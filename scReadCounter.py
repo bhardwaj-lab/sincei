@@ -161,7 +161,8 @@ class CountReadsPerBin(object):
            [0., 1., 1., 2.]])
     """
 
-    def __init__(self, bamFilesList, binLength=50, barcodes=None,
+    def __init__(self, bamFilesList, binLength=50,
+                 barcodes=None, tagName=None,
                  numberOfSamples=None, numberOfProcessors=1,
                  verbose=False, region=None,
                  bedFile=None, extendReads=False,
@@ -180,6 +181,7 @@ class CountReadsPerBin(object):
                  minFragmentLength=0,
                  maxFragmentLength=0,
                  out_file_for_raw_data=None,
+                 returnRegions=None,
                  bed_and_bin=False,
                  statsList=[],
                  mappedList=[]):
@@ -240,6 +242,8 @@ class CountReadsPerBin(object):
         self.zerosToNans = zerosToNans
         self.smoothLength = smoothLength
         self.barcodes = barcodes
+        self.tagName = tagName
+        self.returnRegions = returnRegions
 
         if out_file_for_raw_data:
             self.save_data = True
@@ -389,7 +393,7 @@ class CountReadsPerBin(object):
 
         try:
             num_reads_per_bin = np.concatenate([x[0] for x in imap_res], axis=0)
-            return num_reads_per_bin
+            return num_reads_per_bin, imap_res
 
         except ValueError:
             if self.bedFile:
@@ -504,7 +508,7 @@ class CountReadsPerBin(object):
 
         for bam in bam_handles:
             for trans in transcriptsToConsider:
-                tcov = self.get_coverage_of_region(bam, chrom, trans, self.barcodes)# tcov is supposed to be an np.array, but now it's a dict
+                tcov = self.get_coverage_of_region(bam, chrom, trans, self.barcodes, self.tagName)# tcov is supposed to be an np.array, but now it's a dict
                 if bed_regions_list is not None and not self.bed_and_bin:
                     #subnum_reads_per_bin[bc].append(np.sum(tcov[bc]))
                     tcov_stack = np.stack(list(tcov.values()))
@@ -548,11 +552,14 @@ class CountReadsPerBin(object):
                   (multiprocessing.current_process().name,
                    rows, rows / (endTime - start_time), chrom, start, end))
 
-        return subnum_reads_per_bin, _file_name
+        if self.returnRegions:
+            return subnum_reads_per_bin, _file_name, transcriptsToConsider
+        else:
+            return subnum_reads_per_bin, _file_name
 
     def get_coverage_of_region(self, bamHandle, chrom, regions,
                                barcodes,## barcodes = list/tuple of barcodes
-                               tagName='BC', ## tag that defines barcodes
+                               tagName, ## tag that defines barcodes
                                fragmentFromRead_func=None):
         """
         Returns a numpy array that corresponds to the number of reads
