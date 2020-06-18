@@ -181,7 +181,6 @@ class CountReadsPerBin(object):
                  minFragmentLength=0,
                  maxFragmentLength=0,
                  out_file_for_raw_data=None,
-                 returnRegions=None,
                  bed_and_bin=False,
                  statsList=[],
                  mappedList=[]):
@@ -243,7 +242,6 @@ class CountReadsPerBin(object):
         self.smoothLength = smoothLength
         self.barcodes = barcodes
         self.tagName = tagName
-        self.returnRegions = returnRegions
 
         if out_file_for_raw_data:
             self.save_data = True
@@ -393,7 +391,7 @@ class CountReadsPerBin(object):
 
         try:
             num_reads_per_bin = np.concatenate([x[0] for x in imap_res], axis=0)
-            return num_reads_per_bin, imap_res
+            return num_reads_per_bin
 
         except ValueError:
             if self.bedFile:
@@ -530,8 +528,8 @@ class CountReadsPerBin(object):
                 if len(trans[0]) != 3:
                     starts = ",".join([str(x[0]) for x in trans])
                     ends = ",".join([str(x[1]) for x in trans])
-                    _file.write("\t".join([chrom, starts, ends]) + "\t")
-                    _file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[i, :]]) + "\n")
+                    _file.write("_".join([chrom, starts, ends]) + "\n")
+                    #_file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[i, :]]) + "\n")
                 else:
                     for exon in trans:
                         for startPos in range(exon[0], exon[1], exon[2]):
@@ -539,8 +537,8 @@ class CountReadsPerBin(object):
                                 # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
                                 # Counts there are added to the bin before them, but range() will still try to include them.
                                 break
-                            _file.write("{0}\t{1}\t{2}\t".format(chrom, startPos, min(startPos + exon[2], exon[1])))
-                            _file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[idx, :]]) + "\n")
+                            _file.write("{0}_{1}_{2}\n".format(chrom, startPos, min(startPos + exon[2], exon[1])))
+                            #_file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[idx, :]]) + "\n")
                             idx += 1
             _file.close()
 
@@ -552,10 +550,7 @@ class CountReadsPerBin(object):
                   (multiprocessing.current_process().name,
                    rows, rows / (endTime - start_time), chrom, start, end))
 
-        if self.returnRegions:
-            return subnum_reads_per_bin, _file_name, transcriptsToConsider
-        else:
-            return subnum_reads_per_bin, _file_name
+        return subnum_reads_per_bin, _file_name
 
     def get_coverage_of_region(self, bamHandle, chrom, regions,
                                barcodes,## barcodes = list/tuple of barcodes
