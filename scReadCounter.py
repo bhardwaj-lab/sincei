@@ -11,6 +11,7 @@ from deeptools import bamHandler
 from deeptools import mapReduce
 from deeptoolsintervals import GTF
 import pyBigWig
+import py2bit
 
 debug = 0
 old_settings = np.seterr(all='ignore')
@@ -162,7 +163,8 @@ class CountReadsPerBin(object):
     """
 
     def __init__(self, bamFilesList, binLength=50,
-                 barcodes=None, tagName=None,
+                 barcodes=None, tagName=None, motifFilter=None,
+                 genome2bit=None,
                  numberOfSamples=None, numberOfProcessors=1,
                  verbose=False, region=None,
                  bedFile=None, extendReads=False,
@@ -242,6 +244,8 @@ class CountReadsPerBin(object):
         self.smoothLength = smoothLength
         self.barcodes = barcodes
         self.tagName = tagName
+        self.motifFilter = motifFilter# list of [readMotif, refMotif]
+        self.genome = genome2bit
 
         if out_file_for_raw_data:
             self.save_data = True
@@ -402,6 +406,64 @@ class CountReadsPerBin(object):
                 sys.exit('\nNo coverage values could be computed.\n\nCheck that all bam files are valid and '
                          'contain mapped reads.')
 
+
+    def checkMotifs(self, read, chrom, genome, readMotif, refMotif):
+            """
+            Check whether a given motif is present in the read and the corresponding reference genome.
+            For example, in MNAse (scChIC-seq) data, we expect the reads to have an 'A' at the 5'-end,
+            while the genome has a 'TA' over hang (where the 'A' aligns with 'A' in the forward read),
+            like this below.
+
+            Forwards aligned read: read has 'A', upstream has T
+            R1 ........A------->
+            ----------TA------------\ Ref (+)
+
+            Rev aligned read: read has 'T', downstream has A
+
+            <-------T....... R1
+            --------TA------------\ Ref (+)
+
+            This function can look for any arbitrary motif in read and corresponding genome, but in the
+            same orientation as described above.
+
+            :return: bool
+
+            >>> import pysam
+            >>> import os
+            >>> from scDeepTools.scReadCounter import CountReadsPerBin as cr
+            >>> root = os.path.dirname(os.path.abspath(__file__)) + "/test/test_data/"
+            >>> bam = pysam.AlignmentFile("{}/test_TA_filtering.bam".format(root))
+            >>> iter = bam.fetch()
+            >>> read = next(iter)
+            >>> cr.checkMotifs(read, 'A', 'TA') # for valid scChIC read
+            True
+            >>> read = next(iter)
+            >>> cr.is_proper_pair(read, 'A', 'TA') # for invalid scChIC read
+            False
+            """
+            # get read and ref motif pos
+            read_motif = read.get_forward_sequence()[0:len(readMotif)]
+            ref_motifLen = len(refMotif) - 1
+
+            if(read.is_reverse):
+                # for reverse reads ref motif begins at read-end and ends downstream
+                endpos = read.reference_end + ref_motifLen
+                if endpos > genome.chroms()[chrom]:
+                    endpos = read.reference_end #fail without error
+                ref_motif = genome.sequence(chrom, read.reference_end - 1, endpos)
+            else:
+                # for forward reads ref motif begins upstream and ends at read-start
+                startpos = read.reference_start - ref_motifLen
+                if startpos < 0:
+                    startpos = read.reference_start #fail without error
+                ref_motif = genome.sequence(chrom, startpos, read.reference_start + 1)
+
+            if read_motif == readMotif and ref_motif == refMotif:
+                return True
+            else:
+                return False
+
+
     def count_reads_in_region(self, chrom, start, end, bed_regions_list=None):
         """Counts the reads in each bam file at each 'stepSize' position
         within the interval (start, end) for a window or bin of size binLength.
@@ -506,7 +568,7 @@ class CountReadsPerBin(object):
 
         for bam in bam_handles:
             for trans in transcriptsToConsider:
-                tcov = self.get_coverage_of_region(bam, chrom, trans, self.barcodes, self.tagName)# tcov is supposed to be an np.array, but now it's a dict
+                tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict
                 if bed_regions_list is not None and not self.bed_and_bin:
                     #subnum_reads_per_bin[bc].append(np.sum(tcov[bc]))
                     tcov_stack = np.stack(list(tcov.values()))
@@ -552,10 +614,7 @@ class CountReadsPerBin(object):
 
         return subnum_reads_per_bin, _file_name
 
-    def get_coverage_of_region(self, bamHandle, chrom, regions,
-                               barcodes,## barcodes = list/tuple of barcodes
-                               tagName, ## tag that defines barcodes
-                               fragmentFromRead_func=None):
+    def get_coverage_of_region(self, bamHandle, chrom, regions, fragmentFromRead_func=None):
         """
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
@@ -602,8 +661,8 @@ class CountReadsPerBin(object):
         #coverages = np.zeros(nbins, dtype='float64')
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
-        for bc in barcodes:
-            coverages[bc] = np.zeros(nbins, dtype='float64')
+        for b in self.barcodes:
+            coverages[b] = np.zeros(nbins, dtype='float64')
 
         if self.defaultFragmentLength == 'read length':
             extension = 0
@@ -644,11 +703,15 @@ class CountReadsPerBin(object):
 
             start_time = time.time()
             # caching seems faster. TODO: profile the function
-            ## c is the count for that sample in that position, if we could create a barcode dict and add the count in the
-            ## appropriate position in the dict based on read barcode, we can maybe get the barcode read counts
             c = 0
             if chrom not in bamHandle.references:
                 raise NameError("chromosome {} not found in bam file".format(chrom))
+            # raise error if motifs are to be checked but the chromosome in bam and 2bit don't match
+
+            if self.motifFilter:
+                twoBitGenome = py2bit.open(self.genome, True)
+                if chrom not in twoBitGenome.chroms().keys():
+                    raise NameError("chromosome {} not found in 2bit file".format(chrom))
 
             prev_pos = set()
             lpos = None
@@ -672,8 +735,14 @@ class CountReadsPerBin(object):
                     continue
                 if self.maxFragmentLength > 0 and tLen > self.maxFragmentLength:
                     continue
+
+                # Motif filter
+                if self.motifFilter:
+                    if not self.checkMotifs(read, chrom, twoBitGenome, self.motifFilter[0], self.motifFilter[1]):
+                        continue
+
                 ## get barcode from read
-                bc = read.get_tag(tagName)
+                bc = read.get_tag(self.tagName)
 
                 # get rid of duplicate reads that have same position on each of the
                 # pairs (this code needs revision to consider barcodes)
@@ -700,6 +769,7 @@ class CountReadsPerBin(object):
                 try:
                     position_blocks = fragmentFromRead_func(read)
                 except TypeError:
+                    print("type error")
                     # the get_fragment_from_read functions returns None in some cases.
                     # Those cases are to be skipped, hence the continue line.
                     continue
@@ -743,7 +813,8 @@ class CountReadsPerBin(object):
 
         # change zeros to NAN
         if self.zerosToNans:
-            coverages[coverages == 0] = np.nan
+            for bc in coverages.keys():
+                coverages[bc][coverages[bc] == 0] = np.nan
 
         return coverages
 
