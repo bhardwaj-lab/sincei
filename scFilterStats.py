@@ -8,6 +8,9 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 import numpy as np
 
+## own functions
+from utilities import checkMotifs
+
 def parseArguments():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -157,6 +160,25 @@ The sum of these may be more than the total number of reads. Note that alignment
                            nargs="+",
                            required=False)
 
+    filtering.add_argument('--motifFilter',
+                           help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
+                           ' reads not having either of the motifs will be rejected. (Default: %(default)s)',
+                           default=None,
+                           required=False)
+
+    filtering.add_argument('--GCcontentFilter',
+                           help='Range of GC content to keep for reads (provided as "<minGCfraction>, <maxGCfraction>"). '
+                           'Reads whose GC content are not within the given range are rejected. '
+                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region. '
+                           '(Default: %(default)s)',
+                           default=None,
+                           required=False)
+
+    filtering.add_argument('--genome2bit',
+                           help='Genome sequence in the 2bit format, if --motifFilter is needed. (Default: %(default)s)',
+                           default=None,
+                           required=False)
+
     return parser
 
 
@@ -183,6 +205,8 @@ def getFiltered_worker(arglist):
         externalDupes = {}
         singletons = {}
         filterRNAstrand = {}
+        filterMotifs = {}
+        filterGC = {}
         nFiltered = {}
         total = {}  # This is only used to estimate the percentage affected
         filtered = {}
@@ -195,6 +219,8 @@ def getFiltered_worker(arglist):
             externalDupes[b] = 0
             singletons[b] = 0
             filterRNAstrand[b] = 0
+            filterMotifs[b] = 0
+            filterGC[b] = 0
             nFiltered[b] = 0
             total[b] = 0  # This is only used to estimate the percentage affected
 
@@ -219,6 +245,8 @@ def getFiltered_worker(arglist):
             if args.samFlagExclude and read.flag & args.samFlagExclude != 0:
                 filtered[bc] = 1
                 samFlagExclude[bc] += 1
+
+            ## Duplicates
             if args.ignoreDuplicates:
                 # Assuming more or less concordant reads, use the fragment bounds, otherwise the start positions
                 if read.tlen >= 0:
@@ -243,6 +271,22 @@ def getFiltered_worker(arglist):
             if read.is_paired and read.mate_is_unmapped:
                 filtered[bc] = 1
                 singletons[bc] += 1
+
+            ## remove reads with low/high GC content
+            if args.GCcontentFilter:
+                seq = read.get_forward_sequence()
+                total_bases = len(seq)
+                gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
+                gc_frac = float(gc_bases)/total_bases
+                if gc_frac < GCcontentFilter[0] or gc_frac > GCcontentFilter[1]:
+                    filtered[bc] = 1
+                    filterGC[bc] += 1
+
+            ## remove reads that don't pass the motif filter
+            if args.motifFilter:
+                if not checkMotifs(read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]):
+                    filtered[bc] = 1
+                    filterMotifs[bc] += 1
 
             # filterRNAstrand
             if args.filterRNAstrand:

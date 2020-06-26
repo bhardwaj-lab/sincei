@@ -11,6 +11,9 @@ from deeptools.mapReduce import mapReduce
 from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
+## own functions
+from utilities import checkMotifs
+
 
 def parseArguments():
     parser = argparse.ArgumentParser(
@@ -144,24 +147,13 @@ def parseArguments():
                            type=int,
                            required=False)
 
-    filtering.add_argument('--minGCcontent',
-                           help='minimum GC content needed for a read/pair to be kept (fraction, between 0 and 1).'
-                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region.'
-                           'Also, read/fragment shifting is performed after the filtering. (Default: %(default)s)',
-                           metavar='FLOAT',
+    filtering.add_argument('--GCcontentFilter',
+                           help='Range of GC content needed for a read/pair to be kept (provided as "<minGCfraction>, <maxGCfraction>"). '
+                           'Reads whose GC content are not within the given range are rejected. '
+                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region. '
+                           '(Default: %(default)s)',
                            default=None,
-                           type=float,
                            required=False)
-
-    filtering.add_argument('--maxGCcontent',
-                           help='maximum GC content needed for a read/pair to be kept (fraction, between 0 and 1).'
-                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region.'
-                           'Also, read/fragment shifting is performed after the filtering. (Default: %(default)s)',
-                           metavar='FLOAT',
-                           default=None,
-                           type=float,
-                           required=False)
-
 
     filtering.add_argument('--motifFilter',
                            help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
@@ -230,36 +222,6 @@ def shiftRead(b, chromDict, args):
             b2.next_reference_start -= args.shift[3]
 
     return b2
-
-### filter for non-TA cuts
-def checkMotifs(read, chrom, genome, readMotif, refMotif):
-        """
-        Check whether a given motif is present in the read and the corresponding reference genome.
-        For example, in MNAse (scChIC-seq) data, we expect the reads to have an 'A' at the 5'-end,
-        while the genome has a 'TA' over hang (where the 'A' aligns with 'A' in the forward read)
-        """
-        # get read and ref motif pos
-        read_motif = read.get_forward_sequence()[0:len(readMotif)]
-        ref_motifLen = len(refMotif) - 1
-
-        if(read.is_reverse):
-            # for reverse reads ref motif begins at read-end and ends downstream
-            endpos = read.reference_end + ref_motifLen
-            if endpos > genome.chroms()[chrom]:
-                endpos = read.reference_end #fail without error
-            ref_motif = genome.sequence(chrom, read.reference_end - 1, endpos)
-        else:
-            # for forward reads ref motif begins upstream and ends at read-start
-            startpos = read.reference_start - ref_motifLen
-            if startpos < 0:
-                startpos = read.reference_start #fail without error
-            ref_motif = genome.sequence(chrom, startpos, read.reference_start + 1)
-
-        if read_motif == readMotif and ref_motif == refMotif:
-            return True
-        else:
-            return False
-
 
 def filterWorker(arglist):
     chrom, start, end, args, chromDict = arglist
@@ -351,23 +313,16 @@ def filterWorker(arglist):
             prev_pos.add((s, e, read.next_reference_id, read.is_reverse))
 
         ## remove reads with low/high GC content
-        if args.minGCcontent or args.maxGCcontent:
+        if args.GCcontentFilter:
             seq = read.get_forward_sequence()
             total_bases = len(seq)
             gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
             gc_frac = float(gc_bases)/total_bases
-            if args.minGCcontent:
-                if gc_frac < args.minGCcontent:
-                    nFiltered += 1
-                    if ofiltered:
-                        ofiltered.write(read)
-                    continue
-            if args.maxGCcontent:
-                if gc_frac > args.maxGCcontent:
-                    nFiltered += 1
-                    if ofiltered:
-                        ofiltered.write(read)
-                    continue
+            if gc_frac < args.GCcontentFilter[0] or gc_frac > args.GCcontentFilter[1]:
+                nFiltered += 1
+                if ofiltered:
+                    ofiltered.write(read)
+                continue
 
         ## remove reads that don't pass the motif filter
         if args.motifFilter:
@@ -480,6 +435,9 @@ def main(args=None):
     # if motifFilter is given, convert the input to list
     if args.motifFilter:
         args.motifFilter = args.motifFilter.strip(" ").split(",")
+
+    if args.GCcontentFilter:
+        args.GCcontentFilter = args.GCcontentFilter.strip(" ").split(",")
 
     # Filter, writing the results to a bunch of temporary files
     res = mapReduce([args, chromDict],
