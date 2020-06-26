@@ -708,7 +708,7 @@ class CountReadsPerBin(object):
                 raise NameError("chromosome {} not found in bam file".format(chrom))
             # raise error if motifs are to be checked but the chromosome in bam and 2bit don't match
 
-            if self.motifFilter:
+            if self.motifFilter and self.genome:
                 twoBitGenome = py2bit.open(self.genome, True)
                 if chrom not in twoBitGenome.chroms().keys():
                     raise NameError("chromosome {} not found in 2bit file".format(chrom))
@@ -815,6 +815,9 @@ class CountReadsPerBin(object):
         if self.zerosToNans:
             for bc in coverages.keys():
                 coverages[bc][coverages[bc] == 0] = np.nan
+        # close 2bit file if opened
+        if self.motifFilter and self.genome:
+            twoBitGenome.close()
 
         return coverages
 
