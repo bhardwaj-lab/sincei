@@ -437,7 +437,8 @@ def main(args=None):
         args.motifFilter = args.motifFilter.strip(" ").split(",")
 
     if args.GCcontentFilter:
-        args.GCcontentFilter = args.GCcontentFilter.strip(" ").split(",")
+        gc = args.GCcontentFilter.strip(" ").split(",")
+        args.GCcontentFilter = [float(x) for x in gc]
 
     # Filter, writing the results to a bunch of temporary files
     res = mapReduce([args, chromDict],
