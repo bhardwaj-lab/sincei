@@ -7,6 +7,7 @@ from deeptools.mapReduce import mapReduce
 from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 import numpy as np
+import py2bit
 
 ## own functions
 from utilities import checkMotifs
@@ -189,6 +190,9 @@ def getFiltered_worker(arglist):
         end -= args.distanceBetweenBins
     if end <= start:
         end = start + 1
+    ## open genome if needed
+    if args.genome2bit:
+        twoBitGenome = py2bit.open(args.genome2bit, True)
 
     o = []
     for fname in args.bamfiles:
@@ -227,6 +231,10 @@ def getFiltered_worker(arglist):
 
         for read in fh.fetch(chromUse, start, end):
             bc = read.get_tag(args.tagName)
+            # also keep a counter for barcodes not in whitelist?
+            if bc not in args.barcodes:
+                continue
+
             filtered[bc] = 0
             if read.pos < start:
                 # ensure that we never double count (in case distanceBetweenBins == 0)
@@ -322,7 +330,7 @@ def getFiltered_worker(arglist):
         fh.close()
 
         # first make a tuple where each entry is a dict of barcodes:value
-        tup = (total, nFiltered, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand)
+        tup = (total, nFiltered, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC)
 
         # now simplify it
         merged = {}
@@ -331,7 +339,7 @@ def getFiltered_worker(arglist):
         # now merged is a dict with each key = barcode, values = tuple of stats
         # Now convert it to array
         out = np.stack([ v for k, v in merged.items() ])
-        # out is an array with row = len(barcode) [384], column = len(stats) [9]
+        # out is an array with row = len(barcode) [384], column = len(stats) [11]
         o.append(out)
     return o
 
@@ -348,7 +356,12 @@ def main(args=None):
         else:
             args.sampleLabels = [os.path.basename(x) for x in args.bamfiles]
 
-    # open file and read the content in a list
+    ## check 2bit genome if asked
+    if args.motifFilter and not args.genome2bit:
+        print("MotifFilter asked but genome (2bit) file not provided.")
+        sys.exit(1)
+
+    # open barcode file and read the content in a list
     with open(args.barcodes, 'r') as f:
         barcodes = f.read().splitlines()
     args.barcodes = barcodes
@@ -388,25 +401,21 @@ def main(args=None):
                     blackListFileName=args.blackListFileName,
                     numberOfProcessors=args.numberOfProcessors,
                     verbose=args.verbose)
-
     ## res, should be the list of np.arrays of length (len(barcodes) * 9)
 
     ## final output is an array where nrows = bamfiles*barcodes, ncol = No. of stats
-    final = np.concatenate(res)
-    ## get final sample Names (bamnames_barcode)
-    newlabels = ["{}_{}\t".format(a, b) for a in args.sampleLabels for b in barcodes ]
+    final_array = np.asarray(res).sum(axis = 0)
+    ## get final row/col Names (bamnames_barcode)
+    rowLabels = ["{}_{}".format(a, b) for a in args.sampleLabels for b in barcodes ]
+    colLabels = ["Total","Filtered","Low_MAPQ",
+             "Missing_Flags","Excluded_Flags","Internal_Duplicates",
+             "Marked_Duplicates","Singletons","Wrong_strand",
+             "Wrong_motif", "unwanted_GC_content"]
 
-    # Print some output
-    of.write("Sample\tTotal\tMapped\tBlacklisted\tFiltered\tLow_MAPQ\tMissing_Flags\tExcluded_Flags\tInternal_Duplicates\tMarked_Duplicates\tSingletons\tWrong_strand\n")
-    for idx, _ in enumerate(newlabels):
-        of.write(newlabels[idx])
-        #of.write("\n")
-        # filler for total/mapped/blacklisted
-        #of.write("\t".join(["{}{}{}".format(x) for x in [0,0,0]]) + "\n")
-        # write all for now
-        of.write("\t".join(["{}".format(x) for x in final[idx, :]]) + "\n")
-        of.write("\n")
-
+    final_df = pd.DataFrame(data = np.concatenate(final_array),
+                  index = rowLabels,
+                  columns = colLabels)
+    
     if args.outFile is not None:
         of.close()
 
