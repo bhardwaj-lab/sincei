@@ -434,7 +434,11 @@ def main(args=None):
 
     # if motifFilter is given, convert the input to list
     if args.motifFilter:
-        args.motifFilter = args.motifFilter.strip(" ").split(",")
+        if not args.genome2bit:
+            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.exit(1)
+        else:
+            args.motifFilter = args.motifFilter.strip(" ").split(",")
 
     if args.GCcontentFilter:
         gc = args.GCcontentFilter.strip(" ").split(",")

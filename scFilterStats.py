@@ -286,7 +286,7 @@ def getFiltered_worker(arglist):
                 total_bases = len(seq)
                 gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
                 gc_frac = float(gc_bases)/total_bases
-                if gc_frac < GCcontentFilter[0] or gc_frac > GCcontentFilter[1]:
+                if gc_frac < args.GCcontentFilter[0] or gc_frac > args.GCcontentFilter[1]:
                     filtered[bc] = 1
                     filterGC[bc] += 1
 
@@ -356,10 +356,17 @@ def main(args=None):
         else:
             args.sampleLabels = [os.path.basename(x) for x in args.bamfiles]
 
-    ## check 2bit genome if asked
-    if args.motifFilter and not args.genome2bit:
-        print("MotifFilter asked but genome (2bit) file not provided.")
-        sys.exit(1)
+    ## Motif and GC filter
+    if args.motifFilter:
+        if not args.genome2bit:
+            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.exit(1)
+        else:
+            args.motifFilter = args.motifFilter.strip(" ").split(",")
+
+    if args.GCcontentFilter:
+        gc = args.GCcontentFilter.strip(" ").split(",")
+        args.GCcontentFilter = [float(x) for x in gc]
 
     # open barcode file and read the content in a list
     with open(args.barcodes, 'r') as f:
