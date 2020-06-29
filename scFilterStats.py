@@ -407,17 +407,21 @@ def main(args=None):
     final_array = np.asarray(res).sum(axis = 0)
     ## get final row/col Names (bamnames_barcode)
     rowLabels = ["{}_{}".format(a, b) for a in args.sampleLabels for b in barcodes ]
-    colLabels = ["Total","Filtered","Low_MAPQ",
-             "Missing_Flags","Excluded_Flags","Internal_Duplicates",
-             "Marked_Duplicates","Singletons","Wrong_strand",
-             "Wrong_motif", "unwanted_GC_content"]
+    colLabels = ["Total_sampled","Filtered","Low_MAPQ",
+                 "Missing_Flags","Excluded_Flags","Internal_Duplicates",
+                 "Marked_Duplicates","Singletons","Wrong_strand",
+                 "Wrong_motif", "unwanted_GC_content"]
 
     final_df = pd.DataFrame(data = np.concatenate(final_array),
                   index = rowLabels,
                   columns = colLabels)
-    
+    ## since stats are approximate, present results as %
+    final_df.iloc[:,1:] = final_df.iloc[:,1:].div(final_df.Total, axis=0)*100
+
     if args.outFile is not None:
-        of.close()
+        final_df.to_csv(args.outFile, sep = "\t")
+    else:
+        print(final_df)
 
     return 0
 
