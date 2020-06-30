@@ -56,6 +56,11 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
 
 
 def checkGCcontent(read, lowFilter, highFilter):
+    """
+    Check whether the read falls into the range of min and max GC content provided.
+    Return: Bool
+    
+    """
     seq = read.get_forward_sequence()
     total_bases = len(seq)
     gc_bases = len([x for x in seq if x == 'C' or x == 'G'])

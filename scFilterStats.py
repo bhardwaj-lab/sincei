@@ -10,7 +10,7 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
-from utilities import checkMotifs
+from utilities import checkMotifs, checkGCcontent
 
 def parseArguments():
     parser = argparse.ArgumentParser(
