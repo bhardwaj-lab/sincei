@@ -515,24 +515,21 @@ class CountReadsPerBin(object):
 
         # array to keep the read counts for the regions
         subnum_reads_per_bin = []
-
-        for bam in bam_handles:
-            for trans in transcriptsToConsider:
+        for trans in transcriptsToConsider:
+            for bam in bam_handles:
                 tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict
+                tcov_stack = np.stack(list(tcov.values()), axis=0)# row-bind the output (rows = barcodes, col =- )
+
                 if bed_regions_list is not None and not self.bed_and_bin:
-                    #subnum_reads_per_bin[bc].append(np.sum(tcov[bc]))
-                    tcov_stack = np.stack(list(tcov.values()))
-                    tcov_keys = list(tcov.keys())
-                    subnum_reads_per_bin.append(tcov_stack)# not sure if this would work
+                    subnum_reads_per_bin.append(tcov_stack)
                 else:
-                    tcov_stack = np.stack(list(tcov.values()))
-                    tcov_keys = list(tcov.keys())# list of barcodes, which should be same as len(barcodes)
-                    subnum_reads_per_bin.extend(tcov_stack)# output should be list of length = nCells*nBAMs, containing arrays
+                    subnum_reads_per_bin.extend(tcov_stack)
+                    # output should be list of length = nCells*nBAMs, containing arrays
                     # of length = nBins
 
         #subnum_reads_per_bin[bc] = np.concatenate([ subnum_reads_per_bin[bc] ]).reshape(-1, len(self.bamFilesList), order='F')
         ## this function should output np. array with rows = bins and cols = barcodes*no. of BAMs
-        subnum_reads_per_bin = np.concatenate([ subnum_reads_per_bin ]).reshape(-1, len(self.barcodes)*len(self.bamFilesList), order='F')
+        subnum_reads_per_bin = np.concatenate([ subnum_reads_per_bin ]).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
 
         if self.save_data:
             idx = 0
@@ -696,7 +693,9 @@ class CountReadsPerBin(object):
                         continue
                 ## get barcode from read
                 bc = read.get_tag(self.tagName)
-
+                # also keep a counter for barcodes not in whitelist?
+                if bc not in self.barcodes:
+                    continue
                 # get rid of duplicate reads that have same position on each of the
                 # pairs (this code needs revision to consider barcodes)
                 if self.ignoreDuplicates:
