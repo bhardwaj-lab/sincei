@@ -8,7 +8,7 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 import numpy as np
 import py2bit
-
+import pandas as pd
 ## own functions
 from utilities import checkMotifs
 
@@ -282,11 +282,7 @@ def getFiltered_worker(arglist):
 
             ## remove reads with low/high GC content
             if args.GCcontentFilter:
-                seq = read.get_forward_sequence()
-                total_bases = len(seq)
-                gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
-                gc_frac = float(gc_bases)/total_bases
-                if gc_frac < args.GCcontentFilter[0] or gc_frac > args.GCcontentFilter[1]:
+                if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
                     filtered[bc] = 1
                     filterGC[bc] += 1
 
@@ -423,7 +419,7 @@ def main(args=None):
                   index = rowLabels,
                   columns = colLabels)
     ## since stats are approximate, present results as %
-    final_df.iloc[:,1:] = final_df.iloc[:,1:].div(final_df.Total, axis=0)*100
+    final_df.iloc[:,1:] = final_df.iloc[:,1:].div(final_df.Total_sampled, axis=0)*100
 
     if args.outFile is not None:
         final_df.to_csv(args.outFile, sep = "\t")

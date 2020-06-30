@@ -12,8 +12,7 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
-from utilities import checkMotifs
-
+from utilities import checkMotifs, checkGCcontent
 
 def parseArguments():
     parser = argparse.ArgumentParser(
@@ -314,11 +313,7 @@ def filterWorker(arglist):
 
         ## remove reads with low/high GC content
         if args.GCcontentFilter:
-            seq = read.get_forward_sequence()
-            total_bases = len(seq)
-            gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
-            gc_frac = float(gc_bases)/total_bases
-            if gc_frac < args.GCcontentFilter[0] or gc_frac > args.GCcontentFilter[1]:
+            if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
