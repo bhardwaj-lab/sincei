@@ -19,6 +19,38 @@ from utilities import checkMotifs, checkGCcontent
 debug = 0
 old_settings = np.seterr(all='ignore')
 
+####----------- Functions needed inside the class ------------------
+
+def remove_row_of_zeros(matrix):
+    # remove rows containing all zeros or all nans
+    _mat = np.nan_to_num(matrix)
+    to_keep = _mat.sum(1) != 0
+    return matrix[to_keep, :]
+
+
+def estimateSizeFactors(m):
+    """
+    Compute size factors in the same way as DESeq2.
+    The inverse of that is returned, as it's then compatible with bamCoverage.
+
+    m : a numpy ndarray
+
+    >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
+    >>> sf = estimateSizeFactors(m)
+    >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))
+    >>> m = np.array([[0, 0], [0, 1], [1, 1], [1, 2]])
+    >>> sf = estimateSizeFactors(m)
+    >>> assert(np.all(np.abs(sf - [1.1892, 0.8409]) < 1e-4))
+    """
+    loggeomeans = np.sum(np.log(m), axis=1) / m.shape[1]
+    # Mask after computing the geometric mean
+    m = np.ma.masked_where(m <= 0, m)
+    loggeomeans = np.ma.masked_where(np.isinf(loggeomeans), loggeomeans)
+    # DESeq2 ratio-based size factor
+    sf = np.exp(np.ma.median((np.log(m).T - loggeomeans).T, axis=0))
+    return 1. / sf
+
+
 
 def countReadsInRegions_wrapper(args):
     """
@@ -31,6 +63,7 @@ def countReadsInRegions_wrapper(args):
     """
     return CountReadsPerBin.count_reads_in_region(*args)
 
+######### --------------- Class definitions --------------
 
 class CountReadsPerBin(object):
 
@@ -492,14 +525,20 @@ class CountReadsPerBin(object):
         # A list of lists of tuples
         transcriptsToConsider = []
         if bed_regions_list is not None:
+            # bed/gtf file is provided
             if self.bed_and_bin:
+                # further binning needs to be done inside the bed/gtf file (metagene counting, or computeMatrix bins)
                 transcriptsToConsider.append([(x[1][0][0], x[1][0][1], self.binLength) for x in bed_regions_list])
             else:
+                # simply take the whole regions
                 transcriptsToConsider = [x[1] for x in bed_regions_list]
         else:
+            # genome-wide binning is needed
             if self.stepSize == self.binLength:
+                # simple tiling of chromosome
                 transcriptsToConsider.append([(start, end, self.binLength)])
             else:
+                # tiling with some stepsize
                 for i in range(start, end, self.stepSize):
                     if i + self.binLength > end:
                         break
@@ -517,19 +556,22 @@ class CountReadsPerBin(object):
         subnum_reads_per_bin = []
         for trans in transcriptsToConsider:
             for bam in bam_handles:
-                tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict
-                tcov_stack = np.stack(list(tcov.values()), axis=0)# row-bind the output (rows = barcodes, col =- )
+                tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict(barcode:array)
+                tcov_stack = np.stack(list(tcov.values()), axis=0)# col-bind the output (rownames = barcode, colnames = bins )
 
                 if bed_regions_list is not None and not self.bed_and_bin:
-                    subnum_reads_per_bin.append(tcov_stack)
+                    subnum_reads_per_bin.append([np.sum(s) for s in tcov_stack])
                 else:
-                    subnum_reads_per_bin.extend(tcov_stack)
+                    subnum_reads_per_bin.append(tcov_stack)
                     # output should be list of length = nCells*nBAMs, containing arrays
                     # of length = nBins
 
-        #subnum_reads_per_bin[bc] = np.concatenate([ subnum_reads_per_bin[bc] ]).reshape(-1, len(self.bamFilesList), order='F')
-        ## this function should output np. array with rows = bins and cols = barcodes*no. of BAMs
-        subnum_reads_per_bin = np.concatenate([ subnum_reads_per_bin ]).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
+        ## final output should be regions=rows, cells=col
+        # the order of col should be bam1:cell1...n, bam2:cell1..n
+        if bed_regions_list is not None and not self.bed_and_bin:
+            subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
+        else:
+            subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
 
         if self.save_data:
             idx = 0
@@ -1012,36 +1054,6 @@ class CountReadsPerBin(object):
         indexStart = max(tileIndex - smoothTilesLeft, 0)
         indexEnd = min(maxPosition, tileIndex + smoothTilesRight)
         return (indexStart, indexEnd)
-
-
-def remove_row_of_zeros(matrix):
-    # remove rows containing all zeros or all nans
-    _mat = np.nan_to_num(matrix)
-    to_keep = _mat.sum(1) != 0
-    return matrix[to_keep, :]
-
-
-def estimateSizeFactors(m):
-    """
-    Compute size factors in the same way as DESeq2.
-    The inverse of that is returned, as it's then compatible with bamCoverage.
-
-    m : a numpy ndarray
-
-    >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
-    >>> sf = estimateSizeFactors(m)
-    >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))
-    >>> m = np.array([[0, 0], [0, 1], [1, 1], [1, 2]])
-    >>> sf = estimateSizeFactors(m)
-    >>> assert(np.all(np.abs(sf - [1.1892, 0.8409]) < 1e-4))
-    """
-    loggeomeans = np.sum(np.log(m), axis=1) / m.shape[1]
-    # Mask after computing the geometric mean
-    m = np.ma.masked_where(m <= 0, m)
-    loggeomeans = np.ma.masked_where(np.isinf(loggeomeans), loggeomeans)
-    # DESeq2 ratio-based size factor
-    sf = np.exp(np.ma.median((np.log(m).T - loggeomeans).T, axis=0))
-    return 1. / sf
 
 
 class Tester(object):
