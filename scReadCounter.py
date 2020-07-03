@@ -423,7 +423,7 @@ class CountReadsPerBin(object):
 
             # concatenate intermediary bedgraph files
             ofile = open(self.out_file_for_raw_data, "w")
-            for _values, tempFileName in imap_res:
+            for _values, tempFileName, regions in imap_res:
                 if tempFileName:
                     # concatenate all intermediate tempfiles into one
                     _foo = open(tempFileName, 'r')
@@ -435,7 +435,8 @@ class CountReadsPerBin(object):
 
         try:
             num_reads_per_bin = np.concatenate([x[0] for x in imap_res], axis=0)
-            return num_reads_per_bin
+            regionList = np.concatenate([x[2] for x in imap_res])
+            return num_reads_per_bin, regionList
 
         except ValueError:
             if self.bedFile:
@@ -546,11 +547,11 @@ class CountReadsPerBin(object):
                         continue
                     transcriptsToConsider.append([(i, i + self.binLength)])
 
-        if self.save_data:
-            _file = open(deeptools.utilities.getTempFileName(suffix='.bed'), 'w+t')
-            _file_name = _file.name
-        else:
-            _file_name = ''
+#        if self.save_data:
+#            _file = open(deeptools.utilities.getTempFileName(suffix='.bed'), 'w+t')
+#            _file_name = _file.name
+#        else:
+#            _file_name = ''
 
         # array to keep the read counts for the regions
         subnum_reads_per_bin = []
@@ -573,25 +574,38 @@ class CountReadsPerBin(object):
         else:
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
 
+        ## prepare list of regions
+        regionList = []
+        idx = 0
+        for i, trans in enumerate(transcriptsToConsider):
+            if len(trans[0]) != 3:
+                starts = ",".join([str(x[0]) for x in trans])
+                ends = ",".join([str(x[1]) for x in trans])
+                name = "{}_{}_{}".format(chrom, starts, ends)
+                regionList.append(name)
+                #_file.write(name + "\n")
+            else:
+                for exon in trans:
+                    for startPos in range(exon[0], exon[1], exon[2]):
+                        if idx >= subnum_reads_per_bin.shape[0]:
+                            # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
+                            # Counts there are added to the bin before them, but range() will still try to include them.
+                            break
+                        name = "{}_{}_{}".format(chrom, startPos, min(startPos + exon[2], exon[1]) )
+                        regionList.append(name)
+                        #_file.write(name+"\n")
+                        idx += 1
+
+        # save region data as text (if the mtx file is asked)
         if self.save_data:
-            idx = 0
-            for i, trans in enumerate(transcriptsToConsider):
-                if len(trans[0]) != 3:
-                    starts = ",".join([str(x[0]) for x in trans])
-                    ends = ",".join([str(x[1]) for x in trans])
-                    _file.write("_".join([chrom, starts, ends]) + "\n")
-                    #_file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[i, :]]) + "\n")
-                else:
-                    for exon in trans:
-                        for startPos in range(exon[0], exon[1], exon[2]):
-                            if idx >= subnum_reads_per_bin.shape[0]:
-                                # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
-                                # Counts there are added to the bin before them, but range() will still try to include them.
-                                break
-                            _file.write("{0}_{1}_{2}\n".format(chrom, startPos, min(startPos + exon[2], exon[1])))
-                            #_file.write("\t".join(["{}".format(x) for x in subnum_reads_per_bin[idx, :]]) + "\n")
-                            idx += 1
-            _file.close()
+                _file = open(deeptools.utilities.getTempFileName(suffix='.bed'), 'w+t')
+                _file_name = _file.name
+                for name in regionList:
+                    _file.write(name+"\n")
+                _file.close()
+
+        else:
+            _file_name = ''
 
         if self.verbose:
             endTime = time.time()
@@ -601,7 +615,7 @@ class CountReadsPerBin(object):
                   (multiprocessing.current_process().name,
                    rows, rows / (endTime - start_time), chrom, start, end))
 
-        return subnum_reads_per_bin, _file_name
+        return subnum_reads_per_bin, _file_name, regionList
 
     def get_coverage_of_region(self, bamHandle, chrom, regions, fragmentFromRead_func=None):
         """

@@ -7,6 +7,9 @@ import argparse
 import numpy as np
 from scipy import sparse, io
 
+import pandas as pd
+import anndata as ad
+
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
 from deeptools._version import __version__
@@ -160,6 +163,15 @@ def bamcorrelate_args(case='bins'):
                           'The default value of None specifies that this is determined by read '
                           'density of the BAM file.')
 
+    optional.add_argument('--outFileFormat',
+                          type=str,
+                          default='anndata',
+                          choices=['anndata', 'mtx'],
+                          help='Output file format. Default is to write an anndata object of name '
+                          '<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. '
+                          '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
+                          '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
+
     if case == 'bins':
         optional.add_argument('--binSize', '-bs',
                               metavar='INT',
@@ -253,9 +265,12 @@ def main(args=None):
     f.close()
 
     ## create row/colNames
-    mtxFile = args.outFilePrefix + ".counts.mtx"
-    rowNamesFile = args.outFilePrefix + ".rownames.txt"
-    colNamesFile = args.outFilePrefix + ".colnames.txt"
+    if args.outFileFormat == "mtx":
+        mtxFile = args.outFilePrefix + ".counts.mtx"
+        rowNamesFile = args.outFilePrefix + ".rownames.txt"
+        colNamesFile = args.outFilePrefix + ".colnames.txt"
+    else:
+        rowNamesFile=None
 
     stepSize = args.binSize + args.distanceBetweenBins
     c = countR.CountReadsPerBin(
@@ -285,28 +300,43 @@ def main(args=None):
         zerosToNans=False,
         out_file_for_raw_data=rowNamesFile)
 
-    num_reads_per_bin = c.run(allArgs=args)
+    num_reads_per_bin, regionList = c.run(allArgs=args)
 
     sys.stderr.write("Number of bins "
                      "found: {}\n".format(num_reads_per_bin.shape[0]))
 
-    #if num_reads_per_bin.shape[0] < 2:
-    #    exit("ERROR: too few non zero bins found.\n"
-    #         "If using --region please check that this "
-    #         "region is covered by reads.\n")
+    if num_reads_per_bin.shape[0] < 1:
+        exit("ERROR: too few non zero bins found.\n"
+             "If using --region please check that this "
+             "region is covered by reads.\n")
 
-    ## add labels to barcodes and write
+    ## create colnames (sampleLabel+barcode)
     newlabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
 
-    f = open(colNamesFile, "w")
-    f.write("\n".join(newlabels))
-    f.write("\n")
-    f.close()
+    ## write mtx/rownames if asked
+    if args.outFileFormat == 'mtx':
+        f = open(colNamesFile, "w")
+        f.write("\n".join(newlabels))
+        f.write("\n")
+        f.close()
+        ## write the matrix as .mtx
+        sp = sparse.csr_matrix(num_reads_per_bin)
+        io.mmwrite(mtxFile, sp, field="integer")
+    else:
+        # write anndata
+        adata = ad.AnnData(num_reads_per_bin.T)
+        adata.obs = pd.DataFrame({"sample":[x.split('_')[0] for x in newlabels],
+                                "barcodes":[x.split('_')[1] for x in newlabels]
+                                },index=newlabels)
 
-    ## write the matrix as .mtx
-    sp = sparse.csr_matrix(num_reads_per_bin)
-    io.mmwrite(mtxFile, sp, field="integer")
+        rows=list(regionList)
 
+        adata.var = pd.DataFrame({"chrom":[x.split('_')[0] for x in rows],
+                                "start":[x.split('_')[1] for x in rows],
+                                "end":[x.split('_')[2] for x in rows]
+                                }, index=rows)
+
+        adata.write_h5ad(args.outFilePrefix+".h5ad")
 
 if __name__ == "__main__":
     main()
