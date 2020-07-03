@@ -59,13 +59,23 @@ def checkGCcontent(read, lowFilter, highFilter):
     """
     Check whether the read falls into the range of min and max GC content provided.
     Return: Bool
-    
+
     """
     seq = read.get_forward_sequence()
     total_bases = len(seq)
     gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
     gc_frac = float(gc_bases)/total_bases
     if gc_frac >= lowFilter and gc_frac <= highFilter:
+        return True
+    else:
+        return False
+
+def checkSoftClipFraction(read, lowFilter):
+    cig = read.cigartuples
+    tot = sum([i[1] for i in cig])
+    softPos = [i[0] == 4 for i in cig]
+    softSum = sum([i[1] for i in list(compress(cig, softPos)) ])
+    if softSum/tot >= lowFilter:
         return True
     else:
         return False
