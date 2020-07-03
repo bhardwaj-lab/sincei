@@ -1,3 +1,6 @@
+from itertools import compress
+
+
 def checkMotifs(read, chrom, genome, readMotif, refMotif):
         """
         Check whether a given motif is present in the read and the corresponding reference genome.
@@ -70,12 +73,19 @@ def checkGCcontent(read, lowFilter, highFilter):
     else:
         return False
 
-def checkSoftClipFraction(read, lowFilter):
+def checkAlignedFraction(read, lowFilter):
+    """
+    Check whether the fraction of read length that aligns to the reference is higher than
+    the given threshold. Aligned fraction includes the max allowed mismatches tolerated by
+    the aligner, and excludes InDels and Clippings.
+
+    Return: Bool
+    """
     cig = read.cigartuples
-    tot = sum([i[1] for i in cig])
-    softPos = [i[0] == 4 for i in cig]
-    softSum = sum([i[1] for i in list(compress(cig, softPos)) ])
-    if softSum/tot >= lowFilter:
+    tot = read.infer_read_length()
+    matchPos = [i[0] == 0 for i in cig]
+    matchSum = sum([i[1] for i in list(compress(cig, matchPos)) ])
+    if matchSum/tot >= lowFilter:
         return True
     else:
         return False

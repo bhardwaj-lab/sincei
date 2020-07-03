@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import sys
+import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
@@ -10,7 +11,7 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
-from utilities import checkMotifs, checkGCcontent
+from utilities import *
 
 def parseArguments():
     parser = argparse.ArgumentParser(
@@ -161,6 +162,14 @@ The sum of these may be more than the total number of reads. Note that alignment
                            nargs="+",
                            required=False)
 
+    filtering.add_argument('--minAlignedFraction',
+                           help='Minimum fraction of the reads which should be aligned to be counted. This includes '
+                           'mismatches tolerated by the aligners, but excludes InDels/Clippings (Default: %(default)s)',
+                           metavar='FLOAT',
+                           default=None,
+                           type=float,
+                           required=False)
+
     filtering.add_argument('--motifFilter',
                            help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
                            ' reads not having either of the motifs will be rejected. (Default: %(default)s)',
@@ -202,6 +211,7 @@ def getFiltered_worker(arglist):
         lpos = None
 
         ## a dict with barcodes = keys
+        # metrics
         minMapq = {}
         samFlagInclude = {}
         samFlagExclude = {}
@@ -211,6 +221,8 @@ def getFiltered_worker(arglist):
         filterRNAstrand = {}
         filterMotifs = {}
         filterGC = {}
+        minAlignedFraction = {}
+        # trackers
         nFiltered = {}
         total = {}  # This is only used to estimate the percentage affected
         filtered = {}
@@ -225,6 +237,7 @@ def getFiltered_worker(arglist):
             filterRNAstrand[b] = 0
             filterMotifs[b] = 0
             filterGC[b] = 0
+            minAlignedFraction[b] = 0
             nFiltered[b] = 0
             total[b] = 0  # This is only used to estimate the percentage affected
 
@@ -253,6 +266,11 @@ def getFiltered_worker(arglist):
             if args.samFlagExclude and read.flag & args.samFlagExclude != 0:
                 filtered[bc] = 1
                 samFlagExclude[bc] += 1
+
+            if args.minAlignedFraction:
+                if not checkAlignedFraction(read, args.minAlignedFraction):
+                    filtered[bc] = 1
+                    minAlignedFraction[bc] += 1
 
             ## Duplicates
             if args.ignoreDuplicates:
@@ -326,7 +344,7 @@ def getFiltered_worker(arglist):
         fh.close()
 
         # first make a tuple where each entry is a dict of barcodes:value
-        tup = (total, nFiltered, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC)
+        tup = (total, nFiltered, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC, minAlignedFraction)
 
         # now simplify it
         merged = {}
@@ -413,7 +431,7 @@ def main(args=None):
     colLabels = ["Total_sampled","Filtered","Low_MAPQ",
                  "Missing_Flags","Excluded_Flags","Internal_Duplicates",
                  "Marked_Duplicates","Singletons","Wrong_strand",
-                 "Wrong_motif", "unwanted_GC_content"]
+                 "Wrong_motif", "Unwanted_GC_content", "Low_aligned_fraction"]
 
     final_df = pd.DataFrame(data = np.concatenate(final_array),
                   index = rowLabels,
