@@ -172,6 +172,14 @@ def bamcorrelate_args(case='bins'):
                           '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
                           '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
 
+    optional.add_argument('--minAlignedFraction',
+                           help='Minimum fraction of the reads which should be aligned to be counted. This includes '
+                           'mismatches tolerated by the aligners, but excludes InDels/Clippings (Default: %(default)s)',
+                           metavar='FLOAT',
+                           default=None,
+                           type=float,
+                           required=False)
+
     if case == 'bins':
         optional.add_argument('--binSize', '-bs',
                               metavar='INT',

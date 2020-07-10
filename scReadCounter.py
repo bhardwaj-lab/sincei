@@ -13,8 +13,8 @@ from deeptoolsintervals import GTF
 import pyBigWig
 import py2bit
 
-# own functions
-from utilities import checkMotifs, checkGCcontent
+## own functions
+from utilities import *
 
 debug = 0
 old_settings = np.seterr(all='ignore')
@@ -159,6 +159,18 @@ class CountReadsPerBin(object):
     maxFragmentLength : int
         If greater than 0, fragments above this size are excluded.
 
+    minAlignedFraction : float
+        fragments where less than the given fraction of bases align are excluded.
+
+    motifFilter : list
+        Only alignments with reads containing the given motif at 5'-end and genome 5'-end are counted.
+
+    GCcontentFilter : list
+        Only alignments with given min and max GC content are counted.
+
+    genome2bit : str
+        2 bit file for the genome (if motifFilter is specified)
+
     out_file_for_raw_data : str
         File name to save the raw counts computed
 
@@ -204,7 +216,8 @@ class CountReadsPerBin(object):
                  motifFilter=None,
                  genome2bit=None,
                  GCcontentFilter=None,
-                 numberOfSamples=None, numberOfProcessors=1,
+                 numberOfSamples=None,
+                 numberOfProcessors=1,
                  verbose=False, region=None,
                  bedFile=None, extendReads=False,
                  genomeChunkSize=None,
@@ -221,6 +234,7 @@ class CountReadsPerBin(object):
                  smoothLength=0,
                  minFragmentLength=0,
                  maxFragmentLength=0,
+                 minAlignedFraction=0,
                  out_file_for_raw_data=None,
                  bed_and_bin=False,
                  statsList=[],
@@ -279,6 +293,7 @@ class CountReadsPerBin(object):
         self.samFlag_exclude = samFlag_exclude
         self.minFragmentLength = minFragmentLength
         self.maxFragmentLength = maxFragmentLength
+        self.minAlignedFraction = minAlignedFraction
         self.zerosToNans = zerosToNans
         self.smoothLength = smoothLength
         self.barcodes = barcodes
@@ -747,6 +762,12 @@ class CountReadsPerBin(object):
                 if self.GCcontentFilter:
                     if not checkGCcontent(read, self.GCcontentFilter[0], self.GCcontentFilter[1]):
                         continue
+
+                # Aligned fraction filter
+                if self.minAlignedFraction:
+                    if not checkAlignedFraction(read, self.minAlignedFraction):
+                        continue
+
                 ## get barcode from read
                 bc = read.get_tag(self.tagName)
                 # also keep a counter for barcodes not in whitelist?
