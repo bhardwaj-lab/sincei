@@ -690,6 +690,11 @@ class CountReadsPerBin(object):
         blackList = None
         if self.blackListFileName is not None:
             blackList = GTF(self.blackListFileName)
+        # raise error if motifs are to be checked but the chromosome in bam and 2bit don't match
+        if self.motifFilter and self.genome:
+            twoBitGenome = py2bit.open(self.genome, True)
+            if chrom not in twoBitGenome.chroms().keys():
+                raise NameError("chromosome {} not found in 2bit file".format(chrom))
 
         vector_start = 0
         for idx, reg in enumerate(regions):
@@ -724,17 +729,10 @@ class CountReadsPerBin(object):
             c = 0
             if chrom not in bamHandle.references:
                 raise NameError("chromosome {} not found in bam file".format(chrom))
-            # raise error if motifs are to be checked but the chromosome in bam and 2bit don't match
-
-            if self.motifFilter and self.genome:
-                twoBitGenome = py2bit.open(self.genome, True)
-                if chrom not in twoBitGenome.chroms().keys():
-                    raise NameError("chromosome {} not found in 2bit file".format(chrom))
 
             prev_pos = set()
-            lpos = None
-            # of previous processed read pair
-            # read object should also return the barcode name
+            lpos = None # of previous processed read pair
+            
             for read in bamHandle.fetch(chrom, regStart, regEnd):
                 if read.is_unmapped:
                     continue
@@ -756,7 +754,8 @@ class CountReadsPerBin(object):
 
                 # Motif filter
                 if self.motifFilter:
-                    if not checkMotifs(read, chrom, twoBitGenome, self.motifFilter[0], self.motifFilter[1]):
+                    test = [ checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in self.motifFilter ]
+                    if not any(test):
                         continue
                 # GC content filter
                 if self.GCcontentFilter:

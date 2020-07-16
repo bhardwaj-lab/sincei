@@ -127,6 +127,7 @@ def bamcorrelate_args(case='bins'):
                                 'This function checks for the motif at the 5-end of the read and at the 5-overhang in the genome. '
                                 'Reads not containing the given motif are not discarded. ',
                           type=str,
+                          nargs='+',
                           default=None)
 
     optional.add_argument('--genome2bit', '-g',
@@ -190,7 +191,7 @@ def bamcorrelate_args(case='bins'):
 
         optional.add_argument('--distanceBetweenBins', '-n',
                               metavar='INT',
-                              help='By default, multiBamSummary considers consecutive '
+                              help='By default, scCountReads considers consecutive '
                               'bins of the specified --binSize. However, to '
                               'reduce the computation time, a larger distance '
                               'between bins can by given. Larger distances '
@@ -261,7 +262,7 @@ def main(args=None):
             print("MotifFilter asked but genome (2bit) file not provided.")
             sys.exit(1)
         else:
-            args.motifFilter = args.motifFilter.strip(" ").split(",")
+            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
 
     if args.GCcontentFilter:
         gc = args.GCcontentFilter.strip(" ").split(",")
