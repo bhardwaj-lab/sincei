@@ -32,7 +32,7 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
         >>> cr.checkMotifs(read, 'A', 'TA') # for valid scChIC read
         True
         >>> read = next(iter)
-        >>> cr.is_proper_pair(read, 'A', 'TA') # for invalid scChIC read
+        >>> cr.checkMotifs(read, 'A', 'TA') # for invalid scChIC read
         False
         """
         # get read and ref motif pos

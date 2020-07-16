@@ -174,6 +174,7 @@ The sum of these may be more than the total number of reads. Note that alignment
                            help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
                            ' reads not having either of the motifs will be rejected. (Default: %(default)s)',
                            default=None,
+                           nargs='+',
                            required=False)
 
     filtering.add_argument('--GCcontentFilter',
@@ -306,7 +307,9 @@ def getFiltered_worker(arglist):
 
             ## remove reads that don't pass the motif filter
             if args.motifFilter:
-                if not checkMotifs(read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]):
+                test = [ checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter ]
+                # if none given motif found, return true
+                if not any(test):
                     filtered[bc] = 1
                     filterMotifs[bc] += 1
 
@@ -376,7 +379,7 @@ def main(args=None):
             print("MotifFilter asked but genome (2bit) file not provided.")
             sys.exit(1)
         else:
-            args.motifFilter = args.motifFilter.strip(" ").split(",")
+            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
 
     if args.GCcontentFilter:
         gc = args.GCcontentFilter.strip(" ").split(",")
