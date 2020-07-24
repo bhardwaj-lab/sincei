@@ -7,6 +7,8 @@ from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import smartLabels
 from deeptools._version import __version__
+from deeptoolsintervals import GTF
+
 import numpy as np
 import py2bit
 import pandas as pd
@@ -203,6 +205,10 @@ def getFiltered_worker(arglist):
     ## open genome if needed
     if args.genome2bit:
         twoBitGenome = py2bit.open(args.genome2bit, True)
+    ## open blacklist file
+    blackList = None
+    if args.blackListFileName is not None:
+        blackList = GTF(args.blackListFileName)
 
     o = []
     for fname in args.bamfiles:
@@ -213,6 +219,7 @@ def getFiltered_worker(arglist):
 
         ## a dict with barcodes = keys
         # metrics
+        blacklisted = {}
         minMapq = {}
         samFlagInclude = {}
         samFlagExclude = {}
@@ -229,6 +236,7 @@ def getFiltered_worker(arglist):
         filtered = {}
 
         for b in args.barcodes:
+            blacklisted[b] = 0
             minMapq[b] = 0
             samFlagInclude[b] = 0
             samFlagExclude[b] = 0
@@ -272,6 +280,11 @@ def getFiltered_worker(arglist):
                 if not checkAlignedFraction(read, args.minAlignedFraction):
                     filtered[bc] = 1
                     minAlignedFraction[bc] += 1
+
+            ## reads in blacklisted regions
+            if blackList and blackList.findOverlaps(chrom, read.reference_start, read.reference_start + read.infer_query_length(always=False) - 1):
+                filtered[bc] = 1
+                blacklisted[bc] += 1
 
             ## Duplicates
             if args.ignoreDuplicates:
@@ -347,7 +360,7 @@ def getFiltered_worker(arglist):
         fh.close()
 
         # first make a tuple where each entry is a dict of barcodes:value
-        tup = (total, nFiltered, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC, minAlignedFraction)
+        tup = (total, nFiltered, blacklisted, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC, minAlignedFraction)
 
         # now simplify it
         merged = {}
@@ -396,23 +409,7 @@ def main(args=None):
         of = open(args.outFile, "w")
 
     bhs = [bamHandler.openBam(x, returnStats=True, nThreads=args.numberOfProcessors) for x in args.bamfiles]
-
-    ## need to convert these stats to single-cells
-    #mapped = [x[1] for x in bhs]
-    #unmappedList = [x[2] for x in bhs]
     bhs = [x[0] for x in bhs]
-
-    # Get the reads in blacklisted regions
-#    if args.blackListFileName:
-#        blacklisted = []
-#        for bh in bhs:
-#            blacklisted.append(utilities.bam_blacklisted_reads(bh, None, args.blackListFileName, args.numberOfProcessors))
-#    else:
-#        blacklisted = [0] * len(bhs) * len(args.barcodes)
-
-    # Get the total and mapped reads
-    # total = [x + y for x, y in list(zip(mapped, unmappedList))]
-
     chrom_sizes = list(zip(bhs[0].references, bhs[0].lengths))
     for x in bhs:
         x.close()
@@ -431,7 +428,7 @@ def main(args=None):
     final_array = np.asarray(res).sum(axis = 0)
     ## get final row/col Names (bamnames_barcode)
     rowLabels = ["{}_{}".format(a, b) for a in args.sampleLabels for b in barcodes ]
-    colLabels = ["Total_sampled","Filtered","Low_MAPQ",
+    colLabels = ["Total_sampled","Filtered","Blacklisted", "Low_MAPQ",
                  "Missing_Flags","Excluded_Flags","Internal_Duplicates",
                  "Marked_Duplicates","Singletons","Wrong_strand",
                  "Wrong_motif", "Unwanted_GC_content", "Low_aligned_fraction"]
