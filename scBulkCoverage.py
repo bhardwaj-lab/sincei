@@ -5,12 +5,13 @@
 import argparse
 import sys
 import numpy as np
+import pandas as pd
 from deeptools import parserCommon
 from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
 
 ## own Functions
-import scWriteBedGraph as writeBedGraph
+import scWriteBedGraph
 import scParserCommon
 
 debug = 0
@@ -138,6 +139,11 @@ def main(args=None):
         debug = 1
     else:
         debug = 0
+
+    ## read the group info file (make it more robust)
+    df = pd.read_csv(args.groupInfo, sep="\t", index_col=0)
+    barcodes = df.barcodes.unique().tolist()
+
     ## Motif and GC filter
     if args.motifFilter:
         if not args.genome2bit:
@@ -150,10 +156,6 @@ def main(args=None):
         gc = args.GCcontentFilter.strip(" ").split(",")
         args.GCcontentFilter = [float(x) for x in gc]
 
-    ## read the barcode file
-    with open(args.barcodes, 'r') as f:
-        barcodes = f.read().splitlines()
-    f.close()
 
     # Normalization options
     if not args.ignoreForNormalization:
@@ -252,7 +254,7 @@ def main(args=None):
         wr.filter_strand = args.filterRNAstrand
         wr.Offset = args.Offset
     else:
-        wr = writeBedGraph.WriteBedGraph([args.bamfiles],
+        wr = scWriteBedGraph.WriteBedGraph([args.bamfiles],
                                          binLength=args.binSize,
                                          stepSize=args.binSize,
                                          barcodes=barcodes,
@@ -276,12 +278,12 @@ def main(args=None):
                                          verbose=args.verbose,
                                          )
 
-    wr.run(writeBedGraph.scaleCoverage, func_args, args.outFileName,
+    wr.run(scWriteBedGraph.scaleCoverage, func_args, args.outFileName,
            blackListFileName=args.blackListFileName,
            format=args.outFileFormat, smoothLength=args.smoothLength)
 
 
-class OffsetFragment(writeBedGraph.WriteBedGraph):
+class OffsetFragment(scWriteBedGraph.WriteBedGraph):
     """
     Class to redefine the get_fragment_from_read for the --Offset case
     """
@@ -409,7 +411,7 @@ class OffsetFragment(writeBedGraph.WriteBedGraph):
         return self.get_fragment_from_read_list(read, offset)
 
 
-class CenterFragment(writeBedGraph.WriteBedGraph):
+class CenterFragment(scWriteBedGraph.WriteBedGraph):
     """
     Class to redefine the get_fragment_from_read for the --MNase case
 
