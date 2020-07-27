@@ -213,6 +213,7 @@ class CountReadsPerBin(object):
     def __init__(self, bamFilesList, binLength=50,
                  barcodes=None,
                  tagName=None,
+                 clusterInfo=None,
                  motifFilter=None,
                  genome2bit=None,
                  GCcontentFilter=None,
@@ -298,6 +299,7 @@ class CountReadsPerBin(object):
         self.smoothLength = smoothLength
         self.barcodes = barcodes
         self.tagName = tagName
+        self.clusterInfo=clusterInfo
         self.motifFilter = motifFilter# list of [readMotif, refMotif]
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
         self.genome = genome2bit
@@ -732,7 +734,7 @@ class CountReadsPerBin(object):
 
             prev_pos = set()
             lpos = None # of previous processed read pair
-            
+
             for read in bamHandle.fetch(chrom, regStart, regEnd):
                 if read.is_unmapped:
                     continue
