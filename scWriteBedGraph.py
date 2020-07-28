@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import numpy as np
+import pandas as pd
 import pyBigWig
 
 # deeptools modules
@@ -223,6 +224,9 @@ class WriteBedGraph(cr.CountReadsPerBin):
         res = [[chrom_order[x[0]], x[1], x[2], x[3]] for x in res]
         res.sort()
 
+        # write output for each cluster
+        cluster_info = self.clusterInfo
+        clusters = cluster_info.cluster.unique().tolist()
         for cl in clusters:
             if format == 'bedgraph':
                 out_file = open("{}_{}.bedgraph".format(out_file_prefix, cl), 'wb')
@@ -295,7 +299,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         coverage, _, r = self.count_reads_in_region(chrom, start, end)
 
         ## get groups (clusters)
-        cluster_info = self.clusterInfo# need to have appropriate check in place such that it's not empty
+        cluster_info = self.clusterInfo
         clusters = cluster_info.cluster.unique().tolist()
         tempfilenames = dict.fromkeys(clusters)
         ## sum up tilecoverage group-wise
@@ -315,12 +319,12 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 value = func_to_call(np.sum(tileCoverage[cl_idx]), nCells, func_args)
 
                 if previous_value is None:
-                    writeStart = start + tileIndex * binLength
-                    writeEnd = min(writeStart + binLength, end)
+                    writeStart = start + tileIndex * self.binLength
+                    writeEnd = min(writeStart + self.binLength, end)
                     previous_value = value
 
                 elif previous_value == value:
-                    writeEnd = min(writeEnd + binLength, end)
+                    writeEnd = min(writeEnd + self.binLength, end)
 
                 elif previous_value != value:
                     if not np.isnan(previous_value):
@@ -328,7 +332,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                             line_string.format(chrom, writeStart, writeEnd, previous_value))
                     previous_value = value
                     writeStart = writeEnd
-                    writeEnd = min(writeStart + binLength, end)
+                    writeEnd = min(writeStart + self.binLength, end)
 
                 # write remaining value if not a nan
             if previous_value is not None and writeStart != end and not np.isnan(previous_value):

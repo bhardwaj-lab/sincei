@@ -57,17 +57,17 @@ def get_required_args():
     required = parser.add_argument_group('Required arguments')
 
     # define the arguments
-    required.add_argument('--bam', '-b',
-                          help='BAM file(s) to process',
-                          metavar='BAM file',
+    required.add_argument('--bamfiles', '-b',
+                          metavar='FILE1 FILE2',
+                          help='List of indexed bam files separated by spaces.',
+                          nargs='+',
                           required=True)
 
-    required.add_argument('--groupInfo', '-g',
+    required.add_argument('--groupInfo', '-i',
                           help='tsv file with Cell grouping information. Pseudo-Bulk Bigwigs will be '
                                 'computed per group.',
                           metavar='TXT file',
                           required=True)
-
 
     return parser
 
@@ -79,6 +79,11 @@ def get_optional_args():
 
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
+
+    optional.add_argument('--outFileFormat', '-of',
+                       help='Output file type. Either "bigwig" or "bedgraph".',
+                       choices=['bigwig', 'bedgraph'],
+                       default='bigwig')
 
     optional.add_argument('--scaleFactor',
                           help='The computed scaling factor (or 1, if not applicable) will '
@@ -141,8 +146,8 @@ def main(args=None):
         debug = 0
 
     ## read the group info file (make it more robust)
-    df = pd.read_csv(args.groupInfo, sep="\t", index_col=0)
-    barcodes = df.barcodes.unique().tolist()
+    groupInfo = pd.read_csv(args.groupInfo, sep="\t", index_col=0)
+    barcodes = groupInfo.barcodes.unique().tolist()
 
     ## Motif and GC filter
     if args.motifFilter:
@@ -164,10 +169,10 @@ def main(args=None):
         args.normalizeUsing = None  # For the sake of sanity
     elif args.normalizeUsing == 'RPGC' and not args.effectiveGenomeSize:
         sys.exit("RPGC normalization requires an --effectiveGenomeSize!\n")
-
+    print(args.bamfiles)
     if args.normalizeUsing:
         # if a normalization is required then compute the scale factors
-        bam, mapped, unmapped, stats = openBam(args.bam, returnStats=True, nThreads=args.numberOfProcessors)
+        bam, mapped, unmapped, stats = openBam(args.bamfiles[0], returnStats=True, nThreads=args.numberOfProcessors)
         bam.close()
         scale_factor = get_scale_factor(args, stats)
     else:
@@ -183,7 +188,7 @@ def main(args=None):
         # check that library is paired end
         # using getFragmentAndReadSize
         from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
-        frag_len_dict, read_len_dict = get_read_and_fragment_length(args.bam,
+        frag_len_dict, read_len_dict = get_read_and_fragment_length(args.bamfiles[0],
                                                                     return_lengths=False,
                                                                     blackListFileName=args.blackListFileName,
                                                                     numberOfProcessors=args.numberOfProcessors,
@@ -197,10 +202,11 @@ def main(args=None):
         if args.maxFragmentLength == 0:
             args.maxFragmentLength = 200
 
-        wr = CenterFragment([args.bamfiles],
+        wr = CenterFragment(args.bamfiles,
                             binLength=args.binSize,
                             stepSize=args.binSize,
                             barcodes=barcodes,
+                            clusterInfo=groupInfo,
                             tagName=args.tagName,
                             motifFilter=args.motifFilter,
                             genome2bit=args.genome2bit,
@@ -230,10 +236,11 @@ def main(args=None):
         else:
             if args.Offset[0] == 0:
                 sys.exit("*Error*: An offset of 0 isn't allowed, since offsets are 1-based positions inside each alignment.")
-        wr = OffsetFragment([args.bamfiles],
+        wr = OffsetFragment(args.bamfiles,
                             binLength=args.binSize,
                             stepSize=args.binSize,
                             barcodes=barcodes,
+                            clusterInfo=groupInfo,
                             tagName=args.tagName,
                             motifFilter=args.motifFilter,
                             genome2bit=args.genome2bit,
@@ -254,10 +261,11 @@ def main(args=None):
         wr.filter_strand = args.filterRNAstrand
         wr.Offset = args.Offset
     else:
-        wr = scWriteBedGraph.WriteBedGraph([args.bamfiles],
+        wr = scWriteBedGraph.WriteBedGraph(args.bamfiles,
                                          binLength=args.binSize,
                                          stepSize=args.binSize,
                                          barcodes=barcodes,
+                                         clusterInfo=groupInfo,
                                          tagName=args.tagName,
                                          motifFilter=args.motifFilter,
                                          genome2bit=args.genome2bit,
@@ -278,7 +286,7 @@ def main(args=None):
                                          verbose=args.verbose,
                                          )
 
-    wr.run(scWriteBedGraph.scaleCoverage, func_args, args.outFileName,
+    wr.run(scWriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,
            blackListFileName=args.blackListFileName,
            format=args.outFileFormat, smoothLength=args.smoothLength)
 
@@ -439,3 +447,7 @@ class CenterFragment(scWriteBedGraph.WriteBedGraph):
                 fragment_end = fragment_start + 3
 
         return [(fragment_start, fragment_end)]
+
+
+if __name__ == "__main__":
+    main()
