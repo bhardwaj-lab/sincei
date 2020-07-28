@@ -1,26 +1,21 @@
 import argparse
 import os
-from scDeepTools._version import __version__
+#from scDeepTools._version import __version__
 
 def output(args=None):
     parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group('Output')
+    group = parser.add_argument_group('Output options')
     group.add_argument('--outFilePrefix', '-o',
                        help='Output file name prefix.',
                        metavar='FILEPREFIX',
-                       type=int,
+                       type=str,
                        required=True)
-
-    group.add_argument('--outFileFormat', '-of',
-                       help='Output file type. Either "bigwig" or "bedgraph".',
-                       choices=['bigwig', 'bedgraph'],
-                       default='bigwig')
 
     return parser
 
 def filterOptions(args=None):
     parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group('Filter')
+    group = parser.add_argument_group('Filtering Arguments')
 
     group.add_argument('--tagName', '-tn',
                           metavar='STR',
@@ -57,3 +52,4 @@ def filterOptions(args=None):
                            default=None,
                            type=float,
                            required=False)
+    return parser

@@ -14,9 +14,13 @@ import py2bit
 import pandas as pd
 ## own functions
 from utilities import *
+import scParserCommon
 
 def parseArguments():
+    filterParser = scParserCommon.filterOptions()
+
     parser = argparse.ArgumentParser(
+        parents=[filterParser],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 This tool estimates the number of reads that would be filtered given a set of
@@ -56,12 +60,6 @@ The sum of these may be more than the total number of reads. Note that alignment
     general.add_argument('--outFile', '-o',
                          type=parserCommon.writableFile,
                          help='The file to write results to. By default, results are printed to the console')
-
-    general.add_argument('--tagName', '-tn',
-                         metavar='STR',
-                         help='Name of the barcode tag in the BAM file (Default: %(default)s)',
-                         default='BC',
-                         type=str)
 
     general.add_argument('--sampleLabels',
                          help='Labels for the samples. The '
@@ -162,34 +160,6 @@ The sum of these may be more than the total number of reads. Note that alignment
                            'that you should adjust the effective genome size, if relevant.',
                            metavar="BED file",
                            nargs="+",
-                           required=False)
-
-    filtering.add_argument('--minAlignedFraction',
-                           help='Minimum fraction of the reads which should be aligned to be counted. This includes '
-                           'mismatches tolerated by the aligners, but excludes InDels/Clippings (Default: %(default)s)',
-                           metavar='FLOAT',
-                           default=None,
-                           type=float,
-                           required=False)
-
-    filtering.add_argument('--motifFilter',
-                           help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
-                           ' reads not having either of the motifs will be rejected. (Default: %(default)s)',
-                           default=None,
-                           nargs='+',
-                           required=False)
-
-    filtering.add_argument('--GCcontentFilter',
-                           help='Range of GC content to keep for reads (provided as "<minGCfraction>, <maxGCfraction>"). '
-                           'Reads whose GC content are not within the given range are rejected. '
-                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region. '
-                           '(Default: %(default)s)',
-                           default=None,
-                           required=False)
-
-    filtering.add_argument('--genome2bit',
-                           help='Genome sequence in the 2bit format, if --motifFilter is needed. (Default: %(default)s)',
-                           default=None,
                            required=False)
 
     return parser
