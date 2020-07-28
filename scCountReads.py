@@ -16,6 +16,7 @@ from deeptools._version import __version__
 
 # own functions
 import scReadCounter as countR
+import scParserCommon
 
 old_settings = np.seterr(all='ignore')
 
@@ -90,7 +91,10 @@ A detailed sub-commands help is available by typing:
 
 
 def bamcorrelate_args(case='bins'):
-    parser = argparse.ArgumentParser(add_help=False)
+    outputParser = scParserCommon.output()
+    filterParser = scParserCommon.filterOptions()
+    parser = argparse.ArgumentParser(parents=[outputParser, filterParser],
+                                    add_help=False)
     required = parser.add_argument_group('Required arguments')
 
     # define the arguments
@@ -105,43 +109,10 @@ def bamcorrelate_args(case='bins'):
                           help='A single-column text file with barcodes (whitelist) to count.',
                           required=True)
 
-    required.add_argument('--outFilePrefix', '-out', '-o',
-                          help='Prefix of file name to save the results. The output is a sparse matrix '
-                               'which can be subsequently loaded into R or python for further analysis.',
-                          type=str)
-
     optional = parser.add_argument_group('Optional arguments')
 
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
-
-    optional.add_argument('--tagName', '-tn',
-                          metavar='STR',
-                          help='Name of the BAM tag from which to extract barcodes.',
-                          type=str,
-                          default='BC')
-
-    optional.add_argument('--motifFilter', '-m',
-                          metavar='STR',
-                          help='Check whether a given motif is present in the read and the corresponding reference genome. '
-                                'This function checks for the motif at the 5-end of the read and at the 5-overhang in the genome. '
-                                'Reads not containing the given motif are not discarded. ',
-                          type=str,
-                          nargs='+',
-                          default=None)
-
-    optional.add_argument('--genome2bit', '-g',
-                          metavar='STR',
-                          help='If --motifFilter is provided, please also provide the genome sequence (in 2bit format). ',
-                          type=str,
-                          default=None)
-
-    optional.add_argument('--GCcontentFilter', '-gc',
-                          metavar='STR',
-                          help='Check whether the GC content of the read falls within the provided range. '
-                                'If the GC content of the reads fall outside the range, they are discarded. ',
-                          type=str,
-                          default=None)
 
     optional.add_argument('--labels', '-l',
                           metavar='sample1 sample2',
@@ -172,14 +143,6 @@ def bamcorrelate_args(case='bins'):
                           '<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. '
                           '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
                           '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
-
-    optional.add_argument('--minAlignedFraction',
-                           help='Minimum fraction of the reads which should be aligned to be counted. This includes '
-                           'mismatches tolerated by the aligners, but excludes InDels/Clippings (Default: %(default)s)',
-                           metavar='FLOAT',
-                           default=None,
-                           type=float,
-                           required=False)
 
     if case == 'bins':
         optional.add_argument('--binSize', '-bs',
