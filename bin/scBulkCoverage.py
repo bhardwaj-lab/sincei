@@ -4,6 +4,8 @@
 # own tools
 import argparse
 import sys
+import os
+import itertools
 import numpy as np
 import pandas as pd
 from deeptools import parserCommon
@@ -63,6 +65,14 @@ def get_required_args():
                           nargs='+',
                           required=True)
 
+    required.add_argument('--labels', '-l',
+                          metavar='sample1 sample2',
+                          help='User defined labels instead of default labels from '
+                               'file names. '
+                               'Multiple labels have to be separated by a space, e.g. '
+                               '--labels sample1 sample2 sample3',
+                          nargs='+')
+
     required.add_argument('--groupInfo', '-i',
                           help='tsv file with Cell grouping information. Pseudo-Bulk Bigwigs will be '
                                 'computed per group.',
@@ -79,6 +89,12 @@ def get_optional_args():
 
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
+
+    optional.add_argument('--smartLabels',
+                          action='store_true',
+                          help='Instead of manually specifying labels for the input '
+                          'BAM files, this causes scDeepTools to use the file name '
+                          'after removing the path and extension.')
 
     optional.add_argument('--outFileFormat', '-of',
                        help='Output file type. Either "bigwig" or "bedgraph".',
@@ -145,9 +161,44 @@ def main(args=None):
     else:
         debug = 0
 
-    ## read the group info file (make it more robust)
-    groupInfo = pd.read_csv(args.groupInfo, sep="\t", index_col=0)
-    barcodes = groupInfo.barcodes.unique().tolist()
+        ## read the group info file (make it more robust)
+    df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, header = None,
+                            comment="#", names = ['sample', 'barcode', 'cluster'])
+    df.index = df[['sample', 'barcode']].apply(lambda x: ':'.join(x), axis=1)
+    #barcodes = groupInfo.barcode.unique().tolist()
+
+    ## match the sample labels with groupInfo labels before proceeding
+    ## create new DF with user-provided bam+labels (this would match the counts)
+    if args.labels and len(args.bamfiles) != len(args.labels):
+        print("The number of labels does not match the number of bam files.")
+        exit(0)
+    if not args.labels:
+        if args.smartLabels:
+            args.labels = smartLabels(args.bamfiles)
+        else:
+            args.labels = [os.path.basename(x) for x in args.bamfiles]
+
+    # check that sample names in df and --labels match
+    labels_in_df = set(args.labels).difference(set(df['sample']))
+    df_in_labels = set(df['sample']).difference(set(args.labels))
+    if bool(df_in_labels):
+        sys.stderr.write("Some (or all) of the samples indicated in the groupInfo file "
+                     "are absent from the bam file labels! \n"
+                     "Mismatched samples are: {} \n".format(df_in_labels))
+    elif bool(labels_in_df):
+        sys.stderr.write("Some (or all) of the samples indicated in --labels "
+                     "are absent from the in the groupInfo file! \n"
+                     "Mismatched samples are: {} \n".format(labels_in_df))
+
+    # make another df, containing union of all barcodes, and in the same order per sample
+    barcodes = df['barcode'].unique().tolist()
+    sm = list(itertools.chain.from_iterable(itertools.repeat(lab, len(barcodes)) for lab in args.labels))
+    bc = barcodes*len(args.labels)
+    groupInfo = pd.DataFrame({"sample":sm, "barcode":bc})
+    groupInfo.index = groupInfo[['sample', 'barcode']].apply(lambda x: ':'.join(x), axis=1)
+    groupInfo = pd.merge(groupInfo, df['cluster'], how="left", left_index=True, right_index=True, sort=False)
+    groupInfo = groupInfo.reset_index()[['sample', 'barcode', 'cluster']]
+    # remove
 
     ## Motif and GC filter
     if args.motifFilter:
@@ -169,16 +220,22 @@ def main(args=None):
         args.normalizeUsing = None  # For the sake of sanity
     elif args.normalizeUsing == 'RPGC' and not args.effectiveGenomeSize:
         sys.exit("RPGC normalization requires an --effectiveGenomeSize!\n")
-    print(args.bamfiles)
+
     if args.normalizeUsing:
         # if a normalization is required then compute the scale factors
-        bam, mapped, unmapped, stats = openBam(args.bamfiles[0], returnStats=True, nThreads=args.numberOfProcessors)
-        bam.close()
-        scale_factor = get_scale_factor(args, stats)
+        scale_factor_list = []
+        for file in args.bamfiles:
+            bam, mapped, unmapped, stats = openBam(file, returnStats=True, nThreads=args.numberOfProcessors)
+            bam.close()
+            args.bam = file
+            scale_factor_list.extend([get_scale_factor(args, stats)])
+        # currently the scale-factor is just the mean of all scale-factors
+        func_args = {'scaleFactor': np.mean(scale_factor_list) }
+        sys.stderr.write("Mean Scale Factor: {}\n".format(np.mean(scale_factor_list)))
     else:
         scale_factor = args.scaleFactor
+        func_args = {'scaleFactor': args.scaleFactor }
 
-    func_args = {'scaleFactor': scale_factor}
 
     # This fixes issue #520, where --extendReads wasn't honored if --filterRNAstrand was used
     if args.filterRNAstrand and not args.Offset:
@@ -188,12 +245,12 @@ def main(args=None):
         # check that library is paired end
         # using getFragmentAndReadSize
         from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
-        frag_len_dict, read_len_dict = get_read_and_fragment_length(args.bamfiles[0],
+        frag_len_dict, read_len_dict = [get_read_and_fragment_length(file,
                                                                     return_lengths=False,
                                                                     blackListFileName=args.blackListFileName,
                                                                     numberOfProcessors=args.numberOfProcessors,
-                                                                    verbose=args.verbose)
-        if frag_len_dict is None:
+                                                                    verbose=args.verbose) for file in args.bamfiles]
+        if any([x is None for x in frag_len_dict]):
             sys.exit("*Error*: For the --MNAse function a paired end library is required. ")
 
         # Set some default fragment length bounds
