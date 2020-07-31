@@ -818,9 +818,8 @@ class CountReadsPerBin(object):
 
                     if fragmentStart < reg[0]:
                         fragmentStart = reg[0]
-                    if fragmentEnd > reg[0] + len(coverages) * tileSize:
-                        fragmentEnd = reg[0] + len(coverages) * tileSize
-
+                    if fragmentEnd > reg[0] + len(coverages[bc]) * tileSize:
+                        fragmentEnd = reg[0] + len(coverages[bc]) * tileSize
                     sIdx = vector_start + max((fragmentStart - reg[0]) // tileSize, 0)
                     eIdx = vector_start + min(np.ceil(float(fragmentEnd - reg[0]) / tileSize).astype('int'), nRegBins)
                     if last_eIdx is not None:
