@@ -6,7 +6,7 @@ import os
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import smartLabels
-from deeptools._version import __version__
+#from deeptools._version import __version__
 from deeptoolsintervals import GTF
 
 import numpy as np
@@ -106,8 +106,8 @@ The sum of these may be more than the total number of reads. Note that alignment
                          help='Set to see processing messages.',
                          action='store_true')
 
-    general.add_argument('--version', action='version',
-                         version='%(prog)s {}'.format(__version__))
+#    general.add_argument('--version', action='version',
+#                         version='%(prog)s {}'.format(__version__))
 
     filtering = parser.add_argument_group('Optional arguments')
 
