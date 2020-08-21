@@ -176,6 +176,8 @@ class WriteBedGraph(cr.CountReadsPerBin):
         # write output for each cluster
         cluster_info = self.clusterInfo
         clusters = cluster_info.cluster.unique().tolist()
+        ## here is the opportunity to sum the counts per sample and get a genomic scaling factor,
+        
         for cl in clusters:
             if np.isnan(cl):
                 continue
