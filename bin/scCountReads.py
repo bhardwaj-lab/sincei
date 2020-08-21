@@ -15,8 +15,9 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 
 # own functions
-import scReadCounter as countR
-import scParserCommon
+sys.path.append('../sincei')
+import ReadCounter as countR
+import ParserCommon
 
 old_settings = np.seterr(all='ignore')
 
@@ -91,8 +92,8 @@ A detailed sub-commands help is available by typing:
 
 
 def bamcorrelate_args(case='bins'):
-    outputParser = scParserCommon.output()
-    filterParser = scParserCommon.filterOptions()
+    outputParser = ParserCommon.output()
+    filterParser = ParserCommon.filterOptions()
     parser = argparse.ArgumentParser(parents=[outputParser, filterParser],
                                     add_help=False)
     required = parser.add_argument_group('Required arguments')

@@ -13,11 +13,12 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
+sys.path.append('../sincei')
 from utilities import *
-import scParserCommon
+import ParserCommon
 
 def parseArguments():
-    filterParser = scParserCommon.filterOptions()
+    filterParser = ParserCommon.filterOptions()
 
     parser = argparse.ArgumentParser(
         parents=[filterParser],

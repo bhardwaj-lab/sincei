@@ -13,8 +13,9 @@ from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
 
 ## own Functions
-import scWriteBedGraph
-import scParserCommon
+sys.path.append('../sincei')
+import WriteBedGraph
+import ParserCommon
 
 debug = 0
 
@@ -24,8 +25,8 @@ def parseArguments():
     bamParser = parserCommon.read_options()
     normalizationParser = parserCommon.normalization_options()
 
-    outputParser = scParserCommon.output()
-    filterParser = scParserCommon.filterOptions()
+    outputParser = ParserCommon.output()
+    filterParser = ParserCommon.filterOptions()
     requiredArgs = get_required_args()
     optionalArgs = get_optional_args()
     parser = \
@@ -318,7 +319,7 @@ def main(args=None):
         wr.filter_strand = args.filterRNAstrand
         wr.Offset = args.Offset
     else:
-        wr = scWriteBedGraph.WriteBedGraph(args.bamfiles,
+        wr = WriteBedGraph.WriteBedGraph(args.bamfiles,
                                          binLength=args.binSize,
                                          stepSize=args.binSize,
                                          barcodes=barcodes,
@@ -343,12 +344,12 @@ def main(args=None):
                                          verbose=args.verbose,
                                          )
 
-    wr.run(scWriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,
+    wr.run(WriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,
            blackListFileName=args.blackListFileName,
            format=args.outFileFormat, smoothLength=args.smoothLength)
 
 
-class OffsetFragment(scWriteBedGraph.WriteBedGraph):
+class OffsetFragment(WriteBedGraph.WriteBedGraph):
     """
     Class to redefine the get_fragment_from_read for the --Offset case
     """
@@ -476,7 +477,7 @@ class OffsetFragment(scWriteBedGraph.WriteBedGraph):
         return self.get_fragment_from_read_list(read, offset)
 
 
-class CenterFragment(scWriteBedGraph.WriteBedGraph):
+class CenterFragment(WriteBedGraph.WriteBedGraph):
     """
     Class to redefine the get_fragment_from_read for the --MNase case
 

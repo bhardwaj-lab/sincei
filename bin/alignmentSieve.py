@@ -12,6 +12,7 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
+sys.path.append('../sincei')
 from utilities import checkMotifs, checkGCcontent
 
 def parseArguments():
