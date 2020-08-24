@@ -18,14 +18,14 @@ import ReadCounter as cr
 debug = 0
 
 
-def scaleCoverage(tile_coverage, nCells, args):
-    """
-    Return coverage normalized by cell numbers per cluster.
-    tileCoverage should be an list with only one element
-    """
-    return (args['scaleFactor'] * tile_coverage)/float(nCells)
+#def scaleCoverage(tile_coverage, nCells, args):
+#    """
+#    Return coverage normalized by cell numbers per cluster.
+#    tileCoverage should be an list with only one element
+#    """
+#    return (args['scaleFactor'] * tile_coverage)/float(nCells)
 
-def scaleCoverage_simple(tile_coverage, nCells, args):
+def scaleCoverage(tile_coverage, args):
     """
     Return coverage normalized by cell numbers per cluster.
     tileCoverage should be an list with only one element
@@ -176,24 +176,56 @@ class WriteBedGraph(cr.CountReadsPerBin):
         # write output for each cluster
         cluster_info = self.clusterInfo
         clusters = cluster_info.cluster.unique().tolist()
-        ## here is the opportunity to sum the counts per sample and get a genomic scaling factor,
 
+        ## here is the opportunity to sum the counts per sample and get a genomic scaling factor,
+        #for cl in clusters:
+        #    if np.isnan(cl):
+        #        continue
+        #    if format == 'bedgraph':
+        #        out_file = open("{}_{}.bedgraph".format(out_file_prefix, cl), 'wb')
+        #        for r in res:
+        #            if r[3][cl]:
+        #                _foo = open(r[3][cl], 'rb')
+        #                shutil.copyfileobj(_foo, out_file)
+        #                _foo.close()
+                        #os.remove(r[3][cl])
+        #        out_file.close()
+        #    else:
+        #        bedGraphToBigWig(chrom_names_and_size, [r[3][cl] for r in res],
+        #                         "{}_{}.bw".format(out_file_prefix, cl))
         for cl in clusters:
             if np.isnan(cl):
-                continue
-            if format == 'bedgraph':
-                out_file = open("{}_{}.bedgraph".format(out_file_prefix, cl), 'wb')
-                for r in res:
-                    if r[3][cl]:
-                        _foo = open(r[3][cl], 'rb')
-                        shutil.copyfileobj(_foo, out_file)
-                        _foo.close()
-                        #os.remove(r[3][cl])
-                out_file.close()
-            else:
-                bedGraphToBigWig(chrom_names_and_size, [x[3][cl] for x in res],
-                                 "{}_{}.bw".format(out_file_prefix, cl))
+                        continue
+            # concatenate the coverages
+            tmp_out = "/tmp/{}_{}.tmp".format(out_file_prefix, cl)
+            out_file = open(tmp_out, 'wb')
+            for r in res:
+                if r[3][cl]:
+                    _foo = open(r[3][cl], 'rb')
+                    shutil.copyfileobj(_foo, out_file)
+                    _foo.close()
+                    os.remove(r[3][cl])
+            out_file.close()
 
+            ## read back and normalize
+            cl_idx = cluster_info.index[pd.Series(cluster_info.cluster == cl)].tolist()
+            nCells = float(len(cl_idx))
+            out_file = pd.read_csv(tmp_out, sep = "\t", index_col=None, header = None)
+            # CPM norm
+            million_reads_mapped = float(np.sum(out_file[3])) / 1e6
+            scale_factor = 1.0 / (million_reads_mapped)
+            # per mil counts
+            out_file[3] *= scale_factor
+            # divided by nCells
+            out_file[3] *= 1/nCells
+            # out
+            bg_out = "{}_{}.bedgraph".format(out_file_prefix, cl)
+
+            out_file.to_csv(bg_out, sep ="\t", index = False, header = False)
+            os.remove(tmp_out)
+            if format == 'bigwig':
+                bedGraphToBigWig(chrom_names_and_size, [bg_out],
+                                         "{}_{}.bw".format(out_file_prefix, cl))
 
     def writeBedGraph_worker(self, chrom, start, end, func_to_call, func_args, bed_regions_list=None):
 
@@ -263,7 +295,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
             previous_value = None
             line_string = "{}\t{}\t{}\t{:g}\n"
             cl_idx = cluster_info.index[pd.Series(cluster_info.cluster == cl)].tolist()
-            nCells = len(cl_idx)
+#            nCells = len(cl_idx)
 
             for tileIndex in range(coverage.shape[0]):
                 ## smoothing disabled for now
@@ -271,7 +303,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 if self.skipZeroOverZero and np.sum(tileCoverage) == 0:
                     continue
 
-                value = func_to_call(np.sum(tileCoverage[cl_idx]), nCells, func_args)
+                value = func_to_call(np.sum(tileCoverage[cl_idx]), func_args)
 
                 if previous_value is None:
                     writeStart = start + tileIndex * self.binLength

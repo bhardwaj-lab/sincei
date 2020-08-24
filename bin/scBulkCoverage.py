@@ -13,7 +13,7 @@ from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
 
 ## own Functions
-sys.path.append('../sincei')
+sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
 import WriteBedGraph
 import ParserCommon
 
@@ -222,20 +222,23 @@ def main(args=None):
     elif args.normalizeUsing == 'RPGC' and not args.effectiveGenomeSize:
         sys.exit("RPGC normalization requires an --effectiveGenomeSize!\n")
 
-    if args.normalizeUsing:
+    scale_factor = args.scaleFactor
+    func_args = {'scaleFactor': args.scaleFactor }
+
+#    if args.normalizeUsing:
         # if a normalization is required then compute the scale factors
-        scale_factor_list = []
-        for file in args.bamfiles:
-            bam, mapped, unmapped, stats = openBam(file, returnStats=True, nThreads=args.numberOfProcessors)
-            bam.close()
-            args.bam = file
-            scale_factor_list.extend([get_scale_factor(args, stats)])
+#        scale_factor_list = []
+#        for file in args.bamfiles:
+#            bam, mapped, unmapped, stats = openBam(file, returnStats=True, nThreads=args.numberOfProcessors)
+#            bam.close()
+#            args.bam = file
+#            scale_factor_list.extend([get_scale_factor(args, stats)])
         # currently the scale-factor is just the mean of all scale-factors
-        func_args = {'scaleFactor': np.mean(scale_factor_list) }
-        sys.stderr.write("Mean Scale Factor: {}\n".format(np.mean(scale_factor_list)))
-    else:
-        scale_factor = args.scaleFactor
-        func_args = {'scaleFactor': args.scaleFactor }
+#        func_args = {'scaleFactor': np.mean(scale_factor_list) }
+#        sys.stderr.write("Mean Scale Factor: {}\n".format(np.mean(scale_factor_list)))
+#    else:
+#        scale_factor = args.scaleFactor
+#        func_args = {'scaleFactor': args.scaleFactor }
 
 
     # This fixes issue #520, where --extendReads wasn't honored if --filterRNAstrand was used
