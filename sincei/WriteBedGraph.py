@@ -212,8 +212,8 @@ class WriteBedGraph(cr.CountReadsPerBin):
             nCells = float(len(cl_idx))
             out_file = pd.read_csv(tmp_out, sep = "\t", index_col=None, header = None)
             # CPM norm
-            million_reads_mapped = float(np.sum(out_file[3])) / 1e6
-            scale_factor = 1.0 / (million_reads_mapped)
+            per10k_reads_mapped = float(np.sum(out_file[3])) / 1e4
+            scale_factor = 1.0 / (per10k_reads_mapped)
             # per mil counts
             out_file[3] *= scale_factor
             # divided by nCells
