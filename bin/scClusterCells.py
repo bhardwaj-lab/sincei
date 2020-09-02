@@ -164,7 +164,7 @@ def cluster_LSA(cell_topic, louvain_resolution):
     umap_df.columns = ['UMAP1', 'UMAP2']
     umap_df['louvain'] = list(cell_topic.louvain)
     umap_df.index = cell_topic.index
-    
+
     return umap_df
 
 
@@ -285,7 +285,7 @@ def main(args=None):
         # convert cm values to inches
         fig = plt.figure(figsize=(args.plotWidth / 2.54, args.plotHeight / 2.54))
         fig.suptitle('LSA-UMAP', y=(1 - (0.06 / args.plotHeight)))
-        plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, c=[sns.color_palette()[x] for x in list(umap_lsi.louvain)])
+        plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.louvain)])
         plt.tight_layout()
         plt.savefig(args.plotFile, dpi=200, format=args.plotFileFormat)
         plt.close()
