@@ -163,7 +163,8 @@ def cluster_LSA(cell_topic, louvain_resolution):
     umap_df = pd.DataFrame(umfit.embedding_)
     umap_df.columns = ['UMAP1', 'UMAP2']
     umap_df['louvain'] = list(cell_topic.louvain)
-
+    umap_df.index = cell_topic.index
+    
     return umap_df
 
 
