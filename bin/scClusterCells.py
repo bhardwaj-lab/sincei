@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse, io
 from itertools import compress
-from deeptools import parserCommon
+
 # plotting
 import seaborn as sns
 import matplotlib
@@ -16,19 +16,22 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['svg.fonttype'] = 'none'
 
 # clustering and umap
-#from sklearn.decomposition import TruncatedSVD
-#from sklearn.cluster import AgglomerativeClustering
+from scipy.sparse import issparse, coo_matrix, csr_matrix
+from sklearn.metrics import pairwise_distances
 # topic models
 from gensim import corpora, matutils, models
 # Louvain clustering and UMAP
-from sklearn.metrics.pairwise import cosine_similarity
 from networkx import convert_matrix
+import leidenalg as la
 import community
 import umap
 
 # single-cell stuff
-import scanpy as scp
+
 import anndata
+import scanpy as scp
+from scanpy.neighbors import _compute_connectivities_umap,  _get_indices_distances_from_dense_matrix
+from scanpy._utils import get_igraph_from_adjacency
 
 ### ------ Functions ------
 
@@ -126,11 +129,11 @@ def preprocess_adata(adata, min_cell_sum, min_region_sum):
     # return
 #    return adata
 
-def LSA_gensim(mat, cells, regions, nTopics):
+def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
     # LSA
     regions_dict = corpora.dictionary.Dictionary([regions])
     corpus = matutils.Sparse2Corpus(mat)
-    tfidf = models.TfidfModel(corpus)
+    tfidf = models.TfidfModel(corpus, id2word=regions_dict, normalize=True, smartirs=smartCode)
     corpus_tfidf = tfidf[corpus]
     lsi_model = models.LsiModel(corpus_tfidf, id2word=regions_dict, num_topics=nTopics)
     corpus_lsi = lsi_model[corpus_tfidf]
@@ -150,19 +153,35 @@ def LSA_gensim(mat, cells, regions, nTopics):
 
     return corpus_lsi, cell_topic
 
-def cluster_LSA(cell_topic, louvain_resolution):
+def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0):
+
     # cluster on cel-topic dist
-    sims = cosine_similarity(cell_topic)
-    sims_graph = convert_matrix.from_numpy_array(sims)
-    partition = community.best_partition(sims_graph, resolution=louvain_resolution)
-    cell_topic['louvain'] = partition.values()
+    _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
+    knn_indices, knn_distances = _get_indices_distances_from_dense_matrix(_distances, nk)
+    distances, connectivities = _compute_connectivities_umap(knn_indices,
+                                                             knn_distances,
+                                                             _distances.shape[0], nk)
+
+
+    if modularityAlg == 'leiden':
+        G = get_igraph_from_adjacency(connectivities, directed=True)
+        partition = la.find_partition(G,
+                              la.RBConfigurationVertexPartition,
+                              weights='weight',
+                              seed=42,
+                              resolution_parameter=resolution)
+        cell_topic['cluster'] = partition.membership
+    else:
+        G = convert_matrix.from_numpy_array(connectivities)
+        partition = community.best_partition(G, resolution=resolution, random_state=42)
+        cell_topic['cluster'] = partition.values()
 
     # umap on cell-topic dist
-    um = umap.UMAP(spread = 5, min_dist=0.1, metric='cosine', init='random')
+    um = umap.UMAP(spread = 5, min_dist=0.1, n_neighbors=nk, metric=distance_metric, init='random', random_state=42)
     umfit = um.fit(cell_topic.iloc[:, 0:(len(cell_topic.columns) - 1)])
     umap_df = pd.DataFrame(umfit.embedding_)
     umap_df.columns = ['UMAP1', 'UMAP2']
-    umap_df['louvain'] = list(cell_topic.louvain)
+    umap_df['cluster'] = list(cell_topic.cluster)
     umap_df.index = cell_topic.index
 
     return umap_df
@@ -184,28 +203,22 @@ def parseArguments():
                           required=True)
 
     required.add_argument('--outFile', '-o',
-                         type=parserCommon.writableFile,
+                         type=argparse.FileType('w'),
                          required=True,
                          help='The file to write results to. The output file contains cell metadata, UMAP coordinates and cluster IDs.')
 
     general = parser.add_argument_group('General arguments')
 
     general.add_argument('--plotFile', '-p',
-                         type=parserCommon.writableFile,
+                         type=argparse.FileType('w'),
                          required=False,
                          help='The output plot file (for UMAP)')
 
     general.add_argument('--outFileTrainedModel', '-om',
-                         type=parserCommon.writableFile,
+                         type=argparse.FileType('w'),
                          required=False,
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
-
-    general.add_argument('--method', '-m',
-                         type=str,
-                         choices=['LSA'],
-                         default='LSA',
-                         help='The dimentionality reduction method for clustering. (Default: %(default)s)')
 
     general.add_argument('--minCellSum', '-c',
                          default=1000,
@@ -219,17 +232,36 @@ def parseArguments():
                          help='For filtering of regions: Minimum number of cells the regions should be present in, '
                               'for the region to be kept. (Default: %(default)s)')
 
+    general.add_argument('--whitelist', '-w',
+                         default=None,
+                         type=argparse.FileType('r'),
+                         help='For filtering of regions: Minimum number of cells the regions should be present in, '
+                              'for the region to be kept. (Default: %(default)s)')
+
+    general.add_argument('--method', '-m',
+                         type=str,
+                         choices=['LSA'],
+                         default='LSA',
+                         help='The dimentionality reduction method for clustering. (Default: %(default)s)')
+
     general.add_argument('--nPrinComps', '-n',
                          default=20,
                          type=int,
                          help='Number of principle components to reduce the dimentionality to. '
                               'Use higher number for samples with more expected heterogenity. (Default: %(default)s)')
 
-    general.add_argument('--louvainResolution', '-lr',
+    general.add_argument('--nNeighbors', '-nk',
+                         default=30,
+                         type=int,
+                         help='Number of nearest neighbours to consider for clustering and UMAP. This number should be chosen considering '
+                              'the total number of cells and expected number of clusters. Smaller number will lead to more fragmented clusters. '
+                              '(Default: %(default)s)')
+
+    general.add_argument('--clusterResolution', '-cr',
                          default=1.0,
                          type=float,
-                         help='Resolution parameter for louvain clustering. Values lower than 1.0 would result in more clusters, '
-                              'while higher values lead to merging of clusters. In most cases, the optimum values would be between '
+                         help='Resolution parameter for clustering. Values lower than 1.0 would result in less clusters, '
+                              'while higher values lead to splitting of clusters. In most cases, the optimum value would be between '
                               '0.8 and 1.2. (Default: %(default)s)')
 
     general.add_argument('--plotWidth',
@@ -272,8 +304,8 @@ def main(args=None):
 
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adat.X.transpose())
-    corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps)
-    umap_lsi = cluster_LSA(cell_topic, args.louvainResolution)
+    corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
+    umap_lsi = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     #cluster_id = adat.obs.louvain.to_list()
     #cluster_id = [int(x) for x in cluster_id]
@@ -285,7 +317,7 @@ def main(args=None):
         # convert cm values to inches
         fig = plt.figure(figsize=(args.plotWidth / 2.54, args.plotHeight / 2.54))
         fig.suptitle('LSA-UMAP', y=(1 - (0.06 / args.plotHeight)))
-        plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.louvain)])
+        plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.cluster)])
         plt.tight_layout()
         plt.savefig(args.plotFile, dpi=200, format=args.plotFileFormat)
         plt.close()
