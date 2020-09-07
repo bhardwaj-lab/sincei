@@ -89,3 +89,19 @@ def checkAlignedFraction(read, lowFilter):
         return True
     else:
         return False
+
+def colorPicker(name):
+    """
+    select colors from my list of custom made color color_palettes
+    """
+    colors = {'twentyfive': ["#dd4e34",  "#78d545",  "#b047dc",  "#d6d94d",  "#5d48c6",  "#74d88b",  "#c944af",
+                 "#8a9739",  "#542c75",  "#d3953c",  "#607dc7",  "#487f46",  "#d04774",  "#7bd2c8",
+                 "#6b2737",  "#cfcb9a",  "#332a42",  "#d7928a",  "#343d25",  "#cc8ad3",  "#7b6a43",
+                 "#b5bad9",  "#99472b",  "#4e8290",  "#936987"],
+              'colorblind': ["#ffaec0", "#cd7600", "#893558", "#195f37", "#da71f9", "#a2d391", "#881e9b",
+                 "#b9d05f", "#524d7e", "#f2bf4b", "#01d6c2", "#f54040", "#0097fb", "#756400",
+                 "#4b44aa", "#f0bd79", "#a1008b", "#6d4d02", "#ff9afc", "#01df8f", "#e2b8ed",
+                 "#6e9d00", "#f4177b", "#01b65f", "#9b2532"]
+            }
+
+    return colors[name]
