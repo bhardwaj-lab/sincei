@@ -224,7 +224,7 @@ class CountReadsPerBin(object):
                  genomeChunkSize=None,
                  blackListFileName=None,
                  minMappingQuality=None,
-                 ignoreDuplicates=False,
+                 duplicateFilter=None,
                  chrsToSkip=[],
                  stepSize=None,
                  center_read=False,
@@ -286,7 +286,7 @@ class CountReadsPerBin(object):
         self.region = region
         self.bedFile = bedFile
         self.minMappingQuality = minMappingQuality
-        self.ignoreDuplicates = ignoreDuplicates
+        self.duplicateFilter = duplicateFilter
         self.chrsToSkip = chrsToSkip
         self.stepSize = stepSize
         self.center_read = center_read
@@ -770,14 +770,18 @@ class CountReadsPerBin(object):
                         continue
 
                 ## get barcode from read
-                bc = read.get_tag(self.tagName)
+                try:
+                    bc = read.get_tag(self.tagName)
+                except KeyError:
+                    continue
                 # also keep a counter for barcodes not in whitelist?
                 if bc not in self.barcodes:
                     continue
-                # get rid of duplicate reads that have same position on each of the
-                # pairs (this code needs revision to consider barcodes)
-                if self.ignoreDuplicates:
-                    # Assuming more or less concordant reads, use the fragment bounds, otherwise the start positions
+                # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
+                if duplicateFilter:
+                    filt = duplicateFilter.split('_')
+                    ## get read (or fragment) start/end
+                    # get fragment start and end for that read
                     if tLen >= 0:
                         s = read.pos
                         e = s + tLen
@@ -786,13 +790,26 @@ class CountReadsPerBin(object):
                         e = s - tLen
                     if read.reference_id != read.next_reference_id:
                         e = read.pnext
+                    if 'end' not in filt:
+                        # use only read (or fragment) start
+                        if read.is_reverse:
+                            s = None
+                        else:
+                            e = None
+                    ## get UMI if asked
+                    if 'umi' in filt:
+                        umi = read.get_tag('RX')
+                    else:
+                        umi = None
+
                     if lpos is not None and lpos == read.reference_start \
-                            and (s, e, read.next_reference_id, read.is_reverse) in prev_pos:
-                        continue
+                        and (bc, umi, s, e, read.next_reference_id, read.is_reverse) in prev_pos:
+                            continue
+
                     if lpos != read.reference_start:
                         prev_pos.clear()
                     lpos = read.reference_start
-                    prev_pos.add((s, e, read.next_reference_id, read.is_reverse))
+                    prev_pos.add((bc, umi, s, e, read.next_reference_id, read.is_reverse))
 
                 # since reads can be split (e.g. RNA-seq reads) each part of the
                 # read that maps is called a position block.
