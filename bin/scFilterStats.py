@@ -36,7 +36,7 @@ The following metrics are estimated according to the --binSize and --distanceBet
  * Alignments with a below threshold MAPQ (--minMappingQuality)
  * Alignments with at least one missing flag (--samFlagInclude)
  * Alignments with undesirable flags (--samFlagExclude)
- * Duplicates determined by deepTools (--ignoreDuplicates)
+ * Duplicates determined by sincei (--duplicateFilter)
  * Duplicates marked externally (e.g., by picard)
  * Singletons (paired-end reads with only one mate aligning)
  * Wrong strand (due to --filterRNAstrand)
@@ -117,13 +117,6 @@ The sum of these may be more than the total number of reads. Note that alignment
                                 'the given strand. (Default: %(default)s)',
                            choices=['forward', 'reverse'],
                            default=None)
-
-    filtering.add_argument('--ignoreDuplicates',
-                           help='If set, reads that have the same orientation '
-                           'and start position will be considered only '
-                           'once. If reads are paired, the mate\'s position '
-                           'also has to coincide to ignore a read.',
-                           action='store_true')
 
     filtering.add_argument('--minMappingQuality',
                            metavar='INT',
@@ -258,24 +251,16 @@ def getFiltered_worker(arglist):
                 blacklisted[bc] += 1
 
             ## Duplicates
-            if args.ignoreDuplicates:
-                # Assuming more or less concordant reads, use the fragment bounds, otherwise the start positions
-                if read.tlen >= 0:
-                    s = read.pos
-                    e = s + read.tlen
-                else:
-                    s = read.pnext
-                    e = s - read.tlen
-                if read.reference_id != read.next_reference_id:
-                    e = read.pnext
+            if args.duplicateFilter:
+                tup = getDupFilterTuple(read, bc, args.duplicateFilter)
                 if lpos is not None and lpos == read.reference_start \
-                        and (s, e, read.next_reference_id, read.is_reverse) in prev_pos:
+                        and tup in prev_pos:
                     filtered[bc] = 1
                     internalDupes[bc] += 1
                 if lpos != read.reference_start:
                     prev_pos.clear()
                 lpos = read.reference_start
-                prev_pos.add((s, e, read.next_reference_id, read.is_reverse))
+                prev_pos.add(tup)
             if read.is_duplicate:
                 filtered[bc] = 1
                 externalDupes[bc] += 1

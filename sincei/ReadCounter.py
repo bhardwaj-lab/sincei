@@ -118,9 +118,9 @@ class CountReadsPerBin(object):
     minMappingQuality : int
         Reads of a mapping quality less than the give value are not considered. Default: None
 
-    ignoreDuplicates : bool
-        Whether read duplicates (same start, end position. If paired-end, same start-end for mates) are
-        to be excluded. Default: false
+    duplicateFilter : str
+        Type of duplicate filter to use (same start, end position, umi and barcodes. If paired-end, same start-end for mates) are
+        to be excluded. Default: None
 
     chrToSkip: list
         List with names of chromosomes that do not want to be included in the coverage computation.
@@ -778,39 +778,15 @@ class CountReadsPerBin(object):
                 if bc not in self.barcodes:
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
-                if duplicateFilter:
-                    tLenDup = deeptools.utilities.getTLen(read, notAbs=True)
-                    filt = duplicateFilter.split('_')
-                    ## get read (or fragment) start/end
-                    # get fragment start and end for that read
-                    if tLenDup >= 0:
-                        s = read.pos
-                        e = s + tLenDup
-                    else:
-                        s = read.pnext
-                        e = s - tLenDup
-                    if read.reference_id != read.next_reference_id:
-                        e = read.pnext
-                    if 'end' not in filt:
-                        # use only read (or fragment) start
-                        if read.is_reverse:
-                            s = None
-                        else:
-                            e = None
-                    ## get UMI if asked
-                    if 'umi' in filt:
-                        umi = read.get_tag('RX')
-                    else:
-                        umi = None
-
+                if self.duplicateFilter:
+                    tup = getDupFilterTuple(read, bc, self.duplicateFilter)
                     if lpos is not None and lpos == read.reference_start \
-                        and (bc, umi, s, e, read.next_reference_id, read.is_reverse) in prev_pos:
+                        and tup in prev_pos:
                             continue
-
                     if lpos != read.reference_start:
                         prev_pos.clear()
                     lpos = read.reference_start
-                    prev_pos.add((bc, umi, s, e, read.next_reference_id, read.is_reverse))
+                    prev_pos.add(tup)
 
                 # since reads can be split (e.g. RNA-seq reads) each part of the
                 # read that maps is called a position block.

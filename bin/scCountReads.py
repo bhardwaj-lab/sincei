@@ -57,7 +57,7 @@ A detailed sub-commands help is available by typing:
         metavar='')
 
     parent_parser = parserCommon.getParentArgParse(binSize=False)
-    read_options_parser = parserCommon.read_options()
+    read_options_parser = ParserCommon.read_options()
 
     # bins mode options
     subparsers.add_parser(
@@ -264,7 +264,7 @@ def main(args=None):
         blackListFileName=args.blackListFileName,
         extendReads=args.extendReads,
         minMappingQuality=args.minMappingQuality,
-        ignoreDuplicates=args.ignoreDuplicates,
+        duplicateFilter=args.duplicateFilter,
         center_read=args.centerReads,
         samFlag_include=args.samFlagInclude,
         samFlag_exclude=args.samFlagExclude,

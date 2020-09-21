@@ -1,5 +1,5 @@
 from itertools import compress
-
+from deeptools.utilities import getTLen
 
 def checkMotifs(read, chrom, genome, readMotif, refMotif):
         """
@@ -105,3 +105,34 @@ def colorPicker(name):
             }
 
     return colors[name]
+
+
+def getDupFilterTuple(read, bc, filter):
+    """
+    based on read and filter type, return a tuple to match with previous read, such that duplicates can be detected.
+    """
+    tLenDup = getTLen(read, notAbs=True)
+    filt = filter.split('_')
+    ## get read (or fragment) start/end
+    # get fragment start and end for that read
+    if tLenDup >= 0:
+        s = read.pos
+        e = s + tLenDup
+    else:
+        s = read.pnext
+        e = s - tLenDup
+    if read.reference_id != read.next_reference_id:
+        e = read.pnext
+    if 'end' not in filt:
+        # use only read (or fragment) start
+        if read.is_reverse:
+            s = None
+        else:
+            e = None
+    ## get UMI if asked
+    if 'umi' in filt:
+        umi = read.get_tag('RX')
+    else:
+        umi = None
+    tup = (bc, umi, s, e, read.next_reference_id, read.is_reverse)
+    return tup
