@@ -779,15 +779,16 @@ class CountReadsPerBin(object):
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if duplicateFilter:
+                    tLenDup = deeptools.utilities.getTLen(read, notAbs=True)
                     filt = duplicateFilter.split('_')
                     ## get read (or fragment) start/end
                     # get fragment start and end for that read
-                    if tLen >= 0:
+                    if tLenDup >= 0:
                         s = read.pos
-                        e = s + tLen
+                        e = s + tLenDup
                     else:
                         s = read.pnext
-                        e = s - tLen
+                        e = s - tLenDup
                     if read.reference_id != read.next_reference_id:
                         e = read.pnext
                     if 'end' not in filt:
