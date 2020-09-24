@@ -183,6 +183,9 @@ class CountReadsPerBin(object):
     bed_and_bin : boolean
         If true AND a bedFile is given, compute coverage of each bin of the given size in each region of bedFile
 
+    sumCoveragePerBin : boolean
+        If true return cumulative coverage per bin, instead of total read counts (for plotFingerPrint)
+
     genomeChunkSize : int
         If not None, the length of the genome used for multiprocessing.
 
@@ -238,6 +241,7 @@ class CountReadsPerBin(object):
                  minAlignedFraction=0,
                  out_file_for_raw_data=None,
                  bed_and_bin=False,
+                 sumCoveragePerBin=False,
                  statsList=[],
                  mappedList=[]):
 
@@ -303,6 +307,7 @@ class CountReadsPerBin(object):
         self.motifFilter = motifFilter# list of [readMotif, refMotif]
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
         self.genome = genome2bit
+        self.sumCoveragePerBin = sumCoveragePerBin
 
         if out_file_for_raw_data:
             self.save_data = True
@@ -729,8 +734,20 @@ class CountReadsPerBin(object):
             start_time = time.time()
             # caching seems faster. TODO: profile the function
             c = 0
-            if chrom not in bamHandle.references:
-                raise NameError("chromosome {} not found in bam file".format(chrom))
+            try:
+                if chrom not in bamHandle.references:
+                    raise NameError("chromosome {} not found in bam file".format(chrom))
+            except:
+                # bigWig input, as used by plotFingerprint
+                if bamHandle.chroms(chrom):
+                    _ = np.array(bamHandle.stats(chrom, regStart, regEnd, type="mean", nBins=nRegBins), dtype=np.float)
+                    _[np.isnan(_)] = 0.0
+                    _ = _ * tileSize
+                    coverages += _
+                    continue
+                else:
+                    raise NameError("chromosome {} not found in bigWig file with chroms {}".format(chrom, bamHandle.chroms()))
+
 
             prev_pos = set()
             lpos = None # of previous processed read pair
@@ -822,8 +839,32 @@ class CountReadsPerBin(object):
                             continue
                     sIdx = int(sIdx)
                     eIdx = int(eIdx)
-                    #coverages[sIdx:eIdx] += 1
-                    coverages[bc][sIdx:eIdx] += 1
+                    ## if sumCoverage is asked (plotFingerPrint) do cumulative coverage on that bin
+                    ## cum coverage = total no of bases covered * num reads
+                    if self.sumCoveragePerBin:
+                        if fragmentEnd < reg[0] + (sIdx + 1) * tileSize:
+                            _ = fragmentEnd - fragmentStart
+                        else:
+                            _ = reg[0] + (sIdx + 1) * tileSize - fragmentStart
+                        if _ > tileSize:
+                            _ = tileSize
+                        coverages[bc][sIdx] += _
+                        _ = sIdx + 1
+                        while _ < eIdx:
+                            coverages[bc][_] += tileSize
+                            _ += 1
+                        while eIdx - sIdx >= nRegBins:
+                            eIdx -= 1
+                        if eIdx > sIdx:
+                            _ = fragmentEnd - (reg[0] + eIdx * tileSize)
+                            if _ > tileSize:
+                                _ = tileSize
+                            elif _ < 0:
+                                _ = 0
+                            coverages[bc][eIdx] += _
+                    else:
+                        # for everything except plotFingerPrint, simply count the number of reads
+                        coverages[bc][sIdx:eIdx] += 1
                     last_eIdx = eIdx
                 c += 1
 
@@ -1083,6 +1124,35 @@ class CountReadsPerBin(object):
         indexStart = max(tileIndex - smoothTilesLeft, 0)
         indexEnd = min(maxPosition, tileIndex + smoothTilesRight)
         return (indexStart, indexEnd)
+
+def remove_row_of_zeros(matrix):
+    # remove rows containing all zeros or all nans
+    _mat = np.nan_to_num(matrix)
+    to_keep = _mat.sum(1) != 0
+    return matrix[to_keep, :]
+
+
+def estimateSizeFactors(m):
+    """
+    Compute size factors in the same way as DESeq2.
+    The inverse of that is returned, as it's then compatible with bamCoverage.
+
+    m : a numpy ndarray
+
+    >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
+    >>> sf = estimateSizeFactors(m)
+    >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))
+    >>> m = np.array([[0, 0], [0, 1], [1, 1], [1, 2]])
+    >>> sf = estimateSizeFactors(m)
+    >>> assert(np.all(np.abs(sf - [1.1892, 0.8409]) < 1e-4))
+    """
+    loggeomeans = np.sum(np.log(m), axis=1) / m.shape[1]
+    # Mask after computing the geometric mean
+    m = np.ma.masked_where(m <= 0, m)
+    loggeomeans = np.ma.masked_where(np.isinf(loggeomeans), loggeomeans)
+    # DESeq2 ratio-based size factor
+    sf = np.exp(np.ma.median((np.log(m).T - loggeomeans).T, axis=0))
+    return 1. / sf
 
 
 class Tester(object):
