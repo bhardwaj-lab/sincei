@@ -15,7 +15,7 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 
 # own functions
-sys.path.append('../sincei')
+sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
 import ReadCounter as countR
 import ParserCommon
 
@@ -126,7 +126,7 @@ def bamcorrelate_args(case='bins'):
     optional.add_argument('--smartLabels',
                           action='store_true',
                           help='Instead of manually specifying labels for the input '
-                          'BAM files, this causes deepTools to use the file name '
+                          'BAM files, this causes sincei to use the file name '
                           'after removing the path and extension.')
 
     optional.add_argument('--genomeChunkSize',

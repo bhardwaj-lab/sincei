@@ -13,7 +13,7 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
-sys.path.append('../sincei')
+sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
 from utilities import *
 import ParserCommon
 
@@ -73,7 +73,7 @@ The sum of these may be more than the total number of reads. Note that alignment
     general.add_argument('--smartLabels',
                          action='store_true',
                          help='Instead of manually specifying labels for the input '
-                         'BAM files, this causes deepTools to use the '
+                         'BAM files, this causes sincei to use the '
                          'file name after removing the path and extension.')
 
     general.add_argument('--binSize', '-bs',
