@@ -709,8 +709,9 @@ class CountReadsPerBin(object):
                 tileSize = int(reg[2])
                 nRegBins = (reg[1] - reg[0]) // tileSize
                 if (reg[1] - reg[0]) % tileSize > 0:
-                    # Don't eliminate small bins! Issue 887
-                    nRegBins += 1
+                    if not self.sumCoveragePerBin:
+                        # Don't eliminate small bins! Issue 887
+                        nRegBins += 1
             else:
                 nRegBins = 1
                 tileSize = int(reg[1] - reg[0])
