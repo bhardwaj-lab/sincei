@@ -5,13 +5,13 @@ Single-Cell Informatics: A user-friendly toolkit for QC, counting, clustering an
 
 ### Currently supported functions
 
-1. scFilterStats: Evaluate cells from a BAM file based on various QC metrics. Output: tsv file
+1. **scFilterStats**: Evaluate cells from a BAM file based on various QC metrics. Output: tsv file
 
-2. scCountReads: Count reads/UMIs on genes, bins, exons etc, from a BAM file. Output: mtx file / hdf5 object (for other tools).
+2. **scCountReads**: Count reads/UMIs on genes, bins, exons etc, from a BAM file. Output: mtx file / hdf5 object (for other tools).
 
-3. scClusterCells: Cluster cells using LSA algorithm and make UMAP. Input: hdf5 object (from scCountReads), Output: tsv file (with UMAP + clusters), UMAP plot.
+3. **scClusterCells**: Cluster cells using LSA algorithm and make UMAP. Input: hdf5 object (from scCountReads), Output: tsv file (with UMAP + clusters), UMAP plot.
 
-4. scBulkCoverage: Create pseudo-bulk bigWig files from BAM files based on cluster assignments (from scClusterCells). Input: BAM file + tsv file (from scClusterCells), Output: bigWig files per cluster
+4. **scBulkCoverage**: Create pseudo-bulk bigWig files from BAM files based on cluster assignments (from scClusterCells). Input: BAM file + tsv file (from scClusterCells), Output: bigWig files per cluster
 
 ### Other tool ideas
 
