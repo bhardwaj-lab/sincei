@@ -4,6 +4,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import pyBigWig
+import math
 
 # deeptools modules
 from deeptools import mapReduce
@@ -193,11 +194,12 @@ class WriteBedGraph(cr.CountReadsPerBin):
         #    else:
         #        bedGraphToBigWig(chrom_names_and_size, [r[3][cl] for r in res],
         #                         "{}_{}.bw".format(out_file_prefix, cl))
+        prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
-            if np.isnan(cl):
-                        continue
+            if pd.isna(cl):
+                continue
             # concatenate the coverages
-            tmp_out = "/tmp/{}_{}.tmp".format(out_file_prefix, cl)
+            tmp_out = "/tmp/{}_{}.tmp".format(prefix, cl)
             out_file = open(tmp_out, 'wb')
             for r in res:
                 if r[3][cl]:
@@ -289,7 +291,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         tempfilenames = dict.fromkeys(clusters)
         ## sum up tilecoverage group-wise
         for cl in clusters:
-            if np.isnan(cl):
+            if pd.isna(cl):
                 continue
             _file = open(utilities.getTempFileName(suffix='.bg'), 'w')
             previous_value = None
