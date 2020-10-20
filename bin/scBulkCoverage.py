@@ -27,11 +27,12 @@ def parseArguments():
 
     outputParser = ParserCommon.output()
     filterParser = ParserCommon.filterOptions()
+    label_parser = ParserCommon.labelOptions()
     requiredArgs = get_required_args()
     optionalArgs = get_optional_args()
     parser = \
         argparse.ArgumentParser(
-            parents=[requiredArgs, outputParser, filterParser, optionalArgs,
+            parents=[requiredArgs, outputParser, label_parser, filterParser, optionalArgs,
                      parentParser, normalizationParser, bamParser],
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description='This tool takes alignments of reads or fragments '
@@ -66,14 +67,6 @@ def get_required_args():
                           nargs='+',
                           required=True)
 
-    required.add_argument('--labels', '-l',
-                          metavar='sample1 sample2',
-                          help='User defined labels instead of default labels from '
-                               'file names. '
-                               'Multiple labels have to be separated by a space, e.g. '
-                               '--labels sample1 sample2 sample3',
-                          nargs='+')
-
     required.add_argument('--groupInfo', '-i',
                           help='tsv file with Cell grouping information. Pseudo-Bulk Bigwigs will be '
                                 'computed per group.',
@@ -90,12 +83,6 @@ def get_optional_args():
 
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
-
-    optional.add_argument('--smartLabels',
-                          action='store_true',
-                          help='Instead of manually specifying labels for the input '
-                          'BAM files, this causes scDeepTools to use the file name '
-                          'after removing the path and extension.')
 
     optional.add_argument('--outFileFormat', '-of',
                        help='Output file type. Either "bigwig" or "bedgraph".',

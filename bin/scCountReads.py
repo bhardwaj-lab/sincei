@@ -94,7 +94,8 @@ A detailed sub-commands help is available by typing:
 def bamcorrelate_args(case='bins'):
     outputParser = ParserCommon.output()
     filterParser = ParserCommon.filterOptions()
-    parser = argparse.ArgumentParser(parents=[outputParser, filterParser],
+    label_parser = ParserCommon.labelOptions()
+    parser = argparse.ArgumentParser(parents=[outputParser, filterParser, label_parser],
                                     add_help=False)
     required = parser.add_argument_group('Required arguments')
 
@@ -114,20 +115,6 @@ def bamcorrelate_args(case='bins'):
 
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
-
-    optional.add_argument('--labels', '-l',
-                          metavar='sample1 sample2',
-                          help='User defined labels instead of default labels from '
-                               'file names. '
-                               'Multiple labels have to be separated by a space, e.g. '
-                               '--labels sample1 sample2 sample3',
-                          nargs='+')
-
-    optional.add_argument('--smartLabels',
-                          action='store_true',
-                          help='Instead of manually specifying labels for the input '
-                          'BAM files, this causes sincei to use the file name '
-                          'after removing the path and extension.')
 
     optional.add_argument('--genomeChunkSize',
                           type=int,

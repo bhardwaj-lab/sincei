@@ -62,7 +62,7 @@ The sum of these may be more than the total number of reads. Note that alignment
                          type=parserCommon.writableFile,
                          help='The file to write results to. By default, results are printed to the console')
 
-    general.add_argument('--sampleLabels',
+    general.add_argument('--labels', '-l',
                          help='Labels for the samples. The '
                          'default is to use the file name of the '
                          'sample. The sample labels should be separated '

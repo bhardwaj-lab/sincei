@@ -13,6 +13,27 @@ def output(args=None):
 
     return parser
 
+def labelOptions(args=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    group = parser.add_argument_group('Label options')
+
+    group.add_argument('--labels', '-l',
+                          metavar='sample1 sample2',
+                          help='User defined labels instead of default labels from '
+                               'file names. '
+                               'Multiple labels have to be separated by a space, e.g. '
+                               '--labels sample1 sample2 sample3',
+                          nargs='+')
+
+    group.add_argument('--smartLabels',
+                          action='store_true',
+                          help='Instead of manually specifying labels for the input '
+                          'BAM files, this causes sincei to use the file name '
+                          'after removing the path and extension.')
+
+    return parser
+
+
 def filterOptions(args=None):
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('Filtering Arguments')
@@ -153,3 +174,19 @@ def read_options():
                        required=False)
 
     return parser
+
+
+def process_args(args=None):
+
+    args = parse_arguments().parse_args(args)
+
+    if not args.labels:
+        if args.smartLabels:
+            args.labels = smartLabels(args.bamfiles)
+        else:
+            args.labels = args.bamfiles
+
+    if len(args.bamfiles) != len(args.labels):
+        sys.exit("The number of labels does not match the number of BAM files.")
+
+    return args
