@@ -177,9 +177,6 @@ def read_options():
 
 
 def process_args(args=None):
-
-    args = parse_arguments().parse_args(args)
-
     if not args.labels:
         if args.smartLabels:
             args.labels = smartLabels(args.bamfiles)
