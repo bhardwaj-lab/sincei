@@ -43,7 +43,7 @@ def get_required_args():
 
     required.add_argument('--outFile', '-o',
                          type=parserCommon.writableFile,
-                         help='The file to write results to. By default, results are printed to the console')
+                         help='The file to write results to.')
 
     return parser
 
@@ -148,8 +148,8 @@ def main(args=None):
 
     ## create colnames (sampleLabel+barcode)
     newlabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
-    df = pd.DataFrame({'cell': newlabs, 'jsd': jsd_all})
-    df.to_csv("test_jsd_df.txt", sep = "\t")
+    df = pd.DataFrame({'cell': newlabels, 'jsd': jsd_all})
+    df.to_csv(args.outFile, sep = "\t")
 
 
 
