@@ -235,8 +235,8 @@ def parseArguments():
     general.add_argument('--whitelist', '-w',
                          default=None,
                          type=argparse.FileType('r'),
-                         help='For filtering of regions: Minimum number of cells the regions should be present in, '
-                              'for the region to be kept. (Default: %(default)s)')
+                         help='A list of barcodes to be included for the clustering. The barcodes '
+                         '(along with sample labels) must be present in the anndata object (Default: %(default)s)')
 
     general.add_argument('--method', '-m',
                          type=str,
