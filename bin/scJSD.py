@@ -41,6 +41,11 @@ def get_required_args():
                           help='List of indexed BAM files',
                           required=True)
 
+    required.add_argument('--barcodes', '-bc',
+                          metavar='TXT',
+                          help='A single-column text file with barcodes (whitelist) to count.',
+                          required=True)
+
     required.add_argument('--outFile', '-o',
                          type=parserCommon.writableFile,
                          help='The file to write results to.')
@@ -84,9 +89,11 @@ def parse_arguments(args=None):
 
     read_options_parser = ParserCommon.read_options()
     label_parser = ParserCommon.labelOptions()
+    filter_parser = ParserCommon.filterOptions()
+
     parser = argparse.ArgumentParser(
         parents=[required_args, label_parser, read_options_parser,
-                 optional_args, parent_parser],
+                 filter_parser, optional_args, parent_parser],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='This tool samples regions in the genome from BAM files '
         'and compares the cumulative read coverages for each cell on those regions. '
@@ -104,25 +111,48 @@ def parse_arguments(args=None):
 def main(args=None):
     args = ParserCommon.process_args(parse_arguments().parse_args(args))
 
+    ## Motif and GC filter
+    if args.motifFilter:
+        if not args.genome2bit:
+            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.exit(1)
+        else:
+            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
+
+    if args.GCcontentFilter:
+        gc = args.GCcontentFilter.strip(" ").split(",")
+        args.GCcontentFilter = [float(x) for x in gc]
+
+    ## read the barcode file
+    with open(args.barcodes, 'r') as f:
+        barcodes = f.read().splitlines()
+    f.close()
+
+    ## Count
     c = countR.CountReadsPerBin(
         args.bamfiles,
-        args.binSize,
-        args.numberOfSamples,
-        barcodes=args.barcodes,
-        motifFilter=args.motifFilter,
+        binLength=args.binSize,
+        numberOfSamples=args.numberOfSamples,
+        barcodes=barcodes,
         tagName=args.tagName,
+        motifFilter=args.motifFilter,
+        genome2bit=args.genome2bit,
+        GCcontentFilter=args.GCcontentFilter,
         blackListFileName=args.blackListFileName,
         numberOfProcessors=args.numberOfProcessors,
         verbose=args.verbose,
-        region=args.region,
+        region=None,
+        bedFile=None,
         extendReads=args.extendReads,
         minMappingQuality=args.minMappingQuality,
-        ignoreDuplicates=args.ignoreDuplicates,
+        duplicateFilter=args.duplicateFilter,
         center_read=args.centerReads,
         samFlag_include=args.samFlagInclude,
         samFlag_exclude=args.samFlagExclude,
         minFragmentLength=args.minFragmentLength,
-        maxFragmentLength=args.maxFragmentLength)
+        maxFragmentLength=args.maxFragmentLength,
+        zerosToNans=False,
+        sumCoveragePerBin=True)
 
     num_reads_per_bin, _ = c.run(allArgs=None)
 
