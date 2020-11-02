@@ -242,6 +242,7 @@ class CountReadsPerBin(object):
                  out_file_for_raw_data=None,
                  bed_and_bin=False,
                  sumCoveragePerBin=False,
+                 binarizeCoverage=False,
                  statsList=[],
                  mappedList=[]):
 
@@ -308,6 +309,7 @@ class CountReadsPerBin(object):
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
         self.genome = genome2bit
         self.sumCoveragePerBin = sumCoveragePerBin
+        self.binarizeCoverage = binarizeCoverage
 
         if out_file_for_raw_data:
             self.save_data = True
@@ -594,6 +596,7 @@ class CountReadsPerBin(object):
         if bed_regions_list is not None and not self.bed_and_bin:
             subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
         else:
+#            print(np.concatenate(subnum_reads_per_bin).shape)
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
 
         ## prepare list of regions
@@ -863,6 +866,9 @@ class CountReadsPerBin(object):
                             elif _ < 0:
                                 _ = 0
                             coverages[bc][eIdx] += _
+                    elif self.binarizeCoverage:
+                        # only return 1, since frequencies are desired
+                        coverages[bc][sIdx:eIdx] = 1
                     else:
                         # for everything except plotFingerPrint, simply count the number of reads
                         coverages[bc][sIdx:eIdx] += 1

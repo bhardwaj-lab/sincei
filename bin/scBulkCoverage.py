@@ -89,6 +89,12 @@ def get_optional_args():
                        choices=['bigwig', 'bedgraph'],
                        default='bigwig')
 
+    optional.add_argument('--coverageAsFrequency', '-cf',
+                          help='Return coverage per bin as frequency (i.e. counts per cell are '
+                          'returned as either 0 or 1, and counts in a bin therefore represent the frequency of cells'
+                          'with non-zero counts in that bin)',
+                          action='store_true')
+
     optional.add_argument('--scaleFactor',
                           help='The computed scaling factor (or 1, if not applicable) will '
                           'be multiplied by this. (Default: %(default)s)',
@@ -272,6 +278,7 @@ def main(args=None):
                             minFragmentLength=args.minFragmentLength,
                             maxFragmentLength=args.maxFragmentLength,
                             chrsToSkip=args.ignoreForNormalization,
+                            binarizeCoverage=args.coverageAsFrequency,
                             verbose=args.verbose,
                             )
 
@@ -305,6 +312,7 @@ def main(args=None):
                             minFragmentLength=args.minFragmentLength,
                             maxFragmentLength=args.maxFragmentLength,
                             chrsToSkip=args.ignoreForNormalization,
+                            binarizeCoverage=args.coverageAsFrequency,
                             verbose=args.verbose)
         wr.filter_strand = args.filterRNAstrand
         wr.Offset = args.Offset
@@ -331,7 +339,8 @@ def main(args=None):
                                          minFragmentLength=args.minFragmentLength,
                                          maxFragmentLength=args.maxFragmentLength,
                                          chrsToSkip=args.ignoreForNormalization,
-                                         verbose=args.verbose,
+                                         binarizeCoverage=args.coverageAsFrequency,
+                                         verbose=args.verbose
                                          )
 
     wr.run(WriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,

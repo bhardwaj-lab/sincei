@@ -109,7 +109,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
     """
 
-    def run(self, func_to_call, func_args, out_file_prefix, blackListFileName=None, format="bedgraph", smoothLength=0):
+    def run(self, func_to_call, func_args, out_file_prefix, blackListFileName=None, format="bedgraph", smoothLength=0, cpmNorm=False):
         r"""
         Given a list of bamfiles, a function and a function arguments,
         this method writes a bedgraph file (or bigwig) file
@@ -177,23 +177,6 @@ class WriteBedGraph(cr.CountReadsPerBin):
         # write output for each cluster
         cluster_info = self.clusterInfo
         clusters = cluster_info.cluster.unique().tolist()
-
-        ## here is the opportunity to sum the counts per sample and get a genomic scaling factor,
-        #for cl in clusters:
-        #    if np.isnan(cl):
-        #        continue
-        #    if format == 'bedgraph':
-        #        out_file = open("{}_{}.bedgraph".format(out_file_prefix, cl), 'wb')
-        #        for r in res:
-        #            if r[3][cl]:
-        #                _foo = open(r[3][cl], 'rb')
-        #                shutil.copyfileobj(_foo, out_file)
-        #                _foo.close()
-                        #os.remove(r[3][cl])
-        #        out_file.close()
-        #    else:
-        #        bedGraphToBigWig(chrom_names_and_size, [r[3][cl] for r in res],
-        #                         "{}_{}.bw".format(out_file_prefix, cl))
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
             if pd.isna(cl):
@@ -214,10 +197,11 @@ class WriteBedGraph(cr.CountReadsPerBin):
             nCells = float(len(cl_idx))
             out_file = pd.read_csv(tmp_out, sep = "\t", index_col=None, header = None)
             # CPM norm
-            mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
-            scale_factor = 1.0 / (mil_reads_mapped)
-            # per mil counts
-            out_file[3] *= scale_factor
+            if cpmNorm:
+                mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
+                scale_factor = 1.0 / (mil_reads_mapped)
+                # per mil counts
+                out_file[3] *= scale_factor
             # divided by nCells
             out_file[3] *= 1/nCells
             # out
