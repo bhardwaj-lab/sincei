@@ -67,7 +67,7 @@ The sum of these may be more than the total number of reads. Note that alignment
                          'default is to use the file name of the '
                          'sample. The sample labels should be separated '
                          'by spaces and quoted if a label itself'
-                         'contains a space E.g. --sampleLabels label-1 "label 2"  ',
+                         'contains a space E.g. --labels label-1 "label 2"  ',
                          nargs='+')
 
     general.add_argument('--smartLabels',
@@ -333,14 +333,14 @@ def getFiltered_worker(arglist):
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    if args.sampleLabels and len(args.bamfiles) != len(args.sampleLabels):
+    if args.labels and len(args.bamfiles) != len(args.labels):
         print("The number of labels does not match the number of bam files.")
         sys.exit(1)
-    if not args.sampleLabels:
+    if not args.labels:
         if args.smartLabels:
-            args.sampleLabels = smartLabels(args.bamfiles)
+            args.labels = smartLabels(args.bamfiles)
         else:
-            args.sampleLabels = [os.path.basename(x) for x in args.bamfiles]
+            args.labels = [os.path.basename(x) for x in args.bamfiles]
 
     ## Motif and GC filter
     if args.motifFilter:
@@ -383,7 +383,7 @@ def main(args=None):
     ## final output is an array where nrows = bamfiles*barcodes, ncol = No. of stats
     final_array = np.asarray(res).sum(axis = 0)
     ## get final row/col Names (bamnames_barcode)
-    rowLabels = ["{}_{}".format(a, b) for a in args.sampleLabels for b in barcodes ]
+    rowLabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
     colLabels = ["Total_sampled","Filtered","Blacklisted", "Low_MAPQ",
                  "Missing_Flags","Excluded_Flags","Internal_Duplicates",
                  "Marked_Duplicates","Singletons","Wrong_strand",
