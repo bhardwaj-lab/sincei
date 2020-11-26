@@ -36,12 +36,12 @@ from scanpy._utils import get_igraph_from_adjacency
 ### ------ Functions ------
 
 def read_mtx(prefix):
-    mtx = io.mmread(infolder + ".counts.mtx")
+    mtx = io.mmread(prefix + ".counts.mtx")
     mtx = mtx.tocsr()
-    with open(infolder + ".colnames.txt") as col:
+    with open(prefix + ".colnames.txt") as col:
         colnames = col.read().splitlines()
     col.close()
-    with open(infolder + ".rownames.txt") as row:
+    with open(prefix + ".rownames.txt") as row:
         rownames = row.read().splitlines()
     row.close()
 
