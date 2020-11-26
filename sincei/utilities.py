@@ -58,7 +58,7 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
             return False
 
 
-def checkGCcontent(read, lowFilter, highFilter):
+def checkGCcontent(read, lowFilter, highFilter, returnGC=False):
     """
     Check whether the read falls into the range of min and max GC content provided.
     Return: Bool
@@ -68,10 +68,14 @@ def checkGCcontent(read, lowFilter, highFilter):
     total_bases = len(seq)
     gc_bases = len([x for x in seq if x == 'C' or x == 'G'])
     gc_frac = float(gc_bases)/total_bases
-    if gc_frac >= lowFilter and gc_frac <= highFilter:
-        return True
+    if returnGC:
+        return gc_frac
     else:
-        return False
+        if gc_frac >= lowFilter and gc_frac <= highFilter:
+            return True
+        else:
+            return False
+
 
 def checkAlignedFraction(read, lowFilter):
     """
