@@ -242,12 +242,12 @@ def main(args=None):
         # check that library is paired end
         # using getFragmentAndReadSize
         from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
-        frag_len_dict, read_len_dict = [get_read_and_fragment_length(file,
+        fraglengths = [get_read_and_fragment_length(file,
                                                                     return_lengths=False,
                                                                     blackListFileName=args.blackListFileName,
                                                                     numberOfProcessors=args.numberOfProcessors,
                                                                     verbose=args.verbose) for file in args.bamfiles]
-        if any([x is None for x in frag_len_dict]):
+        if any([x[0] is None for x in fraglengths]):
             sys.exit("*Error*: For the --MNAse function a paired end library is required. ")
 
         # Set some default fragment length bounds
