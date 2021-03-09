@@ -585,18 +585,20 @@ class CountReadsPerBin(object):
                 tcov_stack = np.stack(list(tcov.values()), axis=0)# col-bind the output (rownames = barcode, colnames = bins )
 
                 if bed_regions_list is not None and not self.bed_and_bin:
+                    # output should be list of length = nBAMs*nbarcodes, containing 1 value each (per-region)
                     subnum_reads_per_bin.append([np.sum(s) for s in tcov_stack])
                 else:
+                    # output should be list of length = nCells*nBAMs,
+                    # each entry is an array of length = nBins
                     subnum_reads_per_bin.append(tcov_stack)
-                    # output should be list of length = nCells*nBAMs, containing arrays
-                    # of length = nBins
 
         ## final output should be regions=rows, cells=col
         # the order of col should be bam1:cell1...n, bam2:cell1..n
-        if bed_regions_list is not None and not self.bed_and_bin:
-            subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
+        if bed_regions_list is not None or self.numberOfSamples is not None:
+            if not self.bed_and_bin:
+                # stack the arrays column-wise, output rows=barcodes(*nBam), col=regions then reshape them so the regions are rows now
+                subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
         else:
-#            print(np.concatenate(subnum_reads_per_bin).shape)
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
 
         ## prepare list of regions
