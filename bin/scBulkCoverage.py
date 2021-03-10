@@ -23,7 +23,6 @@ debug = 0
 def parseArguments():
     parentParser = parserCommon.getParentArgParse()
     bamParser = parserCommon.read_options()
-    normalizationParser = parserCommon.normalization_options()
 
     outputParser = ParserCommon.output()
     filterParser = ParserCommon.filterOptions()
@@ -43,11 +42,7 @@ def parseArguments():
             'where bins are short consecutive counting windows of a defined '
             'size. It is possible to extended the length of the reads '
             'to better reflect the actual fragment length. *scBulkCoverage* '
-            'offers normalization by a scaling factor, Reads Per Kilobase per '
-            'Million mapped reads (RPKM), counts per million (CPM), bins per '
-            'million mapped reads (BPM) and 1x depth (reads per genome '
-            'coverage, RPGC). By default, counts are also normalized to the number of cells '
-            'per group/cluster. \n',
+            'offers normalization by a scaling factor or CPM per cluster \n',
             usage='An example usage is:'
             '$ scBulkCoverage -b reads.bam -g scClusterCells_output.tsv -o coverage.bw',
             add_help=False)
@@ -89,11 +84,20 @@ def get_optional_args():
                        choices=['bigwig', 'bedgraph'],
                        default='bigwig')
 
-    optional.add_argument('--coverageAsFrequency', '-cf',
-                          help='Return coverage per bin as frequency (i.e. counts per cell are '
-                          'returned as either 0 or 1, and counts in a bin therefore represent the frequency of cells'
-                          'with non-zero counts in that bin)',
-                          action='store_true')
+    optional.add_argument('--normalizeUsing', '-n',
+                          help='How to normalize the pseudo-bulk counts. Options are '
+                          '"CPM": normalized each bin to the counts per million mapped reads in that group.\n'
+                          '"Frequency": binarize the coverage per bin and normalize to the total no. of cells per group. \n'
+                          '"Mean": get mean signal per bin across cells in each group.\n'
+                          '"None": simply return the sum of coverage per group.',
+                          choices=['CPM', 'Frequency', 'Mean', 'None'],
+                          default='CPM')
+
+    optional.add_argument('--normalizeByReference', '-nr',
+                          help='NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)'
+                          'Note that the --normalizeUsing method is applied beforehand.',
+                          choices=['ratio', 'log2_ratio', 'difference', 'None'],
+                          default=None)
 
     optional.add_argument('--scaleFactor',
                           help='The computed scaling factor (or 1, if not applicable) will '
@@ -208,30 +212,16 @@ def main(args=None):
 
 
     # Normalization options
+    scale_factor = args.scaleFactor
+    func_args = {'scaleFactor': args.scaleFactor }
+
     if not args.ignoreForNormalization:
         args.ignoreForNormalization = []
     if args.normalizeUsing == 'None':
         args.normalizeUsing = None  # For the sake of sanity
-    elif args.normalizeUsing == 'RPGC' and not args.effectiveGenomeSize:
-        sys.exit("RPGC normalization requires an --effectiveGenomeSize!\n")
-
-    scale_factor = args.scaleFactor
-    func_args = {'scaleFactor': args.scaleFactor }
-
-#    if args.normalizeUsing:
-        # if a normalization is required then compute the scale factors
-#        scale_factor_list = []
-#        for file in args.bamfiles:
-#            bam, mapped, unmapped, stats = openBam(file, returnStats=True, nThreads=args.numberOfProcessors)
-#            bam.close()
-#            args.bam = file
-#            scale_factor_list.extend([get_scale_factor(args, stats)])
-        # currently the scale-factor is just the mean of all scale-factors
-#        func_args = {'scaleFactor': np.mean(scale_factor_list) }
-#        sys.stderr.write("Mean Scale Factor: {}\n".format(np.mean(scale_factor_list)))
-#    else:
-#        scale_factor = args.scaleFactor
-#        func_args = {'scaleFactor': args.scaleFactor }
+    elif args.normalizeUsing == 'Frequency':
+        coverageAsFrequency = True
+        args.normalizeUsing = 'Mean'# mean of binarized counts shall give us frequency
 
 
     # This fixes issue #520, where --extendReads wasn't honored if --filterRNAstrand was used
@@ -243,10 +233,10 @@ def main(args=None):
         # using getFragmentAndReadSize
         from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
         fraglengths = [get_read_and_fragment_length(file,
-                                                                    return_lengths=False,
-                                                                    blackListFileName=args.blackListFileName,
-                                                                    numberOfProcessors=args.numberOfProcessors,
-                                                                    verbose=args.verbose) for file in args.bamfiles]
+                                                    return_lengths=False,
+                                                    blackListFileName=args.blackListFileName,
+                                                    numberOfProcessors=args.numberOfProcessors,
+                                                    verbose=args.verbose) for file in args.bamfiles]
         if any([x[0] is None for x in fraglengths]):
             sys.exit("*Error*: For the --MNAse function a paired end library is required. ")
 
@@ -278,7 +268,7 @@ def main(args=None):
                             minFragmentLength=args.minFragmentLength,
                             maxFragmentLength=args.maxFragmentLength,
                             chrsToSkip=args.ignoreForNormalization,
-                            binarizeCoverage=args.coverageAsFrequency,
+                            binarizeCoverage=coverageAsFrequency,
                             verbose=args.verbose,
                             )
 
@@ -312,7 +302,7 @@ def main(args=None):
                             minFragmentLength=args.minFragmentLength,
                             maxFragmentLength=args.maxFragmentLength,
                             chrsToSkip=args.ignoreForNormalization,
-                            binarizeCoverage=args.coverageAsFrequency,
+                            binarizeCoverage=coverageAsFrequency,
                             verbose=args.verbose)
         wr.filter_strand = args.filterRNAstrand
         wr.Offset = args.Offset
@@ -339,12 +329,12 @@ def main(args=None):
                                          minFragmentLength=args.minFragmentLength,
                                          maxFragmentLength=args.maxFragmentLength,
                                          chrsToSkip=args.ignoreForNormalization,
-                                         binarizeCoverage=args.coverageAsFrequency,
+                                         binarizeCoverage=coverageAsFrequency,
                                          verbose=args.verbose
                                          )
 
     wr.run(WriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,
-           blackListFileName=args.blackListFileName,
+           blackListFileName=args.blackListFileName, normUsing=args.normalizeUsing,
            format=args.outFileFormat, smoothLength=args.smoothLength)
 
 

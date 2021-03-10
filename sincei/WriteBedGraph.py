@@ -19,18 +19,11 @@ import ReadCounter as cr
 debug = 0
 
 
-#def scaleCoverage(tile_coverage, nCells, args):
-#    """
-#    Return coverage normalized by cell numbers per cluster.
-#    tileCoverage should be an list with only one element
-#    """
-#    return (args['scaleFactor'] * tile_coverage)/float(nCells)
-
 def scaleCoverage(tile_coverage, args):
     """
-    Return coverage normalized by cell numbers per cluster.
-    tileCoverage should be an list with only one element
-    """
+#    Return coverage per cluster as sum of cells.
+#    tileCoverage should be an list with only one element
+#    """
     return args['scaleFactor'] * tile_coverage
 
 def writeBedGraph_wrapper(args):
@@ -109,7 +102,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
     """
 
-    def run(self, func_to_call, func_args, out_file_prefix, blackListFileName=None, format="bedgraph", smoothLength=0, cpmNorm=False):
+    def run(self, func_to_call, func_args, out_file_prefix, blackListFileName=None, format="bedgraph", smoothLength=0, normUsing=None):
         r"""
         Given a list of bamfiles, a function and a function arguments,
         this method writes a bedgraph file (or bigwig) file
@@ -197,13 +190,14 @@ class WriteBedGraph(cr.CountReadsPerBin):
             nCells = float(len(cl_idx))
             out_file = pd.read_csv(tmp_out, sep = "\t", index_col=None, header = None)
             # CPM norm
-            if cpmNorm:
+            if normUsing=='CPM':
                 mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
-                scale_factor = 1.0 / (mil_reads_mapped)
                 # per mil counts
-                out_file[3] *= scale_factor
-            # divided by nCells
-            out_file[3] *= 1/nCells
+                out_file[3] *= 1.0 / (mil_reads_mapped)
+            else if normUsing=='Mean':
+                # divided by nCells
+                out_file[3] *= 1.0/(nCells)
+
             # out
             bg_out = "{}_{}.bedgraph".format(out_file_prefix, cl)
 
