@@ -194,7 +194,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
                 # per mil counts
                 out_file[3] *= 1.0 / (mil_reads_mapped)
-            else if normUsing=='Mean':
+            elif normUsing=='Mean':
                 # divided by nCells
                 out_file[3] *= 1.0/(nCells)
 

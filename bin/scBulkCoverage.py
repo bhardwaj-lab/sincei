@@ -31,8 +31,9 @@ def parseArguments():
     optionalArgs = get_optional_args()
     parser = \
         argparse.ArgumentParser(
-            parents=[requiredArgs, outputParser, label_parser, filterParser, optionalArgs,
-                     parentParser, normalizationParser, bamParser],
+            parents=[requiredArgs, outputParser,
+                    label_parser, filterParser, optionalArgs,
+                     parentParser, bamParser],
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description='This tool takes alignments of reads or fragments '
             'as input (BAM files), along with cell grouping information, such as '
@@ -92,6 +93,11 @@ def get_optional_args():
                           '"None": simply return the sum of coverage per group.',
                           choices=['CPM', 'Frequency', 'Mean', 'None'],
                           default='CPM')
+
+    optional.add_argument('--ignoreForNormalization', '-ig',
+                          help='Chromosomes to skip while calculating normalization factors',
+                          nargs='+',
+                          default=None)
 
     optional.add_argument('--normalizeByReference', '-nr',
                           help='NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)'
@@ -215,6 +221,7 @@ def main(args=None):
     scale_factor = args.scaleFactor
     func_args = {'scaleFactor': args.scaleFactor }
 
+    coverageAsFrequency=False
     if not args.ignoreForNormalization:
         args.ignoreForNormalization = []
     if args.normalizeUsing == 'None':
@@ -262,7 +269,7 @@ def main(args=None):
                             minMappingQuality=args.minMappingQuality,
                             duplicateFilter=args.duplicateFilter,
                             center_read=args.centerReads,
-                            zerosToNans=args.skipNonCoveredRegions,
+                            zerosToNans=False,
                             samFlag_include=args.samFlagInclude,
                             samFlag_exclude=args.samFlagExclude,
                             minFragmentLength=args.minFragmentLength,
@@ -296,7 +303,7 @@ def main(args=None):
                             minMappingQuality=args.minMappingQuality,
                             duplicateFilter=args.duplicateFilter,
                             center_read=args.centerReads,
-                            zerosToNans=args.skipNonCoveredRegions,
+                            zerosToNans=False,
                             samFlag_include=args.samFlagInclude,
                             samFlag_exclude=args.samFlagExclude,
                             minFragmentLength=args.minFragmentLength,
@@ -323,7 +330,7 @@ def main(args=None):
                                          minMappingQuality=args.minMappingQuality,
                                          duplicateFilter=args.duplicateFilter,
                                          center_read=args.centerReads,
-                                         zerosToNans=args.skipNonCoveredRegions,
+                                         zerosToNans=False,
                                          samFlag_include=args.samFlagInclude,
                                          samFlag_exclude=args.samFlagExclude,
                                          minFragmentLength=args.minFragmentLength,
@@ -335,7 +342,7 @@ def main(args=None):
 
     wr.run(WriteBedGraph.scaleCoverage, func_args, args.outFilePrefix,
            blackListFileName=args.blackListFileName, normUsing=args.normalizeUsing,
-           format=args.outFileFormat, smoothLength=args.smoothLength)
+           format=args.outFileFormat, smoothLength=None)
 
 
 class OffsetFragment(WriteBedGraph.WriteBedGraph):
