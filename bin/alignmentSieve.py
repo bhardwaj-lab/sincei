@@ -12,15 +12,22 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
-sys.path.append('../sincei')
-from utilities import checkMotifs, checkGCcontent
+sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
+from utilities import checkMotifs, checkGCcontent, getDupFilterTuple
+import ParserCommon
 
 def parseArguments():
+    internalParser = get_args()
+    filterParser = ParserCommon.filterOptions()
     parser = argparse.ArgumentParser(
+        parents=[internalParser, filterParser],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="This tool filters alignments in a BAM/CRAM file according the the specified parameters. It can optionally output to BEDPE format.",
         usage='Example usage: alignmentSieve.py -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt')
+    return parser
 
+def get_args():
+    parser = argparse.ArgumentParser(add_help=False)
     required = parser.add_argument_group('Required arguments')
     required.add_argument('--bam', '-b',
                           metavar='FILE1',
@@ -88,13 +95,6 @@ def parseArguments():
                            choices=['forward', 'reverse'],
                            default=None)
 
-    filtering.add_argument('--ignoreDuplicates',
-                           help='If set, reads that have the same orientation '
-                           'and start position will be considered only '
-                           'once. If reads are paired, the mate\'s position '
-                           'also has to coincide to ignore a read.',
-                           action='store_true')
-
     filtering.add_argument('--minMappingQuality',
                            metavar='INT',
                            help='If set, only reads that have a mapping '
@@ -145,25 +145,6 @@ def parseArguments():
                            metavar='INT',
                            default=0,
                            type=int,
-                           required=False)
-
-    filtering.add_argument('--GCcontentFilter',
-                           help='Range of GC content needed for a read/pair to be kept (provided as "<minGCfraction>, <maxGCfraction>"). '
-                           'Reads whose GC content are not within the given range are rejected. '
-                           'Note that only the read/pair sequence is assessed, not the overlapping genomic region. '
-                           '(Default: %(default)s)',
-                           default=None,
-                           required=False)
-
-    filtering.add_argument('--motifFilter',
-                           help='Motifs to find in read and reference (provided as "<readMotif>, <refMotif>")'
-                           ' reads not having either of the motifs will be rejected. (Default: %(default)s)',
-                           default=None,
-                           required=False)
-
-    filtering.add_argument('--genome2bit',
-                           help='Genome sequence in the 2bit format, if --motifFilter is needed. (Default: %(default)s)',
-                           default=None,
                            required=False)
 
     return parser
@@ -250,6 +231,7 @@ def filterWorker(arglist):
     nFiltered = 0
     total = 0
     for read in fh.fetch(chrom, start, end):
+        bc = read.get_tag(args.tagName)
         if read.pos < start:
             # ensure that we never double count (in case distanceBetweenBins == 0)
             continue
@@ -291,18 +273,10 @@ def filterWorker(arglist):
                 ofiltered.write(read)
             continue
 
-        if args.ignoreDuplicates:
-            # Assuming more or less concordant reads, use the fragment bounds, otherwise the start positions
-            if tLen >= 0:
-                s = read.pos
-                e = s + tLen
-            else:
-                s = read.pnext
-                e = s - tLen
-            if read.reference_id != read.next_reference_id:
-                e = read.pnext
+        if args.duplicateFilter:
+            tup = getDupFilterTuple(read, bc, args.duplicateFilter)
             if lpos is not None and lpos == read.reference_start \
-                    and (s, e, read.next_reference_id, read.is_reverse) in prev_pos:
+                    and tup in prev_pos:
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -310,7 +284,7 @@ def filterWorker(arglist):
             if lpos != read.reference_start:
                 prev_pos.clear()
             lpos = read.reference_start
-            prev_pos.add((s, e, read.next_reference_id, read.is_reverse))
+            prev_pos.add(tup)
 
         ## remove reads with low/high GC content
         if args.GCcontentFilter:
