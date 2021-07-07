@@ -147,8 +147,14 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
     ## make cell-topic df
     li = [[tup[0] for tup in x] for x in corpus_lsi]
     li_val = np.stack([[tup[1] for tup in x] for x in corpus_lsi])
-    if all([elem == li[0] for elem in li]): # if all documents have same set of topics
-        cell_topic = pd.DataFrame(li_val, columns=li[0])
+    if len(set([len(x) for x in li_val])): # if all documents don't have same set of topics
+        bad_idx = [i for i,v in enumerate(li_val) if len(v) != nTopics]
+        print("{} Cells were detected which don't contribute to all {} topics. Removing them!".format(len(bad_idx), nTopics))
+        bad_out = [li_val.pop(x) for x in sorted(bad_idx, reverse=True)]
+        bad_li = [li.pop(x) for x in sorted(bad_idx, reverse=True)]
+        cells = [cells.pop(x) for x in sorted(bad_idx, reverse=True)]
+    li_val = np.stack(li_val)
+    cell_topic = pd.DataFrame(li_val, columns=li[0])
     cell_topic.index = cells
 
     return corpus_lsi, cell_topic
