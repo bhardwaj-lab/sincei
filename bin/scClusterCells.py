@@ -146,13 +146,13 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
 
     ## make cell-topic df
     li = [[tup[0] for tup in x] for x in corpus_lsi]
-    li_val = np.stack([[tup[1] for tup in x] for x in corpus_lsi])
-    if len(set([len(x) for x in li_val])): # if all documents don't have same set of topics
-        bad_idx = [i for i,v in enumerate(li_val) if len(v) != nTopics]
+    li_val = [[tup[1] for tup in x] for x in corpus_lsi]
+    if len(set([len(x) for x in li_val])) > 1: # if all documents don't have same set of topics
+        bad_idx = sorted([i for i,v in enumerate(li_val) if len(v) != nTopics], reverse=True)
         print("{} Cells were detected which don't contribute to all {} topics. Removing them!".format(len(bad_idx), nTopics))
-        bad_out = [li_val.pop(x) for x in sorted(bad_idx, reverse=True)]
-        bad_li = [li.pop(x) for x in sorted(bad_idx, reverse=True)]
-        cells = [cells.pop(x) for x in sorted(bad_idx, reverse=True)]
+        [li_val.pop(x) for x in bad_idx]
+        [li.pop(x) for x in bad_idx]
+        [cells.pop(x) for x in bad_idx]
     li_val = np.stack(li_val)
     cell_topic = pd.DataFrame(li_val, columns=li[0])
     cell_topic.index = cells
@@ -190,7 +190,7 @@ def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', 
     umap_df['cluster'] = list(cell_topic.cluster)
     umap_df.index = cell_topic.index
 
-    return umap_df
+    return umap_df, G
 
 
 def parseArguments():
@@ -311,7 +311,7 @@ def main(args=None):
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adat.X.transpose())
     corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
-    umap_lsi = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
+    umap_lsi, _ = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     #cluster_id = adat.obs.louvain.to_list()
     #cluster_id = [int(x) for x in cluster_id]
