@@ -216,7 +216,7 @@ def parseArguments():
     general = parser.add_argument_group('General arguments')
 
     general.add_argument('--plotFile', '-p',
-                         type=argparse.FileType('w'),
+                         type=str,
                          required=False,
                          help='The output plot file (for UMAP)')
 
@@ -225,6 +225,11 @@ def parseArguments():
                          required=False,
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
+
+    general.add_argument('--outGraph', '-og',
+                         type=argparse.FileType('w'),
+                         required=False,
+                         help='The output file for the Graph object (lgl format) which can be used for further clustering/integration.')
 
     general.add_argument('--minCellSum', '-c',
                          default=1000,
@@ -311,7 +316,7 @@ def main(args=None):
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adat.X.transpose())
     corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
-    umap_lsi, _ = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
+    umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     #cluster_id = adat.obs.louvain.to_list()
     #cluster_id = [int(x) for x in cluster_id]
@@ -340,7 +345,8 @@ def main(args=None):
     # save if asked
     if args.outFileTrainedModel:
         corpus_lsi.save(args.outFileTrainedModel)
-
+    if args.outGraph:
+        graph.write_lgl(args.outGraph)
     umap_lsi.to_csv(args.outFile, sep = "\t")
 
     return 0
