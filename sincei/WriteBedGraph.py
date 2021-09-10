@@ -172,6 +172,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         clusters = cluster_info.cluster.unique().tolist()
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
+            print('Writing output for cluster: {}'.format(cl))
             if pd.isna(cl):
                 continue
             # concatenate the coverages
