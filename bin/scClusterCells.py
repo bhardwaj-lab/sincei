@@ -159,7 +159,7 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
 
     return corpus_lsi, cell_topic
 
-def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0):
+def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0, connectivity_graph=True):
 
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
@@ -170,7 +170,10 @@ def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', 
 
 
     if modularityAlg == 'leiden':
-        G = get_igraph_from_adjacency(connectivities, directed=True)
+        if connectivity_graph:
+            G = get_igraph_from_adjacency(connectivities, directed=True)
+        else:
+            G = get_igraph_from_adjacency(distances, directed=True)
         partition = la.find_partition(G,
                               la.RBConfigurationVertexPartition,
                               weights='weight',
@@ -178,7 +181,10 @@ def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', 
                               resolution_parameter=resolution)
         cell_topic['cluster'] = partition.membership
     else:
-        G = convert_matrix.from_numpy_array(connectivities)
+        if connectivity_graph:
+            G = convert_matrix.from_numpy_array(connectivities)
+        else:
+            G = convert_matrix.from_numpy_array(distances)
         partition = community.best_partition(G, resolution=resolution, random_state=42)
         cell_topic['cluster'] = partition.values()
 
