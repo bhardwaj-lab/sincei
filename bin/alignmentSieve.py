@@ -12,7 +12,8 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
-sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
+scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+sys.path.append(scriptdir)
 from utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
 

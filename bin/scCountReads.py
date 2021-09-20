@@ -15,7 +15,8 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 
 # own functions
-sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
+scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
 

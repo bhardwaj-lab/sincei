@@ -16,7 +16,8 @@ matplotlib.use('Agg')
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['svg.fonttype'] = 'none'
 
-sys.path.append("/home/vbhardwaj/programs/sincei/sincei")
+scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+sys.path.append(scriptdir)
 ## own functions
 import ReadCounter as countR
 import ParserCommon

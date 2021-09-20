@@ -13,7 +13,8 @@ from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
 
 ## own Functions
-sys.path.append('/home/vbhardwaj/programs/sincei/sincei')
+scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+sys.path.append(scriptdir)
 import WriteBedGraph
 import ParserCommon
 
