@@ -232,6 +232,11 @@ def parseArguments():
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
 
+    general.add_argument('--outFileAdata', '-oa',
+                         type=argparse.FileType('b'),
+                         required=False,
+                         help='The output updated h5ad object.')
+
     general.add_argument('--outGraph', '-og',
                          type=argparse.FileType('w'),
                          required=False,
@@ -324,10 +329,14 @@ def main(args=None):
     corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
     umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
-    #cluster_id = adat.obs.louvain.to_list()
-    #cluster_id = [int(x) for x in cluster_id]
-    #embeddings = adat.obsm['X_umap']
-
+    ## update the anndata object if asked
+    if args.outFileAdata:
+        ## drop cells which are not in the anndata
+        atac_adata=atac_adata[umap_lsi.index]
+        atac_adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
+        atac_adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
+        atac_adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
+        anndata.write_h5ad(args.outFileAdata)
     if args.plotFile:
         ## plot UMAP
         plt.rcParams['font.size'] = 8.0
