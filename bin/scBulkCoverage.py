@@ -43,7 +43,7 @@ def parseArguments():
             'where bins are short consecutive counting windows of a defined '
             'size. It is possible to extended the length of the reads '
             'to better reflect the actual fragment length. *scBulkCoverage* '
-            'offers normalization by a scaling factor or CPM per cluster \n',
+            'offers normalization per cluster using different methods \n',
             usage='An example usage is:'
             '$ scBulkCoverage -b reads.bam -g scClusterCells_output.tsv -o coverage.bw',
             add_help=False)
