@@ -62,13 +62,13 @@ def get_optional_args():
     optional.add_argument('--binSize', '-bs',
                           help='Window size in base pairs to '
                           'sample the genome. This times --numberOfSamples should be less than the genome size. (Default: %(default)s)',
-                          default=500,
+                          default=10000,
                           type=int)
 
     optional.add_argument('--numberOfSamples', '-n',
                           help='The number of bins that are sampled from the genome, '
                           'for which the overlapping number of reads is computed. (Default: %(default)s)',
-                          default=5e5,
+                          default=1e5,
                           type=int)
 
     optional.add_argument('--skipZeros',
