@@ -1,0 +1,106 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} UI Forms {% endblock %}
+
+<!-- Specific CSS goes HERE -->
+{% block stylesheets %}{% endblock stylesheets %}
+
+{% block content %}
+
+<div class="pcoded-content">
+    <div class="pcoded-inner-content">
+        <!-- [ breadcrumb ] start -->
+        <div class="page-header">
+            <div class="page-block">
+                <div class="row align-items-center">
+                    <div class="col-md-12">
+                        <div class="page-header-title">
+                            <h5 class="m-b-10">Data Upload</h5>
+                        </div>
+                        <ul class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/"><i class="feather icon-home"></i></a></li>
+                            <li class="breadcrumb-item"><a href="javascript:">Home</a></li>
+                            <li class="breadcrumb-item"><a href="javascript:">Data Upload</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- [ breadcrumb ] end -->
+        <div class="main-body">
+            <div class="page-wrapper">
+                <!-- [ Main Content ] start -->
+                <div class="row">
+                    <div class="col-sm-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Input</h5>
+                            </div>
+                            <div class="card-body">
+                                <h3>BAM files</h3>
+                                <hr>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                      <form action = "/uploader" method = "POST" enctype = "multipart/form-data">
+                                        <div class="form-group">
+                                            <input id="upload" type="file" name="file[]" multiple="multiple" /><!-- onchange="readURL();" -->
+                                            <input id="fileList" type="hidden" name="fileList" />
+                                            <small id="inputBAMHelp" class="form-text text-muted">Files will be linked to the output folder</small>
+                                            <button type="submit" class="btn btn-primary">Submit</button>
+                                        </div>
+                                        </form>
+                                    </div>
+                                    <div class="col-md-6">
+                                      <!--Show uploaded files here-->
+                                      
+                                    </div>
+                                </div>
+                                <h3 class="mt-5">Sample Metadata</h3>
+                                <hr>
+                                <div class="row">
+                                <!-- Sample information input goes here-->
+                                </div>
+
+                                <h3 class="mt-5">Feature Metadata</h3>
+                                <hr>
+                                <div class="row">
+                                <!-- Feature metadata (bed/gtf) input goes here-->
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <!-- [ Main Content ] end -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+<!-- Specific Page JS goes HERE  -->
+{% block javascripts %}
+<!-- Javascript for file upload -->
+<script type="text/javascript">
+function readURL(){
+  var filenames = document.getElementById('upload').files;
+
+  if (filenames.length > 0) {
+    flist=[];
+    for (var i = 0; i <= fi.files.length - 1; i++) {
+      var fullPath = fi.files.item(i).name;
+      var startIndex = (fullPath.indexOf('\\') >= 0 ? fullPath.lastIndexOf('\\') : fullPath.lastIndexOf('/'));
+      var filename = fullPath.substring(startIndex);
+      if (filename.indexOf('\\') === 0 || filename.indexOf('/') === 0) {
+          filename = filename.substring(1);
+      }
+      flist.push(filename);
+    }
+     alert(filename);
+     document.getElementById("fileList").value = filename;
+  }
+}
+
+</script>
+{% endblock javascripts %}
