@@ -13,7 +13,7 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
-scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
 sys.path.append(scriptdir)
 from utilities import *
 import ParserCommon
