@@ -159,7 +159,7 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
 
     return corpus_lsi, cell_topic
 
-def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0):
+def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0, connectivity_graph=True):
 
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
@@ -170,7 +170,10 @@ def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', 
 
 
     if modularityAlg == 'leiden':
-        G = get_igraph_from_adjacency(connectivities, directed=True)
+        if connectivity_graph:
+            G = get_igraph_from_adjacency(connectivities, directed=True)
+        else:
+            G = get_igraph_from_adjacency(distances, directed=True)
         partition = la.find_partition(G,
                               la.RBConfigurationVertexPartition,
                               weights='weight',
@@ -178,7 +181,10 @@ def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', 
                               resolution_parameter=resolution)
         cell_topic['cluster'] = partition.membership
     else:
-        G = convert_matrix.from_numpy_array(connectivities)
+        if connectivity_graph:
+            G = convert_matrix.from_numpy_array(connectivities)
+        else:
+            G = convert_matrix.from_numpy_array(distances)
         partition = community.best_partition(G, resolution=resolution, random_state=42)
         cell_topic['cluster'] = partition.values()
 
@@ -225,6 +231,11 @@ def parseArguments():
                          required=False,
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
+
+    general.add_argument('--outFileAdata', '-oa',
+                         type=argparse.FileType('b'),
+                         required=False,
+                         help='The output updated h5ad object.')
 
     general.add_argument('--outGraph', '-og',
                          type=argparse.FileType('w'),
@@ -318,10 +329,14 @@ def main(args=None):
     corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
     umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
-    #cluster_id = adat.obs.louvain.to_list()
-    #cluster_id = [int(x) for x in cluster_id]
-    #embeddings = adat.obsm['X_umap']
-
+    ## update the anndata object if asked
+    if args.outFileAdata:
+        ## drop cells which are not in the anndata
+        atac_adata=atac_adata[umap_lsi.index]
+        atac_adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
+        atac_adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
+        atac_adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
+        anndata.write_h5ad(args.outFileAdata)
     if args.plotFile:
         ## plot UMAP
         plt.rcParams['font.size'] = 8.0

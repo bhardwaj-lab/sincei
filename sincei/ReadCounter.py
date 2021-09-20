@@ -4,7 +4,7 @@ import time
 import sys
 import multiprocessing
 import numpy as np
-
+#import scipy as sc
 # deepTools packages
 import deeptools.utilities
 from deeptools import bamHandler
@@ -600,7 +600,8 @@ class CountReadsPerBin(object):
                 subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
         else:
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
-
+        ## convert the output to a sparse matrix
+        #subnum_reads_per_bin = sc.sparse.csr_matrix(subnum_reads_per_bin)
         ## prepare list of regions
         regionList = []
         idx = 0
@@ -630,13 +631,13 @@ class CountReadsPerBin(object):
                 for name in regionList:
                     _file.write(name+"\n")
                 _file.close()
-
+                regionList=None
         else:
             _file_name = ''
 
         if self.verbose:
             endTime = time.time()
-            rows = subnum_reads_per_bin[barcodes[0]].shape[0]
+            rows = subnum_reads_per_bin.shape[0]
             print("%s countReadsInRegions_worker: processing %d "
                   "(%.1f per sec) @ %s:%s-%s" %
                   (multiprocessing.current_process().name,
