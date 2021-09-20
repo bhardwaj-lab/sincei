@@ -8,7 +8,6 @@ import leidenalg as la
 from scipy import sparse
 
 import sys
-sys.path.append('/home/vbhardwaj/programs/sincei/bin')
 from scClusterCells import LSA_gensim, cluster_LSA
 
 #umap.__version__ : should be >= 0.5.1
