@@ -15,7 +15,8 @@ from deeptools.utilities import smartLabels
 from deeptools._version import __version__
 
 # own functions
-scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
+scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
+print(scriptdir)
 sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
