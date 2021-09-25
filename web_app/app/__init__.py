@@ -4,6 +4,7 @@ Copyright (c) 2019 - present AppSeed.us
 """
 
 from flask import Flask, url_for
+from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from importlib import import_module
@@ -12,6 +13,16 @@ from os import path
 
 db = SQLAlchemy()
 login_manager = LoginManager()
+
+## Db for samples
+class Sample(db.Model):
+    __tablename__='input_samples'
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(256))
+    samplename = db.Column(db.String(120), index=True)
+    def __init__(self, filename, samplename):
+        self.filename = filename
+        self.samplename = samplename
 
 def register_extensions(app):
     db.init_app(app)
@@ -38,4 +49,5 @@ def create_app(config):
     register_extensions(app)
     register_blueprints(app)
     configure_database(app)
+    Migrate(app, db)
     return app

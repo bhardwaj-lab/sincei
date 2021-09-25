@@ -19,15 +19,14 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 get_config_mode = 'Debug' if DEBUG else 'Production'
 
 try:
-    
-    # Load the configuration using the default values 
+    # Load the configuration using the default values
     app_config = config_dict[get_config_mode.capitalize()]
 
 except KeyError:
     exit('Error: Invalid <config_mode>. Expected values [Debug, Production] ')
 
-app = create_app( app_config ) 
-Migrate(app, db)
+app = create_app( app_config )
+#Migrate(app, db)
 
 if DEBUG:
     app.logger.info('DEBUG       = ' + str(DEBUG)      )
