@@ -40,35 +40,75 @@
                                 <h3>BAM files</h3>
                                 <hr>
                                 <div class="row">
-                                    <div class="col-md-6">
+                                  <!--Upload files-->
+                                    <div class="col-sm">
                                       <form action = "/uploader" method = "POST" enctype = "multipart/form-data">
                                         <div class="form-group">
                                             <input id="upload" type="file" name="file[]" multiple="multiple" /><!-- onchange="readURL();" -->
                                             <input id="fileList" type="hidden" name="fileList" />
                                             <small id="inputBAMHelp" class="form-text text-muted">Files will be linked to the output folder</small>
                                             <button type="submit" class="btn btn-primary">Submit</button>
+                                            <button type="button" class="btn btn-secondary">Clear</button>
                                         </div>
                                         </form>
                                     </div>
-                                    <div class="col-md-6">
-                                      <!--Show uploaded files here-->
-                                      
+                                    <!--Show uploaded files here-->
+                                    <div class="col-sm">
+                                      <table id="bamData" class="table table-hover">
+                                      <thead>
+                                        <tr>
+                                          <th>File</th>
+                                          <th>Sample Name</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {% for sample in samples %}
+                                          <tr>
+                                            <td>{{ sample.filename }}</td>
+                                            <td>{{ sample.samplename }}</td>
+                                          </tr>
+                                        {% endfor %}
+                                      </tbody>
+                                      </table>
                                     </div>
                                 </div>
+
                                 <h3 class="mt-5">Sample Metadata</h3>
                                 <hr>
                                 <div class="row">
                                 <!-- Sample information input goes here-->
+                                <!--Upload files-->
+                                  <div class="col-sm">
+                                    <form action = "/uploader" method = "POST" enctype = "multipart/form-data">
+                                      <div class="form-group">
+                                          <input id="upload" type="file" name="file[]" multiple="multiple" /><!-- onchange="readURL();" -->
+                                          <input id="fileList" type="hidden" name="fileList" />
+                                          <small id="inputBAMHelp" class="form-text text-muted">Files will be linked to the output folder</small>
+                                          <button type="submit" class="btn btn-primary">Submit</button>
+                                          <button type="button" class="btn btn-secondary">Clear</button>
+                                      </div>
+                                      </form>
+                                  </div>
                                 </div>
-
                                 <h3 class="mt-5">Feature Metadata</h3>
                                 <hr>
                                 <div class="row">
                                 <!-- Feature metadata (bed/gtf) input goes here-->
+                                <!--Upload files-->
+                                  <div class="col-sm">
+                                    <form action = "/uploader" method = "POST" enctype = "multipart/form-data">
+                                      <div class="form-group">
+                                          <input id="upload" type="file" name="file[]" multiple="multiple" /><!-- onchange="readURL();" -->
+                                          <input id="fileList" type="hidden" name="fileList" />
+                                          <small id="inputBAMHelp" class="form-text text-muted">Files will be linked to the output folder</small>
+                                          <button type="submit" class="btn btn-primary">Submit</button>
+                                          <button type="button" class="btn btn-secondary">Clear</button>
+                                      </div>
+                                      </form>
+                                  </div>
                                 </div>
                             </div>
                         </div>
-
                     </div>
                 </div>
                 <!-- [ Main Content ] end -->
