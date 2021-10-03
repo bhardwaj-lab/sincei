@@ -1,0 +1,84 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} scFilterStats {% endblock %}
+
+<!-- Specific CSS goes HERE-->
+{% block stylesheets %}
+{{ css_resources|indent(4)|safe }}
+{% endblock stylesheets %}
+
+{% block content %}
+{{ plot_script|indent(4)|safe }}
+<div class="pcoded-content">
+    <div class="pcoded-inner-content">
+        <!-- [ breadcrumb ] start -->
+        <div class="page-header">
+            <div class="page-block">
+                <div class="row align-items-center">
+                    <div class="col-md-12">
+                        <div class="page-header-title">
+                            <h5 class="m-b-10">Preprocessing</h5>
+                        </div>
+                        <ul class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/"><i class="feather icon-home"></i></a></li>
+                            <li class="breadcrumb-item"><a href="javascript:">Preprocessing</a></li>
+                            <li class="breadcrumb-item"><a href="javascript:">QC statistics</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="main-body">
+            <div class="page-wrapper">
+                <!-- [ Main Content ] start -->
+                <div class="row">
+                    <div class="col-sm-12">
+                        <!-- WTFroms with input -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Input</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                  <!--Upload files-->
+                                    <div class="col-sm">
+                                      <h3 class="mt-5">BAM files</h3>
+                                      <form action = "/filter_stats" method = "POST" enctype = "multipart/form-data">
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary">Submit</button>
+                                        </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                <hr/>
+                            </div>
+                        </div>
+                        <!--Bokeh plot of output-->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Output</h5>
+                            </div>
+                            <div class="card-body">
+                                <h5 style="text-align: left; margin-bottom: 40px;">Flask + Bokeh</h5>
+                                <div class="row">
+                                  <div style="display: flex; justify-content: center;">
+                                  {{ plot_div|indent(4)|safe }}
+                                  </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- [ Main Content ] end -->
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock content %}
+
+<!-- Specific Page JS goes HERE-->
+{% block javascripts %}
+{{ js_resources|indent(4)|safe }}
+{% endblock javascripts %}
