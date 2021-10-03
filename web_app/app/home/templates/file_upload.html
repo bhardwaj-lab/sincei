@@ -127,25 +127,4 @@
     });
   });
 </script>
-<!-- Javascript for file upload
-<script type="text/javascript">
-function readURL(){
-  var filenames = document.getElementById('upload').files;
-  if (filenames.length > 0) {
-    flist=[];
-    for (var i = 0; i <= fi.files.length - 1; i++) {
-      var fullPath = fi.files.item(i).name;
-      var startIndex = (fullPath.indexOf('\\') >= 0 ? fullPath.lastIndexOf('\\') : fullPath.lastIndexOf('/'));
-      var filename = fullPath.substring(startIndex);
-      if (filename.indexOf('\\') === 0 || filename.indexOf('/') === 0) {
-          filename = filename.substring(1);
-      }
-      flist.push(filename);
-    }
-     alert(filename);
-     document.getElementById("fileList").value = filename;
-  }
-}
-</script>
--->
 {% endblock javascripts %}
