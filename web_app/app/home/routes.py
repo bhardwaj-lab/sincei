@@ -63,7 +63,7 @@ def uploader_file():
 @blueprint.route('/filter_stats', methods = ['GET', 'POST'])
 @login_required
 def show_plots():
-    if request.method in ['POST', 'GET']:
+    if request.method == 'POST':
         try:
             def getFilterStats(txtpath="/Users/vivek/programs/sincei/web_app/example_data/scFilterStats.txt"):
                 res = pd.read_csv(txtpath, sep="\t", index_col=0)
@@ -91,8 +91,15 @@ def show_plots():
                     css_resources=INLINE.render_css(),
                     ).encode(encoding='UTF-8')
         except:
-            print("blah")
             return render_template('page-500.html'), 500
+    else:
+        return render_template(
+                'filter_stats.html',
+                plot_script="",
+                plot_div="",
+                js_resources=INLINE.render_js(),
+                css_resources=INLINE.render_css(),
+                ).encode(encoding='UTF-8')
 
 # Helper - Extract current page name from request
 def get_segment( request ):
