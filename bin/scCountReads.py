@@ -20,6 +20,7 @@ print(scriptdir)
 sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
+from Utilities import gini
 
 old_settings = np.seterr(all='ignore')
 

@@ -15,7 +15,7 @@ import pandas as pd
 ## own functions
 scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
 sys.path.append(scriptdir)
-from utilities import *
+from Utilities import *
 import ParserCommon
 
 def parseArguments():

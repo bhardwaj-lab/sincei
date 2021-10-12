@@ -14,7 +14,7 @@ import pyBigWig
 import py2bit
 
 ## own functions
-from utilities import *
+from Utilities import *
 
 debug = 0
 old_settings = np.seterr(all='ignore')
