@@ -14,7 +14,7 @@ from deeptools.utilities import getTLen, smartLabels, getTempFileName
 ## own functions
 scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
 sys.path.append(scriptdir)
-from utilities import checkMotifs, checkGCcontent, getDupFilterTuple
+from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
 
 def parseArguments():

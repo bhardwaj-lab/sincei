@@ -157,7 +157,7 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
     cell_topic = pd.DataFrame(li_val, columns=li[0])
     cell_topic.index = cells
 
-    return corpus_lsi, cell_topic
+    return corpus_lsi, cell_topic, corpus_tfidf
 
 def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0, connectivity_graph=True):
 
@@ -326,7 +326,7 @@ def main(args=None):
 
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adat.X.transpose())
-    corpus_lsi, cell_topic = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
+    corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
     umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     ## update the anndata object if asked

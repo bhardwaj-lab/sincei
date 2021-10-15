@@ -20,6 +20,7 @@ print(scriptdir)
 sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
+from Utilities import gini
 
 old_settings = np.seterr(all='ignore')
 
@@ -298,6 +299,32 @@ def main(args=None):
                                 "end":[x.split('_')[2] for x in rows]
                                 }, index=rows)
 
+        ## add QC stats to the anndata object
+        # 1. scanpy metrics
+        sc.pp.calculate_qc_metrics(adata, inplace=True)
+
+        # 2. fraction of regions and cells with signal
+        # how many regions have non-zero counts per cell, as % of total regions
+        nonzero_cells_per_region=np.sum(adata.X > 0, axis=0)
+        nonzero_frac_region = [float(x)/adata.obs.shape[0] for x in nonzero_cells_per_region.tolist()[0]]
+        adata.var['fraction_cells_with_signal'] = nonzero_frac_region
+        # how many regions have non-zero counts per cell, as % of total regions
+        nonzero_regions_per_cell=np.sum(adata.X > 0, axis=1)
+        nonzero_frac = [float(x)/adata.var.shape[0] for x in nonzero_regions_per_cell]
+        chic_adata.obs['fraction_regions_with_signal'] = nonzero_frac
+
+        # 3. Gini coefficient
+        gini_list=[]
+        for i in range(adata.shape[0]):
+            ar=adata.X[:,i].todense()
+            ar=np.array(ar).flatten()
+            if len(ar[ar>0]) > 2:
+                gini_list.append(gini(ar[ar>0]))
+            else:
+                gini_list.append(1.0)
+        adata.obs['gini_coefficient'] = li
+
+        # export as loom
         adata.write_h5ad(args.outFilePrefix+".h5ad")
 
 if __name__ == "__main__":

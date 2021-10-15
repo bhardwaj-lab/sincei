@@ -3,7 +3,6 @@ import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
-from deeptools.utilities import smartLabels
 #from deeptools._version import __version__
 from deeptoolsintervals import GTF
 
@@ -12,7 +11,7 @@ import py2bit
 import pandas as pd
 ## own functions
 scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
-from utilities import *
+from Utilities import *
 
 def getStats_worker(arglist):
     chrom, start, end, args = arglist
