@@ -55,8 +55,10 @@ def filterOptions(args=None):
     group.add_argument('--motifFilter', '-m',
                           metavar='STR',
                           help='Check whether a given motif is present in the read and the corresponding reference genome. '
-                                'This function checks for the motif at the 5-end of the read and at the 5-overhang in the genome. '
-                                'Reads not containing the given motif are not discarded. ',
+                                'This option checks for the motif at the 5-end of the read and at the 5-overhang in the genome, '
+                                'which is useful in identifying reads properly cut by a restriction-enzyme or MNAse. '
+                                'For example, if you want to search for an "A" at the 5\'-end of the read and "TA" at 5\'-overhang, '
+                                'use "-m \'A,TA\'". Reads not containing the given motif are discarded. ',
                           type=str,
                           nargs='+',
                           default=None)
