@@ -64,7 +64,7 @@ def get_args():
     general.add_argument('--smartLabels',
                          action='store_true',
                          help='Instead of manually specifying a labels for the input '
-                         'file, this causes deepTools to use the file name '
+                         'file, this makes sincei use the file name '
                          'after removing the path and extension.')
 
     general.add_argument('--verbose', '-v',

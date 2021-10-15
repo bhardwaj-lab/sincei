@@ -1,6 +1,5 @@
 import argparse
 import os
-#from scDeepTools._version import __version__
 
 def output(args=None):
     parser = argparse.ArgumentParser(add_help=False)
