@@ -1,3 +1,5 @@
 sincei/__pycache__
 bin/__pycache__
 notebooks
+.DS_Store
+.ipynb_checkpoints/
