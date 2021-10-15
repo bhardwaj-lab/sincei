@@ -12,7 +12,7 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
-scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
