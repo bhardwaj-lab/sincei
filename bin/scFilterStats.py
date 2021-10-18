@@ -13,7 +13,7 @@ import numpy as np
 import py2bit
 import pandas as pd
 ## own functions
-scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 from Utilities import *
 import ParserCommon
@@ -44,7 +44,7 @@ The following metrics are estimated according to the --binSize and --distanceBet
 
 The sum of these may be more than the total number of reads. Note that alignments are sampled from bins of size --binSize spaced --distanceBetweenBins apart.
 """,
-        usage='Example usage: estimateReadFiltering.py -b sample1.bam sample2.bam > log.txt')
+        usage='Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt')
 
     required = parser.add_argument_group('Required arguments')
     required.add_argument('--bamfiles', '-b',
@@ -52,7 +52,7 @@ The sum of these may be more than the total number of reads. Note that alignment
                           help='List of indexed bam files separated by spaces.',
                           nargs='+',
                           required=True)
-    required.add_argument('--barcodes',
+    required.add_argument('--barcodes', '-bc',
                            help="A single-column file containing barcodes (whitelist) to be used",
                            metavar="TXT",
                            required=True)
@@ -92,7 +92,7 @@ The sum of these may be more than the total number of reads. Note that alignment
                          'lower coverage samples. Note that if you specify a value that '
                          'results in too few (<1000) reads sampled, the value will be '
                          'decreased. (Default: %(default)s)',
-                         default=10000,
+                         default=1000000,
                          type=int)
 
     general.add_argument('--numberOfProcessors', '-p',
