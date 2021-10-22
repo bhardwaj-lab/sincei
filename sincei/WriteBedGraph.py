@@ -167,12 +167,12 @@ class WriteBedGraph(cr.CountReadsPerBin):
         res = [[chrom_order[x[0]], x[1], x[2], x[3]] for x in res]
         res.sort()
 
-        # write output for each cluster
+        # write output for each group
         cluster_info = self.clusterInfo
         clusters = cluster_info.cluster.unique().tolist()
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
-            print('Writing output for cluster: {}'.format(cl))
+            print('Writing output for group: {}'.format(str(cl)))
             if pd.isna(cl):
                 continue
             # concatenate the coverages
