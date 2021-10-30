@@ -319,24 +319,26 @@ def parseArguments():
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    adat = anndata.read_h5ad(args.input)
-    adat = preprocess_adata(adat, args.minCellSum, args.minRegionSum)
+    adata = anndata.read_h5ad(args.input)
+    adata = preprocess_adata(adata, args.minCellSum, args.minRegionSum)
     #adat = lsa_anndata(adat, args.nPrinComps, args.scaleFactor)
     #adat = UMAP_clustering(adat)
 
     ## LSA and clustering based on gensim
-    mtx = sparse.csr_matrix(adat.X.transpose())
-    corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adat.obs.index), list(adat.var.index), nTopics = args.nPrinComps, smartCode='lfu')
+    mtx = sparse.csr_matrix(adata.X.transpose())
+    corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adata.obs.index), list(adata.var.index), nTopics = args.nPrinComps, smartCode='lfu')
     umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     ## update the anndata object if asked
     if args.outFileAdata:
         ## drop cells which are not in the anndata
-        atac_adata=atac_adata[umap_lsi.index]
-        atac_adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
-        atac_adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
-        atac_adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
-        anndata.write_h5ad(args.outFileAdata)
+        adata=adata[umap_lsi.index]
+        adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
+        adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
+        adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
+        tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(sp))
+        adata.layers['tfidf']=tfidf_mat.transpose()
+        adata.write_loom(args.outFileAdata)
     if args.plotFile:
         ## plot UMAP
         plt.rcParams['font.size'] = 8.0

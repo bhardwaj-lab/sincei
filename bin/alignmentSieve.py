@@ -12,7 +12,7 @@ from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 
 ## own functions
-scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
@@ -64,7 +64,7 @@ def get_args():
     general.add_argument('--smartLabels',
                          action='store_true',
                          help='Instead of manually specifying a labels for the input '
-                         'file, this causes deepTools to use the file name '
+                         'file, this makes sincei use the file name '
                          'after removing the path and extension.')
 
     general.add_argument('--verbose', '-v',

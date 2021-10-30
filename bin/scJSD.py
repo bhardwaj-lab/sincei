@@ -16,7 +16,7 @@ matplotlib.use('Agg')
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['svg.fonttype'] = 'none'
 
-scriptdir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "sincei")
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 ## own functions
 import ReadCounter as countR

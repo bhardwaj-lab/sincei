@@ -3,7 +3,6 @@ import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
-#from deeptools._version import __version__
 from deeptoolsintervals import GTF
 
 import numpy as np
