@@ -327,12 +327,12 @@ def main(args=None):
 
     ## update the anndata object, drop cells which are not in the anndata
     adata=adata[umap_lsi.index]
-    adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
+    adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:args.nPrinComps])
     adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
     adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
-    tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(sp))
+    tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(corpus_tfidf.obj.idfs))
     adata.layers['tfidf']=tfidf_mat.transpose()
-    adata.write_loom(args.outFileAdata)
+    adata.write_loom(args.outFile, write_obsm_varm=True)
 
     if args.outFileUMAP:
         ## plot UMAP
