@@ -29,6 +29,37 @@
                 </div>
             </div>
         </div>
+        <div class="main-body">
+            <div class="page-wrapper">
+                <!-- [ Main Content ] start -->
+                <div class="row">
+                    <div class="col-sm-12">
+                        <!-- WTFroms with input -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Input</h5>
+                            </div>
+                            <div class="card-body">
+                              <!--Test form-->
+                              <form action = "/blah" method="POST">
+                                {{form.hidden_tag()}}
+                                <div class="form-group m-5">
+                                      {{ form.bamfiles.label }}
+                                      {{ form.bamfiles(class="form-control") }}
+                                </div>
+                                <div class="form-group m-5">
+                                      {{ form.barcodes.label }}
+                                      {{ form.barcodes(class="form-control") }}
+                                </div>
+                                  {{ form.submit(class="btn-lg btn-primary m-5") }}
+                              </form>
+                              </div>
+                          </div>
+                        </div>
+                    </div>
+                          <!-- [ Main Content ] end -->
+                </div>
+            </div>
     </div>
 </div>
 
@@ -36,6 +67,4 @@
 
 <!-- Specific Page JS goes HERE -->
 {% block javascripts %}
-<script src="http://cdn.pydata.org/bokeh/release/bokeh-0.12.5.min.js"></script>
-<script src="http://cdn.pydata.org/bokeh/release/bokeh-widgets-0.12.5.min.js"></script>
 {% endblock javascripts %}

@@ -4,7 +4,7 @@ Copyright (c) 2019 - present AppSeed.us
 """
 
 from app.home import blueprint
-from flask import render_template, redirect, url_for, request
+from flask import render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 from app import login_manager, db, Sample
 from jinja2 import TemplateNotFound
@@ -17,12 +17,22 @@ from bokeh.resources import INLINE
 from bokeh.embed import components
 from bokeh.plotting import figure, output_file, show
 import pandas as pd
+import sys
+from .sincei_forms import testForm
 
+# Helper - Extract current page name from request
+def get_segment( request ):
+    try:
+        segment = request.path.split('/')[-1]
+        if segment == '':
+            segment = 'index'
+        return segment
+    except:
+        return None
 
 @blueprint.route('/index')
 @login_required
 def index():
-
     return render_template('index.html', segment='index')
 
 @blueprint.route('/<template>')
@@ -63,8 +73,13 @@ def uploader_file():
 @blueprint.route('/filter_stats', methods = ['GET', 'POST'])
 @login_required
 def show_plots():
-    if request.method == 'POST':
+    form = testForm()
+    flash(form.errors)
+    if request.method == 'POST' and form.validate_on_submit():
         try:
+            bam = form.binSize.data
+            bc = form.distanceBetweenBins.data
+            flash('Input submitted!!')
             def getFilterStats(txtpath="/Users/vivek/programs/sincei/web_app/example_data/scFilterStats.txt"):
                 res = pd.read_csv(txtpath, sep="\t", index_col=0)
                 return res
@@ -85,6 +100,7 @@ def show_plots():
             script, div = components(fig)
             return render_template(
                     'filter_stats.html',
+                    form=form,
                     plot_script=script,
                     plot_div=div,
                     js_resources=INLINE.render_js(),
@@ -95,18 +111,9 @@ def show_plots():
     else:
         return render_template(
                 'filter_stats.html',
+                form=form,
                 plot_script="",
                 plot_div="",
                 js_resources=INLINE.render_js(),
                 css_resources=INLINE.render_css(),
                 ).encode(encoding='UTF-8')
-
-# Helper - Extract current page name from request
-def get_segment( request ):
-    try:
-        segment = request.path.split('/')[-1]
-        if segment == '':
-            segment = 'index'
-        return segment
-    except:
-        return None
