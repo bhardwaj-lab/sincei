@@ -128,10 +128,10 @@ def bamcorrelate_args(case='bins'):
 
     optional.add_argument('--outFileFormat',
                           type=str,
-                          default='anndata',
-                          choices=['anndata', 'mtx'],
+                          default='loom',
+                          choices=['loom', 'mtx'],
                           help='Output file format. Default is to write an anndata object of name '
-                          '<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. '
+                          '<prefix>.loom, which can either be opened in scanpy, or by downstream tools. '
                           '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
                           '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
 
@@ -325,7 +325,7 @@ def main(args=None):
         adata.obs['gini_coefficient'] = li
 
         # export as loom
-        adata.write_h5ad(args.outFilePrefix+".h5ad")
+        adata.write_loom(args.outFilePrefix+".loom")
 
 if __name__ == "__main__":
     main()

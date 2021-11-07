@@ -210,32 +210,28 @@ def parseArguments():
 
     required = parser.add_argument_group('Required arguments')
     required.add_argument('--input', '-i',
-                          metavar='ADATA',
-                          help='Input count matrix, stored in h5ad format',
+                          metavar='LOOM',
+                          help='Input file in the loom format',
                           required=True)
 
     required.add_argument('--outFile', '-o',
-                         type=argparse.FileType('w'),
+                         type=str,
                          required=True,
-                         help='The file to write results to. The output file contains cell metadata, UMAP coordinates and cluster IDs.')
+                         help='The file to write results to. The output file is an updated .loom object containing cell metadata, UMAP coordinates and cluster IDs.')
 
     general = parser.add_argument_group('General arguments')
 
-    general.add_argument('--plotFile', '-p',
+    general.add_argument('--outFileUMAP', '-op',
                          type=str,
                          required=False,
-                         help='The output plot file (for UMAP)')
+                         help='The output plot file (for UMAP). If you specify this option, another file with the same '
+                         'prefix (and .txt extention) is also created with the raw UMAP coordinates.')
 
     general.add_argument('--outFileTrainedModel', '-om',
                          type=argparse.FileType('w'),
                          required=False,
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
-
-    general.add_argument('--outFileAdata', '-oa',
-                         type=argparse.FileType('b'),
-                         required=False,
-                         help='The output updated h5ad object.')
 
     general.add_argument('--outGraph', '-og',
                          type=argparse.FileType('w'),
@@ -319,7 +315,7 @@ def parseArguments():
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    adata = anndata.read_h5ad(args.input)
+    adata = anndata.read_loom(args.input)
     adata = preprocess_adata(adata, args.minCellSum, args.minRegionSum)
     #adat = lsa_anndata(adat, args.nPrinComps, args.scaleFactor)
     #adat = UMAP_clustering(adat)
@@ -329,17 +325,16 @@ def main(args=None):
     corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adata.obs.index), list(adata.var.index), nTopics = args.nPrinComps, smartCode='lfu')
     umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
-    ## update the anndata object if asked
-    if args.outFileAdata:
-        ## drop cells which are not in the anndata
-        adata=adata[umap_lsi.index]
-        adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:nTopics])
-        adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
-        adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
-        tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(sp))
-        adata.layers['tfidf']=tfidf_mat.transpose()
-        adata.write_loom(args.outFileAdata)
-    if args.plotFile:
+    ## update the anndata object, drop cells which are not in the anndata
+    adata=adata[umap_lsi.index]
+    adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:args.nPrinComps])
+    adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
+    adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
+    tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(corpus_tfidf.obj.idfs))
+    adata.layers['tfidf']=tfidf_mat.transpose()
+    adata.write_loom(args.outFile, write_obsm_varm=True)
+
+    if args.outFileUMAP:
         ## plot UMAP
         plt.rcParams['font.size'] = 8.0
         # convert cm values to inches
@@ -347,24 +342,16 @@ def main(args=None):
         fig.suptitle('LSA-UMAP', y=(1 - (0.06 / args.plotHeight)))
         plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.cluster)])
         plt.tight_layout()
-        plt.savefig(args.plotFile, dpi=200, format=args.plotFileFormat)
+        plt.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
         plt.close()
+        prefix=args.outFileUMAP.split(".")[0]
+        umap_lsi.to_csv(prefix+".tsv", sep = "\t")
 
-
-    ## Write output clusters
-#    df = pd.DataFrame({'UMAP1': embeddings[:, 0],
-#                  'UMAP2': embeddings[:, 1],
-#                  'Cluster': cluster_id,
-#                 })
-
-#    df.index = adat.obs.index
-#    df.to_csv(args.outFile, sep = "\t")
     # save if asked
     if args.outFileTrainedModel:
         corpus_lsi.save(args.outFileTrainedModel)
     if args.outGraph:
         graph.write_lgl(args.outGraph)
-    umap_lsi.to_csv(args.outFile, sep = "\t")
 
     return 0
 
