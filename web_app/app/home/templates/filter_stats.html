@@ -42,7 +42,6 @@
                                 <div class="row">
                                   <!--Form to execute scFilterStats-->
                                   <form action = "/filter_stats" method="POST">
-                                    {{form.hidden_tag()}}
                                     <div class="form-group m-5">
                                       {% for field in form %}
                                         {% if field.type == "SubmitField" %}
@@ -52,6 +51,7 @@
                                           {{ field(class="form-control") }}
                                         {% endif %}
                                       {% endfor %}
+                                      {{ form.hidden_tag() }}
                                     </div>
                                   </form>
                                 </div>
@@ -64,7 +64,7 @@
                                 <h5>Output</h5>
                             </div>
                             <div class="card-body">
-                                <h5 style="text-align: left; margin-bottom: 40px;">Flask + Bokeh</h5>
+                                <h5 style="text-align: left; margin-bottom: 40px;">Result</h5>
                                 <div class="row">
                                   <div style="display: flex; justify-content: center;">
                                   {{ plot_div|indent(4)|safe }}

@@ -109,6 +109,7 @@ def show_plots():
         except:
             return render_template('page-500.html'), 500
     else:
+        flash(form.errors)
         return render_template(
                 'filter_stats.html',
                 form=form,
