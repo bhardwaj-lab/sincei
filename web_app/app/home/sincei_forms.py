@@ -2,7 +2,7 @@ from flask_wtf import FlaskForm as Form
 from wtforms import validators, BooleanField, StringField, DecimalField, FileField, MultipleFileField, FloatField, IntegerField, SelectField, SelectMultipleField, SubmitField, StringField
 
 
-class testForm(Form):
+class form_scFilterStats(Form):
     outFile=StringField(label='Out  File', validators=[], description='The file to write results to. By default, results are printed to the console')
     labels=StringField(label='Labels', validators=[], description='Labels for the samples. The default is to use the file name of the sample. The sample labels should be separated by spaces and quoted if a label itselfcontains a space E.g. -labels label-1 "label 2"  ')
     smartLabels=StringField(label='Smart  Labels', validators=[], description='Instead of manually specifying labels for the input BAM files, this causes sincei to use the file name after removing the path and extension.')

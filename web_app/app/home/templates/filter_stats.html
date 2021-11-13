@@ -47,7 +47,10 @@
                                         {% if field.type == "SubmitField" %}
                                           {{ field(class="btn-lg btn-primary m-5") }}
                                         {% else %}
-                                          {{ field.label }}
+                                          {{ field.label }} <a class="feather icon-help-circle" href="#{{field.id}}" role="button" aria-expanded="false" aria-controls="{{field.id}}" data-toggle="collapse" data-placement="right"></a>
+                                            <div class="collapse" id="{{field.id}}">
+                                            <div class="card-body"> <p class="mb-0">{{ field.description }}</p></div>
+                                            </div>
                                           {{ field(class="form-control") }}
                                         {% endif %}
                                       {% endfor %}
