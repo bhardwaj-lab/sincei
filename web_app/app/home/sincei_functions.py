@@ -4,24 +4,28 @@ from bokeh.io import curdoc
 from bokeh.embed import components
 from bokeh.plotting import figure, output_file, show
 import pandas as pd
+import subprocess
 
 # execute a command using args passed from WTforms
 def execute_command(command, args):
-    if command == "scFilterStats":
-        result = True
-    return result
+    final_arg = [command]
+    for field in args:
+        if str(field.id) == "submit":
+            continue
+        final_arg.append("--"+str(field.id)+" "+str(field.data))
+    final_arg=" ".join(final_arg)
+    try:
+        subprocess.Popen(final_arg, shell=True, stdout=subprocess.PIPE).stdout.read()
+    except:
+        pass
+    return final_arg
 
 def fetch_results_scFilterStats():
-    def getFilterStats(txtpath="/Users/vivek/programs/sincei/web_app/example_data/scFilterStats.txt"):
-        res = pd.read_csv(txtpath, sep="\t", index_col=0)
-        return res
-
-    df = getFilterStats()
+    df = pd.read_csv("/Users/vivek/programs/sincei/web_app/example_data/scFilterStats.txt", sep="\t", index_col=0)
     df['color']="#000000"
     pretty_labels={}
     for x in df.columns:
         pretty_labels[" ".join(x.split("_"))] = x
-
     source = ColumnDataSource(df)
     xlabel="Total sampled"
     ylabel="Wrong motif"
@@ -30,5 +34,4 @@ def fetch_results_scFilterStats():
     fig.xaxis.axis_label = xlabel
     fig.yaxis.axis_label = ylabel
     script, div = components(fig)
-
     return script, div

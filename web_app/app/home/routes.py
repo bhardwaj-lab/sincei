@@ -69,14 +69,14 @@ def uploader_file():
 @blueprint.route('/filter_stats', methods = ['GET', 'POST'])
 @login_required
 def show_plots():
-    form = form_scFilterStats(csrf_enabled=False)
+    form = form_scFilterStats(meta={'csrf': False})
     flash(form.errors)
     if request.method == 'POST' and form.validate_on_submit():
         try:
-            bam = form.binSize.data
-            bc = form.distanceBetweenBins.data
             result = execute_command("scFilterStats", args=form)
+            print(result)
             flash('Input submitted!!')
+            #result=True
             if result:
                 script, div = fetch_results_scFilterStats()
                 return render_template(
