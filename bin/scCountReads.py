@@ -25,7 +25,7 @@ from Utilities import gini
 old_settings = np.seterr(all='ignore')
 
 
-def parse_arguments(args=None):
+def parseArguments(args=None):
     parser = \
         argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -181,7 +181,7 @@ def bamcorrelate_args(case='bins'):
 
 
 def process_args(args=None):
-    args = parse_arguments().parse_args(args)
+    args = parseArguments().parse_args(args)
 
     if args.labels and len(args.bamfiles) != len(args.labels):
         print("The number of labels does not match the number of bam files.")
