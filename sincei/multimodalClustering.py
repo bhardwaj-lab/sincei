@@ -12,6 +12,20 @@ from scClusterCells import LSA_gensim, cluster_LSA
 
 #umap.__version__ : should be >= 0.5.1
 
+## literature on multi-graph clustering
+"""
+https://github.com/crisbodnar/regularised-spectral-clustering
+https://arxiv.org/pdf/2103.16534.pdf
+https://arxiv.org/pdf/2010.12301.pdf
+https://arxiv.org/pdf/2010.15456.pdf
+https://chenannie45.github.io/SDM18_MANE.pdf
+https://www.researchgate.net/post/Python_or_R_packages_for_multilayer_network
+http://www.mkivela.com/pymnet/visualizing.html#visualization-tutorial
+https://cran.r-project.org/web/packages/multinet/multinet.pdf
+https://sciendo.com/pdf/10.2478/amcs-2019-0010
+https://web.media.mit.edu/~xdong/paper/tsp14.pdf
+"""
+
 ## multi-graph clustering on matched keys(barcodes) bw two anndata objects
 def multiModal_clustering(mode1_adata, mode2_adata, column_key='barcode_nla', nK=20):
 
