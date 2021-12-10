@@ -16,7 +16,7 @@ from deeptools._version import __version__
 
 # own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-print(scriptdir)
+
 sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
@@ -300,20 +300,10 @@ def main(args=None):
                                 }, index=rows)
 
         ## add QC stats to the anndata object
-        # 1. scanpy metrics
+        # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
         sc.pp.calculate_qc_metrics(adata, inplace=True)
 
-        # 2. fraction of regions and cells with signal
-        # how many regions have non-zero counts per cell, as % of total regions
-        nonzero_cells_per_region=np.sum(adata.X > 0, axis=0)
-        nonzero_frac_region = [float(x)/adata.obs.shape[0] for x in nonzero_cells_per_region.tolist()[0]]
-        adata.var['fraction_cells_with_signal'] = nonzero_frac_region
-        # how many regions have non-zero counts per cell, as % of total regions
-        nonzero_regions_per_cell=np.sum(adata.X > 0, axis=1)
-        nonzero_frac = [float(x)/adata.var.shape[0] for x in nonzero_regions_per_cell]
-        chic_adata.obs['fraction_regions_with_signal'] = nonzero_frac
-
-        # 3. Gini coefficient
+        # 2. Gini coefficient
         gini_list=[]
         for i in range(adata.shape[0]):
             ar=adata.X[:,i].todense()
