@@ -24,7 +24,7 @@ def get_bins_by_gene(dict, gene, firstBin=False):
         if v:
             vlist=[x[0] for x in v]# overlapping genes
             slist=[x[1] for x in v]# overlapping gene strands
-            match=[x==gene for x in vlist]
+            match=[x.lower()==gene.lower() for x in vlist]
             if any(match):
                 klist.append(k)
                 # get strand of the gene
