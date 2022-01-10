@@ -135,7 +135,18 @@ def main(args=None):
     args = parseArguments().parse_args(args)
 
     adata = scp.read_loom(args.input)
-    # if --ddescribe is asked, only print the numeric vars and obs columns
+    # 2. Gini coefficient
+    #gini_list=[]
+    #for i in range(adata.shape[0]):
+    #    ar=adata.X[:,i].todense()
+    #    ar=np.array(ar).flatten()
+    #    if len(ar[ar>0]) > 2:
+    #        gini_list.append(gini(ar[ar>0]))
+    #    else:
+    #        gini_list.append(1.0)
+    #adata.obs['gini_coefficient'] = gini_list
+
+    # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
         cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
         print("Cell metrics:")

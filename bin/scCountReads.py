@@ -303,16 +303,6 @@ def main(args=None):
         # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
         sc.pp.calculate_qc_metrics(adata, inplace=True)
 
-        # 2. Gini coefficient
-        gini_list=[]
-        for i in range(adata.shape[0]):
-            ar=adata.X[:,i].todense()
-            ar=np.array(ar).flatten()
-            if len(ar[ar>0]) > 2:
-                gini_list.append(gini(ar[ar>0]))
-            else:
-                gini_list.append(1.0)
-        adata.obs['gini_coefficient'] = li
 
         # export as loom
         adata.write_loom(args.outFilePrefix+".loom")
