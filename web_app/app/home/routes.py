@@ -14,7 +14,7 @@ from bokeh.resources import INLINE
 
 import sys
 from .sincei_forms import form_scFilterStats
-from .sincei_functions import execute_command, fetch_results_scFilterStats
+from .sincei_functions import execute_command, fetch_results_scFilterStats, fetch_results_UMAP
 
 # Helper - Extract current page name from request
 def get_segment( request ):
@@ -95,6 +95,19 @@ def show_plots():
                 form=form,
                 plot_script="",
                 plot_div="",
+                js_resources=INLINE.render_js(),
+                css_resources=INLINE.render_css(),
+                ).encode(encoding='UTF-8')
+
+
+@blueprint.route('/explore-output', methods = ['GET', 'POST'])
+@login_required
+def explore_umap():
+    script, div = fetch_results_UMAP()
+    return render_template(
+                'explore-output.html',
+                plot_script=script,
+                plot_div=div,
                 js_resources=INLINE.render_js(),
                 css_resources=INLINE.render_css(),
                 ).encode(encoding='UTF-8')
