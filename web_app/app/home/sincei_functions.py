@@ -3,8 +3,8 @@ from bokeh.models import ColumnDataSource, Div, Select, Slider, TextInput, Legen
 from bokeh.io import curdoc
 from bokeh.embed import components
 from bokeh.plotting import figure, output_file, show
-from bokeh.palettes import Category20
-from bokeh.transform import factor_cmap
+from bokeh.palettes import Category20, Blues
+from bokeh.transform import factor_cmap, linear_cmap
 import pandas as pd
 import subprocess
 
@@ -39,10 +39,9 @@ def fetch_results_scFilterStats():
     return script, div
 
 
-def fetch_results_UMAP():
-    df = pd.read_csv("/Users/vivek/programs/sincei/web_app/example_data/umap_annotation.tsv", sep="\t",
-                     index_col=0,
-                     names=['cell', 'celltype', 'UMAP1', 'UMAP2'])
+def fetch_results_UMAP(gene=None):
+    df = pd.read_csv("/Users/vivek/programs/sincei/web_app/example_data/normalized_counts.tsv", sep="\t",
+                     index_col=0)
     pretty_labels={}
     for x in df.columns:
         pretty_labels[" ".join(x.split("_"))] = x
@@ -50,12 +49,16 @@ def fetch_results_UMAP():
     ## map celltypes to a colormap
     xlabel="UMAP1"
     ylabel="UMAP2"
-    fig = figure(plot_height=500, plot_width=800, tooltips=[("ID", "@cell")])# level_0 refers to "index"
+    fig = figure(plot_height=500, plot_width=700, tooltips=[("ID", "@cell")])# level_0 refers to "index"
     fig.add_layout(Legend(), 'right')
-    fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
-               fill_color=factor_cmap('celltype', palette=Category20[20], factors=df.celltype.unique().tolist()),
-               legend_group='celltype',
-               line_color=None)
+    if gene:
+        fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
+                   fill_color=linear_cmap(gene, palette=Blues[256][::-1], low=min(df[gene]), high=max(df[gene])),
+                   line_color=None)
+    else:
+        fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
+                   fill_color=factor_cmap('celltype', palette=Category20[20], factors=df.celltype.unique().tolist()),
+                   legend_group='celltype', line_color=None)
     fig.xaxis.axis_label = xlabel
     fig.yaxis.axis_label = ylabel
     script, div = components(fig)

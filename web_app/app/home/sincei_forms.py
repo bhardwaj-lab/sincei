@@ -25,3 +25,8 @@ class form_scFilterStats(Form):
     samFlagExclude=IntegerField(label='Sam  Flag  Exclude', validators=[], default=None, description='Exclude reads based on the SAM flag. For example, to get only reads that map to the forward strand, use --samFlagExclude 16, where 16 is the SAM flag for reads that map to the reverse strand.')
     blackListFileName=StringField(label='Black  List  File  Name', validators=[], default=None, description='A BED or GTF file containing regions that should be excluded from all analyses. Currently this works by rejecting genomic chunks that happen to overlap an entry. Consequently, for BAM files, if a read partially overlaps a blacklisted region or a fragment spans over it, then the read/fragment might still be considered. Please note that you should adjust the effective genome size, if relevant.')
     submit = SubmitField('Submit')
+
+
+class form_scPlotUMAP(Form):
+    geneName=StringField(label='Gene', validators=[], default=None, description='Name of a gene/region to plot')
+    submit=SubmitField('Submit')

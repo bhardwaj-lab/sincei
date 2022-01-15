@@ -35,10 +35,20 @@
                         <!--Bokeh plot of output-->
                         <div class="card">
                             <div class="card-header">
-                                <h5>Output</h5>
+                                <h5>Explore Output</h5>
                             </div>
                             <div class="card-body">
-                                <h5 style="text-align: left; margin-bottom: 40px;">UMAP</h5>
+                                <div class="row">
+                                  <!--Form to execute scFilterStats-->
+                                  <form action = "/explore-output" method="POST">
+                                    <div class="form-group m-5">
+                                      {{ form.geneName.label }}
+                                      {{ form.geneName(class="form-control") }}
+                                      {{ form.submit(class="btn-lg btn-primary m-5") }}
+                                      {{ form.hidden_tag() }}
+                                    </div>
+                                  </form>
+                                </div>
                                 <div class="row">
                                   <div style="display: flex; justify-content: center;">
                                   {{ plot_div|indent(4)|safe }}

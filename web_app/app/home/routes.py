@@ -13,7 +13,7 @@ import pickle
 from bokeh.resources import INLINE
 
 import sys
-from .sincei_forms import form_scFilterStats
+from .sincei_forms import form_scFilterStats, form_scPlotUMAP
 from .sincei_functions import execute_command, fetch_results_scFilterStats, fetch_results_UMAP
 
 # Helper - Extract current page name from request
@@ -103,11 +103,28 @@ def show_plots():
 @blueprint.route('/explore-output', methods = ['GET', 'POST'])
 @login_required
 def explore_umap():
-    script, div = fetch_results_UMAP()
-    return render_template(
-                'explore-output.html',
-                plot_script=script,
-                plot_div=div,
-                js_resources=INLINE.render_js(),
-                css_resources=INLINE.render_css(),
-                ).encode(encoding='UTF-8')
+    form = form_scPlotUMAP(meta={'csrf': False})
+    flash(form.errors)
+    if request.method == 'POST' and form.validate_on_submit():
+        try:
+            script, div = fetch_results_UMAP(str(form.geneName.data))
+            return render_template(
+                        'explore-output.html',
+                        form=form,
+                        plot_script=script,
+                        plot_div=div,
+                        js_resources=INLINE.render_js(),
+                        css_resources=INLINE.render_css(),
+                        ).encode(encoding='UTF-8')
+        except:
+            return render_template('page-500.html'), 500
+    else:
+        script, div = fetch_results_UMAP()
+        return render_template(
+                    'explore-output.html',
+                    form=form,
+                    plot_script=script,
+                    plot_div=div,
+                    js_resources=INLINE.render_js(),
+                    css_resources=INLINE.render_css(),
+                    ).encode(encoding='UTF-8')
