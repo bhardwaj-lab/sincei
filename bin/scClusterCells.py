@@ -18,6 +18,8 @@ matplotlib.rcParams['svg.fonttype'] = 'none'
 # clustering and umap
 from scipy.sparse import issparse, coo_matrix, csr_matrix
 from sklearn.metrics import pairwise_distances
+from sklearn.preprocessing import binarize
+
 # topic models
 from gensim import corpora, matutils, models
 # Louvain clustering and UMAP
@@ -262,6 +264,10 @@ def parseArguments():
                          default='LSA',
                          help='The dimentionality reduction method for clustering. (Default: %(default)s)')
 
+    general.add_argument('--binarize',
+                         action='store_true',
+                         help='Binarize the counts per region before dimentionality reduction (only for LSA/LDA)')
+
     general.add_argument('--nPrinComps', '-n',
                          default=20,
                          type=int,
@@ -322,30 +328,43 @@ def main(args=None):
 
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adata.X.transpose())
+    if args.binarize:
+        mtx=binarize(mtx, copy=True)
     corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adata.obs.index), list(adata.var.index), nTopics = args.nPrinComps, smartCode='lfu')
-    umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
+    #umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     ## update the anndata object, drop cells which are not in the anndata
-    adata=adata[umap_lsi.index]
-    adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,0:args.nPrinComps])
-    adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
-    adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
-    tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(corpus_tfidf.obj.idfs))
-    adata.layers['tfidf']=tfidf_mat.transpose()
+    adata=adata[cell_topic.index]
+    adata.obsm['X_pca']=np.asarray(cell_topic.iloc[:,1:args.nPrinComps])
+    #adata.obsm['X_umap']=np.asarray(umap_lsi.iloc[:,0:2])
+    #adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
+    #tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(corpus_tfidf.obj.idfs))
+    #adata.layers['tfidf']=tfidf_mat.transpose()
+    sc.pp.neighbors(atac_clustered, use_rep='X_pca', n_neighbors=args.nNeighbors)
+    sc.tl.leiden(atac_clustered, resolution=args.clusterResolution)
+    sc.tl.paga(atac_clustered)
+    sc.pl.paga(atac_clustered, plot=False)
+    sc.tl.umap(atac_clustered, min_dist=0.1, spread=5, init_pos='paga')
+
     adata.write_loom(args.outFile, write_obsm_varm=True)
 
     if args.outFileUMAP:
         ## plot UMAP
-        plt.rcParams['font.size'] = 8.0
+        fig=sc.pl.umap(atac_clustered, color=['leiden', 'log1p_total_counts'],
+               ncols=2,  legend_loc='on data', return_fig=True, show=False)
+        fig.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
+        #plt.rcParams['font.size'] = 8.0
         # convert cm values to inches
-        fig = plt.figure(figsize=(args.plotWidth / 2.54, args.plotHeight / 2.54))
-        fig.suptitle('LSA-UMAP', y=(1 - (0.06 / args.plotHeight)))
-        plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.cluster)])
-        plt.tight_layout()
-        plt.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
-        plt.close()
+        #fig = plt.figure(figsize=(args.plotWidth / 2.54, args.plotHeight / 2.54))
+        #fig.suptitle('LSA-UMAP', y=(1 - (0.06 / args.plotHeight)))
+        #plt.scatter(umap_lsi.UMAP1, umap_lsi.UMAP2, s=5, alpha = 0.8, c=[sns.color_palette()[x] for x in list(umap_lsi.cluster)])
+        #plt.tight_layout()
+        #plt.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
+        #plt.close()
         prefix=args.outFileUMAP.split(".")[0]
-        umap_lsi.to_csv(prefix+".tsv", sep = "\t")
+        umap_lsi = pd.DataFrame(adata.obsm['X_umap'], columns=['UMAP1', 'UMAP2'], index=adata.obs.index)
+        umap_lsi['cluster'] = adata.obs['leiden']
+        umap_lsi.to_csv(prefix+".tsv", sep = "\t", index_label='barcode')
 
     # save if asked
     if args.outFileTrainedModel:

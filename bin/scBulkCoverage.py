@@ -23,8 +23,7 @@ debug = 0
 
 def parseArguments():
     parentParser = parserCommon.getParentArgParse()
-    bamParser = parserCommon.read_options()
-
+    bamParser = ParserCommon.read_options()
     outputParser = ParserCommon.output()
     filterParser = ParserCommon.filterOptions()
     label_parser = ParserCommon.labelOptions()
@@ -166,17 +165,29 @@ def main(args=None):
     else:
         debug = 0
 
-        ## read the group info file (make it more robust)
-    df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, header = None,
-                            comment="#", names = ['sample', 'barcode', 'cluster'])
+    ## read the group info file (make it more robust)
+    ## if the no. of columns are 3, expect "sample", "barcode", "cluster", if 4, expect sample:bc, umap1, umap2, cluster
+    df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, comment="#")
+    if len(df.columns) == 3:
+        df.columns = ['sample', 'barcode', 'cluster']
+    elif len(df.columns) == 4:
+        df.columns = ['barcode', 'umap1', 'umap2', 'cluster']
+        samp = [x.split("_")[:-1] for x in df.barcode]
+        if len(samp[0]) > 1:
+            df['sample'] = ["_".join(x) for x in samp]
+        else:
+            df['sample'] = samp
+        df.barcode = [x.split("_")[-1] for x in df.barcode]
+    else:
+        sys.exit("*Error*:No. of columns in --groupInfo file not recognized. "
+              "Please provide either 3 (sample, barcode, cluster) or 3 (barcode, umap1, umap2, cluster) column file")
     df.index = df[['sample', 'barcode']].apply(lambda x: ':'.join(x), axis=1)
     #barcodes = groupInfo.barcode.unique().tolist()
 
     ## match the sample labels with groupInfo labels before proceeding
     ## create new DF with user-provided bam+labels (this would match the counts)
     if args.labels and len(args.bamfiles) != len(args.labels):
-        print("The number of labels does not match the number of bam files.")
-        exit(0)
+        sys.exit("*Error*:The number of labels does not match the number of bam files.")
     if not args.labels:
         if args.smartLabels:
             args.labels = smartLabels(args.bamfiles)
@@ -208,8 +219,7 @@ def main(args=None):
     ## Motif and GC filter
     if args.motifFilter:
         if not args.genome2bit:
-            print("MotifFilter asked but genome (2bit) file not provided.")
-            sys.exit(1)
+            sys.exit("*Error*:MotifFilter asked but genome (2bit) file not provided.")
         else:
             args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
 
@@ -285,7 +295,7 @@ def main(args=None):
             if args.Offset[0] == 0:
                 sys.exit("*Error*: An offset of 0 isn't allowed, since offsets are 1-based positions inside each alignment.")
             if args.Offset[1] > 0 and args.Offset[1] < args.Offset[0]:
-                sys.exir("'Error*: The right side bound is less than the left-side bound. This is inappropriate.")
+                sys.exit("'Error*: The right side bound is less than the left-side bound. This is inappropriate.")
         else:
             if args.Offset[0] == 0:
                 sys.exit("*Error*: An offset of 0 isn't allowed, since offsets are 1-based positions inside each alignment.")
