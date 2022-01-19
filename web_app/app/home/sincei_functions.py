@@ -40,7 +40,7 @@ def fetch_results_scFilterStats():
 
 
 def fetch_results_UMAP(gene=None):
-    df = pd.read_csv("/Users/vivek/programs/sincei/web_app/example_data/normalized_counts.tsv", sep="\t",
+    df = pd.read_csv("~/programs/sincei/web_app/example_data/normalized_counts.tsv", sep="\t",
                      index_col=0)
     pretty_labels={}
     for x in df.columns:
