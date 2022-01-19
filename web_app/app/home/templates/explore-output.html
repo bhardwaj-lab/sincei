@@ -42,9 +42,9 @@
                                   <!--Form to execute scFilterStats-->
                                   <form action = "/explore-output" method="POST">
                                     <div class="form-group m-5">
-                                      {{ form.geneName.label }}
+                                      {{ form.geneName.description }}
                                       {{ form.geneName(class="form-control") }}
-                                      {{ form.submit(class="btn-lg btn-primary m-5") }}
+                                      <!--{{ form.submit(class="btn-lg btn-primary m-5") }}-->
                                       {{ form.hidden_tag() }}
                                     </div>
                                   </form>
