@@ -69,7 +69,7 @@ def uploader_file():
 @blueprint.route('/filter_stats', methods = ['GET', 'POST'])
 @login_required
 def show_plots():
-    form = form_scFilterStats(meta={'csrf': False})
+    form = form_scFilterStats(meta={'csrf': False})#, formdata=None
     flash(form.errors)
     if request.method == 'POST' and form.validate_on_submit():
         try:
@@ -103,7 +103,7 @@ def show_plots():
 @blueprint.route('/explore-output', methods = ['GET', 'POST'])
 @login_required
 def explore_umap():
-    form = form_scPlotUMAP(meta={'csrf': False})
+    form = form_scPlotUMAP(meta={'csrf': False})#, formdata=None
     flash(form.errors)
     if request.method == 'POST' and form.validate_on_submit():
         try:

@@ -40,8 +40,7 @@ def fetch_results_scFilterStats():
 
 
 def fetch_results_UMAP(gene=None):
-    df = pd.read_csv("./example_data/normalized_counts.tsv", sep="\t",
-                     index_col=0)
+    df = pd.read_csv("./example_data/normalized_counts.tsv", sep="\t", index_col=0)
     pretty_labels={}
     for x in df.columns:
         pretty_labels[" ".join(x.split("_"))] = x
