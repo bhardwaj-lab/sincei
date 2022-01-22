@@ -48,13 +48,15 @@ def fetch_results_UMAP(gene=None):
     ## map celltypes to a colormap
     xlabel="UMAP1"
     ylabel="UMAP2"
-    fig = figure(plot_height=500, plot_width=700, tooltips=[("ID", "@cell")])# level_0 refers to "index"
-    fig.add_layout(Legend(), 'right')
     if gene:
+        fig = figure(title="Activity of Gene: {}".format(gene), 
+                    plot_height=500, plot_width=500, tooltips=[("ID", "@cell")])# level_0 refers to "index"
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=linear_cmap(gene, palette=Blues[256][::-1], low=min(df[gene]), high=max(df[gene])),
                    line_color=None)
     else:
+        fig = figure(title="Cell types", plot_height=500, plot_width=700, tooltips=[("ID", "@cell")])# level_0 refers to "index"
+        fig.add_layout(Legend(), 'right')
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=factor_cmap('celltype', palette=Category20[20], factors=df.celltype.unique().tolist()),
                    legend_group='celltype', line_color=None)
