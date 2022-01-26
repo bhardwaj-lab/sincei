@@ -5,13 +5,13 @@ import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
-from deeptools.utilities import smartLabels
-#from deeptools._version import __version__
 from deeptoolsintervals import GTF
-
 import numpy as np
-import py2bit
 import pandas as pd
+from collections import Counter
+from functools import reduce
+import matplotlib.pyplot as plt
+
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
@@ -38,8 +38,10 @@ def parseArguments():
     general = parser.add_argument_group('Optional arguments')
 
     general.add_argument('--outFile', '-o',
+                         help='The file to write results to. By default, results are printed to the console',
                          type=parserCommon.writableFile,
-                         help='The file to write results to. By default, results are printed to the console')
+                         default=None,
+                         required=False)
 
     general.add_argument('--whitelist', '-w',
                            help="A single-column file containing the whitelist of barcodes to be used",
@@ -53,6 +55,19 @@ def parseArguments():
                            type=int,
                            default=0,
                            required=False)
+
+    general.add_argument('--minCount', '-m',
+                           help='Minimum no. of bins with non-zero counts, in order to report a barcode. Note that this number would range '
+                                'from 0 upto genome size/binSize. ',
+                           metavar="INT",
+                           type=int,
+                           default=0,
+                           required=False)
+
+    general.add_argument('--rankPlot', '-rp',
+                         type=parserCommon.writableFile,
+                         help='The output file name to plot the ranked counts per barcode (similar to the \"knee plot\",'
+                              'but counts in this case would be the number of non-zero bins)')
 
     general.add_argument('--tagName', '-tn',
                           metavar='STR',
@@ -165,14 +180,10 @@ def main(args=None):
     args = parseArguments().parse_args(args)
 
     # open barcode file and read the content in a list
-    with open(args.whitelist, 'r') as f:
-        barcodes = f.read().splitlines()
-    args.whitelist = barcodes
-
-    if args.outFile is None:
-        of = sys.stdout
-    else:
-        of = open(args.outFile, "w")
+    if args.whitelist:
+        with open(args.whitelist, 'r') as f:
+            barcodes = f.read().splitlines()
+        args.whitelist = barcodes
 
     bhs = bamHandler.openBam(args.bamfile, returnStats=True, nThreads=args.numberOfProcessors)[0]
     chrom_sizes = list(zip(bhs.references, bhs.lengths))
@@ -186,12 +197,51 @@ def main(args=None):
                     blackListFileName=args.blackListFileName,
                     numberOfProcessors=args.numberOfProcessors,
                     verbose=args.verbose)
-    ## res, should be a list of sets, collapse it to one set
-    final_set = list(set().union(*res))
+    ## res, should be a list of sets
+    #final_set = list(set().union(*res))
+    df=pd.DataFrame(Counter(reduce(lambda x,y: list(x)+list(y),res)).items(),
+             columns=['barcode','count'])
+
+    if args.minCount:
+        if args.minCount > len(res):
+            print("minCount bigger than No. of bins. Reducing to maximum")
+            args.minCount = len(res)
+        final_set=df.loc[df['count']>=args.minCount]['barcode'].to_list()
+    else:
+        final_set=df['barcode'].tolist()
+
+    # convert count to log10
+    df['count']=np.log10(df['count'])
+    if args.rankPlot:
+        df['count_rank']=df['count'].rank(method='min', ascending=False)
+        fig, ax = plt.subplots()
+        plt.plot('count_rank', 'count', data=df, linestyle='none', marker='o', color='grey', markersize=6)
+        ax.set_xlabel('Barcode Rank', fontsize=15)
+        ax.set_ylabel('No. of nonzero bins (log10)',fontsize=15)
+        ax.set_title('Ranked counts (#bins) for detected Barcodes', fontsize=15)
+        plt.xticks(np.arange(0, max(df['count']), int(max(df['count_rank'])/10)), fontsize=10)
+        plt.yticks(np.arange(0, 4, 0.1), fontsize=10)
+
+
+        # Annotation
+        if args.minCount:
+            plt.axhline(args.minCount, color='r')
+
+        fig.tight_layout()
+        plt.savefig(args.rankPlot, dpi='figure',
+                    format=None, metadata=None,
+                    pad_inches=0.2,
+                    facecolor='auto', edgecolor='auto',
+                    backend=None)
+
+    if args.outFile is None:
+        of=sys.stdout
+    else:
+        of = open(args.outFile, "w")
 
     for x in final_set:
         of.write(str(x)+'\n')
-
+    df.to_csv("~/programs/sincei/test_df.csv")
     return 0
 
 if __name__ == "__main__":
