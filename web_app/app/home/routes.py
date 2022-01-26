@@ -107,12 +107,15 @@ def explore_umap():
     flash(form.errors)
     if request.method == 'POST' and form.validate_on_submit():
         try:
-            script, div = fetch_results_UMAP(str(form.geneName.data))
+            script, div = fetch_results_UMAP()
+            script_res, div_res = fetch_results_UMAP(str(form.geneName.data))
             return render_template(
                         'explore-output.html',
                         form=form,
                         plot_script=script,
                         plot_div=div,
+                        plot_script_res=script_res,
+                        plot_div_res=div_res,
                         js_resources=INLINE.render_js(),
                         css_resources=INLINE.render_css(),
                         ).encode(encoding='UTF-8')
@@ -125,6 +128,8 @@ def explore_umap():
                     form=form,
                     plot_script=script,
                     plot_div=div,
+                    plot_script_res="",
+                    plot_div_res="",
                     js_resources=INLINE.render_js(),
                     css_resources=INLINE.render_css(),
                     ).encode(encoding='UTF-8')

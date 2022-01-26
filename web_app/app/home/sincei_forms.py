@@ -24,5 +24,5 @@ class form_scFilterStats(Form):
 
 
 class form_scPlotUMAP(Form):
-    geneName=StringField(label='Gene', validators=[], default=None, description='Name of a gene/region to plot')
+    geneName=StringField(label='Gene', validators=[], default=None, description='Provide a gene or region to explore')
     submit=SubmitField('Submit')

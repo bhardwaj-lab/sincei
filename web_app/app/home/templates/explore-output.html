@@ -9,6 +9,7 @@
 
 {% block content %}
 {{ plot_script|indent(4)|safe }}
+{{ plot_script_res|indent(4)|safe }}
 <div class="pcoded-content">
     <div class="pcoded-inner-content">
         <!-- [ breadcrumb ] start -->
@@ -31,15 +32,13 @@
             <div class="page-wrapper">
                 <!-- [ Main Content ] start -->
                 <div class="row">
+                  <!-- left column-->
                     <div class="col-sm-12">
                         <!--Bokeh plot of output-->
                         <div class="card">
-                            <div class="card-header">
-                                <h5>Explore Output</h5>
-                            </div>
                             <div class="card-body">
                                 <div class="row">
-                                  <!--Form to execute scFilterStats-->
+                                  <!--Form to plot on UMAP-->
                                   <form action = "/explore-output" method="POST">
                                     <div class="form-group m-5">
                                       {{ form.geneName.description }}
@@ -48,10 +47,33 @@
                                       {{ form.hidden_tag() }}
                                     </div>
                                   </form>
-                                </div>
-                                <div class="row">
                                   <div style="display: flex; justify-content: center;">
                                   {{ plot_div|indent(4)|safe }}
+                                  </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- bottom row-->
+                    <div class="col-sm-6">
+                        <!--UMAP with gene activity-->
+                        <div class="card">
+                            <div class="card-body">
+                                <!--<div class="row">
+                                  <div style="display: flex; justify-content: center;">
+                                  {{ plot_div_res|indent(4)|safe }}
+                                  </div>
+                                </div>-->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <!--Voilin plot per group-->
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="row">
+                                  <div style="display: flex; justify-content: center;">
+                                  {{ plot_div_res|indent(4)|safe }}
                                   </div>
                                 </div>
                             </div>
