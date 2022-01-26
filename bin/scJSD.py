@@ -87,12 +87,12 @@ def parse_arguments(args=None):
     required_args = get_required_args()
     optional_args = get_optional_args()
 
-    read_options_parser = ParserCommon.read_options()
+    readOptions_parser = ParserCommon.readOptions()
     label_parser = ParserCommon.labelOptions()
     filter_parser = ParserCommon.filterOptions()
 
     parser = argparse.ArgumentParser(
-        parents=[required_args, label_parser, read_options_parser,
+        parents=[required_args, label_parser, readOptions_parser,
                  filter_parser, optional_args, parent_parser],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='This tool samples regions in the genome from BAM files '

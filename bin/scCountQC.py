@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
+import os
 import argparse
 import numpy as np
 import pandas as pd
 from scipy import sparse, io
 from itertools import compress
-
+import copy
 # plotting
 import seaborn as sns
 import matplotlib
@@ -15,14 +17,16 @@ matplotlib.use('Agg')
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['svg.fonttype'] = 'none'
 
-
-import scanpy as scp
+import scanpy as sc
+## own Functions
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+sys.path.append(scriptdir)
+import ParserCommon
+from Utilities import gini
 
 ### ------ Functions ------
-def filter_adata(adata,
-                filter_region_dict=None, filter_cell_dict=None,
-                bad_chrom=None, bad_cells=None):
-
+def filter_adata(adata, filter_region_dict=None,
+                filter_cell_dict=None, bad_chrom=None, bad_cells=None):
     # 1. regions
     if bad_chrom:
         adata=adata[:, ~adata.var.chrom.isin(bad_chrom)]
@@ -68,28 +72,35 @@ def make_plots(adata, fname=None):
     return plist
 
 def parseArguments():
-    parser = argparse.ArgumentParser(
+    plot_parser = ParserCommon.plotOptions()
+    other_parser = ParserCommon.otherOptions()
+    parser = argparse.ArgumentParser(parents=[get_args(), plot_parser, other_parser],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         This tool clusters the cells based on the input count matrix (output of scCountReads) and returns a
         tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
-        usage='Example usage: scCountQC.py -i cellCounts.h5ad -o clusters.tsv > log.txt')
+        usage='Example usage: scCountQC.py -i cellCounts.h5ad -o clusters.tsv > log.txt',
+        add_help=False)
 
+    return parser
+
+def get_args():
+    parser = argparse.ArgumentParser(add_help=False)
     required = parser.add_argument_group('Required arguments')
     required.add_argument('--input', '-i',
                           metavar='LOOM',
                           help='Input file in the loom format',
                           required=True)
 
-    general = parser.add_argument_group('General arguments')
-    general.add_argument('--outPlot', '-o',
-                         type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
-
+    general = parser.add_argument_group('Filtering arguments')
     general.add_argument('--describe', '-d',
                          action='store_true',
                          help='Print a list of cell and region metrics available for QC/filtering.')
+
+    general.add_argument('--outPlot', '-o',
+                         type=str,
+                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
 
     general.add_argument('--filterCellArgs', '-fc',
                          type=str,
@@ -120,41 +131,37 @@ def parseArguments():
                          type=str,
                          help='The file to write results to (if filtering is requested). The output file is an updated .loom object post-filtering.')
 
-    general.add_argument('--verbose', '-v',
-                         help='Set to see processing messages.',
-                         action='store_true')
-
-#    general.add_argument('--version', action='version',
-#                         version='%(prog)s {}'.format(__version__))
-
-
     return parser
 
 
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    adata = scp.read_loom(args.input)
+    adata = sc.read_loom(args.input)
+    ## add QC stats to the anndata object
+    # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
+    sc.pp.calculate_qc_metrics(adata, inplace=True)
+
     # 2. Gini coefficient
-    #gini_list=[]
-    #for i in range(adata.shape[0]):
-    #    ar=adata.X[:,i].todense()
-    #    ar=np.array(ar).flatten()
-    #    if len(ar[ar>0]) > 2:
-    #        gini_list.append(gini(ar[ar>0]))
-    #    else:
-    #        gini_list.append(1.0)
-    #adata.obs['gini_coefficient'] = gini_list
+#    gini_list=[]
+#    for i in range(adata.shape[0]):
+#        ar=copy.deepcopy(adata.X[:,i]).todense()
+#        ar=np.array(ar).flatten()
+#        if len(ar[ar>0]) > 2:
+#            gini_list.append(gini(ar[ar>0]))
+#        else:
+#            gini_list.append(1.0)
+#    adata.obs['gini_coefficient'] = gini_list
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
         cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
-        print("Cell metrics:")
+        print('\n Cell metrics:')
         print(pd.DataFrame({'min': cols.min(),
                       'max': cols.max()}))
 
         rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
-        print("Region metrics:")
+        print('\n Region metrics:')
         print(pd.DataFrame({'min': rows.min(),
                             'max': rows.max()}))
         exit()

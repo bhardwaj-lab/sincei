@@ -20,8 +20,6 @@ scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 import ReadCounter as countR
 import ParserCommon
-from Utilities import gini
-
 old_settings = np.seterr(all='ignore')
 
 
@@ -30,19 +28,18 @@ def parseArguments(args=None):
         argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description="""
+            ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
+            The analysis can be performed for the entire genome by running the program in 'bins' mode.
+            If you want to count the read coverage for specific regions only, use the ``BED-file`` mode instead.
+            The standard output of ``scCountReads`` is a ".mtx" file with counts, along with rowName and colNames in a single-column .txt file.
 
-``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
-The analysis can be performed for the entire genome by running the program in 'bins' mode.
-If you want to count the read coverage for specific regions only, use the ``BED-file`` mode instead.
-The standard output of ``scCountReads`` is a ".mtx" file with counts, along with rowName and colNames in a single-column .txt file.
+            A detailed sub-commands help is available by typing:
 
-A detailed sub-commands help is available by typing:
+              scCountReads bins -h
 
-  scCountReads bins -h
+              scCountReads BED-file -h
 
-  scCountReads BED-file -h
-
-""",
+          """,
             epilog='example usages:\n'
                    'scCountReads bins --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results \n\n'
                    'scCountReads BED-file --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n'
@@ -50,8 +47,6 @@ A detailed sub-commands help is available by typing:
                    ' \n\n',
             conflict_handler='resolve')
 
-    parser.add_argument('--version', action='version',
-                        version='%(prog)s {}'.format(__version__))
     subparsers = parser.add_subparsers(
         title="commands",
         dest='command',
@@ -59,19 +54,20 @@ A detailed sub-commands help is available by typing:
         help='subcommands',
         metavar='')
 
-    parent_parser = parserCommon.getParentArgParse(binSize=False)
-    read_options_parser = ParserCommon.read_options()
-
+    bam_args = ParserCommon.bamOptions(binSize=False)
+    read_args = ParserCommon.readOptions()
+    other_args = ParserCommon.otherOptions()
     # bins mode options
     subparsers.add_parser(
         'bins',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[bamcorrelate_args(case='bins'),
-                 parent_parser, read_options_parser,
-                 parserCommon.gtf_options(suppress=True)
+        parents=[get_args(case='bins'),
+                 bam_args, read_args,
+                 parserCommon.gtf_options(suppress=True),
+                 other_args
                  ],
-        help="The coverage calculation is done for consecutive bins of equal "
-             "size (10 kilobases by default). The bin size and distance between bins can be adjusted.",
+        help="The reads are counted in consecutive bins of equal "
+             "size. The bin size and distance between bins can be adjusted.",
         add_help=False,
         usage='%(prog)s '
               '--bamfiles file1.bam file2.bam '
@@ -81,27 +77,28 @@ A detailed sub-commands help is available by typing:
     subparsers.add_parser(
         'BED-file',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[bamcorrelate_args(case='BED-file'),
-                 parent_parser, read_options_parser,
-                 parserCommon.gtf_options()
+        parents=[get_args(case='BED-file'),
+                 bam_args, read_args,
+                 parserCommon.gtf_options(),
+                 other_args
                  ],
         help="The user provides a BED/GTF file containing all regions "
-             "that should be considered for the coverage analysis. A "
-             "common use would be to count scRNA-seq coverage on Genes.",
+             "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
         usage='%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results\n',
         add_help=False)
 
     return parser
 
 
-def bamcorrelate_args(case='bins'):
-    outputParser = ParserCommon.output()
-    filterParser = ParserCommon.filterOptions()
-    label_parser = ParserCommon.labelOptions()
-    parser = argparse.ArgumentParser(parents=[outputParser, filterParser, label_parser],
-                                    add_help=False)
-    required = parser.add_argument_group('Required arguments')
+def get_args(case='bins'):
+    output_args = ParserCommon.outputOptions()
+    filter_args = ParserCommon.filterOptions()
+    bc_args = ParserCommon.bcOptions()
 
+    parser = argparse.ArgumentParser(parents=[output_args, filter_args, bc_args],
+                                    add_help=False)
+
+    required = parser.add_argument_group('Required arguments')
     # define the arguments
     required.add_argument('--bamfiles', '-b',
                           metavar='FILE1 FILE2',
@@ -109,15 +106,7 @@ def bamcorrelate_args(case='bins'):
                           nargs='+',
                           required=True)
 
-    required.add_argument('--barcodes', '-bc',
-                          metavar='TXT',
-                          help='A single-column text file with barcodes (whitelist) to count.',
-                          required=True)
-
     optional = parser.add_argument_group('Optional arguments')
-
-    optional.add_argument("--help", "-h", action="help",
-                          help="show this help message and exit")
 
     optional.add_argument('--genomeChunkSize',
                           type=int,
@@ -298,11 +287,6 @@ def main(args=None):
                                 "start":[x.split('_')[1] for x in rows],
                                 "end":[x.split('_')[2] for x in rows]
                                 }, index=rows)
-
-        ## add QC stats to the anndata object
-        # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
-        sc.pp.calculate_qc_metrics(adata, inplace=True)
-
 
         # export as loom
         adata.write_loom(args.outFilePrefix+".loom")

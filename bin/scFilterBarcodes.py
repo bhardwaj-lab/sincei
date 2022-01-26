@@ -56,7 +56,7 @@ def parseArguments():
                            default=0,
                            required=False)
 
-    general.add_argument('--minCount', '-m',
+    general.add_argument('--minCount', '-mc',
                            help='Minimum no. of bins with non-zero counts, in order to report a barcode. Note that this number would range '
                                 'from 0 upto genome size/binSize. ',
                            metavar="INT",
@@ -85,7 +85,7 @@ def parseArguments():
                            nargs="+",
                            required=False)
 
-    general.add_argument('--minMappingQuality',
+    general.add_argument('--minMappingQuality', '-mq',
                            metavar='INT',
                            help='If set, only reads that have a mapping '
                            'quality score of at least this are '

@@ -8,32 +8,27 @@ import os
 import itertools
 import numpy as np
 import pandas as pd
-from deeptools import parserCommon
 from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
 
 ## own Functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
-import WriteBedGraph
 import ParserCommon
+import WriteBedGraph
 
 debug = 0
 
 
 def parseArguments():
-    parentParser = parserCommon.getParentArgParse()
-    bamParser = ParserCommon.read_options()
-    outputParser = ParserCommon.output()
-    filterParser = ParserCommon.filterOptions()
-    label_parser = ParserCommon.labelOptions()
-    requiredArgs = get_required_args()
-    optionalArgs = get_optional_args()
+    bam_args = ParserCommon.bamOptions()
+    read_args = ParserCommon.readOptions()
+    output_args = ParserCommon.output()
+    filter_args = ParserCommon.filterOptions()
+    other_args = ParserCommon.otherOptions()
     parser = \
         argparse.ArgumentParser(
-            parents=[requiredArgs, outputParser,
-                    label_parser, filterParser, optionalArgs,
-                     parentParser, bamParser],
+            parents=[get_args(), bam_args, filter_args, read_args, other_args],
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description='This tool takes alignments of reads or fragments '
             'as input (BAM files), along with cell grouping information, such as '
@@ -51,11 +46,10 @@ def parseArguments():
     return parser
 
 
-def get_required_args():
+def get_args():
     parser = argparse.ArgumentParser(add_help=False)
 
     required = parser.add_argument_group('Required arguments')
-
     # define the arguments
     required.add_argument('--bamfiles', '-b',
                           metavar='FILE1 FILE2',
@@ -69,17 +63,7 @@ def get_required_args():
                           metavar='TXT file',
                           required=True)
 
-    return parser
-
-
-def get_optional_args():
-
-    parser = argparse.ArgumentParser(add_help=False)
-    optional = parser.add_argument_group('Optional arguments')
-
-    optional.add_argument("--help", "-h", action="help",
-                          help="show this help message and exit")
-
+    optional = parser.add_argument_group('Coverage-related Options')
     optional.add_argument('--outFileFormat', '-of',
                        help='Output file type. Either "bigwig" or "bedgraph".',
                        choices=['bigwig', 'bedgraph'],
