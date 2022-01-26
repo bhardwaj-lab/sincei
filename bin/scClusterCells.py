@@ -8,7 +8,6 @@ from scipy import sparse, io
 from itertools import compress
 
 # plotting
-import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
@@ -340,17 +339,17 @@ def main(args=None):
     #adata.obs['cluster_lsi'] = [str(cl) for cl in umap_lsi['cluster']]
     #tfidf_mat = matutils.corpus2dense(corpus_tfidf, num_terms=len(corpus_tfidf.obj.idfs))
     #adata.layers['tfidf']=tfidf_mat.transpose()
-    sc.pp.neighbors(atac_clustered, use_rep='X_pca', n_neighbors=args.nNeighbors)
-    sc.tl.leiden(atac_clustered, resolution=args.clusterResolution)
-    sc.tl.paga(atac_clustered)
-    sc.pl.paga(atac_clustered, plot=False)
-    sc.tl.umap(atac_clustered, min_dist=0.1, spread=5, init_pos='paga')
+    scp.pp.neighbors(adata, use_rep='X_pca', n_neighbors=args.nNeighbors)
+    scp.tl.leiden(adata, resolution=args.clusterResolution)
+    scp.tl.paga(adata)
+    scp.pl.paga(adata, plot=False)
+    scp.tl.umap(adata, min_dist=0.1, spread=5, init_pos='paga')
 
     adata.write_loom(args.outFile, write_obsm_varm=True)
 
     if args.outFileUMAP:
         ## plot UMAP
-        fig=sc.pl.umap(atac_clustered, color=['leiden', 'log1p_total_counts'],
+        fig=scp.pl.umap(adata, color=['leiden', 'log1p_total_counts'],
                ncols=2,  legend_loc='on data', return_fig=True, show=False)
         fig.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
         #plt.rcParams['font.size'] = 8.0
