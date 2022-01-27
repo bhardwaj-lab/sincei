@@ -140,8 +140,11 @@ def main(args=None):
     adata = sc.read_loom(args.input)
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
-    sc.pp.calculate_qc_metrics(adata, inplace=True)
-
+    try:
+        sc.pp.calculate_qc_metrics(adata, inplace=True)
+    except IndexError:# not enough genes/regions
+        sys.stderr.write('\n Error: Too few regions in the input file to perform QC \n')
+        exit()
     # 2. Gini coefficient
 #    gini_list=[]
 #    for i in range(adata.shape[0]):
@@ -156,13 +159,13 @@ def main(args=None):
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
         cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
-        print('\n Cell metrics:')
-        print(pd.DataFrame({'min': cols.min(),
+        sys.stdout.write('\n Cell metrics: \n')
+        sys.stdout.write(pd.DataFrame({'min': cols.min(),
                       'max': cols.max()}))
 
         rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
-        print('\n Region metrics:')
-        print(pd.DataFrame({'min': rows.min(),
+        sys.stdout.write('\n Region metrics: \n')
+        sys.stdout.write(pd.DataFrame({'min': rows.min(),
                             'max': rows.max()}))
         exit()
 
@@ -199,14 +202,14 @@ def main(args=None):
         badchrom=None
 
     if cellfilter or regionfilter or badcells or badchrom:
-        print(cellfilter)
-        print(regionfilter)
+        sys.stdout.write(cellfilter)
+        sys.stdout.write(regionfilter)
         adata_filt=filter_adata(adata,
                         filter_region_dict=regionfilter,
                         filter_cell_dict=cellfilter,
                         bad_chrom=badchrom,
                         bad_cells=badcells)
-        print(adata_filt.shape)
+        sys.stdout.write(adata_filt.shape)
         adata_filt.write_loom(args.outFile)
 
     if args.outPlot:
