@@ -21,9 +21,9 @@ debug = 0
 
 
 def parseArguments():
-    bam_args = ParserCommon.bamOptions()
+    bam_args = ParserCommon.bamOptions(default_opts={'binSize': 100})
     read_args = ParserCommon.readOptions()
-    output_args = ParserCommon.output()
+    output_args = ParserCommon.outputOptions()
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
     parser = \

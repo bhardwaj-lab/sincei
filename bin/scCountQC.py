@@ -159,13 +159,13 @@ def main(args=None):
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
         cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
-        sys.stdout.write('\n Cell metrics: \n')
-        sys.stdout.write(pd.DataFrame({'min': cols.min(),
+        print('\n Cell metrics: \n')
+        print(pd.DataFrame({'min': cols.min(),
                       'max': cols.max()}))
 
         rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
-        sys.stdout.write('\n Region metrics: \n')
-        sys.stdout.write(pd.DataFrame({'min': rows.min(),
+        print('\n Region metrics: \n')
+        print(pd.DataFrame({'min': rows.min(),
                             'max': rows.max()}))
         exit()
 

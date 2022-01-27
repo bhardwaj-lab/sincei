@@ -67,17 +67,15 @@ def parseArguments(args=None):
         parents=[get_args(case='bins'),
                  bc_args,
                  parserCommon.gtf_options(suppress=True),
-                 ParserCommon.bamOptions(),
+                 ParserCommon.bamOptions(default_opts={'binSize':10000,
+                                        'distanceBetweenBins':0}),
                  read_args,
                  output_args, filter_args,
                  other_args
                  ],
-        help="The reads are counted in consecutive bins of equal "
-             "size. The bin size and distance between bins can be adjusted.",
+        help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage='%(prog)s '
-              '--bamfiles file1.bam file2.bam '
-              '-o results.npz \n')
+        usage='%(prog)s --bamfiles file1.bam file2.bam -o results.npz \n')
 
     # BED file arguments
     subparsers.add_parser(
@@ -86,7 +84,9 @@ def parseArguments(args=None):
         parents=[get_args(case='BED-file'),
                  bc_args,
                  parserCommon.gtf_options(),
-                 ParserCommon.bamOptions(binSize=False),
+                 ParserCommon.bamOptions(suppress_args=['binSize', 'distanceBetweenBins'],
+                                        default_opts={'binSize':10000,
+                                                      'distanceBetweenBins':0}),
                  read_args,
                  output_args, filter_args,
                  other_args
@@ -134,17 +134,6 @@ def get_args(case='bins'):
                               help=argparse.SUPPRESS,
                               default=None)
     else:
-        optional.add_argument('--binSize', '-bs',
-                              help=argparse.SUPPRESS,
-                              default=10000,
-                              type=int)
-
-        optional.add_argument('--distanceBetweenBins', '-n',
-                              help=argparse.SUPPRESS,
-                              metavar='INT',
-                              default=0,
-                              type=int)
-
         required.add_argument('--BED',
                               help='Limits the coverage analysis to '
                               'the regions specified in these files.',

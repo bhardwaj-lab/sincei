@@ -20,7 +20,7 @@ import ParserCommon
 
 def parseArguments():
     bc_args = ParserCommon.bcOptions(barcode=False, required=False)
-    bam_args = ParserCommon.bamOptions(suppress_args=['labels', 'smartLabels', 'distanceBetweenBins'],
+    bam_args = ParserCommon.bamOptions(suppress_args=['labels', 'smartLabels', 'distanceBetweenBins', 'region'],
                                        default_opts={'binSize': 100000})
     other_args = ParserCommon.otherOptions()
 

@@ -71,7 +71,7 @@ def bcOptions(args=None, barcode=True, required=True):
     return parser
 
 ## Tools: scBulkCoverage, scCountReads, scFilterStats, scJSD
-def bamOptions(args=None, suppress_args=None, default_opts=None, binSize=True, blackList=True):
+def bamOptions(args=None, suppress_args=None, default_opts=None):
     """
     Arguments for tools that operate on BAM files
     """
@@ -84,6 +84,15 @@ def bamOptions(args=None, suppress_args=None, default_opts=None, binSize=True, b
                           help='Name of the BAM tag from which to extract barcodes.',
                           type=str,
                           default='BC')
+
+    group.add_argument('--numberOfProcessors', '-p',
+                          help='Number of processors to use. Type "max/2" to '
+                          'use half the maximum number of processors or "max" '
+                          'to use all available processors. (Default: %(default)s)',
+                          metavar="INT",
+                          type=numberOfProcessors,
+                          default=1,
+                          required=False)
 
     group.add_argument('--labels', '-l',
                           metavar='sample1 sample2',
@@ -101,50 +110,39 @@ def bamOptions(args=None, suppress_args=None, default_opts=None, binSize=True, b
                           'smartLabels', suppress_args)
                           )
 
-    group.add_argument('--numberOfProcessors', '-p',
-                          help='Number of processors to use. Type "max/2" to '
-                          'use half the maximum number of processors or "max" '
-                          'to use all available processors. (Default: %(default)s)',
-                          metavar="INT",
-                          type=numberOfProcessors,
-                          default=1,
-                          required=False)
-
     group.add_argument('--region', '-r',
-                          help='Region of the genome to limit the operation '
+                          help=show_or_hide('Region of the genome to limit the operation '
                           'to - this is useful when testing parameters to '
                           'reduce the computing time. The format is '
-                          'chr:start:end, for example --region chr10 or '
-                          '--region chr10:456700:891000.',
+                          'chr:start:end, for example --region chr10 or --region chr10:456700:891000.',
+                          'region', suppress_args),
                           metavar="CHR:START:END",
                           required=False,
                           type=genomicRegion)
 
-    if binSize:
-        group.add_argument('--binSize', '-bs',
-                              help='Size of the bins, in bases, for the output '
-                              'of the bigwig/bedgraph file. (Default: %(default)s)',
-                              metavar="INT bp",
-                              type=int,
-                              default=get_default('binSize', default_opts))
+    group.add_argument('--blackListFileName', '-bl',
+                        help=show_or_hide("A BED or GTF file containing regions that should be excluded from all analyses. Currently this works by rejecting genomic chunks that happen to overlap an entry. Consequently, for BAM files, if a read partially overlaps a blacklisted region or a fragment spans over it, then the read/fragment might still be considered. Please note that you should adjust the effective genome size, if relevant.",
+                        'blackListFileName', suppress_args),
+                        metavar="BED file",
+                        nargs="+",
+                        required=False)
 
-        group.add_argument('--distanceBetweenBins',
-                             metavar='INT',
-                             help=show_or_hide('This option allows you to set the gap distance between bins'
-                             'to count reads, which helps in reducing compute time '
-                             'Larger numbers can be used to sample the genome for input files with high coverage '
-                             'while smaller values are useful for lower coverage data. Note that if you specify a value that '
-                             'results in too few (<1000) reads sampled, the value will be decreased. (Default: %(default)s)',
-                             'distanceBetweenBins', suppress_args),
-                             default=0,
-                             type=int)
-    if blackList:
-        group.add_argument('--blackListFileName', '-bl',
-                              help="A BED or GTF file containing regions that should be excluded from all analyses. Currently this works by rejecting genomic chunks that happen to overlap an entry. Consequently, for BAM files, if a read partially overlaps a blacklisted region or a fragment spans over it, then the read/fragment might still be considered. Please note that you should adjust the effective genome size, if relevant.",
-                              metavar="BED file",
-                              nargs="+",
-                              required=False)
+    group.add_argument('--binSize', '-bs',
+                          help=show_or_hide('Size of the bins, in bases, to calculate coverage (Default: %(default)s)',
+                          'binSize', suppress_args),
+                          metavar="INT bp",
+                          type=int,
+                          default=get_default('binSize', default_opts))
 
+    group.add_argument('--distanceBetweenBins',
+                         metavar='INT',
+                         help=show_or_hide('The gap distance between bins during counting. '
+                         'Larger numbers can be used to sample the genome for input files with high coverage '
+                         'while smaller values are useful for lower coverage data. Note that if you specify a value that '
+                         'results in too few (<1000) reads sampled, the value will be decreased. (Default: %(default)s)',
+                         'distanceBetweenBins', suppress_args),
+                         default=get_default('distanceBetweenBins', default_opts),
+                         type=int)
 
     return parser
 
