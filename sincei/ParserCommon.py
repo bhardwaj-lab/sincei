@@ -128,14 +128,12 @@ def bamOptions(args=None, binSize=True, blackList=True):
 
         group.add_argument('--distanceBetweenBins',
                              metavar='INT',
-                             help='To reduce the computation time, not every possible genomic '
-                             'bin is sampled. This option allows you to set the distance '
-                             'between bins actually sampled from. Larger numbers are sufficient '
-                             'for high coverage samples, while smaller values are useful for '
-                             'lower coverage samples. Note that if you specify a value that '
-                             'results in too few (<1000) reads sampled, the value will be '
-                             'decreased. (Default: %(default)s)',
-                             default=1000000,
+                             help='This option allows you to set the gap distance between bins'
+                             'to count reads, which helps in reducing compute time '
+                             'Larger numbers can be used to sample the genome for input files with high coverage '
+                             'while smaller values are useful for lower coverage data. Note that if you specify a value that '
+                             'results in too few (<1000) reads sampled, the value will be decreased. (Default: %(default)s)',
+                             default=0,
                              type=int)
     if blackList:
         group.add_argument('--blackListFileName', '-bl',

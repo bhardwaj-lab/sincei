@@ -54,16 +54,22 @@ def parseArguments(args=None):
         help='subcommands',
         metavar='')
 
-    bam_args = ParserCommon.bamOptions(binSize=False)
+    bc_args = ParserCommon.bcOptions()
     read_args = ParserCommon.readOptions()
+    output_args = ParserCommon.outputOptions()
+    filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
+
     # bins mode options
     subparsers.add_parser(
         'bins',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[get_args(case='bins'),
-                 bam_args, read_args,
+                 bc_args,
                  parserCommon.gtf_options(suppress=True),
+                 ParserCommon.bamOptions(),
+                 read_args,
+                 output_args, filter_args,
                  other_args
                  ],
         help="The reads are counted in consecutive bins of equal "
@@ -78,8 +84,11 @@ def parseArguments(args=None):
         'BED-file',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[get_args(case='BED-file'),
-                 bam_args, read_args,
+                 bc_args,
                  parserCommon.gtf_options(),
+                 ParserCommon.bamOptions(binSize=False),
+                 read_args,
+                 output_args, filter_args,
                  other_args
                  ],
         help="The user provides a BED/GTF file containing all regions "
@@ -91,12 +100,8 @@ def parseArguments(args=None):
 
 
 def get_args(case='bins'):
-    output_args = ParserCommon.outputOptions()
-    filter_args = ParserCommon.filterOptions()
-    bc_args = ParserCommon.bcOptions()
 
-    parser = argparse.ArgumentParser(parents=[output_args, filter_args, bc_args],
-                                    add_help=False)
+    parser = argparse.ArgumentParser(add_help=False)
 
     required = parser.add_argument_group('Required arguments')
     # define the arguments
@@ -106,7 +111,7 @@ def get_args(case='bins'):
                           nargs='+',
                           required=True)
 
-    optional = parser.add_argument_group('Optional arguments')
+    optional = parser.add_argument_group('Misc arguments')
 
     optional.add_argument('--genomeChunkSize',
                           type=int,
@@ -125,23 +130,6 @@ def get_args(case='bins'):
                           '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
 
     if case == 'bins':
-        optional.add_argument('--binSize', '-bs',
-                              metavar='INT',
-                              help='Length in bases of the window used '
-                                   'to sample the genome. (Default: %(default)s)',
-                              default=10000,
-                              type=int)
-
-        optional.add_argument('--distanceBetweenBins', '-n',
-                              metavar='INT',
-                              help='By default, scCountReads considers consecutive '
-                              'bins of the specified --binSize. However, to '
-                              'reduce the computation time, a larger distance '
-                              'between bins can by given. Larger distances '
-                              'result in fewer bins considered. (Default: %(default)s)',
-                              default=0,
-                              type=int)
-
         required.add_argument('--BED',
                               help=argparse.SUPPRESS,
                               default=None)
