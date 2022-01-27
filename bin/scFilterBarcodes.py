@@ -19,23 +19,30 @@ from Utilities import *
 import ParserCommon
 
 def parseArguments():
-    filterParser = ParserCommon.filterOptions()
+    bc_args = ParserCommon.bcOptions(barcode=False, required=False)
+    bam_args = ParserCommon.bamOptions(suppress_args=['labels', 'smartLabels', 'distanceBetweenBins'],
+                                       default_opts={'binSize': 100000})
+    other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
+        parents=[get_args(), bc_args, bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         This tool identifies barcodes present in a BAM files and produces a list. You can optionally filter these barcodes by matching them to a whitelist or
         based on total counts.
         """,
-        usage='Example usage: scFilterBarcodes.py -b sample.bam -w whitelist.txt > barcodes_detected.txt')
+        usage='Example usage: scFilterBarcodes.py -b sample.bam -w whitelist.txt > barcodes_detected.txt',
+        add_help=False)
 
-    required = parser.add_argument_group('Required arguments')
-    required.add_argument('--bamfile', '-b',
+    return parser
+
+def get_args():
+    parser = argparse.ArgumentParser(add_help=False)
+    general = parser.add_argument_group('Input/Output arguments')
+    general.add_argument('--bamfile', '-b',
                           metavar='FILE',
                           help='BAM file',
                           required=True)
-
-    general = parser.add_argument_group('Optional arguments')
 
     general.add_argument('--outFile', '-o',
                          help='The file to write results to. By default, results are printed to the console',
@@ -43,14 +50,9 @@ def parseArguments():
                          default=None,
                          required=False)
 
-    general.add_argument('--whitelist', '-w',
-                           help="A single-column file containing the whitelist of barcodes to be used",
-                           metavar="TXT",
-                           default=None,
-                           required=False)
-
     general.add_argument('--minHammingDist', '-d',
-                           help="Minimum hamming distance to match the barcode in whitelist",
+                           help='Minimum hamming distance to match the barcode in whitelist. Note that increasing the '
+                                'hamming distance really slows down the barcode detection process.',
                            metavar="INT",
                            type=int,
                            default=0,
@@ -58,7 +60,7 @@ def parseArguments():
 
     general.add_argument('--minCount', '-mc',
                            help='Minimum no. of bins with non-zero counts, in order to report a barcode. Note that this number would range '
-                                'from 0 upto genome size/binSize. ',
+                                'from 0 to genome size/binSize. ',
                            metavar="INT",
                            type=int,
                            default=0,
@@ -69,48 +71,12 @@ def parseArguments():
                          help='The output file name to plot the ranked counts per barcode (similar to the \"knee plot\",'
                               'but counts in this case would be the number of non-zero bins)')
 
-    general.add_argument('--tagName', '-tn',
-                          metavar='STR',
-                          help='Name of the BAM tag from which to extract barcodes.',
-                          type=str,
-                          default='BC')
-
-    general.add_argument('--blackListFileName', '-bl',
-                           help='A BED or GTF file containing regions that should be excluded from all analyses. '
-                           'Currently this works by rejecting genomic chunks that happen to overlap an entry. '
-                           'Consequently, for BAM files, if a read partially overlaps a blacklisted region or '
-                           'a fragment spans over it, then the read/fragment might still be considered. Please note '
-                           'that you should adjust the effective genome size, if relevant.',
-                           metavar="BED file",
-                           nargs="+",
-                           required=False)
-
     general.add_argument('--minMappingQuality', '-mq',
                            metavar='INT',
                            help='If set, only reads that have a mapping '
                            'quality score of at least this are '
                            'considered.',
                            type=int)
-
-    general.add_argument('--binSize', '-bs',
-                         metavar='INT',
-                         help='Length in bases of the window used to count the barcodes. (Default: %(default)s)',
-                         default=1000000,
-                         type=int)
-
-    general.add_argument('--numberOfProcessors', '-p',
-                         help='Number of processors to use. Type "max/2" to '
-                         'use half the maximum number of processors or "max" '
-                         'to use all available processors. (Default: %(default)s)',
-                         metavar="INT",
-                         type=parserCommon.numberOfProcessors,
-                         default=1,
-                         required=False)
-
-    general.add_argument('--verbose', '-v',
-                         help='Set to see processing messages.',
-                         action='store_true')
-
 
     return parser
 

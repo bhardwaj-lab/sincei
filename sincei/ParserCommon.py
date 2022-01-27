@@ -71,7 +71,7 @@ def bcOptions(args=None, barcode=True, required=True):
     return parser
 
 ## Tools: scBulkCoverage, scCountReads, scFilterStats, scJSD
-def bamOptions(args=None, binSize=True, blackList=True):
+def bamOptions(args=None, suppress_args=None, default_opts=None, binSize=True, blackList=True):
     """
     Arguments for tools that operate on BAM files
     """
@@ -87,17 +87,19 @@ def bamOptions(args=None, binSize=True, blackList=True):
 
     group.add_argument('--labels', '-l',
                           metavar='sample1 sample2',
-                          help='User defined labels instead of default labels from '
-                               'file names. '
-                               'Multiple labels have to be separated by a space, e.g. '
+                          help=show_or_hide('User defined labels instead of default labels from '
+                               'file names. Multiple labels have to be separated by a space, e.g. '
                                '--labels sample1 sample2 sample3',
+                               'labels', suppress_args),
                           nargs='+')
 
     group.add_argument('--smartLabels',
                           action='store_true',
-                          help='Instead of manually specifying labels for the input '
+                          help=show_or_hide('Instead of manually specifying labels for the input '
                           'BAM files, this causes sincei to use the file name '
-                          'after removing the path and extension.')
+                          'after removing the path and extension.',
+                          'smartLabels', suppress_args)
+                          )
 
     group.add_argument('--numberOfProcessors', '-p',
                           help='Number of processors to use. Type "max/2" to '
@@ -124,15 +126,16 @@ def bamOptions(args=None, binSize=True, blackList=True):
                               'of the bigwig/bedgraph file. (Default: %(default)s)',
                               metavar="INT bp",
                               type=int,
-                              default=50)
+                              default=get_default('binSize', default_opts))
 
         group.add_argument('--distanceBetweenBins',
                              metavar='INT',
-                             help='This option allows you to set the gap distance between bins'
+                             help=show_or_hide('This option allows you to set the gap distance between bins'
                              'to count reads, which helps in reducing compute time '
                              'Larger numbers can be used to sample the genome for input files with high coverage '
                              'while smaller values are useful for lower coverage data. Note that if you specify a value that '
                              'results in too few (<1000) reads sampled, the value will be decreased. (Default: %(default)s)',
+                             'distanceBetweenBins', suppress_args),
                              default=0,
                              type=int)
     if blackList:
@@ -284,6 +287,18 @@ def readOptions():
     return parser
 
 ## helper functions
+def show_or_hide(help, name, arglist):
+    if arglist and name in arglist:
+        return argparse.SUPPRESS
+    else:
+        return help
+
+def get_default(name, argdict):
+    if argdict and name in argdict.keys():
+        return argdict[name]
+    else:
+        return None
+
 def process_args(args=None):
     if not args.labels:
         if args.smartLabels:
