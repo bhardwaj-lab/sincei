@@ -6,7 +6,7 @@ import sys
 import argparse
 import numpy as np
 from scipy import sparse, io
-
+import re
 import pandas as pd
 import anndata as ad
 import scanpy as sc
@@ -37,7 +37,7 @@ def parseArguments(args=None):
 
               scCountReads bins -h
 
-              scCountReads BED-file -h
+              scCountReads features -h
 
           """,
             epilog='example usages:\n'
@@ -54,9 +54,7 @@ def parseArguments(args=None):
         help='subcommands',
         metavar='')
 
-    bc_args = ParserCommon.bcOptions()
-    read_args = ParserCommon.readOptions()
-    output_args = ParserCommon.outputOptions()
+    read_args = ParserCommon.readOptions(suppress_args=['filterRNAstrand'])
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
 
@@ -64,32 +62,31 @@ def parseArguments(args=None):
     subparsers.add_parser(
         'bins',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[get_args(case='bins'),
-                 bc_args,
+        parents=[ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFilePrefix', 'BED'],
+                                                 requiredOpts=['barcodes','outFilePrefix'],
+                                                 suppress_args=['BED']),
                  parserCommon.gtf_options(suppress=True),
                  ParserCommon.bamOptions(default_opts={'binSize':10000,
                                         'distanceBetweenBins':0}),
-                 read_args,
-                 output_args, filter_args,
-                 other_args
+                 read_args, filter_args,
+                 get_args(), other_args
                  ],
         help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage='%(prog)s --bamfiles file1.bam file2.bam -o results.npz \n')
+        usage='%(prog)s -bs 100000 --bamfiles file1.bam file2.bam -o results \n')
 
     # BED file arguments
     subparsers.add_parser(
-        'BED-file',
+        'features',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[get_args(case='BED-file'),
-                 bc_args,
+        parents=[ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFilePrefix', 'BED'],
+                                                 requiredOpts=['barcodes','outFilePrefix', 'BED']),
                  parserCommon.gtf_options(),
                  ParserCommon.bamOptions(suppress_args=['binSize', 'distanceBetweenBins'],
                                         default_opts={'binSize':10000,
                                                       'distanceBetweenBins':0}),
-                 read_args,
-                 output_args, filter_args,
-                 other_args
+                 read_args, filter_args,
+                 get_args(), other_args
                  ],
         help="The user provides a BED/GTF file containing all regions "
              "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
@@ -99,20 +96,9 @@ def parseArguments(args=None):
     return parser
 
 
-def get_args(case='bins'):
-
+def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-
-    required = parser.add_argument_group('Required arguments')
-    # define the arguments
-    required.add_argument('--bamfiles', '-b',
-                          metavar='FILE1 FILE2',
-                          help='List of indexed bam files separated by spaces.',
-                          nargs='+',
-                          required=True)
-
     optional = parser.add_argument_group('Misc arguments')
-
     optional.add_argument('--genomeChunkSize',
                           type=int,
                           default=None,
@@ -128,20 +114,6 @@ def get_args(case='bins'):
                           '<prefix>.loom, which can either be opened in scanpy, or by downstream tools. '
                           '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
                           '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
-
-    if case == 'bins':
-        required.add_argument('--BED',
-                              help=argparse.SUPPRESS,
-                              default=None)
-    else:
-        required.add_argument('--BED',
-                              help='Limits the coverage analysis to '
-                              'the regions specified in these files.',
-                              metavar='FILE1.bed FILE2.bed',
-                              nargs='+',
-                              required=True)
-
-    group = parser.add_argument_group('Output optional options')
 
     return parser
 
@@ -240,7 +212,7 @@ def main(args=None):
              "region is covered by reads.\n")
 
     ## create colnames (sampleLabel+barcode)
-    newlabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
+    newlabels = ["{}::{}".format(re.sub('\.bam', '', a), b) for a in args.labels for b in barcodes ]
 
     ## write mtx/rownames if asked
     if args.outFileFormat == 'mtx':
@@ -254,8 +226,8 @@ def main(args=None):
     else:
         # write anndata
         adata = ad.AnnData(num_reads_per_bin.T)
-        adata.obs = pd.DataFrame({"sample":[x.split('_')[0] for x in newlabels],
-                                "barcodes":[x.split('_')[1] for x in newlabels]
+        adata.obs = pd.DataFrame({"sample":[x.split('::')[-2] for x in newlabels],
+                                "barcodes":[x.split('::')[-1] for x in newlabels]
                                 },index=newlabels)
 
         rows=list(regionList)

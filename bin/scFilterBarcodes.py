@@ -19,13 +19,14 @@ from Utilities import *
 import ParserCommon
 
 def parseArguments():
-    bc_args = ParserCommon.bcOptions(barcode=False, required=False)
+    io_args = ParserCommon.inputOutputOptions(opts=['bamfile', 'whitelist', 'outfile'],
+                                             requiredOpts=['bamfile'])
     bam_args = ParserCommon.bamOptions(suppress_args=['labels', 'smartLabels', 'distanceBetweenBins', 'region'],
                                        default_opts={'binSize': 100000})
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
-        parents=[get_args(), bc_args, bam_args, other_args],
+        parents=[io_args, get_args(), bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         This tool identifies barcodes present in a BAM files and produces a list. You can optionally filter these barcodes by matching them to a whitelist or
@@ -38,17 +39,7 @@ def parseArguments():
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-    general = parser.add_argument_group('Input/Output arguments')
-    general.add_argument('--bamfile', '-b',
-                          metavar='FILE',
-                          help='BAM file',
-                          required=True)
-
-    general.add_argument('--outFile', '-o',
-                         help='The file to write results to. By default, results are printed to the console',
-                         type=parserCommon.writableFile,
-                         default=None,
-                         required=False)
+    general = parser.add_argument_group('Counting Options')
 
     general.add_argument('--minHammingDist', '-d',
                            help='Minimum hamming distance to match the barcode in whitelist. Note that increasing the '
@@ -66,17 +57,17 @@ def get_args():
                            default=0,
                            required=False)
 
-    general.add_argument('--rankPlot', '-rp',
-                         type=parserCommon.writableFile,
-                         help='The output file name to plot the ranked counts per barcode (similar to the \"knee plot\",'
-                              'but counts in this case would be the number of non-zero bins)')
-
     general.add_argument('--minMappingQuality', '-mq',
                            metavar='INT',
                            help='If set, only reads that have a mapping '
                            'quality score of at least this are '
                            'considered.',
                            type=int)
+
+    general.add_argument('--rankPlot', '-rp',
+                         type=parserCommon.writableFile,
+                         help='The output file name to plot the ranked counts per barcode (similar to the \"knee plot\",'
+                              'but counts in this case would be the number of non-zero bins)')
 
     return parser
 

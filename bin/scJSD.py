@@ -24,47 +24,16 @@ import ParserCommon
 
 ## plot KDE of JSD values
 from numpy import array, linspace
-from sklearn.neighbors.kde import KernelDensity
+from sklearn import neighbors
 
 old_settings = np.seterr(all='ignore')
 MAXLEN = 10000000
 
 
-def get_required_args():
-    parser = argparse.ArgumentParser(add_help=False)
-    required = parser.add_argument_group('Required arguments')
-
-    # define the arguments
-    required.add_argument('--bamfiles', '-b',
-                          metavar='bam files',
-                          nargs='+',
-                          help='List of indexed BAM files',
-                          required=True)
-
-    required.add_argument('--barcodes', '-bc',
-                          metavar='TXT',
-                          help='A single-column text file with barcodes (whitelist) to count.',
-                          required=True)
-
-    required.add_argument('--outFile', '-o',
-                         type=parserCommon.writableFile,
-                         help='The file to write results to.')
-
-    return parser
-
-
-def get_optional_args():
+def get_args():
     parser = argparse.ArgumentParser(add_help=False,
                                      conflict_handler='resolve')
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument("--help", "-h", action="help",
-                          help="show this help message and exit")
-
-    optional.add_argument('--binSize', '-bs',
-                          help='Window size in base pairs to '
-                          'sample the genome. This times --numberOfSamples should be less than the genome size. (Default: %(default)s)',
-                          default=10000,
-                          type=int)
 
     optional.add_argument('--numberOfSamples', '-n',
                           help='The number of bins that are sampled from the genome, '
@@ -83,17 +52,17 @@ def get_optional_args():
     return parser
 
 def parse_arguments(args=None):
-    parent_parser = parserCommon.getParentArgParse(binSize=False)
-    required_args = get_required_args()
-    optional_args = get_optional_args()
-
-    readOptions_parser = ParserCommon.readOptions()
-    label_parser = ParserCommon.labelOptions()
-    filter_parser = ParserCommon.filterOptions()
+    io_args = ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFile'],
+                                             requiredOpts=['bamfiles', 'barcodes', 'outFile'])
+    bam_args = ParserCommon.bamOptions(suppress_args=['region', 'distanceBetweenBins'],
+                                      default_opts={'binSize': 10000})
+    read_args = ParserCommon.readOptions(suppress_args=['filterRNAstrand', 'extendReads', 'centerReads'])
+    filter_args = ParserCommon.filterOptions(suppress_args=['motifFilter', 'genome2bit', 'GCcontentFilter', 'minAlignedFraction'])
+    other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
-        parents=[required_args, label_parser, readOptions_parser,
-                 filter_parser, optional_args, parent_parser],
+        parents=[io_args, bam_args, read_args,
+                 filter_args, get_args(), other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='This tool samples regions in the genome from BAM files '
         'and compares the cumulative read coverages for each cell on those regions. '
@@ -111,18 +80,6 @@ def parse_arguments(args=None):
 def main(args=None):
     args = ParserCommon.process_args(parse_arguments().parse_args(args))
 
-    ## Motif and GC filter
-    if args.motifFilter:
-        if not args.genome2bit:
-            print("MotifFilter asked but genome (2bit) file not provided.")
-            sys.exit(1)
-        else:
-            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
-
-    if args.GCcontentFilter:
-        gc = args.GCcontentFilter.strip(" ").split(",")
-        args.GCcontentFilter = [float(x) for x in gc]
-
     ## read the barcode file
     with open(args.barcodes, 'r') as f:
         barcodes = f.read().splitlines()
@@ -135,9 +92,9 @@ def main(args=None):
         numberOfSamples=args.numberOfSamples,
         barcodes=barcodes,
         tagName=args.tagName,
-        motifFilter=args.motifFilter,
-        genome2bit=args.genome2bit,
-        GCcontentFilter=args.GCcontentFilter,
+        motifFilter=None,
+        genome2bit=None,
+        GCcontentFilter=None,
         blackListFileName=args.blackListFileName,
         numberOfProcessors=args.numberOfProcessors,
         verbose=args.verbose,
@@ -146,7 +103,7 @@ def main(args=None):
         extendReads=args.extendReads,
         minMappingQuality=args.minMappingQuality,
         duplicateFilter=args.duplicateFilter,
-        center_read=args.centerReads,
+        center_read=False,
         samFlag_include=args.samFlagInclude,
         samFlag_exclude=args.samFlagExclude,
         minFragmentLength=args.minFragmentLength,

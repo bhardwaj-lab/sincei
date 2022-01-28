@@ -72,9 +72,10 @@ def make_plots(adata, fname=None):
     return plist
 
 def parseArguments():
-    plot_parser = ParserCommon.plotOptions()
-    other_parser = ParserCommon.otherOptions()
-    parser = argparse.ArgumentParser(parents=[get_args(), plot_parser, other_parser],
+    io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'])
+    plot_args = ParserCommon.plotOptions()
+    other_args = ParserCommon.otherOptions()
+    parser = argparse.ArgumentParser(parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         This tool clusters the cells based on the input count matrix (output of scCountReads) and returns a
@@ -87,18 +88,13 @@ def parseArguments():
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-    required = parser.add_argument_group('Required arguments')
-    required.add_argument('--input', '-i',
-                          metavar='LOOM',
-                          help='Input file in the loom format',
-                          required=True)
 
     general = parser.add_argument_group('Filtering arguments')
     general.add_argument('--describe', '-d',
                          action='store_true',
                          help='Print a list of cell and region metrics available for QC/filtering.')
 
-    general.add_argument('--outPlot', '-o',
+    general.add_argument('--outPlot', '-op',
                          type=str,
                          help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
 
@@ -126,10 +122,6 @@ def get_args():
                          default=None,
                          type=str,
                          help='A comma separated list of chromosomes to exclude. eg. chrM, chrUn')
-
-    general.add_argument('--outFile', '-oa',
-                         type=str,
-                         help='The file to write results to (if filtering is requested). The output file is an updated .loom object post-filtering.')
 
     return parser
 

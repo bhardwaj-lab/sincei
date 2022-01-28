@@ -21,14 +21,14 @@ debug = 0
 
 
 def parseArguments():
+    io_args = ParserCommon.inputOutputOptions(opts=['bamfiles', 'groupInfo', 'outFilePrefix'])
     bam_args = ParserCommon.bamOptions(default_opts={'binSize': 100})
     read_args = ParserCommon.readOptions()
-    output_args = ParserCommon.outputOptions()
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
     parser = \
         argparse.ArgumentParser(
-            parents=[get_args(), bam_args, filter_args, read_args, other_args],
+            parents=[io_args, get_args(), bam_args, filter_args, read_args, other_args],
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description='This tool takes alignments of reads or fragments '
             'as input (BAM files), along with cell grouping information, such as '
@@ -49,19 +49,6 @@ def parseArguments():
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
 
-    required = parser.add_argument_group('Required arguments')
-    # define the arguments
-    required.add_argument('--bamfiles', '-b',
-                          metavar='FILE1 FILE2',
-                          help='List of indexed bam files separated by spaces.',
-                          nargs='+',
-                          required=True)
-
-    required.add_argument('--groupInfo', '-i',
-                          help='tsv file with Cell grouping information. Pseudo-Bulk Bigwigs will be '
-                                'computed per group.',
-                          metavar='TXT file',
-                          required=True)
 
     optional = parser.add_argument_group('Coverage-related Options')
     optional.add_argument('--outFileFormat', '-of',
@@ -125,15 +112,6 @@ def get_args():
                           nargs='+',
                           required=False)
 
-    optional.add_argument('--filterRNAstrand',
-                          help='Selects RNA-seq reads (single-end or paired-end) originating from genes '
-                          'on the given strand. This option assumes a standard dUTP-based library '
-                          'preparation (that is, --filterRNAstrand=forward keeps minus-strand reads, '
-                          'which originally came from genes on the forward strand using a dUTP-based '
-                          'method). Consider using --samExcludeFlag instead for filtering by strand in '
-                          'other contexts.',
-                          choices=['forward', 'reverse'],
-                          default=None)
 
     return parser
 

@@ -1,15 +1,70 @@
 import argparse
 import os
+from deeptools.utilities import smartLabels
 
-def outputOptions(args=None):
+def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group('Output options')
-    group.add_argument('--outFilePrefix', '-o',
-                       help='Output file name prefix.',
-                       metavar='FILEPREFIX',
-                       type=str,
-                       required=True)
+    group = parser.add_argument_group('Input/Output options')
 
+    ## inputs
+    if 'loomfile' in opts:
+        group.add_argument('--input', '-i',
+                              metavar='LOOM',
+                              help='Input file in .loom format',
+                              required=True)
+    elif 'bamfiles' in opts:
+        group.add_argument('--bamfiles', '-b',
+                              metavar='FILE1 FILE2',
+                              help='List of indexed bam files separated by spaces.',
+                              nargs='+',
+                              required=True)
+    elif 'bamfile' in opts:
+        group.add_argument('--bamfile', '-b',
+                              metavar='FILE',
+                              help='Indexed BAM file',
+                              required=True)
+    if 'whitelist' in opts:
+        group.add_argument('--whitelist', '-w',
+                               help="A single-column file containing the whitelist of barcodes to be used",
+                               metavar="TXT",
+                               default=None,
+                               required=True if 'whitelist' in requiredOpts else False)
+    elif 'barcodes' in opts:
+        group.add_argument('--barcodes', '-bc',
+                               help="A single-column file containing barcodes (whitelist) to be used for the analysis.",
+                               metavar="TXT",
+                               required=True if 'barcodes' in requiredOpts else False)
+    if 'groupInfo' in opts:
+        group.add_argument('--groupInfo', '-i',
+                              help='A 3-column tsv file with Cell grouping information in the '
+                                'format: `sample, barcode, group`. Coverages will be '
+                                'computed per group.',
+                              metavar='TXT file',
+                              required=True)
+
+    if 'BED' in opts:
+        group.add_argument('--BED',
+                              help=show_or_hide('Limits the coverage analysis to '
+                              'the regions specified in these files.',
+                              'BED' , suppress_args),
+                              metavar='FILE1.bed FILE2.bed',
+                              nargs='+',
+                              required=True if 'BED' in requiredOpts else False)
+    ## outputs
+    if 'outFilePrefix' in opts:
+        group.add_argument('--outFilePrefix', '-o',
+                           help='Output file name prefix.',
+                           metavar='FILEPREFIX',
+                           type=str,
+                           required=True if 'outFilePrefix' in requiredOpts else False)
+
+    elif 'outFile' in opts:
+        group.add_argument('--outFile', '-o',
+                             type=argparse.FileType('w'),
+                             help='The file to write results to. For `scFilterStats`, `scFilterBarcodes` '
+                             'and `scJSD`, the output file is a .txt file. For other tools, the output file is '
+                             'an updated .loom object with the result of the requested operation. ',
+                             required=True if 'outFile' in requiredOpts else False)
     return parser
 
 def otherOptions(args=None):
@@ -52,23 +107,6 @@ def plotOptions(args=None):
                           'ending. (Default: %(default)s)')
     return parser
 
-def bcOptions(args=None, barcode=True, required=True):
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group('Barcode options')
-
-    if barcode:
-        group.add_argument('--barcodes', '-bc',
-                               help="A single-column file containing barcodes (whitelist) to be used for the analysis.",
-                               metavar="TXT",
-                               required=required)
-    else:
-        group.add_argument('--whitelist', '-w',
-                               help="A single-column file containing the whitelist of barcodes to be used",
-                               metavar="TXT",
-                               default=None,
-                               required=required)
-
-    return parser
 
 ## Tools: scBulkCoverage, scCountReads, scFilterStats, scJSD
 def bamOptions(args=None, suppress_args=None, default_opts=None):
@@ -147,46 +185,51 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
     return parser
 
 ## Tools: scBulkCoverage, scCountReads
-def filterOptions(args=None):
+def filterOptions(args=None, suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('Read Filtering Options')
 
     group.add_argument('--duplicateFilter',
-                           help='How to filter for duplicates? Different combinations (using start/end/umi) are possible. '
+                           help=show_or_hide('How to filter for duplicates? Different combinations (using start/end/umi) are possible. '
                            'Read start position and read barcode are always considered. Default (None) would consider all reads. '
                            'Note that in case of paired end data, both reads in the fragment are considered (and kept). So if you wish '
                            'to keep only read1, combine this option with samFlagInclude ',
+                           'duplicateFilter' , suppress_args),
                            type=str,
                            choices=['start_bc', 'start_bc_umi', 'start_end_bc', 'start_end_bc_umi'],
                            default=None)
 
     group.add_argument('--motifFilter', '-m',
                           metavar='STR',
-                          help='Check whether a given motif is present in the read and the corresponding reference genome. '
+                          help=show_or_hide('Check whether a given motif is present in the read and the corresponding reference genome. '
                                 'This option checks for the motif at the 5-end of the read and at the 5-overhang in the genome, '
                                 'which is useful in identifying reads properly cut by a restriction-enzyme or MNAse. '
                                 'For example, if you want to search for an "A" at the 5\'-end of the read and "TA" at 5\'-overhang, '
                                 'use "-m \'A,TA\'". Reads not containing the given motif are discarded. ',
+                                'motifFilter' , suppress_args),
                           type=str,
                           nargs='+',
                           default=None)
 
     group.add_argument('--genome2bit', '-g',
                           metavar='STR',
-                          help='If --motifFilter is provided, please also provide the genome sequence (in 2bit format). ',
+                          help=show_or_hide('If --motifFilter is provided, please also provide the genome sequence (in 2bit format). ',
+                          'genome2bit' , suppress_args),
                           type=str,
                           default=None)
 
     group.add_argument('--GCcontentFilter', '-gc',
                           metavar='STR',
-                          help='Check whether the GC content of the read falls within the provided range. '
+                          help=show_or_hide('Check whether the GC content of the read falls within the provided range. '
                                 'If the GC content of the reads fall outside the range, they are discarded. ',
+                                'GCcontentFilter' , suppress_args),
                           type=str,
                           default=None)
 
     group.add_argument('--minAlignedFraction',
-                           help='Minimum fraction of the reads which should be aligned to be counted. This includes '
+                           help=show_or_hide('Minimum fraction of the reads which should be aligned to be counted. This includes '
                            'mismatches tolerated by the aligners, but excludes InDels/Clippings (Default: %(default)s)',
+                           'minAlignedFraction' , suppress_args),
                            metavar='FLOAT',
                            default=None,
                            type=float,
@@ -194,15 +237,77 @@ def filterOptions(args=None):
     return parser
 
 ## Tools: scBulkCoverage, scCountReads
-def readOptions():
+def readOptions(args=None, suppress_args=None):
     """Common arguments related to BAM files and the interpretation
     of the read coverage
     """
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('Read Processing Options')
 
+    group.add_argument('--minMappingQuality',
+                       metavar='INT',
+                       help=show_or_hide('If set, only reads that have a mapping '
+                       'quality score of at least this are considered.',
+                       'minMappingQuality', suppress_args),
+                       type=int,
+                       )
+
+    group.add_argument('--samFlagInclude',
+                       help=show_or_hide('Include reads based on the SAM flag. For example, '
+                       'to get only reads that are the first mate, use a flag of 64. '
+                       'This is useful to count properly paired reads only once, '
+                       'as otherwise the second mate will be also considered for the '
+                       'coverage. (Default: %(default)s)',
+                       'samFlagInclude' , suppress_args),
+                       metavar='INT',
+                       default=None,
+                       type=int,
+                       required=False)
+
+    group.add_argument('--samFlagExclude',
+                       help=show_or_hide('Exclude reads based on the SAM flag. For example, '
+                       'to get only reads that map to the forward strand, use '
+                       '--samFlagExclude 16, where 16 is the SAM flag for reads '
+                       'that map to the reverse strand. (Default: %(default)s)',
+                       'samFlagExclude' , suppress_args),
+                       metavar='INT',
+                       default=None,
+                       type=int,
+                       required=False)
+
+    group.add_argument('--minFragmentLength',
+                       help=show_or_hide('The minimum fragment length needed for read/pair '
+                       'inclusion. This option is primarily useful '
+                       'in ATACseq experiments, for filtering mono- or '
+                       'di-nucleosome fragments. (Default: %(default)s)',
+                       'minFragmentLength' , suppress_args),
+                       metavar='INT',
+                       default=0,
+                       type=int,
+                       required=False)
+
+    group.add_argument('--maxFragmentLength',
+                       help=show_or_hide('The maximum fragment length needed for read/pair '
+                       'inclusion. (Default: %(default)s)',
+                       'maxFragmentLength' , suppress_args),
+                       metavar='INT',
+                       default=0,
+                       type=int,
+                       required=False)
+
+    group.add_argument('--filterRNAstrand',
+                          help=show_or_hide('Selects RNA-seq reads (single-end or paired-end) originating from genes '
+                          'on the given strand. This option assumes a standard dUTP-based library '
+                          'preparation (that is, --filterRNAstrand=forward keeps minus-strand reads, '
+                          'which originally came from genes on the forward strand using a dUTP-based '
+                          'method). Consider using --samExcludeFlag instead for filtering by strand in '
+                          'other contexts.',
+                          'filterRNAstrand' , suppress_args),
+                          choices=['forward', 'reverse'],
+                          default=None)
+
     group.add_argument('--extendReads', '-e',
-                       help='This parameter allows the extension of reads to '
+                       help=show_or_hide('This parameter allows the extension of reads to '
                        'fragment size. If set, each read is '
                        'extended, without exception.\n'
                        '*NOTE*: This feature is generally NOT recommended for '
@@ -219,6 +324,7 @@ def readOptions():
                        'of a fragment length value is optional. If '
                        'no value is specified, it is estimated from the '
                        'data (mean of the fragment size of all mate reads).\n',
+                       'extendReads' , suppress_args),
                        type=int,
                        nargs='?',
                        const=True,
@@ -226,61 +332,14 @@ def readOptions():
                        metavar="INT bp")
 
     group.add_argument('--centerReads',
-                       help='By adding this option, reads are centered with '
+                       help=show_or_hide('By adding this option, reads are centered with '
                        'respect to the fragment length. For paired-end data, '
                        'the read is centered at the fragment length defined '
                        'by the two ends of the fragment. For single-end data, the '
                        'given fragment length is used. This option is '
-                       'useful to get a sharper signal around enriched '
-                       'regions.',
+                       'useful to get a sharper signal around enriched regions.',
+                       'centerReads' , suppress_args),
                        action='store_true')
-
-    group.add_argument('--minMappingQuality',
-                       metavar='INT',
-                       help='If set, only reads that have a mapping '
-                       'quality score of at least this are '
-                       'considered.',
-                       type=int,
-                       )
-
-    group.add_argument('--samFlagInclude',
-                       help='Include reads based on the SAM flag. For example, '
-                       'to get only reads that are the first mate, use a flag of 64. '
-                       'This is useful to count properly paired reads only once, '
-                       'as otherwise the second mate will be also considered for the '
-                       'coverage. (Default: %(default)s)',
-                       metavar='INT',
-                       default=None,
-                       type=int,
-                       required=False)
-
-    group.add_argument('--samFlagExclude',
-                       help='Exclude reads based on the SAM flag. For example, '
-                       'to get only reads that map to the forward strand, use '
-                       '--samFlagExclude 16, where 16 is the SAM flag for reads '
-                       'that map to the reverse strand. (Default: %(default)s)',
-                       metavar='INT',
-                       default=None,
-                       type=int,
-                       required=False)
-
-    group.add_argument('--minFragmentLength',
-                       help='The minimum fragment length needed for read/pair '
-                       'inclusion. This option is primarily useful '
-                       'in ATACseq experiments, for filtering mono- or '
-                       'di-nucleosome fragments. (Default: %(default)s)',
-                       metavar='INT',
-                       default=0,
-                       type=int,
-                       required=False)
-
-    group.add_argument('--maxFragmentLength',
-                       help='The maximum fragment length needed for read/pair '
-                       'inclusion. (Default: %(default)s)',
-                       metavar='INT',
-                       default=0,
-                       type=int,
-                       required=False)
 
     return parser
 

@@ -21,12 +21,21 @@ import ParserCommon
 def parseArguments():
     filterParser = ParserCommon.filterOptions()
 
+    io_args = ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFile'],
+                                              requiredOpts=['barcodes'])
+    bam_args = ParserCommon.bamOptions(suppress_args=['region'],
+                                      default_opts={'binSize': 100000,
+                                                    'distanceBetweenBins': 1000000})
+    filter_args = ParserCommon.filterOptions()
+    read_args = ParserCommon.readOptions(suppress_args=['minFragmentLength', 'maxFragmentLength', 'extendReads', 'centerReads'])
+    other_args = ParserCommon.otherOptions()
+
     parser = argparse.ArgumentParser(
-        parents=[filterParser],
+        parents=[io_args, bam_args, filter_args, read_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-This tool estimates the number of reads that would be filtered given a set of
-settings and prints this to the terminal. Further, it tracks the number of singleton reads. The following metrics will always be tracked regardless of what you specify (the order output also matches this):
+This tool estimates the number of reads that would be filtered given a set of settings and prints this to the terminal.
+Further, it tracks the number of singleton reads. The following metrics will always be tracked regardless of what you specify (the order output also matches this):
 
  * Total reads (including unmapped)
  * Mapped reads
@@ -44,118 +53,8 @@ The following metrics are estimated according to the --binSize and --distanceBet
 
 The sum of these may be more than the total number of reads. Note that alignments are sampled from bins of size --binSize spaced --distanceBetweenBins apart.
 """,
-        usage='Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt')
-
-    required = parser.add_argument_group('Required arguments')
-    required.add_argument('--bamfiles', '-b',
-                          metavar='FILE1 FILE2',
-                          help='List of indexed bam files separated by spaces.',
-                          nargs='+',
-                          required=True)
-    required.add_argument('--barcodes', '-bc',
-                           help="A single-column file containing barcodes (whitelist) to be used",
-                           metavar="TXT",
-                           required=True)
-
-    general = parser.add_argument_group('General arguments')
-
-    general.add_argument('--outFile', '-o',
-                         type=parserCommon.writableFile,
-                         help='The file to write results to. By default, results are printed to the console')
-
-    general.add_argument('--labels', '-l',
-                         help='Labels for the samples. The '
-                         'default is to use the file name of the '
-                         'sample. The sample labels should be separated '
-                         'by spaces and quoted if a label itself'
-                         'contains a space E.g. --labels label-1 "label 2"  ',
-                         nargs='+')
-
-    general.add_argument('--smartLabels',
-                         action='store_true',
-                         help='Instead of manually specifying labels for the input '
-                         'BAM files, this causes sincei to use the '
-                         'file name after removing the path and extension.')
-
-    general.add_argument('--binSize', '-bs',
-                         metavar='INT',
-                         help='Length in bases of the window used to sample the genome. (Default: %(default)s)',
-                         default=1000000,
-                         type=int)
-
-    general.add_argument('--distanceBetweenBins', '-n',
-                         metavar='INT',
-                         help='To reduce the computation time, not every possible genomic '
-                         'bin is sampled. This option allows you to set the distance '
-                         'between bins actually sampled from. Larger numbers are sufficient '
-                         'for high coverage samples, while smaller values are useful for '
-                         'lower coverage samples. Note that if you specify a value that '
-                         'results in too few (<1000) reads sampled, the value will be '
-                         'decreased. (Default: %(default)s)',
-                         default=1000000,
-                         type=int)
-
-    general.add_argument('--numberOfProcessors', '-p',
-                         help='Number of processors to use. Type "max/2" to '
-                         'use half the maximum number of processors or "max" '
-                         'to use all available processors. (Default: %(default)s)',
-                         metavar="INT",
-                         type=parserCommon.numberOfProcessors,
-                         default=1,
-                         required=False)
-
-    general.add_argument('--verbose', '-v',
-                         help='Set to see processing messages.',
-                         action='store_true')
-
-#    general.add_argument('--version', action='version',
-#                         version='%(prog)s {}'.format(__version__))
-
-    filtering = parser.add_argument_group('Optional arguments')
-
-    filtering.add_argument('--filterRNAstrand',
-                           help='Selects RNA-seq reads (single-end or paired-end) in '
-                                'the given strand. (Default: %(default)s)',
-                           choices=['forward', 'reverse'],
-                           default=None)
-
-    filtering.add_argument('--minMappingQuality',
-                           metavar='INT',
-                           help='If set, only reads that have a mapping '
-                           'quality score of at least this are '
-                           'considered.',
-                           type=int)
-
-    filtering.add_argument('--samFlagInclude',
-                           help='Include reads based on the SAM flag. For example, '
-                           'to get only reads that are the first mate, use a flag of 64. '
-                           'This is useful to count properly paired reads only once, '
-                           'as otherwise the second mate will be also considered for the '
-                           'coverage. (Default: %(default)s)',
-                           metavar='INT',
-                           default=None,
-                           type=int,
-                           required=False)
-
-    filtering.add_argument('--samFlagExclude',
-                           help='Exclude reads based on the SAM flag. For example, '
-                           'to get only reads that map to the forward strand, use '
-                           '--samFlagExclude 16, where 16 is the SAM flag for reads '
-                           'that map to the reverse strand. (Default: %(default)s)',
-                           metavar='INT',
-                           default=None,
-                           type=int,
-                           required=False)
-
-    filtering.add_argument('--blackListFileName', '-bl',
-                           help='A BED or GTF file containing regions that should be excluded from all analyses. '
-                           'Currently this works by rejecting genomic chunks that happen to overlap an entry. '
-                           'Consequently, for BAM files, if a read partially overlaps a blacklisted region or '
-                           'a fragment spans over it, then the read/fragment might still be considered. Please note '
-                           'that you should adjust the effective genome size, if relevant.',
-                           metavar="BED file",
-                           nargs="+",
-                           required=False)
+        usage='Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt',
+        add_help=False)
 
     return parser
 

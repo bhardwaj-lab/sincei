@@ -27,10 +27,11 @@ import ParserCommon
 from Clustering import preprocess_adata, LSA_gensim
 
 def parseArguments():
+    io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'], requiredOpts=['outFile'])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
-    bc_args = ParserCommon.bcOptions()
-    parser = argparse.ArgumentParser(parents=[get_args(), plot_args, other_args],
+
+    parser = argparse.ArgumentParser(parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,#argparse.RawDescriptionHelpFormatter,
         description="""
         This tool clusters the cells based on the input count matrix (output of scCountReads) and returns a
@@ -43,16 +44,6 @@ def parseArguments():
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-    required = parser.add_argument_group('Required arguments')
-    required.add_argument('--input', '-i',
-                          metavar='LOOM',
-                          help='Input file in the loom format',
-                          required=True)
-
-    required.add_argument('--outFile', '-o',
-                         type=str,
-                         required=True,
-                         help='The file to write results to. The output file is an updated .loom object containing cell metadata, UMAP coordinates and cluster IDs.')
 
     general = parser.add_argument_group('Clustering Options')
     general.add_argument('--outFileUMAP', '-op',
