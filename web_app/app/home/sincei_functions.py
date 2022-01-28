@@ -7,6 +7,7 @@ from bokeh.palettes import Category20, Blues
 from bokeh.transform import factor_cmap, linear_cmap
 import pandas as pd
 import subprocess
+import scanpy as sc
 
 # execute a command using args passed from WTforms
 def execute_command(command, args):
@@ -21,6 +22,11 @@ def execute_command(command, args):
     except:
         pass
     return final_arg
+
+# load anndata object from default output dir
+def load_anndata(name):
+    ad = sc.read_loom(os.path.join("output","loomfiles", name))
+    return ad
 
 def fetch_results_scFilterStats():
     df = pd.read_csv("./example_data/scFilterStats.txt", sep="\t", index_col=0)
@@ -49,7 +55,7 @@ def fetch_results_UMAP(gene=None):
     xlabel="UMAP1"
     ylabel="UMAP2"
     if gene:
-        fig = figure(title="Activity of Gene: {}".format(gene), 
+        fig = figure(title="Activity of Gene: {}".format(gene),
                     plot_height=500, plot_width=500, tooltips=[("ID", "@cell")])# level_0 refers to "index"
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=linear_cmap(gene, palette=Blues[256][::-1], low=min(df[gene]), high=max(df[gene])),

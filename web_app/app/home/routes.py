@@ -105,6 +105,8 @@ def show_plots():
 def explore_umap():
     form = form_scPlotUMAP(meta={'csrf': False})#, formdata=None
     flash(form.errors)
+    ## load the anndata object from output folder
+    ad = load_anndata()
     if request.method == 'POST' and form.validate_on_submit():
         try:
             script, div = fetch_results_UMAP()
