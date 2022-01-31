@@ -30,8 +30,8 @@ def parseArguments(args=None):
             description="""
             ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
             The analysis can be performed for the entire genome by running the program in 'bins' mode.
-            If you want to count the read coverage for specific regions only, use the ``BED-file`` mode instead.
-            The standard output of ``scCountReads`` is a ".mtx" file with counts, along with rowName and colNames in a single-column .txt file.
+            If you want to count the read coverage for specific regions only, use the ``features`` mode instead.
+            The standard output of ``scCountReads`` is a ".loom" file with counts, along with rowName (features) and colNames (cell barcodes).
 
             A detailed sub-commands help is available by typing:
 
@@ -42,7 +42,7 @@ def parseArguments(args=None):
           """,
             epilog='example usages:\n'
                    'scCountReads bins --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results \n\n'
-                   'scCountReads BED-file --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n'
+                   'scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n'
                    '-o results'
                    ' \n\n',
             conflict_handler='resolve')
