@@ -106,11 +106,11 @@ def explore_umap():
     form = form_scPlotUMAP(meta={'csrf': False})#, formdata=None
     flash(form.errors)
     ## load the anndata object from output folder
-    ad = load_anndata()
+    ad, df = load_anndata('filtered')
     if request.method == 'POST' and form.validate_on_submit():
         try:
-            script, div = fetch_results_UMAP()
-            script_res, div_res = fetch_results_UMAP(str(form.geneName.data))
+            script, div = fetch_results_UMAP(ad, df)
+            script_res, div_res = fetch_results_UMAP(ad, df, str(form.geneName.data))
             return render_template(
                         'explore-output.html',
                         form=form,
