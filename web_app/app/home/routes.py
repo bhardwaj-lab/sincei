@@ -109,8 +109,11 @@ def explore_umap():
     ad, df = load_anndata('filtered')
     if request.method == 'POST' and form.validate_on_submit():
         try:
+            olaps = get_gtf_olaps(ad)
             script, div = fetch_results_UMAP(ad, df)
-            script_res, div_res = fetch_results_UMAP(ad, df, str(form.geneName.data))
+            script_res, div_res = fetch_results_UMAP(ad, df,
+                                                     gene=str(form.geneName.data),
+                                                     gene_bin_dict=olaps)
             return render_template(
                         'explore-output.html',
                         form=form,
@@ -124,7 +127,7 @@ def explore_umap():
         except:
             return render_template('page-500.html'), 500
     else:
-        script, div = fetch_results_UMAP()
+        script, div = fetch_results_UMAP(ad, df)
         return render_template(
                     'explore-output.html',
                     form=form,
