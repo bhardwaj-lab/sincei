@@ -6,12 +6,17 @@ from bokeh.plotting import figure, output_file, show
 from bokeh.palettes import Category20, Blues
 from bokeh.transform import factor_cmap, linear_cmap
 import pandas as pd
+import numpy as np
 import subprocess
 import scanpy as sc
 from deeptoolsintervals import GTF
 import sys
+import os
 sys.path.append("../sincei")
 from RegionQuery import *
+WORKDIR="example_data"
+import warnings
+
 
 # execute a command using args passed from WTforms
 def execute_command(command, args):
@@ -32,12 +37,15 @@ def load_anndata(name):
     """
     Load filtered/unfiltered anndata object
     """
-    ad = sc.read_loom(os.path.join("output", "loomfiles", name+'.loom'))
+    print("LOADING ANNDATA")
+    ad = sc.read_loom(os.path.join(WORKDIR, "output", "loomfiles", name+'.loom'))
+    ad.obs.set_index('obs_names', inplace=True)
+    ad.var.set_index('var_names', inplace=True)
     df = pd.DataFrame(ad.obsm['X_umap'])
     df.index = ad.obs_names
     df.columns = ['UMAP1', 'UMAP2']
-    df['Cluster'] = ad.obs['leiden']
-    df['Celltype'] = ad.obs['predicted.id']
+    df['Cluster'] = ad.obs['cluster_lsi']#WIP:expeted colname for clusters
+    df['celltype'] = ad.obs['hour']#WIP: expected colname for celltypes
     return ad, df
 
 def get_gtf_olaps(ad, gtf_prefix="GRCz11"):
@@ -45,8 +53,10 @@ def get_gtf_olaps(ad, gtf_prefix="GRCz11"):
     Check for overlap of ad.var with gtf regions
     """
     if all([len(x.split('_')) == 3 for x in ad.var_names]):
-        gtf_file = os.path.join("annotations", gtf_prefix+".gtf")
-        gtf = GTF(gtf_file, transcript_id_designator='gene_name',keepExons=False)
+        gtf_file = os.path.join(WORKDIR, "annotations", gtf_prefix+".gtf")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gtf = GTF(gtf_file, transcript_id_designator='gene_name',keepExons=False)
         olap = get_gtf_adata_olaps(ad, gtf)
         return olap
     else:
@@ -56,7 +66,7 @@ def fetch_results_scFilterStats():
     """
     Load and plot the output of scFilterStats
     """
-    df = pd.read_csv(os.path.join("output", "textfiles", "scFilterStats.txt"), sep="\t", index_col=0)
+    df = pd.read_csv(os.path.join(WORKDIR, "output", "textfiles", "scFilterStats.txt"), sep="\t", index_col=0)
     df['color']="#000000"
     pretty_labels={}
     for x in df.columns:
@@ -72,16 +82,16 @@ def fetch_results_scFilterStats():
     return script, div
 
 
-def fetch_results_UMAP(adata, df, gene=None, gene_bin_dict=None):
+def fetch_results_UMAP(ad, df, gene=None, gene_bin_dict=None):
     """
     Plot UMAP with annotation, and if asked, gene/region signal
     """
     pretty_labels={}
     for x in df.columns:
         pretty_labels[" ".join(x.split("_"))] = x
-    ## map celltypes to a colormap
     xlabel="UMAP1"
     ylabel="UMAP2"
+    ## map celltypes to a colormap
     if gene:
         try:
             gene_idx = ad.var.index.get_loc(gene)
@@ -90,21 +100,20 @@ def fetch_results_UMAP(adata, df, gene=None, gene_bin_dict=None):
                 bins=get_bins_by_gene(gene_bin_dict, gene, firstBin=False)
                 gene_idx = [ad.var.index.get_loc(x) for x in bins]
             else:
-                print("Gene not found in ad.var. Gene->bin mapping unavailable")
-
+                print("Gene not found in anndata.var. Gene->bin mapping unavailable")
         out_df = pd.DataFrame(np.sum(ad.X[:, gene_idx].todense(), axis=1))
         out_df.index = df.index
         out_df.rename({0:gene}, axis=1, inplace=True)
         df = df.join(out_df)
         source = ColumnDataSource(df)
         fig = figure(title="Activity of Feature: {}".format(gene),
-                    plot_height=500, plot_width=500, tooltips=[("ID", "@cell")])# level_0 refers to "index"
+                    plot_height=500, plot_width=500, tooltips=[("ID", "@celltype")])# level_0 refers to "index"
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=linear_cmap(gene, palette=Blues[256][::-1], low=min(df[gene]), high=max(df[gene])),
                    line_color=None)
-
     else:
-        fig = figure(title="Cell types", plot_height=500, plot_width=700, tooltips=[("ID", "@cell")])# level_0 refers to "index"
+        source = ColumnDataSource(df)
+        fig = figure(title="Cell types", plot_height=500, plot_width=700, tooltips=[("ID", "@celltype")])# level_0 refers to "index"
         fig.add_layout(Legend(), 'right')
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=factor_cmap('celltype', palette=Category20[20],

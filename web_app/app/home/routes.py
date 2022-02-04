@@ -14,7 +14,7 @@ from bokeh.resources import INLINE
 
 import sys
 from .sincei_forms import form_scFilterStats, form_scPlotUMAP
-from .sincei_functions import execute_command, fetch_results_scFilterStats, fetch_results_UMAP
+from .sincei_functions import *
 
 # Helper - Extract current page name from request
 def get_segment( request ):
