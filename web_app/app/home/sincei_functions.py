@@ -1,5 +1,5 @@
 # for bokeh plotting
-from bokeh.models import ColumnDataSource, Div, Select, Slider, TextInput, Legend
+from bokeh.models import ColumnDataSource, Div, Select, Slider, TextInput, Legend, ColorBar, LinearColorMapper
 from bokeh.io import curdoc
 from bokeh.embed import components
 from bokeh.plotting import figure, output_file, show
@@ -41,6 +41,9 @@ def load_anndata(name):
     ad = sc.read_loom(os.path.join(WORKDIR, "output", "loomfiles", name+'.loom'))
     ad.obs.set_index('obs_names', inplace=True)
     ad.var.set_index('var_names', inplace=True)
+    ## if data is not binarized, normalize counts per cell
+    if (np.sum(ad.X > 1) != 0):
+        sc.pp.normalize_total(ad, target_sum=100000, exclude_highly_expressed=True)
     df = pd.DataFrame(ad.obsm['X_umap'])
     df.index = ad.obs_names
     df.columns = ['UMAP1', 'UMAP2']
@@ -104,13 +107,21 @@ def fetch_results_UMAP(ad, df, gene=None, gene_bin_dict=None):
         out_df = pd.DataFrame(np.sum(ad.X[:, gene_idx].todense(), axis=1))
         out_df.index = df.index
         out_df.rename({0:gene}, axis=1, inplace=True)
+        # scale counts to range 0:100 across cells
+        out_df=out_df.apply(lambda a: (100*(a - np.min(a))/np.ptp(a)), axis=0)
+
         df = df.join(out_df)
         source = ColumnDataSource(df)
         fig = figure(title="Activity of Feature: {}".format(gene),
-                    plot_height=500, plot_width=500, tooltips=[("ID", "@celltype")])# level_0 refers to "index"
+                    plot_height=500, plot_width=500, tooltips=[("ID", "@celltype"),
+                                                               ("Intensity", "@"+gene)])# level_0 refers to "index"
         fig.circle(x=pretty_labels[xlabel], y=pretty_labels[ylabel], source=source, size=8,
                    fill_color=linear_cmap(gene, palette=Blues[256][::-1], low=min(df[gene]), high=max(df[gene])),
                    line_color=None)
+        ## add color bar
+        color_mapper=LinearColorMapper(palette=Blues[256][::-1], low=0, high=100)
+        color_bar = ColorBar(color_mapper=color_mapper, label_standoff=12)
+        fig.add_layout(color_bar, 'right')
     else:
         source = ColumnDataSource(df)
         fig = figure(title="Cell types", plot_height=500, plot_width=700, tooltips=[("ID", "@celltype")])# level_0 refers to "index"
