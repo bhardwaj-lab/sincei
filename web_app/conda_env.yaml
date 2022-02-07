@@ -8,6 +8,7 @@ dependencies:
   - pandas
   - scanpy
   - loompy
+  - deeptools
   - pip
   - pip:
     - flask==1.1.2
