@@ -2,7 +2,11 @@ name: sincei
 channels:
  - bioconda
  - conda-forge
+ - anaconda
+ - defaults
 dependencies:
  - scanpy
  - deeptools
- - gensim
+ - pip
+ - pip:
+   - gensim
