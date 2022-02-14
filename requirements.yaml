@@ -10,3 +10,4 @@ dependencies:
  - pip
  - pip:
    - gensim
+   - "--editable=git+ssh://git@github.com:vivekbhr/sincei.git@master#egg=sincei"
