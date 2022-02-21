@@ -72,7 +72,6 @@ setup(
         "leidenalg",
         "networkx",
         "community",
-        "uamp",
         "igraph"
     ],
     zip_safe=True,
