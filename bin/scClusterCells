@@ -129,7 +129,7 @@ def main(args=None):
     sc.pp.neighbors(adata, use_rep='X_pca', n_neighbors=args.nNeighbors)
     sc.tl.leiden(adata, resolution=args.clusterResolution)
     sc.tl.paga(adata)
-    sc.pl.paga(adata, plot=False, threshold=0.2)
+    sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos='paga')
 
     adata.write_loom(args.outFile, write_obsm_varm=True)
