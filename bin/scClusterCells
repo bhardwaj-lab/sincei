@@ -34,10 +34,11 @@ def parseArguments():
     parser = argparse.ArgumentParser(parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,#argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and returns a
-        tsv file with UMAP coordinates and corresponding cluster id for each barcode.
+        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimentionality reduction,
+        community detection and 2D projection (UMAP) of the cells. The result is an updated loom object, and (optionally) a plot file
+        and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
-        usage='Example usage: scClusterCells.py -i cellCounts.h5ad -o clusters.tsv > log.txt',
+        usage='Example usage: scClusterCells -i cellCounts.loom -o clustered.loom -op <umap_prefix>.png  > log.txt',
         add_help=False)
 
     return parser

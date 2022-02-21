@@ -60,7 +60,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
 
     elif 'outFile' in opts:
         group.add_argument('--outFile', '-o',
-                             type=argparse.FileType('w'),
+                             type=str,
                              help='The file to write results to. For `scFilterStats`, `scFilterBarcodes` '
                              'and `scJSD`, the output file is a .txt file. For other tools, the output file is '
                              'an updated .loom object with the result of the requested operation. ',
