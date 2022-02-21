@@ -107,7 +107,7 @@ def get_args():
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    adata = anndata.read_loom(args.input)
+    adata = sc.read_loom(args.input, obs_names='obs_names', var_names='var_names')
     adata = preprocess_adata(adata, args.minCellSum, args.minRegionSum)
     #adat = lsa_anndata(adat, args.nPrinComps, args.scaleFactor)
     #adat = UMAP_clustering(adat)
@@ -129,7 +129,7 @@ def main(args=None):
     sc.pp.neighbors(adata, use_rep='X_pca', n_neighbors=args.nNeighbors)
     sc.tl.leiden(adata, resolution=args.clusterResolution)
     sc.tl.paga(adata)
-    sc.pl.paga(adata, plot=False)
+    sc.pl.paga(adata, plot=False, threshold=0.2)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos='paga')
 
     adata.write_loom(args.outFile, write_obsm_varm=True)
@@ -150,7 +150,7 @@ def main(args=None):
         #plt.tight_layout()
         #plt.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
         #plt.close()
-    
+
     # save if asked
     if args.outFileTrainedModel:
         corpus_lsi.save(args.outFileTrainedModel)

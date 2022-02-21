@@ -65,8 +65,8 @@ setup(
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering :: Bio-Informatics'],
     install_requires=[
-        "scanpy",
-        "loompy",
+        "scanpy >= 1.7.2",
+        "loompy >= 3.0.6",
         "deeptools",
         "gensim",
         "leidenalg",
