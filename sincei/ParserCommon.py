@@ -1,6 +1,7 @@
 import argparse
 import os
 from deeptools.utilities import smartLabels
+from _version import __version__
 
 def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
@@ -78,8 +79,8 @@ def otherOptions(args=None):
                          help='Set to see processing messages.',
                          action='store_true')
 
-#    group.add_argument('--version', action='version',
-#                         version='%(prog)s {}'.format(__version__))
+    group.add_argument('--version', action='version',
+                         version='%(prog)s {}'.format(__version__))
 
     return parser
 
