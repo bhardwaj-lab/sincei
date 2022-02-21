@@ -68,7 +68,12 @@ setup(
         "scanpy",
         "loompy",
         "deeptools",
-        "gensim"
+        "gensim",
+        "leidenalg",
+        "networkx",
+        "community",
+        "uamp",
+        "igraph"
     ],
     zip_safe=True,
     cmdclass={'sdist': sdist, 'install': install}
