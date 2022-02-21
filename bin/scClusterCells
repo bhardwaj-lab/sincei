@@ -59,11 +59,6 @@ def get_args():
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
 
-    general.add_argument('--outGraph', '-og',
-                         type=argparse.FileType('w'),
-                         required=False,
-                         help='The output file for the Graph object (lgl format) which can be used for further clustering/integration.')
-
     general.add_argument('--minCellSum', '-c',
                          default=1000,
                          type=float,
@@ -160,8 +155,9 @@ def main(args=None):
     # save if asked
     if args.outFileTrainedModel:
         corpus_lsi.save(args.outFileTrainedModel)
-    if args.outGraph:
-        graph.write_lgl(args.outGraph)
+#    if args.outGraph:
+# 'The output file for the Graph object (lgl format) which can be used for further clustering/integration.'
+#        graph.write_lgl(args.outGraph)
 
     return 0
 
