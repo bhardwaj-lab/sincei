@@ -72,6 +72,14 @@ def make_plots(adata, fname=None):
             for plot in plist:
                 pp.savefig(plot.figure)
     return plist
+
+    general.add_argument('--outPlot', '-op',
+                         type=str,
+                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
+    if args.outPlot:
+        make_plots(adata, fname=args.outPlot)
+        if cellfilter or regionfilter or badcells or badchrom:
+            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
 '''
 
 def parseArguments():
@@ -212,15 +220,6 @@ def main(args=None):
         sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
         adata_filt.write_loom(args.outFile)
 
-'''
-    general.add_argument('--outPlot', '-op',
-                         type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
-    if args.outPlot:
-        make_plots(adata, fname=args.outPlot)
-        if cellfilter or regionfilter or badcells or badchrom:
-            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
-'''
     return 0
 
 if __name__ == "__main__":
