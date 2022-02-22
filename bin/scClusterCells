@@ -24,7 +24,7 @@ import scanpy as sc
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 import ParserCommon
-from Clustering import preprocess_adata, LSA_gensim
+from Clustering import LSA_gensim
 
 def parseArguments():
     io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'], requiredOpts=['outFile'])
@@ -58,18 +58,6 @@ def get_args():
                          required=False,
                          help='The output file for the trained LSI model. The saved model can be used later to embed/compare new cells '
                               'to the existing cluster of cells.')
-
-    general.add_argument('--minCellSum', '-c',
-                         default=1000,
-                         type=float,
-                         help='For filtering of cells: minimum number of regions detected in a cell for '
-                               'the cell to be kept. (Default: %(default)s)')
-
-    general.add_argument('--minRegionSum', '-r',
-                         default=100,
-                         type=float,
-                         help='For filtering of regions: Minimum number of cells the regions should be present in, '
-                              'for the region to be kept. (Default: %(default)s)')
 
     general.add_argument('--method', '-m',
                          type=str,
@@ -108,16 +96,24 @@ def main(args=None):
     args = parseArguments().parse_args(args)
 
     adata = sc.read_loom(args.input, obs_names='obs_names', var_names='var_names')
-    adata = preprocess_adata(adata, args.minCellSum, args.minRegionSum)
-    #adat = lsa_anndata(adat, args.nPrinComps, args.scaleFactor)
-    #adat = UMAP_clustering(adat)
+'''
+    general.add_argument('--minCellSum', '-c',
+                         default=1000,
+                         type=float,
+                         help='For filtering of cells: minimum number of regions detected in a cell for '
+                               'the cell to be kept. (Default: %(default)s)')
 
+    general.add_argument('--minRegionSum', '-r',
+                         default=100,
+                         type=float,
+                         help='For filtering of regions: Minimum number of cells the regions should be present in, '
+                              'for the region to be kept. (Default: %(default)s)')
+'''
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adata.X.transpose())
     if args.binarize:
         mtx=binarize(mtx, copy=True)
     corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(mtx, list(adata.obs.index), list(adata.var.index), nTopics = args.nPrinComps, smartCode='lfu')
-    #umap_lsi, graph = cluster_LSA(cell_topic, modularityAlg='leiden', resolution=args.clusterResolution, nk=args.nNeighbors)
 
     ## update the anndata object, drop cells which are not in the anndata
     adata=adata[cell_topic.index]

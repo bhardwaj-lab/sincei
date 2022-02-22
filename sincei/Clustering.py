@@ -52,23 +52,6 @@ def preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum, min_region_sum)
 
     return adata
 
-# from anndata
-def preprocess_adata(adata, min_cell_sum, min_region_sum):
-    # binarize
-    sparse_mtx = adata.X
-    nonzero_mask = np.array(sparse_mtx[sparse_mtx.nonzero()] > 1)[0]
-    rows = sparse_mtx.nonzero()[0][nonzero_mask]
-    cols = sparse_mtx.nonzero()[1][nonzero_mask]
-    sparse_mtx[rows, cols] = 1
-    adata.x = sparse_mtx
-    # save some QC
-    sc.pp.calculate_qc_metrics(adata, inplace=True)
-    # filter
-    adata = adata[adata.obs.n_genes_by_counts >= min_cell_sum, :]
-    adata = adata[:, adata.var.n_cells_by_counts >= min_region_sum]
-
-    return adata
-
 def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
     # LSA
     regions_dict = corpora.dictionary.Dictionary([regions])
