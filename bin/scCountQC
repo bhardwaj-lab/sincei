@@ -167,14 +167,14 @@ def main(args=None):
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
         cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
-        print('\n Cell metrics: \n')
-        print(pd.DataFrame({'min': cols.min(),
-                      'max': cols.max()}))
+        sys.stdout.write("\n Cell metrics: \n")
+        sys.stdout.write("Total cells: {} \n".format(adata.shape[0]))
+        sys.stdout.write(pd.DataFrame({'min': cols.min(), 'max': cols.max()}))
 
         rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
-        print('\n Region metrics: \n')
-        print(pd.DataFrame({'min': rows.min(),
-                            'max': rows.max()}))
+        sys.stdout.write("\n Feature metrics: \n")
+        sys.stdout.write("Total features: {} \n".format(adata.shape[1]))
+        sys.stdout.write(pd.DataFrame({'min': rows.min(), 'max': rows.max()}))
         exit()
 
     if args.filterCellArgs:
