@@ -10,14 +10,6 @@ import pandas as pd
 from scipy import sparse, io
 from itertools import compress
 import copy
-# plotting
-import seaborn as sns
-import matplotlib
-import matplotlib.pyplot as plt
-matplotlib.use('Agg')
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['svg.fonttype'] = 'none'
-
 import scanpy as sc
 ## own Functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
@@ -46,7 +38,16 @@ def filter_adata(adata, filter_region_dict=None,
 
     return adata
 
+'''
 def make_plots(adata, fname=None):
+    # plotting
+    import matplotlib
+    import matplotlib.pyplot as plt
+    matplotlib.use('Agg')
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['svg.fonttype'] = 'none'
+    import seaborn as sns# seaborn colormaps conflicts with deeptools colormaps
+
     ## filtering of regions
     plt.figure()
     pl1=sns.violinplot(data=adata.var, x='total_counts', y='chrom')
@@ -71,6 +72,7 @@ def make_plots(adata, fname=None):
             for plot in plist:
                 pp.savefig(plot.figure)
     return plist
+'''
 
 def parseArguments():
     io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'])
@@ -95,10 +97,6 @@ def get_args():
     general.add_argument('--describe', '-d',
                          action='store_true',
                          help='Print a list of cell and region metrics available for QC/filtering.')
-
-    general.add_argument('--outPlot', '-op',
-                         type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
 
     general.add_argument('--outMetrics', '-om',
                          type=str,
@@ -214,11 +212,15 @@ def main(args=None):
         sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
         adata_filt.write_loom(args.outFile)
 
+'''
+    general.add_argument('--outPlot', '-op',
+                         type=str,
+                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
     if args.outPlot:
         make_plots(adata, fname=args.outPlot)
         if cellfilter or regionfilter or badcells or badchrom:
             make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
-
+'''
     return 0
 
 if __name__ == "__main__":
