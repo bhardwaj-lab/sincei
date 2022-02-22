@@ -41,8 +41,8 @@ def filter_adata(adata, filter_region_dict=None,
         adata=adata[~adata.obs.index.isin(bad_cells)]
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
-            adata=adata[:, (adata.obs[key] >= filter_cell_dict[key][0]) &
-                            (adata.obs[key] <= filter_cell_dict[key][1]) ]
+            adata=adata[(adata.obs[key] >= filter_cell_dict[key][0]) &
+                            (adata.obs[key] <= filter_cell_dict[key][1]), : ]
 
     return adata
 
