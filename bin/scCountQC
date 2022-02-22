@@ -155,8 +155,8 @@ def main(args=None):
         mat=re.sub(".txt|.tsv|.csv","",args.outMetrics)
         obs_tsv = mat+".cells.tsv"
         var_tsv = mat+".regions.tsv"
-        adata.obs.to_csv(obs_tsv, sep="\t")
-        adata.var.to_csv(var_tsv, sep="\t")
+        adata.obs.to_csv(obs_tsv, sep="\t", index_label='cell_id')
+        adata.var.to_csv(var_tsv, sep="\t", index_label='feature_id')
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
@@ -204,14 +204,14 @@ def main(args=None):
         badchrom=None
 
     if cellfilter or regionfilter or badcells or badchrom:
-        sys.stdout.write(cellfilter)
-        sys.stdout.write(regionfilter)
+        sys.stdout.write("Applying filters \n")
         adata_filt=filter_adata(adata,
                         filter_region_dict=regionfilter,
                         filter_cell_dict=cellfilter,
                         bad_chrom=badchrom,
                         bad_cells=badcells)
-        sys.stdout.write(adata_filt.shape)
+        sys.stdout.write("Remaining cells: {} \n".format(adata_filt.shape[0]))
+        sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
         adata_filt.write_loom(args.outFile)
 
     if args.outPlot:
