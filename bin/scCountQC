@@ -169,12 +169,15 @@ def main(args=None):
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
-        cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
+        
+        is_num_col=[(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.obs.dtypes]
+        cols=adata.obs.loc[:, is_num_col]
         sys.stdout.write("\n Cell metrics: \n")
         sys.stdout.write("Total cells: {} \n".format(adata.shape[0]))
         sys.stdout.write(pd.DataFrame({'min': cols.min(), 'max': cols.max()}))
 
-        rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
+        is_num_row=[(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.var.dtypes]
+        rows=adata.var.loc[:, is_num_row]
         sys.stdout.write("\n Feature metrics: \n")
         sys.stdout.write("Total features: {} \n".format(adata.shape[1]))
         sys.stdout.write(pd.DataFrame({'min': rows.min(), 'max': rows.max()}))
