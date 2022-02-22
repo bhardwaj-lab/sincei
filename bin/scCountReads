@@ -12,7 +12,6 @@ import anndata as ad
 import scanpy as sc
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
-from deeptools._version import __version__
 
 # own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
