@@ -12,6 +12,8 @@ import anndata as ad
 import scanpy as sc
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))

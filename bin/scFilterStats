@@ -11,6 +11,9 @@ from deeptoolsintervals import GTF
 import numpy as np
 import py2bit
 import pandas as pd
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
@@ -282,7 +285,7 @@ def main(args=None):
     ## final output is an array where nrows = bamfiles*barcodes, ncol = No. of stats
     final_array = np.asarray(res).sum(axis = 0)
     ## get final row/col Names (bamnames_barcode)
-    rowLabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
+    rowLabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
     colLabels = ["Total_sampled","Filtered","Blacklisted", "Low_MAPQ",
                  "Missing_Flags","Excluded_Flags","Internal_Duplicates",
                  "Marked_Duplicates","Singletons","Wrong_strand",

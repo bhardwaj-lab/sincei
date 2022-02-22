@@ -9,6 +9,8 @@ from deeptools import parserCommon
 from deeptools.bamHandler import openBam
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))

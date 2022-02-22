@@ -11,6 +11,8 @@ import pandas as pd
 from collections import Counter
 from functools import reduce
 import matplotlib.pyplot as plt
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own Functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))

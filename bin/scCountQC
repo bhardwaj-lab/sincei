@@ -11,6 +11,9 @@ from scipy import sparse, io
 from itertools import compress
 import copy
 import scanpy as sc
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 ## own Functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
