@@ -96,19 +96,7 @@ def main(args=None):
     args = parseArguments().parse_args(args)
 
     adata = sc.read_loom(args.input, obs_names='obs_names', var_names='var_names')
-'''
-    general.add_argument('--minCellSum', '-c',
-                         default=1000,
-                         type=float,
-                         help='For filtering of cells: minimum number of regions detected in a cell for '
-                               'the cell to be kept. (Default: %(default)s)')
 
-    general.add_argument('--minRegionSum', '-r',
-                         default=100,
-                         type=float,
-                         help='For filtering of regions: Minimum number of cells the regions should be present in, '
-                              'for the region to be kept. (Default: %(default)s)')
-'''
     ## LSA and clustering based on gensim
     mtx = sparse.csr_matrix(adata.X.transpose())
     if args.binarize:
