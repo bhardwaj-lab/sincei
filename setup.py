@@ -67,6 +67,7 @@ setup(
     install_requires=[
         "scanpy >= 1.7.2",
         "loompy >= 3.0.6",
+        "umap-learn==0.5.1",
         "deeptools",
         "gensim",
         "leidenalg",
