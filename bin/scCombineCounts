@@ -52,7 +52,7 @@ def get_args():
                          'used by scClusterCells, to perform multi-modal clustering. ',
                          required=True)
 
-    group.add_argument('--labels', '-l',
+    general.add_argument('--labels', '-l',
                           metavar='sample1 sample2',
                           help='User defined labels instead of default labels from '
                                'file names. Multiple labels have to be separated by a space, e.g. '
@@ -62,7 +62,7 @@ def get_args():
     general.add_argument('--method', '-m',
                          type=str,
                          choices=['multi-sample', 'multi-modal'],
-                         default='LSA',
+                         default='multi-sample',
                          help='How to merge the counts from the provided samples. '
                          '`multi-sample`: assumes that each sample is the independent, '
                          'but were counted in the same manner (i.e. on same features), therefore '
@@ -78,7 +78,10 @@ def get_args():
 
 def main(args=None):
     args = parseArguments().parse_args(args)
-
+    if args.method != 'multi-sample':
+        sys.stderr.write("Only multi-sample method is currently implemented")
+        sys.exit(1)
+        
     if args.labels and len(args.input) != len(args.labels):
         print("The number of labels does not match the number of input files.")
         sys.exit(1)
@@ -87,27 +90,31 @@ def main(args=None):
             args.labels = smartLabels(args.input)
         else:
             args.labels = [os.path.basename(x) for x in args.input]
+    adata_list = [sc.read_loom(x,obs_names='obs_names', var_names='var_names') for x in args.input]
 
-    ad_list=["/hpc/hub_oudenaarden/vbhardwaj/2021_mouse_intestine_tchic/sincei_test/scCountReads.loom",
-            "/hpc/hub_oudenaarden/vbhardwaj/2021_mouse_intestine_tchic/sincei_test/scCountReads_filtered.loom",
-            "/hpc/hub_oudenaarden/vbhardwaj/2021_mouse_intestine_tchic/sincei_test/scCountReads_clustered.loom"]
-
-    adata_list = [sc.read_loom(x,obs_names='obs_names', var_names='var_names') for x in ad_list]
-
-    ## concatenate labels
-    labels=['sample1', 'sample2', 'sample3']
-    for lab, ad in zip(labels, adata_list):
+    ## concatenate labels and match chrom, start, end
+    var_list=[]
+    var_cols=['chrom', 'start', 'end']
+    for lab, ad in zip(args.labels, adata_list):
         obs = ad.obs_names.to_list()
         lab = [lab]*len(obs)
         new_names=['_'.join([x,y]) for x,y in zip(lab, obs)]
         ad.obs_names = new_names
-
+        hasinfo = all([x in ad.var.columns for x in var_cols])
+        var_list.append(hasinfo)
 
     ## keep the chrom, start, end from original sample if present
-    var_df=None
-    for ad in adata_list:
-        if all([x in ad.var.columns for x in ['chrom', 'start', 'end']]):
-            continue ## FIXME
+    adata = anndata.concat(adata_list)
+    if all(var_list):
+        var_df = adata_list[0].var[var_cols]
+        adata.var = adata.var.join(var_df)
+    else:
+        sys.stderr.write("WARNING: Not all input files contain the 'chrom', 'start', 'end' information. "
+                         "The output will lack these fields. This might cause an error in some downstream tools")
+
+    sys.stdout.write("Combined cells: {} \n".format(adata.shape[0]))
+    sys.stdout.write("Combined features: {} \n".format(adata.shape[1]))
+    adata.write_loom(args.outFile)
     return 0
 
 if __name__ == "__main__":
