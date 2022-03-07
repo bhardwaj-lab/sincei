@@ -216,6 +216,7 @@ class CountReadsPerBin(object):
     def __init__(self, bamFilesList, binLength=50,
                  barcodes=None,
                  tagName=None,
+                 groupTag=None,
                  clusterInfo=None,
                  motifFilter=None,
                  genome2bit=None,
@@ -304,6 +305,7 @@ class CountReadsPerBin(object):
         self.smoothLength = smoothLength
         self.barcodes = barcodes
         self.tagName = tagName
+        self.groupTag = groupTag
         self.clusterInfo=clusterInfo
         self.motifFilter = motifFilter# list of [readMotif, refMotif]
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
@@ -692,8 +694,11 @@ class CountReadsPerBin(object):
         #coverages = np.zeros(nbins, dtype='float64')
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
-        for b in self.barcodes:
-            coverages[b] = np.zeros(nbins, dtype='float64')
+        if self.groupTag:
+            grplabels = ''
+        else:
+            for b in self.barcodes:
+                coverages[b] = np.zeros(nbins, dtype='float64')
 
         if self.defaultFragmentLength == 'read length':
             extension = 0
@@ -745,12 +750,12 @@ class CountReadsPerBin(object):
                 if chrom not in bamHandle.references:
                     raise NameError("chromosome {} not found in bam file".format(chrom))
             except:
-                # bigWig input, as used by plotFingerprint
+                # bigWig input, currently unUSED
                 if bamHandle.chroms(chrom):
                     _ = np.array(bamHandle.stats(chrom, regStart, regEnd, type="mean", nBins=nRegBins), dtype=np.float)
                     _[np.isnan(_)] = 0.0
                     _ = _ * tileSize
-                    coverages += _
+                    coverages[new_bc] += _
                     continue
                 else:
                     raise NameError("chromosome {} not found in bigWig file with chroms {}".format(chrom, bamHandle.chroms()))
@@ -796,6 +801,11 @@ class CountReadsPerBin(object):
                 ## get barcode from read
                 try:
                     bc = read.get_tag(self.tagName)
+                    if self.groupTag:
+                        grp = read.get_tag(self.groupTag)
+                        new_bc = '::'.join([grp, bc])# new barcode tag = sample+bc tag
+                    else:
+                        new_bc = bc
                 except KeyError:
                     continue
                 # also keep a counter for barcodes not in whitelist?
@@ -836,8 +846,8 @@ class CountReadsPerBin(object):
 
                     if fragmentStart < reg[0]:
                         fragmentStart = reg[0]
-                    if fragmentEnd > reg[0] + len(coverages[bc]) * tileSize:
-                        fragmentEnd = reg[0] + len(coverages[bc]) * tileSize
+                    if fragmentEnd > reg[0] + len(coverages[new_bc]) * tileSize:
+                        fragmentEnd = reg[0] + len(coverages[new_bc]) * tileSize
                     sIdx = vector_start + max((fragmentStart - reg[0]) // tileSize, 0)
                     eIdx = vector_start + min(np.ceil(float(fragmentEnd - reg[0]) / tileSize).astype('int'), nRegBins)
                     if last_eIdx is not None:
@@ -855,10 +865,10 @@ class CountReadsPerBin(object):
                             _ = reg[0] + (sIdx + 1) * tileSize - fragmentStart
                         if _ > tileSize:
                             _ = tileSize
-                        coverages[bc][sIdx] += _
+                        coverages[new_bc][sIdx] += _
                         _ = sIdx + 1
                         while _ < eIdx:
-                            coverages[bc][_] += tileSize
+                            coverages[new_bc][_] += tileSize
                             _ += 1
                         while eIdx - sIdx >= nRegBins:
                             eIdx -= 1
@@ -868,13 +878,13 @@ class CountReadsPerBin(object):
                                 _ = tileSize
                             elif _ < 0:
                                 _ = 0
-                            coverages[bc][eIdx] += _
+                            coverages[new_bc][eIdx] += _
                     elif self.binarizeCoverage:
                         # only return 1, since frequencies are desired
-                        coverages[bc][sIdx:eIdx] = 1
+                        coverages[new_bc][sIdx:eIdx] = 1
                     else:
                         # for everything except plotFingerPrint, simply count the number of reads
-                        coverages[bc][sIdx:eIdx] += 1
+                        coverages[new_bc][sIdx:eIdx] += 1
                     last_eIdx = eIdx
                 c += 1
 
@@ -888,7 +898,7 @@ class CountReadsPerBin(object):
         # change zeros to NAN
         if self.zerosToNans:
             for bc in coverages.keys():
-                coverages[bc][coverages[bc] == 0] = np.nan
+                coverages[new_bc][coverages[new_bc] == 0] = np.nan
         # close 2bit file if opened
         if self.motifFilter and self.genome:
             twoBitGenome.close()
