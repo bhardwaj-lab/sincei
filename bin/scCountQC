@@ -3,21 +3,17 @@
 
 import sys
 import os
+import re
 import argparse
 import numpy as np
 import pandas as pd
 from scipy import sparse, io
 from itertools import compress
 import copy
-# plotting
-import seaborn as sns
-import matplotlib
-import matplotlib.pyplot as plt
-matplotlib.use('Agg')
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['svg.fonttype'] = 'none'
-
 import scanpy as sc
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 ## own Functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
@@ -40,12 +36,21 @@ def filter_adata(adata, filter_region_dict=None,
         adata=adata[~adata.obs.index.isin(bad_cells)]
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
-            adata=adata[:, (adata.obs[key] >= filter_cell_dict[key][0]) &
-                            (adata.obs[key] <= filter_cell_dict[key][1]) ]
+            adata=adata[(adata.obs[key] >= filter_cell_dict[key][0]) &
+                            (adata.obs[key] <= filter_cell_dict[key][1]), : ]
 
     return adata
 
+'''
 def make_plots(adata, fname=None):
+    # plotting
+    import matplotlib
+    import matplotlib.pyplot as plt
+    matplotlib.use('Agg')
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['svg.fonttype'] = 'none'
+    import seaborn as sns# seaborn colormaps conflicts with deeptools colormaps
+
     ## filtering of regions
     plt.figure()
     pl1=sns.violinplot(data=adata.var, x='total_counts', y='chrom')
@@ -71,6 +76,15 @@ def make_plots(adata, fname=None):
                 pp.savefig(plot.figure)
     return plist
 
+    general.add_argument('--outPlot', '-op',
+                         type=str,
+                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
+    if args.outPlot:
+        make_plots(adata, fname=args.outPlot)
+        if cellfilter or regionfilter or badcells or badchrom:
+            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
+'''
+
 def parseArguments():
     io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'])
     plot_args = ParserCommon.plotOptions()
@@ -78,10 +92,11 @@ def parseArguments():
     parser = argparse.ArgumentParser(parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and returns a
-        tsv file with UMAP coordinates and corresponding cluster id for each barcode.
+        This tool performs calculates multiple quality controls metrics on the input .loom file (output of scCountReads)
+        and (optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an
+        updated .loom object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
         """,
-        usage='Example usage: scCountQC.py -i cellCounts.h5ad -o clusters.tsv > log.txt',
+        usage='Example usage: scCountQC -i cellCounts.loom -om qc_metrics.tsv > log.txt',
         add_help=False)
 
     return parser
@@ -94,9 +109,10 @@ def get_args():
                          action='store_true',
                          help='Print a list of cell and region metrics available for QC/filtering.')
 
-    general.add_argument('--outPlot', '-op',
+    general.add_argument('--outMetrics', '-om',
                          type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
+                         help='Prefix of the output file with calculated QC metrics. If given, the cell metrics are printed in '
+                              '<prefix>.cell.tsv and region metrics as <prefix>.region.tsv')
 
     general.add_argument('--filterCellArgs', '-fc',
                          type=str,
@@ -129,7 +145,7 @@ def get_args():
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    adata = sc.read_loom(args.input)
+    adata = sc.read_loom(args.input, obs_names='obs_names', var_names='var_names')
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:
@@ -137,28 +153,34 @@ def main(args=None):
     except IndexError:# not enough genes/regions
         sys.stderr.write('\n Error: Too few regions in the input file to perform QC \n')
         exit()
-    # 2. Gini coefficient
-#    gini_list=[]
-#    for i in range(adata.shape[0]):
-#        ar=copy.deepcopy(adata.X[:,i]).todense()
-#        ar=np.array(ar).flatten()
-#        if len(ar[ar>0]) > 2:
-#            gini_list.append(gini(ar[ar>0]))
-#        else:
-#            gini_list.append(1.0)
-#    adata.obs['gini_coefficient'] = gini_list
+    #pool = multiprocessing.Pool(args.numberOfProcessors)
+
+    #func=partial(gini, X=adata.X)
+    #gini_list = pool.map(func, range(adata.shape[0]) )
+    gini_list = [gini(i, adata.X) for i in range(adata.shape[0])]
+    adata.obs['gini_coefficient'] = gini_list
+
+    if args.outMetrics:
+        mat=re.sub(".txt|.tsv|.csv","",args.outMetrics)
+        obs_tsv = mat+".cells.tsv"
+        var_tsv = mat+".regions.tsv"
+        adata.obs.to_csv(obs_tsv, sep="\t", index_label='cell_id')
+        adata.var.to_csv(var_tsv, sep="\t", index_label='feature_id')
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
-        cols=adata.obs.loc[:,adata.obs.dtypes.isin(['int', 'float64'])]
-        print('\n Cell metrics: \n')
-        print(pd.DataFrame({'min': cols.min(),
-                      'max': cols.max()}))
 
-        rows=adata.var.loc[:,adata.var.dtypes.isin(['int', 'float64'])]
-        print('\n Region metrics: \n')
-        print(pd.DataFrame({'min': rows.min(),
-                            'max': rows.max()}))
+        is_num_col=[(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.obs.dtypes]
+        cols=adata.obs.loc[:, is_num_col]
+        sys.stdout.write("\n Cell metrics: \n")
+        sys.stdout.write("Total cells: {} \n".format(adata.shape[0]))
+        print(pd.DataFrame({'min': cols.min(), 'max': cols.max()}))
+
+        is_num_row=[(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.var.dtypes]
+        rows=adata.var.loc[:, is_num_row]
+        sys.stdout.write("\n Feature metrics: \n")
+        sys.stdout.write("Total features: {} \n".format(adata.shape[1]))
+        print(pd.DataFrame({'min': rows.min(), 'max': rows.max()}))
         exit()
 
     if args.filterCellArgs:
@@ -194,20 +216,15 @@ def main(args=None):
         badchrom=None
 
     if cellfilter or regionfilter or badcells or badchrom:
-        sys.stdout.write(cellfilter)
-        sys.stdout.write(regionfilter)
+        sys.stdout.write("Applying filters \n")
         adata_filt=filter_adata(adata,
                         filter_region_dict=regionfilter,
                         filter_cell_dict=cellfilter,
                         bad_chrom=badchrom,
                         bad_cells=badcells)
-        sys.stdout.write(adata_filt.shape)
+        sys.stdout.write("Remaining cells: {} \n".format(adata_filt.shape[0]))
+        sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
         adata_filt.write_loom(args.outFile)
-
-    if args.outPlot:
-        make_plots(adata, fname=args.outPlot)
-        if cellfilter or regionfilter or badcells or badchrom:
-            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
 
     return 0
 

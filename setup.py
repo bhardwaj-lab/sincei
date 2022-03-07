@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import re
-
+# read the contents of your README file
+from pathlib import Path
 from setuptools import setup, find_packages
 from setuptools.command.sdist import sdist as _sdist
 from setuptools.command.install import install as _install
@@ -41,20 +42,8 @@ class install(_install):
         return
 
 
-def openREADME():
-    """
-    This is only needed because README.md is UTF-8 encoded and that won't work
-    under python3 iff sys.getfilesystemencoding() returns 'ascii'
-    Since open() doesn't accept an encoding in python2...
-    """
-    try:
-        f = open("README.md", encoding="utf-8")
-    except:
-        f = open("README.md")
-
-    foo = f.read()
-    f.close()
-    return foo
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 
 setup(
@@ -63,21 +52,29 @@ setup(
     author=' Vivek Bhardwaj',
     author_email='vivbhr@gmail.com',
     packages=find_packages(),
-    scripts=['bin/scBulkCoverage.py', 'bin/scClusterCells.py', 'bin/scCountQC.py',
-             'bin/scCountReads.py', 'bin/scFilterBarcodes.py', 'bin/scFilterStats.py',
+    scripts=['bin/scBulkCoverage', 'bin/scClusterCells', 'bin/scCountQC',
+             'bin/scCountReads', 'bin/scFilterBarcodes', 'bin/scFilterStats',
              ],
     include_package_data=False,
     url='https://github.com/vivekbhr/sincei',
     license='LICENSE.txt',
     description='A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data ',
-    long_description=openREADME(),
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     classifiers=[
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering :: Bio-Informatics'],
     install_requires=[
-        "scanpy",
+        "scanpy >= 1.7.2",
+        "loompy >= 3.0.6",
+        "umap-learn==0.5.1",
+        "pandas >= 1.4",
         "deeptools",
-        "gensim"
+        "gensim",
+        "leidenalg",
+        "networkx",
+        "community",
+        "igraph"
     ],
     zip_safe=True,
     cmdclass={'sdist': sdist, 'install': install}

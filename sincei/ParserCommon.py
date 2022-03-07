@@ -1,6 +1,7 @@
 import argparse
 import os
 from deeptools.utilities import smartLabels
+from _version import __version__
 
 def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
@@ -60,7 +61,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
 
     elif 'outFile' in opts:
         group.add_argument('--outFile', '-o',
-                             type=argparse.FileType('w'),
+                             type=str,
                              help='The file to write results to. For `scFilterStats`, `scFilterBarcodes` '
                              'and `scJSD`, the output file is a .txt file. For other tools, the output file is '
                              'an updated .loom object with the result of the requested operation. ',
@@ -78,8 +79,8 @@ def otherOptions(args=None):
                          help='Set to see processing messages.',
                          action='store_true')
 
-#    group.add_argument('--version', action='version',
-#                         version='%(prog)s {}'.format(__version__))
+    group.add_argument('--version', action='version',
+                         version='%(prog)s {}'.format(__version__))
 
     return parser
 

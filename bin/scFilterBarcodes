@@ -11,6 +11,8 @@ import pandas as pd
 from collections import Counter
 from functools import reduce
 import matplotlib.pyplot as plt
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
@@ -29,10 +31,10 @@ def parseArguments():
         parents=[io_args, get_args(), bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool identifies barcodes present in a BAM files and produces a list. You can optionally filter these barcodes by matching them to a whitelist or
-        based on total counts.
+        This tool identifies barcodes present in a BAM files and produces a list. You can optionally filter these
+        barcodes by matching them to a whitelist or based on total counts.
         """,
-        usage='Example usage: scFilterBarcodes.py -b sample.bam -w whitelist.txt > barcodes_detected.txt',
+        usage='Example usage: scFilterBarcodes -b sample.bam -w whitelist.txt > barcodes_detected.txt',
         add_help=False)
 
     return parser

@@ -8,12 +8,14 @@ import py2bit
 from deeptools import parserCommon
 from deeptools.bamHandler import openBam
 from deeptools.mapReduce import mapReduce
-from deeptools._version import __version__
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
+from _version import __version__
 from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
 
