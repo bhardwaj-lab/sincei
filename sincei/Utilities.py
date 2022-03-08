@@ -1,6 +1,13 @@
 from itertools import compress
 from deeptools.utilities import getTLen
 import numpy as np
+import sys
+
+def checkBAMtag(bam, name, tag):
+    bctag = [read.has_tag(tag) for read in bam.head(1000)]
+    if not any(bctag):
+        sys.stderr.write("WARNING: Input file {} seems to lack the tag {}. Output might be empty. \n".format(name, tag))
+    return None
 
 def checkMotifs(read, chrom, genome, readMotif, refMotif):
         """
