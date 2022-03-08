@@ -120,8 +120,8 @@ def get_args():
 
 
 def main(args=None):
-    args =  parseArguments().parse_args(args)
 
+    args, _ = ParserCommon.validateInputs(parseArguments().parse_args(args))#newlabels are discarded, since they are re-created from groupInfo file
     global debug
     if args.verbose:
         sys.stderr.write("Specified --scaleFactor: {}\n".format(args.scaleFactor))
@@ -136,62 +136,39 @@ def main(args=None):
         df.columns = ['sample', 'barcode', 'cluster']
     elif len(df.columns) == 4:
         df.columns = ['barcode', 'umap1', 'umap2', 'cluster']
-        samp = [x.split("_")[:-1] for x in df.barcode]
-        if len(samp[0]) > 1:
-            df['sample'] = ["_".join(x) for x in samp]
-        else:
-            df['sample'] = samp
-        df.barcode = [x.split("_")[-1] for x in df.barcode]
+        df['sample'] = [x.split("::")[:-1] for x in df.barcode]
+        df['barcode'] = [x.split("::")[-1] for x in df.barcode]
     else:
         sys.exit("*Error*:No. of columns in --groupInfo file not recognized. "
-              "Please provide either 3 (sample, barcode, cluster) or 3 (barcode, umap1, umap2, cluster) column file")
-    df.index = df[['sample', 'barcode']].apply(lambda x: ':'.join(x), axis=1)
+              "Please provide either 3 (sample, barcode, group) or 4 (sample::barcode, umap1, umap2, group) column file")
+    df.index = df[['sample', 'barcode']].apply(lambda x: '::'.join(x), axis=1)
     #barcodes = groupInfo.barcode.unique().tolist()
 
     ## match the sample labels with groupInfo labels before proceeding
     ## create new DF with user-provided bam+labels (this would match the counts)
-    if args.labels and len(args.bamfiles) != len(args.labels):
-        sys.exit("*Error*:The number of labels does not match the number of bam files.")
-    if not args.labels:
-        if args.smartLabels:
-            args.labels = smartLabels(args.bamfiles)
-        else:
-            args.labels = [os.path.basename(x) for x in args.bamfiles]
 
     # check that sample names in df and --labels match
-    labels_in_df = set(args.labels).difference(set(df['sample']))
-    df_in_labels = set(df['sample']).difference(set(args.labels))
+    labels_not_in_df = set(args.labels).difference(set(df['sample']))
+    df_not_in_labels = set(df['sample']).difference(set(args.labels))
     if bool(df_in_labels):
         sys.stderr.write("Some (or all) of the samples indicated in the groupInfo file "
                      "are absent from the bam file labels! \n"
-                     "Mismatched samples are: {} \n".format(df_in_labels))
+                     "Mismatched samples are: {} \n".format(df_not_in_labels))
     elif bool(labels_in_df):
         sys.stderr.write("Some (or all) of the samples indicated in --labels "
                      "are absent from the in the groupInfo file! \n"
-                     "Mismatched samples are: {} \n".format(labels_in_df))
+                     "Mismatched samples are: {} \n".format(labels_not_in_df))
 
     # make another df, containing union of all barcodes, and in the same order per sample
     barcodes = df['barcode'].unique().tolist()
     sm = list(itertools.chain.from_iterable(itertools.repeat(lab, len(barcodes)) for lab in args.labels))
     bc = barcodes*len(args.labels)
     groupInfo = pd.DataFrame({"sample":sm, "barcode":bc})
-    groupInfo.index = groupInfo[['sample', 'barcode']].apply(lambda x: ':'.join(x), axis=1)
+    groupInfo.index = groupInfo[['sample', 'barcode']].apply(lambda x: '::'.join(x), axis=1)
     groupInfo = pd.merge(groupInfo, df['cluster'], how="left", left_index=True, right_index=True, sort=False)
     groupInfo = groupInfo.reset_index()[['sample', 'barcode', 'cluster']]
-    # remove
-
-    ## Motif and GC filter
-    if args.motifFilter:
-        if not args.genome2bit:
-            sys.exit("*Error*:MotifFilter asked but genome (2bit) file not provided.")
-        else:
-            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
-
-    if args.GCcontentFilter:
-        gc = args.GCcontentFilter.strip(" ").split(",")
-        args.GCcontentFilter = [float(x) for x in gc]
-
-
+    # re-construct new labels (sample+bc)
+    newlabels = ['::'.join([x,y]) for x, y in zip(groupInfo['sample'], groupInfo['barcode'])]
     # Normalization options
     scale_factor = args.scaleFactor
     func_args = {'scaleFactor': args.scaleFactor }
@@ -234,6 +211,8 @@ def main(args=None):
                             barcodes=barcodes,
                             clusterInfo=groupInfo,
                             tagName=args.tagName,
+                            groupTag=args.groupTag,
+                            groupLabels=newlabels,
                             motifFilter=args.motifFilter,
                             genome2bit=args.genome2bit,
                             GCcontentFilter=args.GCcontentFilter,
@@ -269,6 +248,8 @@ def main(args=None):
                             barcodes=barcodes,
                             clusterInfo=groupInfo,
                             tagName=args.tagName,
+                            groupTag=args.groupTag,
+                            groupLabels=newlabels,
                             motifFilter=args.motifFilter,
                             genome2bit=args.genome2bit,
                             GCcontentFilter=args.GCcontentFilter,
@@ -295,6 +276,8 @@ def main(args=None):
                                          barcodes=barcodes,
                                          clusterInfo=groupInfo,
                                          tagName=args.tagName,
+                                         groupTag=args.groupTag,
+                                         groupLabels=newlabels,
                                          motifFilter=args.motifFilter,
                                          genome2bit=args.genome2bit,
                                          GCcontentFilter=args.GCcontentFilter,
