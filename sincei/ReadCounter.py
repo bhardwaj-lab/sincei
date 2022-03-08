@@ -394,6 +394,14 @@ class CountReadsPerBin(object):
                 sys.exit(sys.exc_info()[1])
             except:
                 y = pyBigWig.open(x)
+            # check whether the BAM file has the tags needed
+            bctag = [read.has_tag(self.tagName) for read in y.head(1000)]
+            if not any(bctag):
+                sys.stderr.write("WARNING: Input file {} seems to lack the provided --tagName. Output might be empty.")
+            if self.groupTag:
+                grptag = [read.has_tag(self.groupTag) for read in y.head(1000)]
+                if not any(grptag):
+                    sys.stderr.write("WARNING: Input file {} seems to lack the provided --groupTag. Output might be empty.")
             bamFilesHandles.append(y)
 
         chromsizes, non_common = deeptools.utilities.getCommonChrNames(bamFilesHandles, verbose=self.verbose)
