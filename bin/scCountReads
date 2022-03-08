@@ -173,7 +173,8 @@ def main(args=None):
         colNamesFile = args.outFilePrefix + ".colnames.txt"
     else:
         rowNamesFile=None
-
+    ## create colnames (sampleLabel+barcode)
+    newlabels = ["{}::{}".format(re.sub('\.bam', '', a), b) for a in args.labels for b in barcodes ]
     stepSize = args.binSize + args.distanceBetweenBins
     c = countR.CountReadsPerBin(
         args.bamfiles,
@@ -181,6 +182,8 @@ def main(args=None):
         stepSize=stepSize,
         barcodes=barcodes,
         tagName=args.tagName,
+        groupTag=args.groupTag,
+        groupLabels=newlabels,
         motifFilter=args.motifFilter,
         genome2bit=args.genome2bit,
         GCcontentFilter=args.GCcontentFilter,
@@ -211,9 +214,6 @@ def main(args=None):
         exit("ERROR: too few non zero bins found.\n"
              "If using --region please check that this "
              "region is covered by reads.\n")
-
-    ## create colnames (sampleLabel+barcode)
-    newlabels = ["{}::{}".format(re.sub('\.bam', '', a), b) for a in args.labels for b in barcodes ]
 
     ## write mtx/rownames if asked
     if args.outFileFormat == 'mtx':

@@ -217,6 +217,7 @@ class CountReadsPerBin(object):
                  barcodes=None,
                  tagName=None,
                  groupTag=None,
+                 groupLabels=None,
                  clusterInfo=None,
                  motifFilter=None,
                  genome2bit=None,
@@ -306,6 +307,7 @@ class CountReadsPerBin(object):
         self.barcodes = barcodes
         self.tagName = tagName
         self.groupTag = groupTag
+        self.groupLabels = groupLabels
         self.clusterInfo=clusterInfo
         self.motifFilter = motifFilter# list of [readMotif, refMotif]
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
@@ -585,12 +587,11 @@ class CountReadsPerBin(object):
             for bam in bam_handles:
                 tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict(barcode:array)
                 tcov_stack = np.stack(list(tcov.values()), axis=0)# col-bind the output (rownames = barcode, colnames = bins )
-
                 if bed_regions_list is not None and not self.bed_and_bin:
-                    # output should be list of length = nBAMs*nbarcodes, containing 1 value each (per-region)
+                    # output should be list of arrays. length = nRegions, values.shape=[nBAMs*nbarcodes]
                     subnum_reads_per_bin.append([np.sum(s) for s in tcov_stack])
                 else:
-                    # output should be list of length = nCells*nBAMs,
+                    # output should be list of arrays. length = nCells*nBAMs, values.shape =
                     # each entry is an array of length = nBins
                     subnum_reads_per_bin.append(tcov_stack)
 
@@ -598,8 +599,12 @@ class CountReadsPerBin(object):
         # the order of col should be bam1:cell1...n, bam2:cell1..n
         if bed_regions_list is not None or self.numberOfSamples is not None:
             if not self.bed_and_bin:
-                # stack the arrays column-wise, output rows=barcodes(*nBam), col=regions then reshape them so the regions are rows now
-                subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
+                if self.groupTag and self.groupLabels:
+                    # stack the arrays column-wise, output rows=barcodes*groups*nBam, col=regions then reshape them so the regions are rows now
+                    subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.groupLabels)*len(self.bamFilesList)), order='C')
+                else:
+                    # stack the arrays column-wise, output rows=barcodes(*nBam), col=regions then reshape them so the regions are rows now
+                    subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
         else:
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
         ## convert the output to a sparse matrix
@@ -694,8 +699,9 @@ class CountReadsPerBin(object):
         #coverages = np.zeros(nbins, dtype='float64')
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
-        if self.groupTag:
-            grplabels = ''
+        if self.groupTag and self.groupLabels:# multi-sample BAM input, use the reconstructed labels
+            for b in self.groupLabels:
+                coverages[b] = np.zeros(nbins, dtype='float64')
         else:
             for b in self.barcodes:
                 coverages[b] = np.zeros(nbins, dtype='float64')
@@ -755,7 +761,7 @@ class CountReadsPerBin(object):
                     _ = np.array(bamHandle.stats(chrom, regStart, regEnd, type="mean", nBins=nRegBins), dtype=np.float)
                     _[np.isnan(_)] = 0.0
                     _ = _ * tileSize
-                    coverages[new_bc] += _
+                    coverages[bc] += _
                     continue
                 else:
                     raise NameError("chromosome {} not found in bigWig file with chroms {}".format(chrom, bamHandle.chroms()))
@@ -804,16 +810,22 @@ class CountReadsPerBin(object):
                     if self.groupTag:
                         grp = read.get_tag(self.groupTag)
                         new_bc = '::'.join([grp, bc])# new barcode tag = sample+bc tag
+                        if new_bc not in self.groupLabels:
+                            if self.verbose:
+                                print("Encountered group: {}, not in provided labels. skipping..".format(grp))
+                            continue
                     else:
                         new_bc = bc
                 except KeyError:
                     continue
                 # also keep a counter for barcodes not in whitelist?
                 if bc not in self.barcodes:
+                    if self.verbose:
+                        print("Encountered barcode: {}, not in provided whitelist. skipping..".format(bc))
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if self.duplicateFilter:
-                    tup = getDupFilterTuple(read, bc, self.duplicateFilter)
+                    tup = getDupFilterTuple(read, new_bc, self.duplicateFilter)
                     if lpos is not None and lpos == read.reference_start \
                         and tup in prev_pos:
                             continue
@@ -897,7 +909,7 @@ class CountReadsPerBin(object):
 
         # change zeros to NAN
         if self.zerosToNans:
-            for bc in coverages.keys():
+            for new_bc in coverages.keys():
                 coverages[new_bc][coverages[new_bc] == 0] = np.nan
         # close 2bit file if opened
         if self.motifFilter and self.genome:
