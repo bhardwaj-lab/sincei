@@ -124,6 +124,15 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
                           type=str,
                           default='BC')
 
+    group.add_argument('--groupTag', '-gt',
+                          metavar='STR',
+                          help='In case of a groupped BAM file, such as the one containing Read Group (`RG`) or Sample (`SM`) tag,'
+                          'it is possible to process group the reads using the provided --groupTag argument. NOTE: In case of such input, '
+                          'please ensure that the --labels argument indicates the expected group labels contained in the BAM files. '
+                          'The --groupTag along with the --tagName is then used to identify unique samples (cells) from the input.',
+                          type=str,
+                          default=None)
+
     group.add_argument('--numberOfProcessors', '-p',
                           help='Number of processors to use. Type "max/2" to '
                           'use half the maximum number of processors or "max" '
@@ -447,19 +456,18 @@ def validateInputs(args):
         # in case of --groupTag, use args.labels as groups
         if len(args.bamfiles) > 1:
             print("Only a single BAM file is allowed when --groupTag is specified.")
-            sys.exit(1)
+            exit(0)
         if not args.labels:
             print("Please indicate the sample groups to be processed from the BAM file with --labels")
-            sys.exit(1)
-        newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
+            exit(0)
     else:
         if args.labels and len(args.bamfiles) != len(args.labels):
             print("The number of labels does not match the number of bam files. "
                   "This is only allowed if a single BAM file is provided and --groupTag is specified.")
-            #exit(0)
+            exit(0)
         if not args.labels:
             args.labels = smartLabels(args.bamfiles)
-
+    newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
     ## Motif and GC filter
     if args.motifFilter:
         if not args.genome2bit:
