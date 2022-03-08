@@ -413,3 +413,63 @@ def numberOfProcessors(string):
             numberOfProcessors = availProc
 
     return numberOfProcessors
+
+def smartLabel(label):
+    """
+    Remove the path name and the last extension from the file name
+    /pth/to/file.name.bam -> file.name
+    """
+    lab = os.path.splitext(os.path.basename(label))[0]
+    if lab == '':
+        # Maybe we have a dot file?
+        lab = os.path.basename(label)
+    return lab
+
+
+def smartLabels(labels):
+    smrt = [smartLabel(x) for x in labels]
+    if len(smrt) != len(set(smrt)):
+        print("Labels inferred from file names are not unique. "
+              "Please be aware that in case of overlapping barcodes the counts will be merged.")
+    return smrt
+
+def validateInputs(args):
+    """
+    Ensure that right input is provided from argparse
+    """
+    ## Barcodes
+    with open(args.barcodes, 'r') as f:
+        barcodes = f.read().splitlines()
+    f.close()
+    args.barcodes = barcodes
+    ## Labels
+    if args.groupTag:
+        # in case of --groupTag, use args.labels as groups
+        if len(args.bamfiles) > 1:
+            print("Only a single BAM file is allowed when --groupTag is specified.")
+            sys.exit(1)
+        if not args.labels:
+            print("Please indicate the sample groups to be processed from the BAM file with --labels")
+            sys.exit(1)
+        newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
+    else:
+        if args.labels and len(args.bamfiles) != len(args.labels):
+            print("The number of labels does not match the number of bam files. "
+                  "This is only allowed if a single BAM file is provided and --groupTag is specified.")
+            #exit(0)
+        if not args.labels:
+            args.labels = smartLabels(args.bamfiles)
+
+    ## Motif and GC filter
+    if args.motifFilter:
+        if not args.genome2bit:
+            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.exit(1)
+        else:
+            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
+
+    if args.GCcontentFilter:
+        gc = args.GCcontentFilter.strip(" ").split(",")
+        args.GCcontentFilter = [float(x) for x in gc]
+
+    return args, newlabels
