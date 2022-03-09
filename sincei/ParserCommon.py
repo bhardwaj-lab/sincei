@@ -442,15 +442,11 @@ def smartLabels(labels):
               "Please be aware that in case of overlapping barcodes the counts will be merged.")
     return smrt
 
-def validateInputs(args):
+def validateInputs(args, process_barcodes=True):
     """
     Ensure that right input is provided from argparse
     """
-    ## Barcodes
-    with open(args.barcodes, 'r') as f:
-        barcodes = f.read().splitlines()
-    f.close()
-    args.barcodes = barcodes
+
     ## Labels
     if args.groupTag:
         # in case of --groupTag, use args.labels as groups
@@ -467,7 +463,7 @@ def validateInputs(args):
             exit(0)
         if not args.labels:
             args.labels = smartLabels(args.bamfiles)
-    newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
+
     ## Motif and GC filter
     if args.motifFilter:
         if not args.genome2bit:
@@ -480,4 +476,13 @@ def validateInputs(args):
         gc = args.GCcontentFilter.strip(" ").split(",")
         args.GCcontentFilter = [float(x) for x in gc]
 
-    return args, newlabels
+    ## Barcodes + new labels (if required)
+    if process_barcodes:
+        with open(args.barcodes, 'r') as f:
+            barcodes = f.read().splitlines()
+        f.close()
+        args.barcodes = barcodes
+        newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
+        return args, newlabels
+    else:
+        return args
