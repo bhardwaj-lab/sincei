@@ -234,7 +234,7 @@ def filterWorker(arglist):
     nFiltered = 0
     total = 0
     for read in fh.fetch(chrom, start, end):
-        bc = read.get_tag(args.tagName)
+        bc = read.get_tag(args.cellTag)
         if read.pos < start:
             # ensure that we never double count (in case distanceBetweenBins == 0)
             continue

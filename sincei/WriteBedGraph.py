@@ -197,7 +197,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                     sys.stderr.write("\n No or too few reads counted for group: " + cl +
                                      ". If this persists for all groups, please double-check that your barcodes"
                                      " match between the groupInfo file and the BAM files and you specified the correct "
-                                     " --tagname \n")
+                                     " --cellTag \n")
                     continue
                 else:
                     # per mil counts

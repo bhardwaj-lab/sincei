@@ -118,7 +118,7 @@ def getFiltered_worker(arglist):
 
 
         for read in fh.fetch(chromUse, start, end):
-            bc = read.get_tag(args.tagName)
+            bc = read.get_tag(args.cellTag)
             # also keep a counter for barcodes not in whitelist?
             if bc not in args.barcodes:
                 continue
@@ -245,7 +245,7 @@ def main(args=None):
         x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[0]
         chrom_sizes = list(zip(x.references, x.lengths))
 
-        checkBAMtag(x, bam, args.tagName)
+        checkBAMtag(x, bam, args.cellTag)
         if args.groupTag:
             checkBAMtag(x, bam, args.groupTag)
             sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \n")

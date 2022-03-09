@@ -215,7 +215,7 @@ class CountReadsPerBin(object):
 
     def __init__(self, bamFilesList, binLength=50,
                  barcodes=None,
-                 tagName=None,
+                 cellTag=None,
                  groupTag=None,
                  groupLabels=None,
                  clusterInfo=None,
@@ -305,7 +305,7 @@ class CountReadsPerBin(object):
         self.zerosToNans = zerosToNans
         self.smoothLength = smoothLength
         self.barcodes = barcodes
-        self.tagName = tagName
+        self.cellTag = cellTag
         self.groupTag = groupTag
         self.groupLabels = groupLabels
         self.clusterInfo=clusterInfo
@@ -395,7 +395,7 @@ class CountReadsPerBin(object):
             except:
                 y = pyBigWig.open(x)
             # check whether the BAM file has the tags needed
-            checkBAMtag(y, x, self.tagName)
+            checkBAMtag(y, x, self.cellTag)
             if self.groupTag:
                 checkBAMtag(y, x, self.groupTag)
             bamFilesHandles.append(y)
@@ -810,7 +810,7 @@ class CountReadsPerBin(object):
 
                 ## get barcode from read
                 try:
-                    bc = read.get_tag(self.tagName)
+                    bc = read.get_tag(self.cellTag)
                     if self.groupTag:
                         grp = read.get_tag(self.groupTag)
                         new_bc = '::'.join([grp, bc])# new barcode tag = sample+bc tag

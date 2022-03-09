@@ -118,7 +118,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('BAM processing options')
 
-    group.add_argument('--tagName', '-tn',
+    group.add_argument('--cellTag', '-ct',
                           metavar='STR',
                           help='Name of the BAM tag from which to extract barcodes.',
                           type=str,
@@ -129,7 +129,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
                           help='In case of a groupped BAM file, such as the one containing Read Group (`RG`) or Sample (`SM`) tag,'
                           'it is possible to process group the reads using the provided --groupTag argument. NOTE: In case of such input, '
                           'please ensure that the --labels argument indicates the expected group labels contained in the BAM files. '
-                          'The --groupTag along with the --tagName is then used to identify unique samples (cells) from the input.',
+                          'The --groupTag along with the --cellTag is then used to identify unique samples (cells) from the input.',
                           type=str,
                           default=None)
 

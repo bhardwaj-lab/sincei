@@ -112,7 +112,7 @@ def getFiltered_worker(arglist):
 
         ## get barcode and append to set
         try:
-            bc = read.get_tag(args.tagName)
+            bc = read.get_tag(args.cellTag)
         except KeyError:
             continue
         if args.whitelist:
