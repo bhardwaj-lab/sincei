@@ -121,7 +121,7 @@ def get_args():
 
 def main(args=None):
 
-    args, _ = ParserCommon.validateInputs(parseArguments().parse_args(args))#newlabels are discarded, since they are re-created from groupInfo file
+    args = ParserCommon.validateInputs(parseArguments().parse_args(args), process_barcodes=False)#newlabels are discarded, since they are re-created from groupInfo file
     global debug
     if args.verbose:
         sys.stderr.write("Specified --scaleFactor: {}\n".format(args.scaleFactor))
@@ -150,11 +150,11 @@ def main(args=None):
     # check that sample names in df and --labels match
     labels_not_in_df = set(args.labels).difference(set(df['sample']))
     df_not_in_labels = set(df['sample']).difference(set(args.labels))
-    if bool(df_in_labels):
+    if bool(df_not_in_labels):
         sys.stderr.write("Some (or all) of the samples indicated in the groupInfo file "
                      "are absent from the bam file labels! \n"
                      "Mismatched samples are: {} \n".format(df_not_in_labels))
-    elif bool(labels_in_df):
+    elif bool(labels_not_in_df):
         sys.stderr.write("Some (or all) of the samples indicated in --labels "
                      "are absent from the in the groupInfo file! \n"
                      "Mismatched samples are: {} \n".format(labels_not_in_df))
