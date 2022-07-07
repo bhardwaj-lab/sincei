@@ -145,7 +145,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
             self.region += ":{}".format(self.binLength)
 
         for x in list(self.__dict__.keys()):
-            if x in ["mappedList", "statsList", "barcodes", "clusterInfo"]:
+            if x in ["mappedList", "statsList", "barcodes", "clusterInfo", "groupLabels"]:
                 continue
             sys.stderr.write("{}: {}\n".format(x, self.__getattribute__(x)))
 
