@@ -12,12 +12,13 @@ from deeptools.utilities import getTLen, smartLabels, getTempFileName
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-## own functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+# own functions
+scriptdir = os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
-from _version import __version__
-from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 import ParserCommon
+from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
+from _version import __version__
+
 
 def parseArguments():
     internalParser = get_args()
@@ -28,6 +29,7 @@ def parseArguments():
         description="This tool filters alignments in a BAM/CRAM file according the the specified parameters. It can optionally output to BEDPE format.",
         usage='Example usage: alignmentSieve.py -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt')
     return parser
+
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
@@ -207,10 +209,11 @@ def shiftRead(b, chromDict, args):
 
     return b2
 
+
 def filterWorker(arglist):
     chrom, start, end, args, chromDict = arglist
     fh = openBam(args.bam)
-    ## open 2 bit if needed
+    # open 2 bit if needed
     if args.genome2bit:
         twoBitGenome = py2bit.open(args.genome2bit, True)
         if chrom not in twoBitGenome.chroms().keys():
@@ -289,7 +292,7 @@ def filterWorker(arglist):
             lpos = read.reference_start
             prev_pos.add(tup)
 
-        ## remove reads with low/high GC content
+        # remove reads with low/high GC content
         if args.GCcontentFilter:
             if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
                 nFiltered += 1
@@ -297,7 +300,7 @@ def filterWorker(arglist):
                     ofiltered.write(read)
                 continue
 
-        ## remove reads that don't pass the motif filter
+        # remove reads that don't pass the motif filter
         if args.motifFilter:
             if not checkMotifs(read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]):
                 nFiltered += 1
@@ -389,7 +392,6 @@ def convertBED(oname, tmpFiles, chromDict):
     ofile.close()
 
 
-
 def main(args=None):
     args = parseArguments().parse_args(args)
     if args.shift:
@@ -400,7 +402,8 @@ def main(args=None):
     elif args.ATACshift:
         args.shift = [4, -5, 5, -4]
 
-    bam, mapped, unmapped, stats = openBam(args.bam, returnStats=True, nThreads=args.numberOfProcessors)
+    bam, mapped, unmapped, stats = openBam(
+        args.bam, returnStats=True, nThreads=args.numberOfProcessors)
     total = mapped + unmapped
     chrom_sizes = [(x, y) for x, y in zip(bam.references, bam.lengths)]
     chromDict = {x: y for x, y in zip(bam.references, bam.lengths)}
@@ -464,6 +467,7 @@ def main(args=None):
         of.close()
 
     return 0
+
 
 if __name__ == "__main__":
     main()
