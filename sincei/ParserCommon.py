@@ -126,10 +126,11 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
 
     group.add_argument('--groupTag', '-gt',
                           metavar='STR',
-                          help='In case of a groupped BAM file, such as the one containing Read Group (`RG`) or Sample (`SM`) tag,'
+                          help=show_or_hide('In case of a groupped BAM file, such as the one containing Read Group (`RG`) or Sample (`SM`) tag,'
                           'it is possible to process group the reads using the provided --groupTag argument. NOTE: In case of such input, '
                           'please ensure that the --labels argument indicates the expected group labels contained in the BAM files. '
                           'The --groupTag along with the --cellTag is then used to identify unique samples (cells) from the input.',
+                          'groupTag',suppress_args),
                           type=str,
                           default=None)
 

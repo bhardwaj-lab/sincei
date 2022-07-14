@@ -3,7 +3,7 @@ import argparse
 import pysam
 import os
 import sys
-
+import pandas as pd
 import py2bit
 from deeptools import parserCommon
 from deeptools.bamHandler import openBam
@@ -19,138 +19,54 @@ import ParserCommon
 from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 from _version import __version__
 
+## UPDATE: add group tag to BAM file based on a 2-columns mapping file (barcode -> group)
 
 def parseArguments():
     internalParser = get_args()
+    ioParser = ParserCommon.inputOutputOptions(opts=['bamfile', 'groupInfo', 'outFile'])
+    bamParser = ParserCommon.bamOptions(suppress_args=['binSize', 'distanceBetweenBins'])
     filterParser = ParserCommon.filterOptions()
+    readParser = ParserCommon.readOptions(suppress_args=['extendReads', 'centerReads'])
+    otherParser = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
-        parents=[internalParser, filterParser],
+        parents=[ioParser, internalParser, bamParser, filterParser, readParser, otherParser],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="This tool filters alignments in a BAM/CRAM file according the the specified parameters. It can optionally output to BEDPE format.",
-        usage='Example usage: alignmentSieve.py -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt')
+        usage='Example usage: alignmentSieve.py -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt', add_help=False)
     return parser
 
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-    required = parser.add_argument_group('Required arguments')
-    required.add_argument('--bam', '-b',
-                          metavar='FILE1',
-                          help='An indexed BAM file.',
-                          required=True)
 
-    required.add_argument('--outFile', '-o',
-                          help='The file to write results to. These are the alignments or fragments that pass the filtering criteria.')
-
-    general = parser.add_argument_group('General arguments')
-    general.add_argument('--numberOfProcessors', '-p',
-                         help='Number of processors to use. Type "max/2" to '
-                         'use half the maximum number of processors or "max" '
-                         'to use all available processors. (Default: %(default)s)',
-                         metavar="INT",
-                         type=parserCommon.numberOfProcessors,
-                         default=1,
-                         required=False)
-
-    general.add_argument('--filterMetrics',
-                         metavar="FILE.log",
-                         help="The number of entries in total and filtered are saved to this file")
-
-    general.add_argument('--filteredOutReads',
-                         metavar="filtered.bam",
-                         help="If desired, all reads NOT passing the filtering criteria can be written to this file.")
-
-    general.add_argument('--label', '-l',
-                         metavar='sample1',
-                         help='User defined label instead of the default label '
-                         '(file name).')
-
-    general.add_argument('--smartLabels',
-                         action='store_true',
-                         help='Instead of manually specifying a labels for the input '
-                         'file, this makes sincei use the file name '
-                         'after removing the path and extension.')
-
-    general.add_argument('--verbose', '-v',
-                         help='Set to see processing messages.',
-                         action='store_true')
-
-    general.add_argument('--version', action='version',
-                         version='%(prog)s {}'.format(__version__))
-
-    general.add_argument('--shift',
+    mod = parser.add_argument_group('Read modifiction arguments')
+    mod.add_argument('--shift',
                          nargs='+',
                          type=int,
                          help='Shift the left and right end of a read (for BAM files) or a fragment (for BED files). A positive value shift an end to the right (on the + strand) and a negative value shifts a fragment to the left. Either 2 or 4 integers can be provided. For example, "2 -3" will shift the left-most fragment end two bases to the right and the right-most end 3 bases to the left. If 4 integers are provided, then the first and last two refer to fragments whose read 1 is on the left or right, respectively. Consequently, it is possible to take strand into consideration for strand-specific protocols. A fragment whose length falls below 1 due to shifting will not be written to the output. See the online documentation for graphical examples. Note that non-properly-paired reads will be filtered.')
 
-    general.add_argument('--ATACshift',
+    mod.add_argument('--ATACshift',
                          action='store_true',
                          help='Shift the produced BAM file or BEDPE regions as commonly done for ATAC-seq. This is equivalent to --shift 4 -5 5 -4.')
 
-    output = parser.add_argument_group('Output arguments')
+    output = parser.add_argument_group('Optional output arguments')
     output.add_argument('--BED',
                         action='store_true',
                         help='Instead of producing BAM files, write output in BEDPE format (as defined by MACS2). Note that only reads/fragments passing filtering criterion are written in BEDPE format.')
 
-    filtering = parser.add_argument_group('Optional arguments')
+    output.add_argument('--filterMetrics',
+                         metavar="FILE.log",
+                         help="The number of entries in total and filtered are saved to this file")
 
-    filtering.add_argument('--filterRNAstrand',
-                           help='Selects RNA-seq reads (single-end or paired-end) in '
-                                'the given strand. (Default: %(default)s)',
-                           choices=['forward', 'reverse'],
-                           default=None)
+    output.add_argument('--filteredOutReads',
+                         metavar="filtered.bam",
+                         help="If desired, all reads NOT passing the filtering criteria can be written to this file.")
 
-    filtering.add_argument('--minMappingQuality',
-                           metavar='INT',
-                           help='If set, only reads that have a mapping '
-                           'quality score of at least this are '
-                           'considered.',
-                           type=int)
-
-    filtering.add_argument('--samFlagInclude',
-                           help='Include reads based on the SAM flag. For example, '
-                           'to get only reads that are the first mate, use a flag of 64. '
-                           'This is useful to count properly paired reads only once, '
-                           'as otherwise the second mate will be also considered for the '
-                           'coverage.',
-                           metavar='INT',
-                           default=None,
-                           type=int,
-                           required=False)
-
-    filtering.add_argument('--samFlagExclude',
-                           help='Exclude reads based on the SAM flag. For example, '
-                           'to get only reads that map to the forward strand, use '
-                           '--samFlagExclude 16, where 16 is the SAM flag for reads '
-                           'that map to the reverse strand.',
-                           metavar='INT',
-                           default=None,
-                           type=int,
-                           required=False)
-
-    filtering.add_argument('--blackListFileName', '-bl',
-                           help="A BED or GTF file containing regions that should be excluded from all analyses. Currently this works by rejecting genomic chunks that happen to overlap an entry. Consequently, for BAM files, if a read partially overlaps a blacklisted region or a fragment spans over it, then the read/fragment might still be considered. Please note that you should adjust the effective genome size, if relevant.",
-                           metavar="BED file",
-                           nargs="+",
-                           required=False)
-
-    filtering.add_argument('--minFragmentLength',
-                           help='The minimum fragment length needed for read/pair '
-                           'inclusion. This option is primarily useful '
-                           'in ATACseq experiments, for filtering mono- or '
-                           'di-nucleosome fragments. (Default: %(default)s)',
-                           metavar='INT',
-                           default=0,
-                           type=int,
-                           required=False)
-
-    filtering.add_argument('--maxFragmentLength',
-                           help='The maximum fragment length needed for read/pair '
-                           'inclusion. A value of 0 indicates no limit. (Default: %(default)s)',
-                           metavar='INT',
-                           default=0,
-                           type=int,
-                           required=False)
+    output.add_argument('--outTagName',
+                         metavar="STR",
+                         type=str,
+                         help="In case where you want to group the BAM files based on user-defined --groupInfo, specify the output BAM tag which would contain the group name.",
+                         default=None)
 
     return parser
 
@@ -212,7 +128,7 @@ def shiftRead(b, chromDict, args):
 
 def filterWorker(arglist):
     chrom, start, end, args, chromDict = arglist
-    fh = openBam(args.bam)
+    fh = openBam(args.bamfile)
     # open 2 bit if needed
     if args.genome2bit:
         twoBitGenome = py2bit.open(args.genome2bit, True)
@@ -221,14 +137,13 @@ def filterWorker(arglist):
 
     mode = 'wbu'
     oname = getTempFileName(suffix='.bam')
+    ofh = pysam.AlignmentFile(oname, mode=mode, template=fh)
+
     if args.filteredOutReads:
         onameFiltered = getTempFileName(suffix='.bam')
-    else:
-        onameFiltered = None
-    ofh = pysam.AlignmentFile(oname, mode=mode, template=fh)
-    if onameFiltered:
         ofiltered = pysam.AlignmentFile(onameFiltered, mode=mode, template=fh)
     else:
+        onameFiltered = None
         ofiltered = None
 
     prev_pos = set()
@@ -237,12 +152,28 @@ def filterWorker(arglist):
     nFiltered = 0
     total = 0
     for read in fh.fetch(chrom, start, end):
-        bc = read.get_tag(args.cellTag)
+
         if read.pos < start:
             # ensure that we never double count (in case distanceBetweenBins == 0)
             continue
-
         total += 1
+
+        bc = read.get_tag(args.cellTag)
+        if isinstance(args.groupInfo, pd.DataFrame):
+            smpl = read.get_tag(args.groupTag)
+            try:
+                tag_to_add = args.groupInfo.loc[(args.groupInfo['sample'] == smpl) & \
+                            (args.groupInfo['barcode'] == bc), 'cluster'].values.item()
+                read.set_tag(args.outTagName, tag_to_add, value_type='Z', replace=True)
+            except:
+                if args.verbose:
+                    sys.stderr.write("Encountered read tags not in groupInfo file, skipped..")
+                nFiltered += 1
+                if ofiltered:
+                    ofiltered.write(read)
+                continue
+
+        ## -- begin filtering -- ##
         if read.flag & 4:
             # Ignore unmapped reads, they were counted already
             nFiltered += 1
@@ -394,6 +325,22 @@ def convertBED(oname, tmpFiles, chromDict):
 
 def main(args=None):
     args = parseArguments().parse_args(args)
+
+    # grouping and tagging the output alignments
+    if args.groupInfo:
+        if not args.outTagName:
+            sys.stderr.write("--groupInfo provided without --outTagName. By default, groups will be added to the 'RG' tag in the output BAM file.")
+            args.outTagName = 'RG'
+
+        df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, comment="#")
+        if len(df.columns) == 3:
+            df.columns = ['sample', 'barcode', 'cluster']
+            df.index = df[['sample', 'barcode']].apply(lambda x: '::'.join(x), axis=1)
+            args.groupInfo = df
+        else:
+            sys.stderr.write("Error: The input to --groupInfo must be a 3-column tsv file with <sample> <barcode> and <group>")
+
+    # shifting the output alignments
     if args.shift:
         if len(args.shift) not in [2, 4]:
             sys.exit("The --shift option can accept either 2 or 4 values only.")
@@ -403,7 +350,7 @@ def main(args=None):
         args.shift = [4, -5, 5, -4]
 
     bam, mapped, unmapped, stats = openBam(
-        args.bam, returnStats=True, nThreads=args.numberOfProcessors)
+        args.bamfile, returnStats=True, nThreads=args.numberOfProcessors)
     total = mapped + unmapped
     chrom_sizes = [(x, y) for x, y in zip(bam.references, bam.lengths)]
     chromDict = {x: y for x, y in zip(bam.references, bam.lengths)}
@@ -424,6 +371,7 @@ def main(args=None):
     res = mapReduce([args, chromDict],
                     filterWorker,
                     chrom_sizes,
+                    region=args.region,
                     blackListFileName=args.blackListFileName,
                     numberOfProcessors=args.numberOfProcessors,
                     verbose=args.verbose)
@@ -454,11 +402,11 @@ def main(args=None):
             convertBED(args.outFile, tmpFiles, chromDict, args)
 
     if args.filterMetrics:
-        sampleName = args.bam
+        sampleName = args.bamfile
         if args.label:
             sampleName = args.label
         if args.smartLabels:
-            sampleName = smartLabels([args.bam])[0]
+            sampleName = smartLabels([args.bamfile])[0]
 
         of = open(args.filterMetrics, "w")
         of.write("#bamFilterReads --filterMetrics\n")
