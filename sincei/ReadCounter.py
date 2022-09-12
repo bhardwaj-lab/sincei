@@ -434,7 +434,7 @@ class CountReadsPerBin(object):
         transcriptID, exonID, transcript_id_designator, keepExons = deeptools.utilities.gtfOptions(allArgs)
 
         # use map reduce to call countReadsInRegions_wrapper
-        imap_res = mapReduce.mapReduce([],
+        imap_res, _ = mapReduce.mapReduce([],
                                        countReadsInRegions_wrapper,
                                        chromsizes,
                                        self_=self,
@@ -442,6 +442,7 @@ class CountReadsPerBin(object):
                                        bedFile=self.bedFile,
                                        blackListFileName=self.blackListFileName,
                                        region=self.region,
+                                       includeLabels=True,
                                        numberOfProcessors=self.numberOfProcessors,
                                        transcriptID=transcriptID,
                                        exonID=exonID,
@@ -558,7 +559,10 @@ class CountReadsPerBin(object):
         # A list of lists of tuples
         transcriptsToConsider = []
         if bed_regions_list is not None:
+            #print(bed_regions_list)
             # bed/gtf file is provided
+            # in this case the <name> column entry can be optionally saved in the output
+            regionNames = [x[2] for x in bed_regions_list]
             if self.bed_and_bin:
                 # further binning needs to be done inside the bed/gtf file (metagene counting, or computeMatrix bins)
                 transcriptsToConsider.append([(x[1][0][0], x[1][0][1], self.binLength) for x in bed_regions_list])
@@ -566,6 +570,7 @@ class CountReadsPerBin(object):
                 # simply take the whole regions
                 transcriptsToConsider = [x[1] for x in bed_regions_list]
         else:
+            regionNames = None
             # genome-wide binning is needed
             if self.stepSize == self.binLength:
                 # simple tiling of chromosome
@@ -617,10 +622,15 @@ class CountReadsPerBin(object):
         regionList = []
         idx = 0
         for i, trans in enumerate(transcriptsToConsider):
+            if regionNames is not None:
+                bedname = regionNames[i]
+            else:
+                bedname = ""
+
             if len(trans[0]) != 3:
                 starts = ",".join([str(x[0]) for x in trans])
                 ends = ",".join([str(x[1]) for x in trans])
-                name = "{}_{}_{}".format(chrom, starts, ends)
+                name = "{}_{}_{}::{}".format(chrom, starts, ends, bedname)
                 regionList.append(name)
                 #_file.write(name + "\n")
             else:
@@ -630,7 +640,7 @@ class CountReadsPerBin(object):
                             # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
                             # Counts there are added to the bin before them, but range() will still try to include them.
                             break
-                        name = "{}_{}_{}".format(chrom, startPos, min(startPos + exon[2], exon[1]) )
+                        name = "{}_{}_{}::{}".format(chrom, startPos, min(startPos + exon[2], exon[1]), bedname )
                         regionList.append(name)
                         #_file.write(name+"\n")
                         idx += 1
