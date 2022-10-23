@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
 
-<img src="./sincei.png" alt="sincei logo" style="height: 100px; width:200px;"/>
+<img src="./sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
 
 Bhardwaj V. (2022) Single-Cell Informatics: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
