@@ -1,9 +1,9 @@
 
 <img src="./sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
 
-Bhardwaj V. (2022) Single-Cell Informatics: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data. [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
+Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data. [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
 
-sincei is a suite of command-line tools developed for a user-friendly analysis of single-cell sequencing data.
+sincei (a.k.a Single-Cell Informatics) is a suite of command-line tools developed for a user-friendly analysis of single-cell sequencing data.
 
 ## Installation
 
