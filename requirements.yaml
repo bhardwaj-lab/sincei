@@ -2,8 +2,10 @@ name: sincei
 channels:
  - bioconda
  - conda-forge
+ - anaconda
+ - defaults
 dependencies:
  - scanpy
  - pip
  - pip:
-   - "--editable=git+ssh://git@github.com/vivekbhr/sincei.git@master#egg=sincei"
+   - "git+https://github.com/vivekbhr/sincei.git@master#egg=sincei"

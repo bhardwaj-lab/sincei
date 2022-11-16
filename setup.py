@@ -52,10 +52,10 @@ setup(
     author=' Vivek Bhardwaj',
     author_email='vivbhr@gmail.com',
     packages=find_packages(),
-    scripts=['bin/scBulkCoverage', 'bin/scClusterCells', 'bin/scCountQC',
-             'bin/scCountReads', 'bin/scFilterBarcodes', 'bin/scFilterStats',
+    scripts=['bin/scBulkCoverage', 'bin/scClusterCells', 'bin/scCombineCounts', 'bin/scCountQC',
+             'bin/scCountReads', 'bin/scFilterBarcodes', 'bin/scFilterStats', 'bin/scJSD', 'bin/sincei',
              ],
-    include_package_data=False,
+    include_package_data=True,
     url='https://github.com/vivekbhr/sincei',
     license='LICENSE.txt',
     description='A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data ',
@@ -74,7 +74,7 @@ setup(
         "leidenalg",
         "networkx",
         "community",
-        "igraph"
+        "python-igraph"
     ],
     zip_safe=True,
     cmdclass={'sdist': sdist, 'install': install}
