@@ -9,11 +9,13 @@ sincei is a suite of command-line tools developed for a user-friendly analysis o
 
 sincei is based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
 
-- Download the **environment.yml** from this github repository
-- Create a new conda environment and install sincei using:
+Create a new conda environment and install sincei using:
 
 ```
-conda env create -n sincei -f requirements.yml
+cd <programs_folder>
+conda create -n sincei -c bioconda -c conda-forge scanpy deeptools
+conda activate sincei
+(sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
 ```
 
 ## Usage
