@@ -3,11 +3,11 @@
 
 Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data. [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
 
-sincei (a.k.a Single-Cell Informatics) is a suite of command-line tools developed for a user-friendly analysis of single-cell sequencing data.
+
 
 ## Installation
 
-sincei is based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
+sincei is a command line toolkit based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
 
 Create a new conda environment and install sincei using:
 
