@@ -1,26 +1,21 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-<img src="./sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
+import argparse
+import sys
+import os
+## own functions
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+sys.path.append(scriptdir)
+from _version import __version__
 
-Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data. [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
 
-
-
-## Installation
-
-sincei is a command line toolkit based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
-
-Create a new conda environment and install sincei using:
-
-```
-cd <programs_folder>
-conda create -n sincei -c bioconda -c conda-forge scanpy deeptools
-conda activate sincei
-(sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
-```
-
-## Usage
-
-**Get the tool list with `sincei --help`**
+def parse_arguments(args=None):
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""
+sincei is a suite of command-line tools developed for a user-friendly analysis of single-cell sequencing data.
+Version: {}
 
 Each tool begins with the prefix sc<tool_name>, such as:
 
@@ -37,3 +32,23 @@ Each tool begins with the prefix sc<tool_name>, such as:
     scFindMarkers           [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
     scBulkCoverage          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
     scFeaturePlot           [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.
+
+""".format(__version__))
+
+
+    return parser
+
+
+def process_args(args=None):
+    args = parse_arguments().parse_args(args)
+
+    return args
+
+
+def main(args=None):
+    if args is None and len(sys.argv) == 1:
+        args = ["--help"]
+    process_args(args)
+
+if __name__ == "__main__":
+    main()

@@ -215,7 +215,9 @@ class CountReadsPerBin(object):
 
     def __init__(self, bamFilesList, binLength=50,
                  barcodes=None,
-                 tagName=None,
+                 cellTag=None,
+                 groupTag=None,
+                 groupLabels=None,
                  clusterInfo=None,
                  motifFilter=None,
                  genome2bit=None,
@@ -303,7 +305,9 @@ class CountReadsPerBin(object):
         self.zerosToNans = zerosToNans
         self.smoothLength = smoothLength
         self.barcodes = barcodes
-        self.tagName = tagName
+        self.cellTag = cellTag
+        self.groupTag = groupTag
+        self.groupLabels = groupLabels
         self.clusterInfo=clusterInfo
         self.motifFilter = motifFilter# list of [readMotif, refMotif]
         self.GCcontentFilter = GCcontentFilter# list of [readMotif, refMotif]
@@ -390,6 +394,10 @@ class CountReadsPerBin(object):
                 sys.exit(sys.exc_info()[1])
             except:
                 y = pyBigWig.open(x)
+            # check whether the BAM file has the tags needed
+            checkBAMtag(y, x, self.cellTag)
+            if self.groupTag:
+                checkBAMtag(y, x, self.groupTag)
             bamFilesHandles.append(y)
 
         chromsizes, non_common = deeptools.utilities.getCommonChrNames(bamFilesHandles, verbose=self.verbose)
@@ -426,7 +434,7 @@ class CountReadsPerBin(object):
         transcriptID, exonID, transcript_id_designator, keepExons = deeptools.utilities.gtfOptions(allArgs)
 
         # use map reduce to call countReadsInRegions_wrapper
-        imap_res = mapReduce.mapReduce([],
+        imap_res, _ = mapReduce.mapReduce([],
                                        countReadsInRegions_wrapper,
                                        chromsizes,
                                        self_=self,
@@ -434,6 +442,7 @@ class CountReadsPerBin(object):
                                        bedFile=self.bedFile,
                                        blackListFileName=self.blackListFileName,
                                        region=self.region,
+                                       includeLabels=True,
                                        numberOfProcessors=self.numberOfProcessors,
                                        transcriptID=transcriptID,
                                        exonID=exonID,
@@ -550,7 +559,10 @@ class CountReadsPerBin(object):
         # A list of lists of tuples
         transcriptsToConsider = []
         if bed_regions_list is not None:
+            #print(bed_regions_list)
             # bed/gtf file is provided
+            # in this case the <name> column entry can be optionally saved in the output
+            regionNames = [x[2] for x in bed_regions_list]
             if self.bed_and_bin:
                 # further binning needs to be done inside the bed/gtf file (metagene counting, or computeMatrix bins)
                 transcriptsToConsider.append([(x[1][0][0], x[1][0][1], self.binLength) for x in bed_regions_list])
@@ -558,6 +570,7 @@ class CountReadsPerBin(object):
                 # simply take the whole regions
                 transcriptsToConsider = [x[1] for x in bed_regions_list]
         else:
+            regionNames = None
             # genome-wide binning is needed
             if self.stepSize == self.binLength:
                 # simple tiling of chromosome
@@ -583,12 +596,11 @@ class CountReadsPerBin(object):
             for bam in bam_handles:
                 tcov = self.get_coverage_of_region(bam, chrom, trans)# tcov is supposed to be an np.array, but now it's a dict(barcode:array)
                 tcov_stack = np.stack(list(tcov.values()), axis=0)# col-bind the output (rownames = barcode, colnames = bins )
-
                 if bed_regions_list is not None and not self.bed_and_bin:
-                    # output should be list of length = nBAMs*nbarcodes, containing 1 value each (per-region)
+                    # output should be list of arrays. length = nRegions, values.shape=[nBAMs*nbarcodes]
                     subnum_reads_per_bin.append([np.sum(s) for s in tcov_stack])
                 else:
-                    # output should be list of length = nCells*nBAMs,
+                    # output should be list of arrays. length = nCells*nBAMs, values.shape =
                     # each entry is an array of length = nBins
                     subnum_reads_per_bin.append(tcov_stack)
 
@@ -596,8 +608,12 @@ class CountReadsPerBin(object):
         # the order of col should be bam1:cell1...n, bam2:cell1..n
         if bed_regions_list is not None or self.numberOfSamples is not None:
             if not self.bed_and_bin:
-                # stack the arrays column-wise, output rows=barcodes(*nBam), col=regions then reshape them so the regions are rows now
-                subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
+                if self.groupTag and self.groupLabels:
+                    # stack the arrays column-wise, output rows=barcodes*groups*nBam, col=regions then reshape them so the regions are rows now
+                    subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.groupLabels)*len(self.bamFilesList)), order='C')
+                else:
+                    # stack the arrays column-wise, output rows=barcodes(*nBam), col=regions then reshape them so the regions are rows now
+                    subnum_reads_per_bin = np.asarray(subnum_reads_per_bin).reshape((-1, len(self.barcodes)*len(self.bamFilesList)), order='C')
         else:
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
         ## convert the output to a sparse matrix
@@ -606,10 +622,15 @@ class CountReadsPerBin(object):
         regionList = []
         idx = 0
         for i, trans in enumerate(transcriptsToConsider):
+            if regionNames is not None:
+                bedname = regionNames[i]
+            else:
+                bedname = ""
+
             if len(trans[0]) != 3:
                 starts = ",".join([str(x[0]) for x in trans])
                 ends = ",".join([str(x[1]) for x in trans])
-                name = "{}_{}_{}".format(chrom, starts, ends)
+                name = "{}_{}_{}::{}".format(chrom, starts, ends, bedname)
                 regionList.append(name)
                 #_file.write(name + "\n")
             else:
@@ -619,7 +640,7 @@ class CountReadsPerBin(object):
                             # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
                             # Counts there are added to the bin before them, but range() will still try to include them.
                             break
-                        name = "{}_{}_{}".format(chrom, startPos, min(startPos + exon[2], exon[1]) )
+                        name = "{}_{}_{}::{}".format(chrom, startPos, min(startPos + exon[2], exon[1]), bedname )
                         regionList.append(name)
                         #_file.write(name+"\n")
                         idx += 1
@@ -692,8 +713,12 @@ class CountReadsPerBin(object):
         #coverages = np.zeros(nbins, dtype='float64')
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
-        for b in self.barcodes:
-            coverages[b] = np.zeros(nbins, dtype='float64')
+        if self.groupTag and self.groupLabels:# multi-sample BAM input, use the reconstructed labels
+            for b in self.groupLabels:
+                coverages[b] = np.zeros(nbins, dtype='float64')
+        else:
+            for b in self.barcodes:
+                coverages[b] = np.zeros(nbins, dtype='float64')
 
         if self.defaultFragmentLength == 'read length':
             extension = 0
@@ -745,12 +770,12 @@ class CountReadsPerBin(object):
                 if chrom not in bamHandle.references:
                     raise NameError("chromosome {} not found in bam file".format(chrom))
             except:
-                # bigWig input, as used by plotFingerprint
+                # bigWig input, currently unUSED
                 if bamHandle.chroms(chrom):
                     _ = np.array(bamHandle.stats(chrom, regStart, regEnd, type="mean", nBins=nRegBins), dtype=np.float)
                     _[np.isnan(_)] = 0.0
                     _ = _ * tileSize
-                    coverages += _
+                    coverages[bc] += _
                     continue
                 else:
                     raise NameError("chromosome {} not found in bigWig file with chroms {}".format(chrom, bamHandle.chroms()))
@@ -795,15 +820,26 @@ class CountReadsPerBin(object):
 
                 ## get barcode from read
                 try:
-                    bc = read.get_tag(self.tagName)
+                    bc = read.get_tag(self.cellTag)
+                    if self.groupTag:
+                        grp = read.get_tag(self.groupTag)
+                        new_bc = '::'.join([grp, bc])# new barcode tag = sample+bc tag
+                        if new_bc not in self.groupLabels:
+                            if self.verbose:
+                                print("Encountered group: {}, not in provided labels. skipping..".format(grp))
+                            continue
+                    else:
+                        new_bc = bc
                 except KeyError:
                     continue
                 # also keep a counter for barcodes not in whitelist?
                 if bc not in self.barcodes:
+                    if self.verbose:
+                        print("Encountered barcode: {}, not in provided whitelist. skipping..".format(bc))
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if self.duplicateFilter:
-                    tup = getDupFilterTuple(read, bc, self.duplicateFilter)
+                    tup = getDupFilterTuple(read, new_bc, self.duplicateFilter)
                     if lpos is not None and lpos == read.reference_start \
                         and tup in prev_pos:
                             continue
@@ -836,8 +872,8 @@ class CountReadsPerBin(object):
 
                     if fragmentStart < reg[0]:
                         fragmentStart = reg[0]
-                    if fragmentEnd > reg[0] + len(coverages[bc]) * tileSize:
-                        fragmentEnd = reg[0] + len(coverages[bc]) * tileSize
+                    if fragmentEnd > reg[0] + len(coverages[new_bc]) * tileSize:
+                        fragmentEnd = reg[0] + len(coverages[new_bc]) * tileSize
                     sIdx = vector_start + max((fragmentStart - reg[0]) // tileSize, 0)
                     eIdx = vector_start + min(np.ceil(float(fragmentEnd - reg[0]) / tileSize).astype('int'), nRegBins)
                     if last_eIdx is not None:
@@ -855,10 +891,10 @@ class CountReadsPerBin(object):
                             _ = reg[0] + (sIdx + 1) * tileSize - fragmentStart
                         if _ > tileSize:
                             _ = tileSize
-                        coverages[bc][sIdx] += _
+                        coverages[new_bc][sIdx] += _
                         _ = sIdx + 1
                         while _ < eIdx:
-                            coverages[bc][_] += tileSize
+                            coverages[new_bc][_] += tileSize
                             _ += 1
                         while eIdx - sIdx >= nRegBins:
                             eIdx -= 1
@@ -868,13 +904,13 @@ class CountReadsPerBin(object):
                                 _ = tileSize
                             elif _ < 0:
                                 _ = 0
-                            coverages[bc][eIdx] += _
+                            coverages[new_bc][eIdx] += _
                     elif self.binarizeCoverage:
                         # only return 1, since frequencies are desired
-                        coverages[bc][sIdx:eIdx] = 1
+                        coverages[new_bc][sIdx:eIdx] = 1
                     else:
                         # for everything except plotFingerPrint, simply count the number of reads
-                        coverages[bc][sIdx:eIdx] += 1
+                        coverages[new_bc][sIdx:eIdx] += 1
                     last_eIdx = eIdx
                 c += 1
 
@@ -887,8 +923,8 @@ class CountReadsPerBin(object):
 
         # change zeros to NAN
         if self.zerosToNans:
-            for bc in coverages.keys():
-                coverages[bc][coverages[bc] == 0] = np.nan
+            for new_bc in coverages.keys():
+                coverages[new_bc][coverages[new_bc] == 0] = np.nan
         # close 2bit file if opened
         if self.motifFilter and self.genome:
             twoBitGenome.close()

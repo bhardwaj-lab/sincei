@@ -145,7 +145,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
             self.region += ":{}".format(self.binLength)
 
         for x in list(self.__dict__.keys()):
-            if x in ["mappedList", "statsList", "barcodes", "clusterInfo"]:
+            if x in ["mappedList", "statsList", "barcodes", "clusterInfo", "groupLabels"]:
                 continue
             sys.stderr.write("{}: {}\n".format(x, self.__getattribute__(x)))
 
@@ -193,8 +193,15 @@ class WriteBedGraph(cr.CountReadsPerBin):
             # CPM norm
             if normUsing=='CPM':
                 mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
-                # per mil counts
-                out_file[3] *= 1.0 / (mil_reads_mapped)
+                if mil_reads_mapped < 0.00001:
+                    sys.stderr.write("\n No or too few reads counted for group: " + cl +
+                                     ". If this persists for all groups, please double-check that your barcodes"
+                                     " match between the groupInfo file and the BAM files and you specified the correct "
+                                     " --cellTag \n")
+                    continue
+                else:
+                    # per mil counts
+                    out_file[3] *= 1.0 / (mil_reads_mapped)
             elif normUsing=='Mean':
                 # divided by nCells
                 out_file[3] *= 1.0/(nCells)

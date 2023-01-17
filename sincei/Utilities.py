@@ -1,6 +1,13 @@
 from itertools import compress
 from deeptools.utilities import getTLen
 import numpy as np
+import sys
+
+def checkBAMtag(bam, name, tag):
+    bctag = [read.has_tag(tag) for read in bam.head(1000)]
+    if not any(bctag):
+        sys.stderr.write("WARNING: Input file {} seems to lack the tag {}. Output might be empty. \n".format(name, tag))
+    return None
 
 def checkMotifs(read, chrom, genome, readMotif, refMotif):
         """
@@ -143,24 +150,23 @@ def getDupFilterTuple(read, bc, filter):
     return tup
 
 
-def gini(array):
-    """Calculate the Gini coefficient of a numpy array."""
+def gini(i, X):
+    """Calculate the Gini coefficient of a sparse matrix (Obs*Var) at a given index (obs)."""
     # based on bottom eq:
     # http://www.statsdirect.com/help/generatedimages/equations/equation154.svg
     # from:
     # http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
     # All values are treated equally, arrays must be 1d:
-    array = array.flatten()
-    if np.amin(array) < 0:
-        # Values cannot be negative:
-        array -= np.amin(array)
-    # Values cannot be 0:
-    array += 0.0000001
-    # Values must be sorted:
-    array = np.sort(array)
-    # Index per array element:
-    index = np.arange(1,array.shape[0]+1)
-    # Number of array elements:
-    n = array.shape[0]
-    # Gini coefficient:
-    return ((np.sum((2 * index - n  - 1) * array)) / (n * np.sum(array)))
+    array=X[i,:].A.flatten()# get all bins from i'th cell
+    array=array[array.nonzero()]
+
+    if array.shape[0] <= 1:
+        return np.nan
+    else:
+        array = np.sort(array)
+        # Index per array element:
+        index = np.arange(1,array.shape[0]+1)
+        # Number of array elements:
+        n = array.shape[0]
+        # Gini coefficient:
+        return ((np.sum((2 * index - n  - 1) * array)) / (n * np.sum(array)))

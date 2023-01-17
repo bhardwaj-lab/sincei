@@ -4,6 +4,15 @@ import pandas as pd
 import scanpy as sc
 from gensim import corpora, matutils, models
 
+# Louvain clustering and UMAP
+from networkx import convert_matrix
+from sklearn.metrics import pairwise_distances
+import leidenalg as la
+import community
+import umap
+from scanpy._utils import get_igraph_from_adjacency
+from scanpy.neighbors import _compute_connectivities_umap,  _get_indices_distances_from_dense_matrix
+
 ### ------ Functions ------
 
 def read_mtx(prefix):
@@ -43,23 +52,6 @@ def preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum, min_region_sum)
 
     return adata
 
-# from anndata
-def preprocess_adata(adata, min_cell_sum, min_region_sum):
-    # binarize
-    sparse_mtx = adata.X
-    nonzero_mask = np.array(sparse_mtx[sparse_mtx.nonzero()] > 1)[0]
-    rows = sparse_mtx.nonzero()[0][nonzero_mask]
-    cols = sparse_mtx.nonzero()[1][nonzero_mask]
-    sparse_mtx[rows, cols] = 1
-    adata.x = sparse_mtx
-    # save some QC
-    sc.pp.calculate_qc_metrics(adata, inplace=True)
-    # filter
-    adata = adata[adata.obs.n_genes_by_counts >= min_cell_sum, :]
-    adata = adata[:, adata.var.n_cells_by_counts >= min_region_sum]
-
-    return adata
-
 def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
     # LSA
     regions_dict = corpora.dictionary.Dictionary([regions])
@@ -92,14 +84,6 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
 
 def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0, connectivity_graph=True):
 
-    # Louvain clustering and UMAP
-    from networkx import convert_matrix
-    from sklearn.metrics import pairwise_distances
-    import leidenalg as la
-    import community
-    import umap
-    from scanpy._utils import get_igraph_from_adjacency
-    from scanpy.neighbors import _compute_connectivities_umap,  _get_indices_distances_from_dense_matrix
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
     knn_indices, knn_distances = _get_indices_distances_from_dense_matrix(_distances, nk)

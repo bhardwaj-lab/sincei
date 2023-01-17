@@ -12,7 +12,8 @@ import anndata as ad
 import scanpy as sc
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
-from deeptools._version import __version__
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
@@ -118,21 +119,6 @@ def get_args():
     return parser
 
 
-def process_args(args=None):
-    args = parseArguments().parse_args(args)
-
-    if args.labels and len(args.bamfiles) != len(args.labels):
-        print("The number of labels does not match the number of bam files.")
-        exit(0)
-    if not args.labels:
-        if args.smartLabels:
-            args.labels = smartLabels(args.bamfiles)
-        else:
-            args.labels = [os.path.basename(x) for x in args.bamfiles]
-
-    return args
-
-
 def main(args=None):
     """
     1. get read counts at different positions either
@@ -141,29 +127,12 @@ def main(args=None):
     2. save data for further plotting
 
     """
-    args = process_args(args)
+    args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
 
     if 'BED' in args:
         bed_regions = args.BED
     else:
         bed_regions = None
-
-    ## Motif and GC filter
-    if args.motifFilter:
-        if not args.genome2bit:
-            print("MotifFilter asked but genome (2bit) file not provided.")
-            sys.exit(1)
-        else:
-            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
-
-    if args.GCcontentFilter:
-        gc = args.GCcontentFilter.strip(" ").split(",")
-        args.GCcontentFilter = [float(x) for x in gc]
-
-    ## read the barcode file
-    with open(args.barcodes, 'r') as f:
-        barcodes = f.read().splitlines()
-    f.close()
 
     ## create row/colNames
     if args.outFileFormat == "mtx":
@@ -178,8 +147,10 @@ def main(args=None):
         args.bamfiles,
         binLength=args.binSize,
         stepSize=stepSize,
-        barcodes=barcodes,
-        tagName=args.tagName,
+        barcodes=args.barcodes,
+        cellTag=args.cellTag,
+        groupTag=args.groupTag,
+        groupLabels=newlabels,
         motifFilter=args.motifFilter,
         genome2bit=args.genome2bit,
         GCcontentFilter=args.GCcontentFilter,
@@ -210,9 +181,6 @@ def main(args=None):
         exit("ERROR: too few non zero bins found.\n"
              "If using --region please check that this "
              "region is covered by reads.\n")
-
-    ## create colnames (sampleLabel+barcode)
-    newlabels = ["{}::{}".format(re.sub('\.bam', '', a), b) for a in args.labels for b in barcodes ]
 
     ## write mtx/rownames if asked
     if args.outFileFormat == 'mtx':

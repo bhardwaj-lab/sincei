@@ -1,6 +1,7 @@
 import argparse
 import os
 from deeptools.utilities import smartLabels
+from _version import __version__
 
 def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
@@ -60,7 +61,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
 
     elif 'outFile' in opts:
         group.add_argument('--outFile', '-o',
-                             type=argparse.FileType('w'),
+                             type=str,
                              help='The file to write results to. For `scFilterStats`, `scFilterBarcodes` '
                              'and `scJSD`, the output file is a .txt file. For other tools, the output file is '
                              'an updated .loom object with the result of the requested operation. ',
@@ -78,8 +79,8 @@ def otherOptions(args=None):
                          help='Set to see processing messages.',
                          action='store_true')
 
-#    group.add_argument('--version', action='version',
-#                         version='%(prog)s {}'.format(__version__))
+    group.add_argument('--version', action='version',
+                         version='%(prog)s {}'.format(__version__))
 
     return parser
 
@@ -117,11 +118,21 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('BAM processing options')
 
-    group.add_argument('--tagName', '-tn',
+    group.add_argument('--cellTag', '-ct',
                           metavar='STR',
                           help='Name of the BAM tag from which to extract barcodes.',
                           type=str,
                           default='BC')
+
+    group.add_argument('--groupTag', '-gt',
+                          metavar='STR',
+                          help=show_or_hide('In case of a groupped BAM file, such as the one containing Read Group (`RG`) or Sample (`SM`) tag,'
+                          'it is possible to process group the reads using the provided --groupTag argument. NOTE: In case of such input, '
+                          'please ensure that the --labels argument indicates the expected group labels contained in the BAM files. '
+                          'The --groupTag along with the --cellTag is then used to identify unique samples (cells) from the input.',
+                          'groupTag',suppress_args),
+                          type=str,
+                          default=None)
 
     group.add_argument('--numberOfProcessors', '-p',
                           help='Number of processors to use. Type "max/2" to '
@@ -412,3 +423,67 @@ def numberOfProcessors(string):
             numberOfProcessors = availProc
 
     return numberOfProcessors
+
+def smartLabel(label):
+    """
+    Remove the path name and the last extension from the file name
+    /pth/to/file.name.bam -> file.name
+    """
+    lab = os.path.splitext(os.path.basename(label))[0]
+    if lab == '':
+        # Maybe we have a dot file?
+        lab = os.path.basename(label)
+    return lab
+
+
+def smartLabels(labels):
+    smrt = [smartLabel(x) for x in labels]
+    if len(smrt) != len(set(smrt)):
+        print("Labels inferred from file names are not unique. "
+              "Please be aware that in case of overlapping barcodes the counts will be merged.")
+    return smrt
+
+def validateInputs(args, process_barcodes=True):
+    """
+    Ensure that right input is provided from argparse
+    """
+
+    ## Labels
+    if args.groupTag:
+        # in case of --groupTag, use args.labels as groups
+        if len(args.bamfiles) > 1:
+            print("Only a single BAM file is allowed when --groupTag is specified.")
+            exit(0)
+        if not args.labels:
+            print("Please indicate the sample groups to be processed from the BAM file with --labels")
+            exit(0)
+    else:
+        if args.labels and len(args.bamfiles) != len(args.labels):
+            print("The number of labels does not match the number of bam files. "
+                  "This is only allowed if a single BAM file is provided and --groupTag is specified.")
+            exit(0)
+        if not args.labels:
+            args.labels = smartLabels(args.bamfiles)
+
+    ## Motif and GC filter
+    if args.motifFilter:
+        if not args.genome2bit:
+            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.exit(1)
+        else:
+            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
+
+    if args.GCcontentFilter:
+        gc = args.GCcontentFilter.strip(" ").split(",")
+        args.GCcontentFilter = [float(x) for x in gc]
+
+    ## Barcodes + new labels (if required)
+    if process_barcodes:
+        with open(args.barcodes, 'r') as f:
+            barcodes = f.read().splitlines()
+        f.close()
+        args.barcodes = barcodes
+        newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes ]
+        return args, newlabels
+    else:
+        return args

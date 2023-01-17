@@ -6,12 +6,14 @@ import os
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import smartLabels
-#from deeptools._version import __version__
 from deeptoolsintervals import GTF
 
 import numpy as np
 import py2bit
 import pandas as pd
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 ## own functions
 scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
@@ -116,7 +118,7 @@ def getFiltered_worker(arglist):
 
 
         for read in fh.fetch(chromUse, start, end):
-            bc = read.get_tag(args.tagName)
+            bc = read.get_tag(args.cellTag)
             # also keep a counter for barcodes not in whitelist?
             if bc not in args.barcodes:
                 continue
@@ -231,43 +233,23 @@ def getFiltered_worker(arglist):
 
 
 def main(args=None):
-    args = parseArguments().parse_args(args)
 
-    if args.labels and len(args.bamfiles) != len(args.labels):
-        print("The number of labels does not match the number of bam files.")
-        sys.exit(1)
-    if not args.labels:
-        if args.smartLabels:
-            args.labels = smartLabels(args.bamfiles)
-        else:
-            args.labels = [os.path.basename(x) for x in args.bamfiles]
-
-    ## Motif and GC filter
-    if args.motifFilter:
-        if not args.genome2bit:
-            print("MotifFilter asked but genome (2bit) file not provided.")
-            sys.exit(1)
-        else:
-            args.motifFilter = [ x.strip(" ").split(",") for x in args.motifFilter ]
-
-    if args.GCcontentFilter:
-        gc = args.GCcontentFilter.strip(" ").split(",")
-        args.GCcontentFilter = [float(x) for x in gc]
-
-    # open barcode file and read the content in a list
-    with open(args.barcodes, 'r') as f:
-        barcodes = f.read().splitlines()
-    args.barcodes = barcodes
+    args, rowLabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
 
     if args.outFile is None:
         of = sys.stdout
     else:
         of = open(args.outFile, "w")
 
-    bhs = [bamHandler.openBam(x, returnStats=True, nThreads=args.numberOfProcessors) for x in args.bamfiles]
-    bhs = [x[0] for x in bhs]
-    chrom_sizes = list(zip(bhs[0].references, bhs[0].lengths))
-    for x in bhs:
+    for bam in args.bamfiles:
+        x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[0]
+        chrom_sizes = list(zip(x.references, x.lengths))
+
+        checkBAMtag(x, bam, args.cellTag)
+        if args.groupTag:
+            checkBAMtag(x, bam, args.groupTag)
+            sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \n")
+            exit(1)
         x.close()
 
     # Get the remaining metrics
@@ -283,7 +265,6 @@ def main(args=None):
     ## final output is an array where nrows = bamfiles*barcodes, ncol = No. of stats
     final_array = np.asarray(res).sum(axis = 0)
     ## get final row/col Names (bamnames_barcode)
-    rowLabels = ["{}_{}".format(a, b) for a in args.labels for b in barcodes ]
     colLabels = ["Total_sampled","Filtered","Blacklisted", "Low_MAPQ",
                  "Missing_Flags","Excluded_Flags","Internal_Duplicates",
                  "Marked_Duplicates","Singletons","Wrong_strand",
