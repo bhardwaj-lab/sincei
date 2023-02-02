@@ -67,10 +67,34 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
 
 
 def checkGCcontent(read, lowFilter, highFilter, returnGC=False):
-    """
-    Check whether the read falls into the range of min and max GC content provided.
-    Return: Bool
+    r"""Checks if the GC content of the read is within the given range
 
+    Parameters
+    ----------
+    read : pysam.AlignedSegment
+        A pysam AlignedSegment object
+
+    lowFilter : float
+        Minimum GC content
+
+    highFilter : float
+        Maximum GC content
+
+    returnGC : bool
+        If true, return the GC content of the read
+
+    Returns
+    -------
+    bool
+        True if the GC content of the read is within the given range
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> read = test.bamFile1.fetch().next()
+    >>> checkGCcontent(read, 0.3, 0.7)
+    True
     """
     seq = read.get_forward_sequence()
     total_bases = len(seq)
@@ -103,9 +127,29 @@ def checkAlignedFraction(read, lowFilter):
         return False
 
 def colorPicker(name):
+    r"""
+    This function returns a list of colors for plotting.
+
+    Parameters
+    ----------
+    name : str
+        The name of the color palette to use.
+
+    Returns
+    -------
+    list
+        A list of colors.
+
+    Examples
+    --------
+
+    >>> colorPicker('twentyfive')
+    ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
+
+    >>> colorPicker('colorblind')
+    ['#0072B2', '#009E73', '#D55E00', '#CC79A7', '#F0E442', '#56B4E9', '#E69F00', '#000000']
     """
-    select colors from my list of custom made color color_palettes
-    """
+
     colors = {'twentyfive': ["#dd4e34",  "#78d545",  "#b047dc",  "#d6d94d",  "#5d48c6",  "#74d88b",  "#c944af",
                  "#8a9739",  "#542c75",  "#d3953c",  "#607dc7",  "#487f46",  "#d04774",  "#7bd2c8",
                  "#6b2737",  "#cfcb9a",  "#332a42",  "#d7928a",  "#343d25",  "#cc8ad3",  "#7b6a43",
@@ -120,9 +164,39 @@ def colorPicker(name):
 
 
 def getDupFilterTuple(read, bc, filter):
+    r"""
+    Returns a tuple with the information needed to filter duplicates, based on read and filter type.
+    The tuple is composed of the barcode, the umi, the start and end positions
+    and the chromosome name.
+
+    Parameters
+    ----------
+    read : pysam.AlignedSegment
+        A pysam.AlignedSegment object
+
+    bc : str
+        The barcode
+
+    filter : str
+        A string with the type of filter to use.
+
+    Returns
+    -------
+    tuple
+
+        A tuple with the information needed to filter duplicates.
+        The tuple is composed of the barcode, the umi, the start and end positions
+        and the chromosome name.
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> read = test.bamFile1.fetch().next()
+    >>> getDupFilterTuple(read, 'ATCG', 'end_umi')
+    ('ATCG', 'ATCG', None, None, 0, False)
     """
-    based on read and filter type, return a tuple to match with previous read, such that duplicates can be detected.
-    """
+
     tLenDup = getTLen(read, notAbs=True)
     filt = filter.split('_')
     ## get read (or fragment) start/end
@@ -151,7 +225,32 @@ def getDupFilterTuple(read, bc, filter):
 
 
 def gini(i, X):
-    """Calculate the Gini coefficient of a sparse matrix (Obs*Var) at a given index (obs)."""
+    r"""Computes the Gini coefficient for each row of a sparse matrix (Obs*Var).
+
+    Parameters
+    ----------
+    i : int
+        row index
+    X : numpy array
+        matrix
+
+    Returns
+    -------
+    float
+        Gini coefficient for the given row
+
+    Examples
+    --------
+
+    >>> X = np.matrix([[1,2,3,4],[5,6,7,8],[9,10,11,12]])
+    >>> gini(0, X)
+    0.0
+    >>> gini(1, X)
+    0.0
+    >>> gini(2, X)
+    0.0
+    """
+
     # based on bottom eq:
     # http://www.statsdirect.com/help/generatedimages/equations/equation154.svg
     # from:

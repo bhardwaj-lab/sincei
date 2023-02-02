@@ -22,14 +22,16 @@ old_settings = np.seterr(all='ignore')
 ####----------- Functions needed inside the class ------------------
 
 def remove_row_of_zeros(matrix):
-    # remove rows containing all zeros or all nans
+    """
+    remove rows containing all zeros or all nans
+    """
     _mat = np.nan_to_num(matrix)
     to_keep = _mat.sum(1) != 0
     return matrix[to_keep, :]
 
 
 def estimateSizeFactors(m):
-    """
+    r"""
     Compute size factors in the same way as DESeq2.
     The inverse of that is returned, as it's then compatible with bamCoverage.
 
@@ -53,7 +55,7 @@ def estimateSizeFactors(m):
 
 
 def countReadsInRegions_wrapper(args):
-    """
+    r"""
     Passes the arguments to countReadsInRegions_worker.
     This is a step required given
     the constrains from the multiprocessing module.
@@ -667,7 +669,7 @@ class CountReadsPerBin(object):
         return subnum_reads_per_bin, _file_name, regionList
 
     def get_coverage_of_region(self, bamHandle, chrom, regions, fragmentFromRead_func=None):
-        """
+        r"""
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
 
@@ -936,7 +938,7 @@ class CountReadsPerBin(object):
 
     @staticmethod
     def is_proper_pair(read, maxPairedFragmentLength):
-        """
+        r"""
         Checks if a read is proper pair meaning that both mates are facing each other and are in
         the same chromosome and are not to far away. The sam flag for proper pair can not
         always be trusted. Note that if the fragment size is > maxPairedFragmentLength (~2kb
@@ -997,7 +999,7 @@ class CountReadsPerBin(object):
         return False
 
     def get_fragment_from_read(self, read):
-        """Get read start and end position of a read.
+        r"""Get read start and end position of a read.
         If given, the reads are extended as follows:
         If reads are paired end, each read mate is extended to match
         the fragment length, otherwise, a default fragment length
@@ -1115,7 +1117,7 @@ class CountReadsPerBin(object):
         return [(fragmentStart, fragmentEnd)]
 
     def getSmoothRange(self, tileIndex, tileSize, smoothRange, maxPosition):
-        """
+        r"""
         Given a tile index position and a tile size (length), return the a new indices
         over a larger range, called the smoothRange.
         This region is centered in the tileIndex  an spans on both sizes
@@ -1172,14 +1174,14 @@ class CountReadsPerBin(object):
         return (indexStart, indexEnd)
 
 def remove_row_of_zeros(matrix):
-    # remove rows containing all zeros or all nans
+    r"remove rows containing all zeros or all nans"
     _mat = np.nan_to_num(matrix)
     to_keep = _mat.sum(1) != 0
     return matrix[to_keep, :]
 
 
 def estimateSizeFactors(m):
-    """
+    r"""
     Compute size factors in the same way as DESeq2.
     The inverse of that is returned, as it's then compatible with bamCoverage.
 

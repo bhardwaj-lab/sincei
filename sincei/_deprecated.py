@@ -1,7 +1,25 @@
 def read_mtx(prefix):
-    '''
-    read .mtx files from a folder (genes=rows, cells=columns)
-    '''
+    r"""Reads a matrix from a mtx file
+
+    Parameters
+    ----------
+    prefix : str
+        prefix of the mtx file
+
+    Returns
+    -------
+    mtx : scipy.sparse.csr_matrix
+        matrix
+    rownames : list
+        list of row names
+    colnames : list
+        list of column names
+
+    Examples
+    --------
+
+    >>> mtx, rownames, colnames = read_mtx("test.mtx")
+    """
     mtx = io.mmread(prefix + ".counts.mtx")
     mtx = mtx.tocsr()
     with open(prefix + ".colnames.txt") as col:
@@ -15,9 +33,40 @@ def read_mtx(prefix):
 
 # from mtx
 def preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum, min_region_sum):
-    '''
-    convert .mtx input (genes=rows, cells=columns) to anndata object
-    '''
+    r"""Preprocesses a sparse matrix for use with scanpy
+
+    Parameters
+    ----------
+    sparse_mtx : scipy.sparse.csr_matrix
+        Sparse matrix of read counts
+
+    rownames : list
+        List of row names
+
+    colnames : list
+        List of column names
+
+    min_cell_sum : int
+        Minimum number of reads per cell
+
+    min_region_sum : int
+        Minimum number of reads per region
+
+    Returns
+    -------
+    scanpy.AnnData
+        AnnData object with sparse matrix of read counts
+
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> sparse_mtx = test.sparse_mtx
+    >>> rownames = test.rownames
+    >>> colnames = test.colnames
+    >>> adata = preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum=1, min_region_sum=1)
+    """
 
     from itertools import compress
     ## binarize
@@ -44,9 +93,36 @@ def preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum, min_region_sum)
 
 
 def cluster_LSA(cell_topic, modularityAlg = 'leiden', distance_metric='cosine', nk=30, resolution=1.0, connectivity_graph=True):
-    '''
-    Cluster the cell*topic matrix output from LSA, using louvain/leiden, and get UMAP
-    '''
+    r"""Cluster cells using the output of LSA_gensim
+
+    Parameters
+    ----------
+    cell_topic : pandas dataframe
+        cell_topic dataframe with cell names as index and topic proportions as columns.
+
+    modularityAlg : str
+        Modularity algorithm to use. Default: 'leiden'
+
+    distance_metric : str
+        Distance metric to use. Default: 'cosine'
+
+    nk : int
+        Number of nearest neighbors to use. Default: 30
+
+    resolution : float
+        Resolution parameter for modularity algorithm. Default: 1.0
+
+    connectivity_graph : bool
+        Whether to use a connectivity graph or a distance graph. Default: True
+
+    Returns
+    -------
+    umap_df : pandas dataframe
+        UMAP embedding with cluster labels.
+
+    G : igraph object
+        Graph object.
+    """
 
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)

@@ -17,13 +17,37 @@ from scanpy.neighbors import _compute_connectivities_umap,  _get_indices_distanc
 
 
 def LSA_gensim(mat, cells, regions, nTopics, smartCode='lfu'):
-    '''
-    Perform latent schemantic analysis on a gene*cell sparse matrix (genes=rows, cells=columns)
-    Return:
-        corpus_lsi: trained LSI model
-        cell_topic: cell*topic matrix
-        corpus_tfidf: TF-IDF transformed matrix
-    '''
+    r"""
+    Computes LSA for a given matrix and returns the cell-topic matrix
+
+    Parameters
+    ----------
+    mat : numpy array
+        Matrix of shape (cells, regions)
+
+    cells : list
+        List of cells
+
+    regions : list
+        List of regions
+
+    nTopics : int
+        Number of topics
+
+    smartCode : str
+        Smart code for tfidf
+
+    Returns
+    -------
+    corpus_lsi : gensim corpus
+        LSA corpus
+
+    cell_topic : pandas dataframe
+        Cell-topic matrix
+
+    corpus_tfidf : gensim corpus
+        TFIDF corpus
+    """
     # LSA
     regions_dict = corpora.dictionary.Dictionary([regions])
     corpus = matutils.Sparse2Corpus(mat)

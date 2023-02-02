@@ -13,6 +13,35 @@ scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
 from Utilities import *
 
 def getStats_worker(arglist):
+    r"""Computes statistics for each read in a bam file
+
+    This function computes statistics for each read in a bam file.
+
+    Parameters
+    ----------
+    bamfiles : list
+        List containing the names of indexed bam files. E.g. ['file1.bam', 'file2.bam']
+
+    binSize : int
+        Length of the window/bin. This value is overruled by ``bedFile`` if present.
+    barcodes : list
+        list of barcodes to count the reads from.
+    numberOfSamples : int
+        Total number of samples. The genome is divided into ``numberOfSamples``, each
+        with a window/bin length equal to ``binLength``. This value is overruled
+        by ``stepSize`` in case such value is present and by ``bedFile`` in which
+        case the number of samples and bins are defined in the bed file
+
+    numberOfProcessors : int
+        Number of processors to use. Default is 4
+
+    verbose : bool
+        Output messages. Default: False
+
+    region : str
+        Region to limit the computation in the form chrom:start
+    """
+
     chrom, start, end, args = arglist
     # Fix the bounds
     if end - start > args.binSize and end - start > args.distanceBetweenBins:

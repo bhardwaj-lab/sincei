@@ -9,6 +9,35 @@ import pandas as pd
 
 ## fast fouriour transform
 def ffttable(selected):
+    r"""Computes the FFT of the fragment length distribution
+
+    Parameters
+    ----------
+    selected : numpy array
+        Array of fragment lengths
+
+    Returns
+    -------
+    pandas dataframe
+        Dataframe with two columns. The first column contains the frequencies
+        and the second column the power spectrum.
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> c = CountReadsPerBin([test.bamFile1, test.bamFile2], 50, 4)
+    >>> num_reads_per_bin, regionList = c.run()
+    >>> selected = num_reads_per_bin[:,0]
+    >>> ffttable(selected)
+       freq         value
+    0   0.0  7.812500e+06
+    1   1.0  1.812500e+06
+    2   2.0  1.812500e+06
+    3   3.0  1.812500e+06
+    4   4.0  1.812500e+06
+    5   5.0  1.812500
+    """
     selected = np.log2(selected + 1)
     selected2 = [y-x for x, y in zip(selected, selected[1:])]
     fragment_fft = sp.fftpack.fft(selected2)
@@ -20,13 +49,30 @@ def ffttable(selected):
 
 # get fragment size disribution and fft value from dict{barcode:fragment_size_list}
 def fragment_distribution(fragment_len_dict, length_plot):
-    #read bam file
-    #bam = pysam.AlignmentFile(input_bam)
-    #get fragment lengths
-    #fragment_len = [ b.template_length for b in bam if b.template_length > 0 and
-    #        b.template_length < 2000]
+    r"""Plot fragment length distribution
 
-    #making histogram
+    Parameters
+    ----------
+    fragment_len_dict : dict
+        Dictionary containing the fragment length for each barcode.
+
+    length_plot : str
+        File name to save the plot.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the top 20 frequencies for each barcode.
+
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> fragment_len_dict = {'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    ...                      'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]}
+    >>> fragment_distribution(fragment_len_dict, test.length_plot)
+    """
     plt.style.use('classic')
     fig=plt.figure()
     ax1=fig.add_subplot(1,1,1)
@@ -60,6 +106,29 @@ def fragment_distribution(fragment_len_dict, length_plot):
 
 ## plot the fragment periodicity per barcode using the output of
 def fftplot(outdict, plot):
+    r"""Computes the periodicity of the fragment distribution
+
+    Parameters
+    ----------
+    outdict : dict
+        Dictionary containing the fragment distribution for each barcode
+
+    plot : str
+        File name to save the plot
+
+    Returns
+    -------
+    dict
+        Dictionary containing the periodicity of the fragment distribution for each barcode
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> d = test.get_fragment_distribution()
+    >>> fftplot(d, 'test.png')
+    """
+
     plt.style.use('classic')
     fig = plt.figure()
     ax = fig.add_subplot(1,1,1)

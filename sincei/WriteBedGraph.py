@@ -20,14 +20,14 @@ debug = 0
 
 
 def scaleCoverage(tile_coverage, args):
+    r"""
+    Return coverage per cluster as sum of cells.
+    tileCoverage should be an list with only one element
     """
-#    Return coverage per cluster as sum of cells.
-#    tileCoverage should be an list with only one element
-#    """
     return args['scaleFactor'] * tile_coverage
 
 def writeBedGraph_wrapper(args):
-    """
+    r"""
     Passes the arguments to writeBedGraph_worker.
     This is a step required given
     the constrains from the multiprocessing module.

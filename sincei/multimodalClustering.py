@@ -26,8 +26,28 @@ https://sciendo.com/pdf/10.2478/amcs-2019-0010
 https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
-## multi-graph clustering on matched keys(barcodes) bw two anndata objects
 def multiModal_clustering(mode1_adata, mode2_adata, column_key='barcode_nla', nK=20):
+    r""" Performs multi-graph clustering on matched keys(barcodes) bw two anndata objects.
+    Parameters
+    ----------
+    mode1_adata : AnnData
+        AnnData object for mode 1
+    mode2_adata : AnnData
+        AnnData object for mode 2
+    column_key : str
+        Column name for the barcode in mode 1 and 2
+    nK : int
+        Number of clusters to use for clustering
+
+    Returns
+    -------
+    multi_umap : DataFrame
+        DataFrame with UMAP coordinates and cluster labels
+    mode1_adata : AnnData
+        AnnData object for mode 1
+    mode2_adata : AnnData
+        AnnData object for mode 2
+    """
 
     # subset RNA anndata
     mode1_adata=mode1_adata[[i for i,v in enumerate(mode1_adata.obs[column_key]) if v in mode2_adata.obs.index]]
@@ -74,6 +94,37 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key='barcode_nla', nK
 
 ## run aligned UMAPs between two dfs with PCs
 def umap_aligned(pca_mode1, pca_mode2, nK=15, distance_metric='eucledian'):
+    r"""Aligns two UMAP embeddings using the UMAP AlignedUMAP class
+
+    Parameters
+    ----------
+    pca_mode1 : pandas.DataFrame
+        UMAP embedding of RNA data
+    pca_mode2 : pandas.DataFrame
+        UMAP embedding of CHiC data
+    nK : int
+        Number of nearest neighbors to use for UMAP
+    distance_metric : str
+        Distance metric to use for UMAP
+
+    Returns
+    -------
+    pandas.DataFrame
+        Aligned UMAP embedding of RNA data
+    pandas.DataFrame
+        Aligned UMAP embedding of CHiC data
+
+    Examples
+    --------
+
+    >>> test = Tester()
+    >>> pca_mode1 = test.pca_mode1
+    >>> pca_mode2 = test.pca_mode2
+    >>> umap_aligned(pca_mode1, pca_mode2)
+    (                 aligned_UMAP1  aligned_UMAP2
+    0  -0.012995  0.001206
+    1   0.
+    """
 
     pca_mode1=pca_mode1.loc[pca_mode2.index]
     keys=[x for x in range(len(pca_mode1.index))]
