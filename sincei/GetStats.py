@@ -10,7 +10,7 @@ import py2bit
 import pandas as pd
 ## own functions
 scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
-from Utilities import *
+from sincei.Utilities import *
 
 def getStats_worker(arglist):
     r"""Computes statistics for each read in a bam file

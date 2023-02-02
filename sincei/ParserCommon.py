@@ -1,7 +1,7 @@
 import argparse
 import os
 from deeptools.utilities import smartLabels
-from _version import __version__
+from sincei._version import __version__
 
 def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
     parser = argparse.ArgumentParser(add_help=False)
