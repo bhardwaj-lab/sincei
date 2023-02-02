@@ -21,10 +21,11 @@ import scanpy as sc
 
 
 ## own Functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-import ParserCommon
-from Clustering import LSA_gensim
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+
+from sincei import ParserCommon
+from sincei.Clustering import LSA_gensim
 
 def parseArguments():
     io_args = ParserCommon.inputOutputOptions(opts=['loomfile', 'outFile'], requiredOpts=['outFile'])

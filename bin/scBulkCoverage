@@ -14,10 +14,11 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own Functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-import ParserCommon
-import WriteBedGraph
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+
+from sincei import ParserCommon
+from sincei import WriteBedGraph
 
 debug = 0
 

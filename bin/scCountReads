@@ -16,11 +16,11 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # own functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
 
-import ReadCounter as countR
-import ParserCommon
+from sincei import ReadCounter as countR
+from sincei import ParserCommon
 old_settings = np.seterr(all='ignore')
 
 

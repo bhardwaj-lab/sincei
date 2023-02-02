@@ -15,10 +15,10 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own Functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-import ParserCommon
-from Utilities import gini
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+from sincei import ParserCommon
+from sincei.Utilities import gini
 
 ### ------ Functions ------
 def filter_adata(adata, filter_region_dict=None,

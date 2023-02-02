@@ -15,10 +15,10 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ## own functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-from Utilities import *
-import ParserCommon
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+from sincei.Utilities import *
+from sincei import ParserCommon
 
 def parseArguments():
     io_args = ParserCommon.inputOutputOptions(opts=['bamfile', 'whitelist', 'outfile'],

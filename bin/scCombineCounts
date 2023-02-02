@@ -13,10 +13,10 @@ import scanpy as sc
 
 
 ## own Functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-import ParserCommon
-from Clustering import LSA_gensim
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+from sincei import ParserCommon
+from sincei.Clustering import LSA_gensim
 
 def parseArguments():
     other_args = ParserCommon.otherOptions()
@@ -81,7 +81,7 @@ def main(args=None):
     if args.method != 'multi-sample':
         sys.stderr.write("Only multi-sample method is currently implemented")
         sys.exit(1)
-        
+
     if args.labels and len(args.input) != len(args.labels):
         print("The number of labels does not match the number of input files.")
         sys.exit(1)

@@ -13,11 +13,12 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # own functions
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
-import ParserCommon
-from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
-from _version import __version__
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
+
+from sincei import ParserCommon
+from sincei.Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
+from sincei._version import __version__
 
 ## UPDATE: add group tag to BAM file based on a 2-columns mapping file (barcode -> group)
 

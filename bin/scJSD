@@ -18,11 +18,11 @@ matplotlib.rcParams['svg.fonttype'] = 'none'
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-sys.path.append(scriptdir)
+#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+#sys.path.append(scriptdir)
 ## own functions
-import ReadCounter as countR
-import ParserCommon
+from sincei import ReadCounter as countR
+from sincei import ParserCommon
 
 ## plot KDE of JSD values
 from numpy import array, linspace
