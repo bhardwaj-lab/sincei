@@ -10,3 +10,6 @@ from pygenometracks import plotTracks
 def main(args=None):
 
     plotTracks.main(args)
+
+if __name__ == "__main__":
+    main()
