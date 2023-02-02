@@ -13,7 +13,7 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # own functions
-scriptdir = os.path.abspath(os.path.join(__file__, "../../sincei"))
+scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 sys.path.append(scriptdir)
 import ParserCommon
 from Utilities import checkMotifs, checkGCcontent, getDupFilterTuple

@@ -8,7 +8,8 @@ import leidenalg as la
 from scipy import sparse
 
 import sys
-from scClusterCells import LSA_gensim, cluster_LSA
+from Clustering import LSA_gensim
+from _deprecated import cluster_LSA
 
 #umap.__version__ : should be >= 0.5.1
 
@@ -27,7 +28,9 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 def multiModal_clustering(mode1_adata, mode2_adata, column_key='barcode_nla', nK=20):
-    r""" Performs multi-graph clustering on matched keys(barcodes) bw two anndata objects.
+    r"""
+    Performs multi-graph clustering on matched keys(barcodes) bw two anndata objects.
+
     Parameters
     ----------
     mode1_adata : AnnData
@@ -94,7 +97,8 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key='barcode_nla', nK
 
 ## run aligned UMAPs between two dfs with PCs
 def umap_aligned(pca_mode1, pca_mode2, nK=15, distance_metric='eucledian'):
-    r"""Aligns two UMAP embeddings using the UMAP AlignedUMAP class
+    r"""
+    Aligns two UMAP embeddings using the UMAP AlignedUMAP class
 
     Parameters
     ----------
