@@ -4,12 +4,13 @@ sincei
 
 .. image:: ./content/images/sincei.png
 
+
 Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
 
 Installation
 -------------------
-sincei is a command line toolkit based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
+sincei is a command line toolkit based on python3, and can be installed using `conda <https://conda.io/projects/conda/en/latest/user-guide/install/index.html>`_
 
 Create a new conda environment and install sincei using:
 
@@ -45,7 +46,7 @@ tool                                 description
 Getting Help
 ------------
 
-* For all kind of questions, suggesting changes/enhancements and to report bugs, please create an issue on `our GitHub repository <https://github.com/deeptools/HiCExplorer>`_
+* For all kind of questions, suggesting changes/enhancements and to report bugs, please create an issue on `our GitHub repository <https://github.com/vivekbhr/sincei>`_
 
 
 Contents:
@@ -58,11 +59,3 @@ Contents:
    content/tutorials
    content/modules/modules
    content/news
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
