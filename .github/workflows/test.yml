@@ -1,4 +1,4 @@
-name: test-sincei
+name: test
 
 on: [push]
 
@@ -24,7 +24,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install dependencies
       run: |
-        $CONDA/bin/conda update --file environment.yml --name base
+        $CONDA/bin/conda update --file requirements.yml --name base
     - name: Lint with flake8
       run: |
         $CONDA/bin/conda install flake8
