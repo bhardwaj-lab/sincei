@@ -10,6 +10,7 @@ The following tools use **BAM files** as input. These BAM files could come from 
     tools/scFilterStats
     tools/scCountReads
     tools/scBulkCoverage
+    tools/scJSD
 
 The following tools use the **scloom** output produced within the sincei analysis workflow. The format of **scloom** file is same as **.loom**, but it contains extra metadata that's needed for sincei tools.
 
@@ -19,7 +20,7 @@ The following tools use the **scloom** output produced within the sincei analysi
     tools/scCountQC
     tools/scCombineCounts
     tools/scClusterCells
-
+    tools/scPlotRegion
 
 .. contents::
     :local:

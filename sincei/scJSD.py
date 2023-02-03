@@ -53,7 +53,7 @@ def get_args():
 
     return parser
 
-def parse_arguments(args=None):
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFile'],
                                              requiredOpts=['bamfiles', 'barcodes', 'outFile'])
     bam_args = ParserCommon.bamOptions(suppress_args=['region', 'distanceBetweenBins'],
@@ -80,7 +80,7 @@ def parse_arguments(args=None):
 
 
 def main(args=None):
-    args = ParserCommon.process_args(parse_arguments().parse_args(args))
+    args = ParserCommon.process_args(parseArguments().parse_args(args))
 
     ## read the barcode file
     with open(args.barcodes, 'r') as f:
