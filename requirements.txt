@@ -8,3 +8,5 @@ leidenalg
 networkx
 community
 python-igraph
+Sphinx >= 6.1
+sphinx-argparse
