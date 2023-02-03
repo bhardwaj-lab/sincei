@@ -22,7 +22,7 @@ def get_version(path=VPATH):
     except EnvironmentError:
         return None
     for line in f.readlines():
-        mo = re.match("__version__ = '([^']+)'", line)
+        mo = re.match('__version__ = "([^//"]+)"', line)
         if mo:
             ver = mo.group(1)
             return ver
