@@ -5,6 +5,10 @@ sincei
 .. image:: ./content/images/sincei.png
 
 
+.. image:: https://zenodo.org/badge/271841139.svg
+    :target: https://zenodo.org/badge/latestdoi/271841139
+    :alt: DOI
+
 Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
 
