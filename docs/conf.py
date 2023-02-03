@@ -12,9 +12,12 @@
 import os
 import re
 import sys
-#sys.path.insert(0, os.path.abspath('../'))
 
-VPATH="../sincei/_version.py"
+# sys.path.insert(0, os.path.abspath('../'))
+
+VPATH = "../sincei/_version.py"
+
+
 def get_version(path=VPATH):
     try:
         f = open(path)
@@ -27,11 +30,12 @@ def get_version(path=VPATH):
             return ver
     return None
 
+
 # -- Project information -----------------------------------------------------
 
-project = 'sincei'
-copyright = '2023, Vivek Bhardwaj'
-author = 'Vivek Bhardwaj'
+project = "sincei"
+copyright = "2023, Vivek Bhardwaj"
+author = "Vivek Bhardwaj"
 
 # The full version, including alpha/beta/rc tags
 release = get_version()
@@ -43,13 +47,13 @@ release = get_version()
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.doctest',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.autosummary',
-    'sphinxarg.ext'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.coverage",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.autosummary",
+    "sphinxarg.ext",
 ]
 #    'numpydoc'
 
@@ -57,12 +61,12 @@ extensions = [
 numpydoc_show_class_members = False
 
 # Add any paths that contain templates here, relative to this directory.
-#templates_path = ['_templates']
+# templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -70,9 +74,9 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+on_rtd = os.environ.get("READTHEDOCS", None) == "True"
 
-#if not on_rtd:  # only import and set the theme if we're building docs locally
+# if not on_rtd:  # only import and set the theme if we're building docs locally
 #    import sphinx_rtd_theme
 #    html_theme = 'sphinx_rtd_theme'
 #    html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
@@ -80,4 +84,4 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-#html_static_path = ['_static']
+# html_static_path = ['_static']
