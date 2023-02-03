@@ -13,22 +13,23 @@ import scanpy as sc
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
-#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-#sys.path.append(scriptdir)
+# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+# sys.path.append(scriptdir)
 
 from sincei import ReadCounter as countR
 from sincei import ParserCommon
-old_settings = np.seterr(all='ignore')
+
+old_settings = np.seterr(all="ignore")
 
 
 def parseArguments(args=None):
-    parser = \
-        argparse.ArgumentParser(
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            description="""
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""
             ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
             The analysis can be performed for the entire genome by running the program in 'bins' mode.
             If you want to count the read coverage for specific regions only, use the ``features`` mode instead.
@@ -41,80 +42,100 @@ def parseArguments(args=None):
               scCountReads features -h
 
           """,
-            epilog='example usages:\n'
-                   'scCountReads bins --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results \n\n'
-                   'scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n'
-                   '-o results'
-                   ' \n\n',
-            conflict_handler='resolve')
+        epilog="example usages:\n"
+        "scCountReads bins --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results \n\n"
+        "scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n"
+        "-o results"
+        " \n\n",
+        conflict_handler="resolve",
+    )
 
     subparsers = parser.add_subparsers(
         title="commands",
-        dest='command',
-        description='subcommands',
-        help='subcommands',
-        metavar='')
+        dest="command",
+        description="subcommands",
+        help="subcommands",
+        metavar="",
+    )
 
-    read_args = ParserCommon.readOptions(suppress_args=['filterRNAstrand'])
+    read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand"])
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
 
     # bins mode options
     subparsers.add_parser(
-        'bins',
+        "bins",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFilePrefix', 'BED'],
-                                                 requiredOpts=['barcodes','outFilePrefix'],
-                                                 suppress_args=['BED']),
-                 parserCommon.gtf_options(suppress=True),
-                 ParserCommon.bamOptions(default_opts={'binSize':10000,
-                                        'distanceBetweenBins':0}),
-                 read_args, filter_args,
-                 get_args(), other_args
-                 ],
+        parents=[
+            ParserCommon.inputOutputOptions(
+                opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],
+                requiredOpts=["barcodes", "outFilePrefix"],
+                suppress_args=["BED"],
+            ),
+            parserCommon.gtf_options(suppress=True),
+            ParserCommon.bamOptions(
+                default_opts={"binSize": 10000, "distanceBetweenBins": 0}
+            ),
+            read_args,
+            filter_args,
+            get_args(),
+            other_args,
+        ],
         help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage='%(prog)s -bs 100000 --bamfiles file1.bam file2.bam -o results \n')
+        usage="%(prog)s -bs 100000 --bamfiles file1.bam file2.bam -o results \n",
+    )
 
     # BED file arguments
     subparsers.add_parser(
-        'features',
+        "features",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFilePrefix', 'BED'],
-                                                 requiredOpts=['barcodes','outFilePrefix', 'BED']),
-                 parserCommon.gtf_options(),
-                 ParserCommon.bamOptions(suppress_args=['binSize', 'distanceBetweenBins'],
-                                        default_opts={'binSize':10000,
-                                                      'distanceBetweenBins':0}),
-                 read_args, filter_args,
-                 get_args(), other_args
-                 ],
+        parents=[
+            ParserCommon.inputOutputOptions(
+                opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],
+                requiredOpts=["barcodes", "outFilePrefix", "BED"],
+            ),
+            parserCommon.gtf_options(),
+            ParserCommon.bamOptions(
+                suppress_args=["binSize", "distanceBetweenBins"],
+                default_opts={"binSize": 10000, "distanceBetweenBins": 0},
+            ),
+            read_args,
+            filter_args,
+            get_args(),
+            other_args,
+        ],
         help="The user provides a BED/GTF file containing all regions "
-             "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
-        usage='%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results\n',
-        add_help=False)
+        "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
+        usage="%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results\n",
+        add_help=False,
+    )
 
     return parser
 
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
-    optional = parser.add_argument_group('Misc arguments')
-    optional.add_argument('--genomeChunkSize',
-                          type=int,
-                          default=None,
-                          help='Manually specify the size of the genome provided to each processor. '
-                          'The default value of None specifies that this is determined by read '
-                          'density of the BAM file.')
+    optional = parser.add_argument_group("Misc arguments")
+    optional.add_argument(
+        "--genomeChunkSize",
+        type=int,
+        default=None,
+        help="Manually specify the size of the genome provided to each processor. "
+        "The default value of None specifies that this is determined by read "
+        "density of the BAM file.",
+    )
 
-    optional.add_argument('--outFileFormat',
-                          type=str,
-                          default='loom',
-                          choices=['loom', 'mtx'],
-                          help='Output file format. Default is to write an anndata object of name '
-                          '<prefix>.loom, which can either be opened in scanpy, or by downstream tools. '
-                          '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
-                          '<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt')
+    optional.add_argument(
+        "--outFileFormat",
+        type=str,
+        default="loom",
+        choices=["loom", "mtx"],
+        help="Output file format. Default is to write an anndata object of name "
+        "<prefix>.loom, which can either be opened in scanpy, or by downstream tools. "
+        '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
+        "<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
+    )
 
     return parser
 
@@ -129,7 +150,7 @@ def main(args=None):
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
 
-    if 'BED' in args:
+    if "BED" in args:
         bed_regions = args.BED
     else:
         bed_regions = None
@@ -140,7 +161,7 @@ def main(args=None):
         rowNamesFile = args.outFilePrefix + ".rownames.txt"
         colNamesFile = args.outFilePrefix + ".colnames.txt"
     else:
-        rowNamesFile=None
+        rowNamesFile = None
 
     stepSize = args.binSize + args.distanceBetweenBins
     c = countR.CountReadsPerBin(
@@ -170,20 +191,22 @@ def main(args=None):
         minFragmentLength=args.minFragmentLength,
         maxFragmentLength=args.maxFragmentLength,
         zerosToNans=False,
-        out_file_for_raw_data=rowNamesFile)
+        out_file_for_raw_data=rowNamesFile,
+    )
 
     num_reads_per_bin, regionList = c.run(allArgs=args)
 
-    sys.stderr.write("Number of bins "
-                     "found: {}\n".format(num_reads_per_bin.shape[0]))
+    sys.stderr.write("Number of bins " "found: {}\n".format(num_reads_per_bin.shape[0]))
 
     if num_reads_per_bin.shape[0] < 1:
-        exit("ERROR: too few non zero bins found.\n"
-             "If using --region please check that this "
-             "region is covered by reads.\n")
+        exit(
+            "ERROR: too few non zero bins found.\n"
+            "If using --region please check that this "
+            "region is covered by reads.\n"
+        )
 
     ## write mtx/rownames if asked
-    if args.outFileFormat == 'mtx':
+    if args.outFileFormat == "mtx":
         f = open(colNamesFile, "w")
         f.write("\n".join(newlabels))
         f.write("\n")
@@ -194,16 +217,24 @@ def main(args=None):
     else:
         # write anndata
         adata = ad.AnnData(num_reads_per_bin.T)
-        adata.obs = pd.DataFrame({"sample":[x.split('::')[-2] for x in newlabels],
-                                "barcodes":[x.split('::')[-1] for x in newlabels]
-                                },index=newlabels)
+        adata.obs = pd.DataFrame(
+            {
+                "sample": [x.split("::")[-2] for x in newlabels],
+                "barcodes": [x.split("::")[-1] for x in newlabels],
+            },
+            index=newlabels,
+        )
 
-        rows=list(regionList)
+        rows = list(regionList)
 
-        adata.var = pd.DataFrame({"chrom":[x.split('_')[0] for x in rows],
-                                "start":[x.split('_')[1] for x in rows],
-                                "end":[x.split('_')[2] for x in rows]
-                                }, index=rows)
+        adata.var = pd.DataFrame(
+            {
+                "chrom": [x.split("_")[0] for x in rows],
+                "start": [x.split("_")[1] for x in rows],
+                "end": [x.split("_")[2] for x in rows],
+            },
+            index=rows,
+        )
 
         # export as loom
-        adata.write_loom(args.outFilePrefix+".loom")
+        adata.write_loom(args.outFilePrefix + ".loom")

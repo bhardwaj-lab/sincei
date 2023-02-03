@@ -12,11 +12,12 @@ from deeptools.bamHandler import openBam
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
-#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-#sys.path.append(scriptdir)
+# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+# sys.path.append(scriptdir)
 
 from sincei import ParserCommon
 from sincei.Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
@@ -24,52 +25,76 @@ from sincei._version import __version__
 
 ## UPDATE: add group tag to BAM file based on a 2-columns mapping file (barcode -> group)
 
+
 def parseArguments():
     internalParser = get_args()
-    ioParser = ParserCommon.inputOutputOptions(opts=['bamfile', 'groupInfo', 'outFile'])
-    bamParser = ParserCommon.bamOptions(suppress_args=['binSize', 'distanceBetweenBins'])
+    ioParser = ParserCommon.inputOutputOptions(opts=["bamfile", "groupInfo", "outFile"])
+    bamParser = ParserCommon.bamOptions(
+        suppress_args=["binSize", "distanceBetweenBins"]
+    )
     filterParser = ParserCommon.filterOptions()
-    readParser = ParserCommon.readOptions(suppress_args=['extendReads', 'centerReads'])
+    readParser = ParserCommon.readOptions(suppress_args=["extendReads", "centerReads"])
     otherParser = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
-        parents=[ioParser, internalParser, bamParser, filterParser, readParser, otherParser],
+        parents=[
+            ioParser,
+            internalParser,
+            bamParser,
+            filterParser,
+            readParser,
+            otherParser,
+        ],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="This tool filters alignments in a BAM/CRAM file according the the specified parameters. It can optionally output to BEDPE format.",
-        usage='Example usage: scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt', add_help=False)
+        usage="Example usage: scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt",
+        add_help=False,
+    )
     return parser
 
 
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
 
-    mod = parser.add_argument_group('Read modifiction arguments')
-    mod.add_argument('--shift',
-                         nargs='+',
-                         type=int,
-                         help='Shift the left and right end of a read (for BAM files) or a fragment (for BED files). A positive value shift an end to the right (on the + strand) and a negative value shifts a fragment to the left. Either 2 or 4 integers can be provided. For example, "2 -3" will shift the left-most fragment end two bases to the right and the right-most end 3 bases to the left. If 4 integers are provided, then the first and last two refer to fragments whose read 1 is on the left or right, respectively. Consequently, it is possible to take strand into consideration for strand-specific protocols. A fragment whose length falls below 1 due to shifting will not be written to the output. See the online documentation for graphical examples. Note that non-properly-paired reads will be filtered.')
+    mod = parser.add_argument_group("Read modifiction arguments")
+    mod.add_argument(
+        "--shift",
+        nargs="+",
+        type=int,
+        help='Shift the left and right end of a read (for BAM files) or a fragment (for BED files). A positive value shift an end to the right (on the + strand) and a negative value shifts a fragment to the left. Either 2 or 4 integers can be provided. For example, "2 -3" will shift the left-most fragment end two bases to the right and the right-most end 3 bases to the left. If 4 integers are provided, then the first and last two refer to fragments whose read 1 is on the left or right, respectively. Consequently, it is possible to take strand into consideration for strand-specific protocols. A fragment whose length falls below 1 due to shifting will not be written to the output. See the online documentation for graphical examples. Note that non-properly-paired reads will be filtered.',
+    )
 
-    mod.add_argument('--ATACshift',
-                         action='store_true',
-                         help='Shift the produced BAM file or BEDPE regions as commonly done for ATAC-seq. This is equivalent to --shift 4 -5 5 -4.')
+    mod.add_argument(
+        "--ATACshift",
+        action="store_true",
+        help="Shift the produced BAM file or BEDPE regions as commonly done for ATAC-seq. This is equivalent to --shift 4 -5 5 -4.",
+    )
 
-    output = parser.add_argument_group('Optional output arguments')
-    output.add_argument('--BED',
-                        action='store_true',
-                        help='Instead of producing BAM files, write output in BEDPE format (as defined by MACS2). Note that only reads/fragments passing filtering criterion are written in BEDPE format.')
+    output = parser.add_argument_group("Optional output arguments")
+    output.add_argument(
+        "--BED",
+        action="store_true",
+        help="Instead of producing BAM files, write output in BEDPE format (as defined by MACS2). Note that only reads/fragments passing filtering criterion are written in BEDPE format.",
+    )
 
-    output.add_argument('--filterMetrics',
-                         metavar="FILE.log",
-                         help="The number of entries in total and filtered are saved to this file")
+    output.add_argument(
+        "--filterMetrics",
+        metavar="FILE.log",
+        help="The number of entries in total and filtered are saved to this file",
+    )
 
-    output.add_argument('--filteredOutReads',
-                         metavar="filtered.bam",
-                         help="If desired, all reads NOT passing the filtering criteria can be written to this file.")
+    output.add_argument(
+        "--filteredOutReads",
+        metavar="filtered.bam",
+        help="If desired, all reads NOT passing the filtering criteria can be written to this file.",
+    )
 
-    output.add_argument('--outTagName',
-                         metavar="STR",
-                         type=str,
-                         help="In case where you want to group the BAM files based on user-defined --groupInfo, specify the output BAM tag which would contain the group name.",
-                         default=None)
+    output.add_argument(
+        "--outTagName",
+        metavar="STR",
+        type=str,
+        help="In case where you want to group the BAM files based on user-defined --groupInfo, specify the output BAM tag which would contain the group name.",
+        default=None,
+    )
 
     return parser
 
@@ -138,12 +163,12 @@ def filterWorker(arglist):
         if chrom not in twoBitGenome.chroms().keys():
             raise NameError("chromosome {} not found in 2bit file".format(chrom))
 
-    mode = 'wbu'
-    oname = getTempFileName(suffix='.bam')
+    mode = "wbu"
+    oname = getTempFileName(suffix=".bam")
     ofh = pysam.AlignmentFile(oname, mode=mode, template=fh)
 
     if args.filteredOutReads:
-        onameFiltered = getTempFileName(suffix='.bam')
+        onameFiltered = getTempFileName(suffix=".bam")
         ofiltered = pysam.AlignmentFile(onameFiltered, mode=mode, template=fh)
     else:
         onameFiltered = None
@@ -155,7 +180,6 @@ def filterWorker(arglist):
     nFiltered = 0
     total = 0
     for read in fh.fetch(chrom, start, end):
-
         if read.pos < start:
             # ensure that we never double count (in case distanceBetweenBins == 0)
             continue
@@ -165,12 +189,17 @@ def filterWorker(arglist):
         if isinstance(args.groupInfo, pd.DataFrame):
             smpl = read.get_tag(args.groupTag)
             try:
-                tag_to_add = args.groupInfo.loc[(args.groupInfo['sample'] == smpl) & \
-                            (args.groupInfo['barcode'] == bc), 'cluster'].values.item()
-                read.set_tag(args.outTagName, tag_to_add, value_type='Z', replace=True)
+                tag_to_add = args.groupInfo.loc[
+                    (args.groupInfo["sample"] == smpl)
+                    & (args.groupInfo["barcode"] == bc),
+                    "cluster",
+                ].values.item()
+                read.set_tag(args.outTagName, tag_to_add, value_type="Z", replace=True)
             except:
                 if args.verbose:
-                    sys.stderr.write("Encountered read tags not in groupInfo file, skipped..")
+                    sys.stderr.write(
+                        "Encountered read tags not in groupInfo file, skipped.."
+                    )
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -190,7 +219,10 @@ def filterWorker(arglist):
                 ofiltered.write(read)
             continue
 
-        if args.samFlagInclude and read.flag & args.samFlagInclude != args.samFlagInclude:
+        if (
+            args.samFlagInclude
+            and read.flag & args.samFlagInclude != args.samFlagInclude
+        ):
             nFiltered += 1
             if ofiltered:
                 ofiltered.write(read)
@@ -215,8 +247,7 @@ def filterWorker(arglist):
 
         if args.duplicateFilter:
             tup = getDupFilterTuple(read, bc, args.duplicateFilter)
-            if lpos is not None and lpos == read.reference_start \
-                    and tup in prev_pos:
+            if lpos is not None and lpos == read.reference_start and tup in prev_pos:
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -228,7 +259,9 @@ def filterWorker(arglist):
 
         # remove reads with low/high GC content
         if args.GCcontentFilter:
-            if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
+            if not checkGCcontent(
+                read, args.GCcontentFilter[0], args.GCcontentFilter[1]
+            ):
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -236,7 +269,9 @@ def filterWorker(arglist):
 
         # remove reads that don't pass the motif filter
         if args.motifFilter:
-            if not checkMotifs(read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]):
+            if not checkMotifs(
+                read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]
+            ):
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -245,7 +280,7 @@ def filterWorker(arglist):
         # filterRNAstrand
         if args.filterRNAstrand:
             if read.is_paired:
-                if args.filterRNAstrand == 'forward':
+                if args.filterRNAstrand == "forward":
                     if read.flag & 144 == 128 or read.flag & 96 == 64:
                         pass
                     else:
@@ -253,7 +288,7 @@ def filterWorker(arglist):
                         if ofiltered:
                             ofiltered.write(read)
                         continue
-                elif args.filterRNAstrand == 'reverse':
+                elif args.filterRNAstrand == "reverse":
                     if read.flag & 144 == 144 or read.flag & 96 == 96:
                         pass
                     else:
@@ -262,7 +297,7 @@ def filterWorker(arglist):
                             ofiltered.write(read)
                         continue
             else:
-                if args.filterRNAstrand == 'forward':
+                if args.filterRNAstrand == "forward":
                     if read.flag & 16 == 16:
                         pass
                     else:
@@ -270,7 +305,7 @@ def filterWorker(arglist):
                         if ofiltered:
                             ofiltered.write(read)
                         continue
-                elif args.filterRNAstrand == 'reverse':
+                elif args.filterRNAstrand == "reverse":
                     if read.flag & 16 == 0:
                         pass
                     else:
@@ -332,16 +367,20 @@ def main(args=None):
     # grouping and tagging the output alignments
     if args.groupInfo:
         if not args.outTagName:
-            sys.stderr.write("--groupInfo provided without --outTagName. By default, groups will be added to the 'RG' tag in the output BAM file.")
-            args.outTagName = 'RG'
+            sys.stderr.write(
+                "--groupInfo provided without --outTagName. By default, groups will be added to the 'RG' tag in the output BAM file."
+            )
+            args.outTagName = "RG"
 
         df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, comment="#")
         if len(df.columns) == 3:
-            df.columns = ['sample', 'barcode', 'cluster']
-            df.index = df[['sample', 'barcode']].apply(lambda x: '::'.join(x), axis=1)
+            df.columns = ["sample", "barcode", "cluster"]
+            df.index = df[["sample", "barcode"]].apply(lambda x: "::".join(x), axis=1)
             args.groupInfo = df
         else:
-            sys.stderr.write("Error: The input to --groupInfo must be a 3-column tsv file with <sample> <barcode> and <group>")
+            sys.stderr.write(
+                "Error: The input to --groupInfo must be a 3-column tsv file with <sample> <barcode> and <group>"
+            )
 
     # shifting the output alignments
     if args.shift:
@@ -353,7 +392,8 @@ def main(args=None):
         args.shift = [4, -5, 5, -4]
 
     bam, mapped, unmapped, stats = openBam(
-        args.bamfile, returnStats=True, nThreads=args.numberOfProcessors)
+        args.bamfile, returnStats=True, nThreads=args.numberOfProcessors
+    )
     total = mapped + unmapped
     chrom_sizes = [(x, y) for x, y in zip(bam.references, bam.lengths)]
     chromDict = {x: y for x, y in zip(bam.references, bam.lengths)}
@@ -371,13 +411,15 @@ def main(args=None):
         args.GCcontentFilter = [float(x) for x in gc]
 
     # Filter, writing the results to a bunch of temporary files
-    res = mapReduce([args, chromDict],
-                    filterWorker,
-                    chrom_sizes,
-                    region=args.region,
-                    blackListFileName=args.blackListFileName,
-                    numberOfProcessors=args.numberOfProcessors,
-                    verbose=args.verbose)
+    res = mapReduce(
+        [args, chromDict],
+        filterWorker,
+        chrom_sizes,
+        region=args.region,
+        blackListFileName=args.blackListFileName,
+        numberOfProcessors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
 
     res = sorted(res)  # The temp files are now in order for concatenation
     nFiltered = sum([x[3] for x in res])

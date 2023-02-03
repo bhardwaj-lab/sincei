@@ -14,24 +14,35 @@ import numpy as np
 import py2bit
 import pandas as pd
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own functions
-#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-#sys.path.append(scriptdir)
+# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+# sys.path.append(scriptdir)
 from sincei.Utilities import *
 from sincei import ParserCommon
+
 
 def parseArguments():
     filterParser = ParserCommon.filterOptions()
 
-    io_args = ParserCommon.inputOutputOptions(opts=['bamfiles', 'barcodes', 'outFile'],
-                                              requiredOpts=['barcodes'])
-    bam_args = ParserCommon.bamOptions(suppress_args=['region'],
-                                      default_opts={'binSize': 100000,
-                                                    'distanceBetweenBins': 1000000})
+    io_args = ParserCommon.inputOutputOptions(
+        opts=["bamfiles", "barcodes", "outFile"], requiredOpts=["barcodes"]
+    )
+    bam_args = ParserCommon.bamOptions(
+        suppress_args=["region"],
+        default_opts={"binSize": 100000, "distanceBetweenBins": 1000000},
+    )
     filter_args = ParserCommon.filterOptions()
-    read_args = ParserCommon.readOptions(suppress_args=['minFragmentLength', 'maxFragmentLength', 'extendReads', 'centerReads'])
+    read_args = ParserCommon.readOptions(
+        suppress_args=[
+            "minFragmentLength",
+            "maxFragmentLength",
+            "extendReads",
+            "centerReads",
+        ]
+    )
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
@@ -57,8 +68,9 @@ The following metrics are estimated according to the --binSize and --distanceBet
 
 The sum of these may be more than the total number of reads. Note that alignments are sampled from bins of size --binSize spaced --distanceBetweenBins apart.
 """,
-        usage='Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt',
-        add_help=False)
+        usage="Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt",
+        add_help=False,
+    )
 
     return parser
 
@@ -118,7 +130,6 @@ def getFiltered_worker(arglist):
             nFiltered[b] = 0
             total[b] = 0  # This is only used to estimate the percentage affected
 
-
         for read in fh.fetch(chromUse, start, end):
             bc = read.get_tag(args.cellTag)
             # also keep a counter for barcodes not in whitelist?
@@ -137,7 +148,10 @@ def getFiltered_worker(arglist):
             if args.minMappingQuality and read.mapq < args.minMappingQuality:
                 filtered[bc] = 1
                 minMapq[bc] += 1
-            if args.samFlagInclude and read.flag & args.samFlagInclude != args.samFlagInclude:
+            if (
+                args.samFlagInclude
+                and read.flag & args.samFlagInclude != args.samFlagInclude
+            ):
                 filtered[bc] = 1
                 samFlagInclude[bc] += 1
             if args.samFlagExclude and read.flag & args.samFlagExclude != 0:
@@ -150,15 +164,22 @@ def getFiltered_worker(arglist):
                     minAlignedFraction[bc] += 1
 
             ## reads in blacklisted regions
-            if blackList and blackList.findOverlaps(chrom, read.reference_start, read.reference_start + read.infer_query_length(always=False) - 1):
+            if blackList and blackList.findOverlaps(
+                chrom,
+                read.reference_start,
+                read.reference_start + read.infer_query_length(always=False) - 1,
+            ):
                 filtered[bc] = 1
                 blacklisted[bc] += 1
 
             ## Duplicates
             if args.duplicateFilter:
                 tup = getDupFilterTuple(read, bc, args.duplicateFilter)
-                if lpos is not None and lpos == read.reference_start \
-                        and tup in prev_pos:
+                if (
+                    lpos is not None
+                    and lpos == read.reference_start
+                    and tup in prev_pos
+                ):
                     filtered[bc] = 1
                     internalDupes[bc] += 1
                 if lpos != read.reference_start:
@@ -174,13 +195,18 @@ def getFiltered_worker(arglist):
 
             ## remove reads with low/high GC content
             if args.GCcontentFilter:
-                if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
+                if not checkGCcontent(
+                    read, args.GCcontentFilter[0], args.GCcontentFilter[1]
+                ):
                     filtered[bc] = 1
                     filterGC[bc] += 1
 
             ## remove reads that don't pass the motif filter
             if args.motifFilter:
-                test = [ checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter ]
+                test = [
+                    checkMotifs(read, chrom, twoBitGenome, m[0], m[1])
+                    for m in args.motifFilter
+                ]
                 # if none given motif found, return true
                 if not any(test):
                     filtered[bc] = 1
@@ -189,26 +215,26 @@ def getFiltered_worker(arglist):
             # filterRNAstrand
             if args.filterRNAstrand:
                 if read.is_paired:
-                    if args.filterRNAstrand == 'forward':
+                    if args.filterRNAstrand == "forward":
                         if read.flag & 144 == 128 or read.flag & 96 == 64:
                             pass
                         else:
                             filtered[bc] = 1
                             filterRNAstrand[bc] += 1
-                    elif args.filterRNAstrand == 'reverse':
+                    elif args.filterRNAstrand == "reverse":
                         if read.flag & 144 == 144 or read.flag & 96 == 96:
                             pass
                         else:
                             filtered[bc] = 1
                             filterRNAstrand[bc] += 1
                 else:
-                    if args.filterRNAstrand == 'forward':
+                    if args.filterRNAstrand == "forward":
                         if read.flag & 16 == 16:
                             pass
                         else:
                             filtered[bc] = 1
                             filterRNAstrand[bc] += 1
-                    elif args.filterRNAstrand == 'reverse':
+                    elif args.filterRNAstrand == "reverse":
                         if read.flag & 16 == 0:
                             pass
                         else:
@@ -220,7 +246,21 @@ def getFiltered_worker(arglist):
         fh.close()
 
         # first make a tuple where each entry is a dict of barcodes:value
-        tup = (total, nFiltered, blacklisted, minMapq, samFlagInclude, samFlagExclude, internalDupes, externalDupes, singletons, filterRNAstrand, filterMotifs, filterGC, minAlignedFraction)
+        tup = (
+            total,
+            nFiltered,
+            blacklisted,
+            minMapq,
+            samFlagInclude,
+            samFlagExclude,
+            internalDupes,
+            externalDupes,
+            singletons,
+            filterRNAstrand,
+            filterMotifs,
+            filterGC,
+            minAlignedFraction,
+        )
 
         # now simplify it
         merged = {}
@@ -228,14 +268,13 @@ def getFiltered_worker(arglist):
             merged[b] = tuple(merged[b] for merged in tup)
         # now merged is a dict with each key = barcode, values = tuple of stats
         # Now convert it to array
-        out = np.stack([ v for k, v in merged.items() ])
+        out = np.stack([v for k, v in merged.items()])
         # out is an array with row = len(barcode) [384], column = len(stats) [11]
         o.append(out)
     return o
 
 
 def main(args=None):
-
     args, rowLabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
 
     if args.outFile is None:
@@ -244,7 +283,9 @@ def main(args=None):
         of = open(args.outFile, "w")
 
     for bam in args.bamfiles:
-        x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[0]
+        x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[
+            0
+        ]
         chrom_sizes = list(zip(x.references, x.lengths))
 
         checkBAMtag(x, bam, args.cellTag)
@@ -255,31 +296,46 @@ def main(args=None):
         x.close()
 
     # Get the remaining metrics
-    res = mapReduce([args],
-                    getFiltered_worker,
-                    chrom_sizes,
-                    genomeChunkLength=args.binSize + args.distanceBetweenBins,
-                    blackListFileName=args.blackListFileName,
-                    numberOfProcessors=args.numberOfProcessors,
-                    verbose=args.verbose)
+    res = mapReduce(
+        [args],
+        getFiltered_worker,
+        chrom_sizes,
+        genomeChunkLength=args.binSize + args.distanceBetweenBins,
+        blackListFileName=args.blackListFileName,
+        numberOfProcessors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
     ## res, should be the list of np.arrays of length (len(barcodes) * 9)
 
     ## final output is an array where nrows = bamfiles*barcodes, ncol = No. of stats
-    final_array = np.asarray(res).sum(axis = 0)
+    final_array = np.asarray(res).sum(axis=0)
     ## get final row/col Names (bamnames_barcode)
-    colLabels = ["Total_sampled","Filtered","Blacklisted", "Low_MAPQ",
-                 "Missing_Flags","Excluded_Flags","Internal_Duplicates",
-                 "Marked_Duplicates","Singletons","Wrong_strand",
-                 "Wrong_motif", "Unwanted_GC_content", "Low_aligned_fraction"]
+    colLabels = [
+        "Total_sampled",
+        "Filtered",
+        "Blacklisted",
+        "Low_MAPQ",
+        "Missing_Flags",
+        "Excluded_Flags",
+        "Internal_Duplicates",
+        "Marked_Duplicates",
+        "Singletons",
+        "Wrong_strand",
+        "Wrong_motif",
+        "Unwanted_GC_content",
+        "Low_aligned_fraction",
+    ]
 
-    final_df = pd.DataFrame(data = np.concatenate(final_array),
-                  index = rowLabels,
-                  columns = colLabels)
+    final_df = pd.DataFrame(
+        data=np.concatenate(final_array), index=rowLabels, columns=colLabels
+    )
     ## since stats are approximate, present results as %
-    final_df.iloc[:,1:] = final_df.iloc[:,1:].div(final_df.Total_sampled, axis=0)*100
+    final_df.iloc[:, 1:] = (
+        final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
+    )
 
     if args.outFile is not None:
-        final_df.to_csv(args.outFile, sep = "\t")
+        final_df.to_csv(args.outFile, sep="\t")
     else:
         print(final_df)
 
