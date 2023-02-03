@@ -6,6 +6,7 @@ channels:
  - defaults
 dependencies:
  - scanpy
+ - deeptools
  - pip
  - pip:
    - "git+https://github.com/vivekbhr/sincei.git@master#egg=sincei"
