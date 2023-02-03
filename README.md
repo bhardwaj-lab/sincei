@@ -1,12 +1,12 @@
 
-<img src="./docs/images/sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
+<img src="./docs/content/images/sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
 
 ## Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
 [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
 
  - **Documentation**: [![Documentation Status](https://readthedocs.org/projects/sincei/badge/?version=latest)](https://sincei.readthedocs.io/en/latest/?badge=latest)
- - **Source code**: ![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+ - **Source code**: [![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg)](https://github.com/vivekbhr/sincei/actions/workflows/test.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
 ## Installation

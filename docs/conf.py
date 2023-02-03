@@ -13,11 +13,9 @@ import os
 import re
 import sys
 
-# sys.path.insert(0, os.path.abspath('../'))
+#sys.path.insert(0, os.path.abspath('../'))
 
 VPATH = "../sincei/_version.py"
-
-
 def get_version(path=VPATH):
     try:
         f = open(path)
