@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
 import warnings
 warnings.simplefilter(action="ignore", category=RuntimeWarning)
 warnings.simplefilter(action="ignore", category=PendingDeprecationWarning)
-from pygenometracks import plotTracks
-
+#from pygenometracks import plotTracks
 
 def main(args=None):
 
-    plotTracks.main(args)
+    #plotTracks.main(args)
+    sys.stderr.out("Not implemented yet")
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
