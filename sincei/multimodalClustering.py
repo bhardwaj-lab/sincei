@@ -8,8 +8,9 @@ import leidenalg as la
 from scipy import sparse
 
 import sys
-from Clustering import LSA_gensim
-from _deprecated import cluster_LSA
+# own modules
+from sincei.Clustering import LSA_gensim
+from sincei._deprecated import cluster_LSA
 
 #umap.__version__ : should be >= 0.5.1
 

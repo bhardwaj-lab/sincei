@@ -14,7 +14,7 @@ from deeptools import utilities
 from deeptools.writeBedGraph import bedGraphToBigWig, getGenomeChunkLength
 
 # own modules
-import ReadCounter as cr
+from sincei import ReadCounter as cr
 
 debug = 0
 
