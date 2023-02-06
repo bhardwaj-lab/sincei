@@ -34,7 +34,7 @@ def get_version(path=VPATH):
 
 def get_dependencies():
     try:
-        f = open("sincei/requirements.txt")
+        f = open("requirements.txt")
     except FileNotFoundError:
         return None
     out = []

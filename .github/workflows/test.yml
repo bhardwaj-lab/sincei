@@ -6,6 +6,9 @@ jobs:
   build:
     name: Test installation
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
     strategy:
       max-parallel: 5
       matrix:
@@ -15,7 +18,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v2
       with:
@@ -24,20 +26,17 @@ jobs:
         auto-activate-base: false
         activate-environment: sincei
         environment-file: requirements.yml
-
     - name: Check environment
       run: |
         mamba info
     - name: List tools
       run: |
         mamba list
-    
     - name: Install sincei
       run: |
         python setup.py install
         which sincei
         sincei --help
-
     - name: Test with pytest
       run: |
         mamba install pytest
