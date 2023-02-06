@@ -1,12 +1,9 @@
 name: sincei
 channels:
- - bioconda
  - conda-forge
- - anaconda
+ - bioconda
  - defaults
 dependencies:
- - scanpy
  - deeptools
+ - scanpy
  - pip
- - pip:
-   - "git+https://github.com/vivekbhr/sincei.git@master#egg=sincei"

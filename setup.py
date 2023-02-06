@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import sys
 import re
+import subprocess
 
 # read the contents of your README file
 # from pathlib import Path
