@@ -4,26 +4,24 @@ jobs:
   pypi:
     name: upload to pypi
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
-    - uses: actions/checkout@v1
-    - name: Setup conda
-      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        mamba-version: "*"
+        channels: conda-forge,bioconda,defaults
+        auto-activate-base: false
       run: |
-        curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
-        export PATH="$HOME/miniconda/bin:$PATH"
-        hash -r
-        conda config --set always_yes yes --set changeps1 no
-    - name: create env
-      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
-      run: |
-        export PATH=$HOME/miniconda/bin:$PATH
-        conda create -n foo -q --yes -c conda-forge -c bioconda python=3.8 twine
+        mamba create -n upload -q --yes python=3.8 twine
     - name: sdist
-      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
       run: |
-        export PATH=$HOME/miniconda/bin:$PATH
-        source activate foo
+        mamba activate upload
+        mamba info
         rm -f dist/*
         python setup.py sdist
     - name: upload
@@ -32,6 +30,4 @@ jobs:
         TWINE_USERNAME: "__token__"
         TWINE_PASSWORD: ${{ secrets.pypi_password }}
       run: |
-        export PATH=$HOME/miniconda/bin:$PATH
-        source activate foo
         twine upload dist/*
