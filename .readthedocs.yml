@@ -1,5 +1,5 @@
 # yaml file to configure readthedocs build
 python:
    version: 3.8
-   setup_py_install: true
-   pip_install: False
+   setup_py_install: False
+   pip_install: True

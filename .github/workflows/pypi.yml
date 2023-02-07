@@ -12,16 +12,13 @@ jobs:
       uses: actions/checkout@v2
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v2
-      with:
-        mamba-version: "*"
-        auto-activate-base: false
     - name: Create env
       run: |
-        mamba create -n upload -q --yes python=3.8 twine
+        conda create -n upload -q --yes python=3.8 twine
     - name: sdist
       run: |
-        mamba activate upload
-        mamba info
+        conda activate upload
+        conda info
         rm -f dist/*
         python setup.py sdist
     - name: upload
