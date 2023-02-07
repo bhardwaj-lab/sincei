@@ -15,6 +15,7 @@ jobs:
       with:
         mamba-version: "*"
         auto-activate-base: false
+    - name: Create env
       run: |
         mamba create -n upload -q --yes python=3.8 twine
     - name: sdist
