@@ -14,7 +14,6 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
       with:
         mamba-version: "*"
-        channels: conda-forge,bioconda,defaults
         auto-activate-base: false
       run: |
         mamba create -n upload -q --yes python=3.8 twine
@@ -27,7 +26,7 @@ jobs:
     - name: upload
       if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
       env:
-        TWINE_USERNAME: "__token__"
+        TWINE_USERNAME: ${{ secrets.pypi_username }}
         TWINE_PASSWORD: ${{ secrets.pypi_password }}
       run: |
         twine upload dist/*
