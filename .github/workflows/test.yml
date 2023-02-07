@@ -34,7 +34,7 @@ jobs:
         mamba list
     - name: Install sincei
       run: |
-        python setup.py install
+        pip install .
         which sincei
         sincei --help
     - name: Test with pytest
