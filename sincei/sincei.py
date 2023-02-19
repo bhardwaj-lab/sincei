@@ -50,6 +50,3 @@ def main(args=None):
     if args is None and len(sys.argv) == 1:
         args = ["--help"]
     process_args(args)
-
-if __name__ == "__main__":
-    main()
