@@ -64,10 +64,12 @@ doc = [
     "myst-nb",
     "sphinxcontrib-bibtex>=1.0.0",
     "sphinx-autodoc-typehints",
+    "readthedocs-sphinx-ext",
+    "sphinx-argparse",
     # For notebooks
-    "ipykernel",
-    "ipython",
-    "sphinx-copybutton",
+ #   "ipykernel",
+ #   "ipython",
+ #   "sphinx-copybutton",
 ]
 test = [
     "pytest"

@@ -14,13 +14,13 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
     - name: Create env
       run: |
-        conda create -n upload -q --yes python=3.8 twine
+        conda create -n upload -c conda-forge -q --yes python=3.8 twine hatch
     - name: sdist
       run: |
         conda activate upload
         conda info
         rm -f dist/*
-        python setup.py sdist
+        hatch build -t sdist
     - name: upload
       if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
       env:
