@@ -26,6 +26,14 @@ Create a new conda environment and install sincei using:
     (sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
 
 
+Getting Help
+------------
+
+* For all kind of questions, suggesting changes/enhancements and to report bugs, please create an issue on `our GitHub repository <https://github.com/vivekbhr/sincei>`_
+
+**Please Note that sincei is under active development.** Some features might be incomplete, untested or might be removed as we move towards a stable version.
+
+
 
 The list of tools available in sincei
 ---------------------------------------
@@ -45,12 +53,6 @@ tool                                 description
       scFindMarkers            [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
       scFeaturePlot            [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.
 ========================== ============================================================================================================
-
-
-Getting Help
-------------
-
-* For all kind of questions, suggesting changes/enhancements and to report bugs, please create an issue on `our GitHub repository <https://github.com/vivekbhr/sincei>`_
 
 
 Contents:
