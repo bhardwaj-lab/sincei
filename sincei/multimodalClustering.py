@@ -59,13 +59,7 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK
     """
 
     # subset RNA anndata
-    mode1_adata = mode1_adata[
-        [
-            i
-            for i, v in enumerate(mode1_adata.obs[column_key])
-            if v in mode2_adata.obs.index
-        ]
-    ]
+    mode1_adata = mode1_adata[[i for i, v in enumerate(mode1_adata.obs[column_key]) if v in mode2_adata.obs.index]]
     # re-compute distances/clusters/umap
     sc.pp.neighbors(mode1_adata, n_neighbors=nK)
     sc.tl.louvain(mode1_adata)
@@ -86,9 +80,7 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK
         smartCode="lfu",
     )
     # get graph
-    chic_umap, G_chic = cluster_LSA(
-        cell_topic, modularityAlg="leiden", resolution=1, nk=nK
-    )
+    chic_umap, G_chic = cluster_LSA(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
     mode2_adata.obsm["X_pca"] = cell_topic
     mode2_adata.obsm["X_umap"] = chic_umap
     # leiden multi-layer clustering
@@ -98,25 +90,17 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK
     #
     # part_rna = la.CPMVertexPartition(G_rna, resolution=res_layer1)
     # part_chic = la.CPMVertexPartition(G_chic, resolution=res_layer2)
-    optimiser.optimise_partition_multiplex(
-        [part_rna, part_chic], layer_weights=[2, 1], n_iterations=-1
-    )
+    optimiser.optimise_partition_multiplex([part_rna, part_chic], layer_weights=[2, 1], n_iterations=-1)
     print("Detected clusters: ", set(part_chic.membership))
     chic_umap["cluster_multi"] = part_chic.membership
 
     # merge RNA and ChIC UMAPs
-    rna_umap = pd.DataFrame(
-        mode1_adata.obsm["X_umap"], columns=["RNA_UMAP1", "RNA_UMAP2"]
-    )
+    rna_umap = pd.DataFrame(mode1_adata.obsm["X_umap"], columns=["RNA_UMAP1", "RNA_UMAP2"])
     rna_umap.index = mode1_adata.obs.index
     rna_umap["cluster_mode1"] = mode1_adata.obs.louvain
     rna_umap[column_key] = mode1_adata.obs[column_key]
-    multi_umap = rna_umap.merge(
-        chic_umap, left_index=False, right_index=True, left_on=column_key
-    )
-    multi_umap["cluster_mode1"] = [
-        int(x) for x in multi_umap["cluster_mode1"].to_list()
-    ]
+    multi_umap = rna_umap.merge(chic_umap, left_index=False, right_index=True, left_on=column_key)
+    multi_umap["cluster_mode1"] = [int(x) for x in multi_umap["cluster_mode1"].to_list()]
 
     return multi_umap, mode1_adata, mode2_adata
 

@@ -27,9 +27,7 @@ from sincei import ParserCommon
 def parseArguments():
     filterParser = ParserCommon.filterOptions()
 
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["bamfiles", "barcodes", "outFile"], requiredOpts=["barcodes"]
-    )
+    io_args = ParserCommon.inputOutputOptions(opts=["bamfiles", "barcodes", "outFile"], requiredOpts=["barcodes"])
     bam_args = ParserCommon.bamOptions(
         suppress_args=["region"],
         default_opts={"binSize": 100000, "distanceBetweenBins": 1000000},
@@ -148,10 +146,7 @@ def getFiltered_worker(arglist):
             if args.minMappingQuality and read.mapq < args.minMappingQuality:
                 filtered[bc] = 1
                 minMapq[bc] += 1
-            if (
-                args.samFlagInclude
-                and read.flag & args.samFlagInclude != args.samFlagInclude
-            ):
+            if args.samFlagInclude and read.flag & args.samFlagInclude != args.samFlagInclude:
                 filtered[bc] = 1
                 samFlagInclude[bc] += 1
             if args.samFlagExclude and read.flag & args.samFlagExclude != 0:
@@ -175,11 +170,7 @@ def getFiltered_worker(arglist):
             ## Duplicates
             if args.duplicateFilter:
                 tup = getDupFilterTuple(read, bc, args.duplicateFilter)
-                if (
-                    lpos is not None
-                    and lpos == read.reference_start
-                    and tup in prev_pos
-                ):
+                if lpos is not None and lpos == read.reference_start and tup in prev_pos:
                     filtered[bc] = 1
                     internalDupes[bc] += 1
                 if lpos != read.reference_start:
@@ -195,18 +186,13 @@ def getFiltered_worker(arglist):
 
             ## remove reads with low/high GC content
             if args.GCcontentFilter:
-                if not checkGCcontent(
-                    read, args.GCcontentFilter[0], args.GCcontentFilter[1]
-                ):
+                if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
                     filtered[bc] = 1
                     filterGC[bc] += 1
 
             ## remove reads that don't pass the motif filter
             if args.motifFilter:
-                test = [
-                    checkMotifs(read, chrom, twoBitGenome, m[0], m[1])
-                    for m in args.motifFilter
-                ]
+                test = [checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter]
                 # if none given motif found, return true
                 if not any(test):
                     filtered[bc] = 1
@@ -283,9 +269,7 @@ def main(args=None):
         of = open(args.outFile, "w")
 
     for bam in args.bamfiles:
-        x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[
-            0
-        ]
+        x = bamHandler.openBam(bam, returnStats=True, nThreads=args.numberOfProcessors)[0]
         chrom_sizes = list(zip(x.references, x.lengths))
 
         checkBAMtag(x, bam, args.cellTag)
@@ -326,13 +310,9 @@ def main(args=None):
         "Low_aligned_fraction",
     ]
 
-    final_df = pd.DataFrame(
-        data=np.concatenate(final_array), index=rowLabels, columns=colLabels
-    )
+    final_df = pd.DataFrame(data=np.concatenate(final_array), index=rowLabels, columns=colLabels)
     ## since stats are approximate, present results as %
-    final_df.iloc[:, 1:] = (
-        final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
-    )
+    final_df.iloc[:, 1:] = final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
 
     if args.outFile is not None:
         final_df.to_csv(args.outFile, sep="\t")

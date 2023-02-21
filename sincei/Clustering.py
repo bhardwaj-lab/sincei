@@ -54,9 +54,7 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode="lfu"):
     # LSA
     regions_dict = corpora.dictionary.Dictionary([regions])
     corpus = matutils.Sparse2Corpus(mat)
-    tfidf = models.TfidfModel(
-        corpus, id2word=regions_dict, normalize=True, smartirs=smartCode
-    )
+    tfidf = models.TfidfModel(corpus, id2word=regions_dict, normalize=True, smartirs=smartCode)
     corpus_tfidf = tfidf[corpus]
     lsi_model = models.LsiModel(corpus_tfidf, id2word=regions_dict, num_topics=nTopics)
     corpus_lsi = lsi_model[corpus_tfidf]
@@ -71,12 +69,8 @@ def LSA_gensim(mat, cells, regions, nTopics, smartCode="lfu"):
     ## make cell-topic df
     li = [[tup[0] for tup in x] for x in corpus_lsi]
     li_val = [[tup[1] for tup in x] for x in corpus_lsi]
-    if (
-        len(set([len(x) for x in li_val])) > 1
-    ):  # if all documents don't have same set of topics
-        bad_idx = sorted(
-            [i for i, v in enumerate(li_val) if len(v) != nTopics], reverse=True
-        )
+    if len(set([len(x) for x in li_val])) > 1:  # if all documents don't have same set of topics
+        bad_idx = sorted([i for i, v in enumerate(li_val) if len(v) != nTopics], reverse=True)
         print(
             "{} Cells were detected which don't contribute to all {} topics. Removing them!".format(
                 len(bad_idx), nTopics

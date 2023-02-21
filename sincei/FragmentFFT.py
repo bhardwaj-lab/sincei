@@ -84,9 +84,7 @@ def fragment_distribution(fragment_len_dict, length_plot):
     for barcode in outdict.keys():
         fragment_len = fragment_len_dict[barcode]
 
-        n, bins, patches = ax1.hist(
-            fragment_len, bins=100, color="orange", range=(0, 1000), alpha=0.3
-        )
+        n, bins, patches = ax1.hist(fragment_len, bins=100, color="orange", range=(0, 1000), alpha=0.3)
         # calculating fft
         dflist = []
         for num in range(80, 101, 1):
@@ -149,12 +147,8 @@ def fftplot(outdict, plot):
         p1 = range(120, 160, 1)
         p2 = range(240, 320, 1)
 
-        mononuc_periodicity = np.mean(
-            d2.loc[[int(x) in p1 for x in 1 / d2.freq], "value"]
-        )
-        dinuc_periodicity = np.mean(
-            d2.loc[[int(x) in p2 for x in 1 / d2.freq], "value"]
-        )
+        mononuc_periodicity = np.mean(d2.loc[[int(x) in p1 for x in 1 / d2.freq], "value"])
+        dinuc_periodicity = np.mean(d2.loc[[int(x) in p2 for x in 1 / d2.freq], "value"])
 
         # if int(mean_value) in p1:
         #    col='red'

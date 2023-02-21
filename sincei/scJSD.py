@@ -64,12 +64,8 @@ def parseArguments(args=None):
         opts=["bamfiles", "barcodes", "outFile"],
         requiredOpts=["bamfiles", "barcodes", "outFile"],
     )
-    bam_args = ParserCommon.bamOptions(
-        suppress_args=["region", "distanceBetweenBins"], default_opts={"binSize": 10000}
-    )
-    read_args = ParserCommon.readOptions(
-        suppress_args=["filterRNAstrand", "extendReads", "centerReads"]
-    )
+    bam_args = ParserCommon.bamOptions(suppress_args=["region", "distanceBetweenBins"], default_opts={"binSize": 10000})
+    read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand", "extendReads", "centerReads"])
     filter_args = ParserCommon.filterOptions(
         suppress_args=[
             "motifFilter",
@@ -89,8 +85,7 @@ def parseArguments(args=None):
         "Cells with high enrichment of signals show a higher JSD compared to cells whose signal "
         "is homogenously distrubuted.",
         conflict_handler="resolve",
-        usage="An example usage is: plotFingerprint -b treatment.bam control.bam "
-        "-plot fingerprint.png",
+        usage="An example usage is: plotFingerprint -b treatment.bam control.bam " "-plot fingerprint.png",
         add_help=False,
     )
 

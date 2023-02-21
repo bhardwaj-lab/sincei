@@ -65,9 +65,7 @@ def getStats_worker(arglist):
         prev_pos = set()
         lpos = None
         ## initiate a dict with all values to keep per read
-        info_list = (
-            []
-        )  # dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
+        info_list = []  # dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
 
         for read in fh.fetch(chromUse, start, end):
             ## general filtering
@@ -89,10 +87,7 @@ def getStats_worker(arglist):
             ):
                 continue
             if args.motifFilter:
-                test = [
-                    checkMotifs(read, chrom, twoBitGenome, m[0], m[1])
-                    for m in args.motifFilter
-                ]
+                test = [checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter]
                 # if none given motif found, return true
                 if not any(test):
                     continue
@@ -130,9 +125,7 @@ def getStats_worker(arglist):
             lpos = read.reference_start
             prev_pos.add(tup)
 
-            info[5] = checkGCcontent(
-                read, args.GCcontentFilter[0], args.GCcontentFilter[1], returnGC=True
-            )
+            info[5] = checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1], returnGC=True)
             # filterRNAstrand
             info[6] = read.is_reverse
             if args.getReadID:

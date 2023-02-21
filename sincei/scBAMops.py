@@ -29,9 +29,7 @@ from sincei._version import __version__
 def parseArguments():
     internalParser = get_args()
     ioParser = ParserCommon.inputOutputOptions(opts=["bamfile", "groupInfo", "outFile"])
-    bamParser = ParserCommon.bamOptions(
-        suppress_args=["binSize", "distanceBetweenBins"]
-    )
+    bamParser = ParserCommon.bamOptions(suppress_args=["binSize", "distanceBetweenBins"])
     filterParser = ParserCommon.filterOptions()
     readParser = ParserCommon.readOptions(suppress_args=["extendReads", "centerReads"])
     otherParser = ParserCommon.otherOptions()
@@ -190,16 +188,13 @@ def filterWorker(arglist):
             smpl = read.get_tag(args.groupTag)
             try:
                 tag_to_add = args.groupInfo.loc[
-                    (args.groupInfo["sample"] == smpl)
-                    & (args.groupInfo["barcode"] == bc),
+                    (args.groupInfo["sample"] == smpl) & (args.groupInfo["barcode"] == bc),
                     "cluster",
                 ].values.item()
                 read.set_tag(args.outTagName, tag_to_add, value_type="Z", replace=True)
             except:
                 if args.verbose:
-                    sys.stderr.write(
-                        "Encountered read tags not in groupInfo file, skipped.."
-                    )
+                    sys.stderr.write("Encountered read tags not in groupInfo file, skipped..")
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -219,10 +214,7 @@ def filterWorker(arglist):
                 ofiltered.write(read)
             continue
 
-        if (
-            args.samFlagInclude
-            and read.flag & args.samFlagInclude != args.samFlagInclude
-        ):
+        if args.samFlagInclude and read.flag & args.samFlagInclude != args.samFlagInclude:
             nFiltered += 1
             if ofiltered:
                 ofiltered.write(read)
@@ -259,9 +251,7 @@ def filterWorker(arglist):
 
         # remove reads with low/high GC content
         if args.GCcontentFilter:
-            if not checkGCcontent(
-                read, args.GCcontentFilter[0], args.GCcontentFilter[1]
-            ):
+            if not checkGCcontent(read, args.GCcontentFilter[0], args.GCcontentFilter[1]):
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -269,9 +259,7 @@ def filterWorker(arglist):
 
         # remove reads that don't pass the motif filter
         if args.motifFilter:
-            if not checkMotifs(
-                read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]
-            ):
+            if not checkMotifs(read, chrom, twoBitGenome, args.motifFilter[0], args.motifFilter[1]):
                 nFiltered += 1
                 if ofiltered:
                     ofiltered.write(read)
@@ -391,9 +379,7 @@ def main(args=None):
     elif args.ATACshift:
         args.shift = [4, -5, 5, -4]
 
-    bam, mapped, unmapped, stats = openBam(
-        args.bamfile, returnStats=True, nThreads=args.numberOfProcessors
-    )
+    bam, mapped, unmapped, stats = openBam(args.bamfile, returnStats=True, nThreads=args.numberOfProcessors)
     total = mapped + unmapped
     chrom_sizes = [(x, y) for x, y in zip(bam.references, bam.lengths)]
     chromDict = {x: y for x, y in zip(bam.references, bam.lengths)}

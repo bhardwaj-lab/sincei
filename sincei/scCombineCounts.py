@@ -106,10 +106,7 @@ def main(args=None):
             args.labels = smartLabels(args.input)
         else:
             args.labels = [os.path.basename(x) for x in args.input]
-    adata_list = [
-        sc.read_loom(x, obs_names="obs_names", var_names="var_names")
-        for x in args.input
-    ]
+    adata_list = [sc.read_loom(x, obs_names="obs_names", var_names="var_names") for x in args.input]
 
     ## concatenate labels and match chrom, start, end
     var_list = []

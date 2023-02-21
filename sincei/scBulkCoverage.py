@@ -24,9 +24,7 @@ debug = 0
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["bamfiles", "groupInfo", "outFilePrefix"]
-    )
+    io_args = ParserCommon.inputOutputOptions(opts=["bamfiles", "groupInfo", "outFilePrefix"])
     bam_args = ParserCommon.bamOptions(default_opts={"binSize": 100})
     read_args = ParserCommon.readOptions()
     filter_args = ParserCommon.filterOptions()
@@ -186,16 +184,10 @@ def main(args=None):
 
     # make another df, containing union of all barcodes, and in the same order per sample
     barcodes = df["barcode"].unique().tolist()
-    sm = list(
-        itertools.chain.from_iterable(
-            itertools.repeat(lab, len(barcodes)) for lab in args.labels
-        )
-    )
+    sm = list(itertools.chain.from_iterable(itertools.repeat(lab, len(barcodes)) for lab in args.labels))
     bc = barcodes * len(args.labels)
     groupInfo = pd.DataFrame({"sample": sm, "barcode": bc})
-    groupInfo.index = groupInfo[["sample", "barcode"]].apply(
-        lambda x: "::".join(x), axis=1
-    )
+    groupInfo.index = groupInfo[["sample", "barcode"]].apply(lambda x: "::".join(x), axis=1)
     groupInfo = pd.merge(
         groupInfo,
         df["cluster"],
@@ -206,9 +198,7 @@ def main(args=None):
     )
     groupInfo = groupInfo.reset_index()[["sample", "barcode", "cluster"]]
     # re-construct new labels (sample+bc)
-    newlabels = [
-        "::".join([x, y]) for x, y in zip(groupInfo["sample"], groupInfo["barcode"])
-    ]
+    newlabels = ["::".join([x, y]) for x, y in zip(groupInfo["sample"], groupInfo["barcode"])]
     # Normalization options
     scale_factor = args.scaleFactor
     func_args = {"scaleFactor": args.scaleFactor}
@@ -242,9 +232,7 @@ def main(args=None):
             for file in args.bamfiles
         ]
         if any([x[0] is None for x in fraglengths]):
-            sys.exit(
-                "*Error*: For the --MNAse function a paired end library is required. "
-            )
+            sys.exit("*Error*: For the --MNAse function a paired end library is required. ")
 
         # Set some default fragment length bounds
         if args.minFragmentLength == 0:
@@ -288,9 +276,7 @@ def main(args=None):
                     "*Error*: An offset of 0 isn't allowed, since offsets are 1-based positions inside each alignment."
                 )
             if args.Offset[1] > 0 and args.Offset[1] < args.Offset[0]:
-                sys.exit(
-                    "'Error*: The right side bound is less than the left-side bound. This is inappropriate."
-                )
+                sys.exit("'Error*: The right side bound is less than the left-side bound. This is inappropriate.")
         else:
             if args.Offset[0] == 0:
                 sys.exit(
@@ -416,9 +402,7 @@ class OffsetFragment(WriteBedGraph.WriteBedGraph):
                 else:
                     foo = (
                         read.reference_end,
-                        read.reference_end
-                        + abs(read.template_length)
-                        - read.infer_query_length(),
+                        read.reference_end + abs(read.template_length) - read.infer_query_length(),
                     )
                     if foo[0] < foo[1]:
                         blocks.append(foo)
@@ -427,9 +411,7 @@ class OffsetFragment(WriteBedGraph.WriteBedGraph):
             else:
                 if read.is_reverse:
                     foo = (
-                        read.reference_start
-                        - self.defaultFragmentLength
-                        + read.infer_query_length(),
+                        read.reference_start - self.defaultFragmentLength + read.infer_query_length(),
                         read.reference_start,
                     )
                     if foo[0] < 0:
@@ -439,9 +421,7 @@ class OffsetFragment(WriteBedGraph.WriteBedGraph):
                 else:
                     foo = (
                         read.reference_end,
-                        read.reference_end
-                        + self.defaultFragmentLength
-                        - read.infer_query_length(),
+                        read.reference_end + self.defaultFragmentLength - read.infer_query_length(),
                     )
                     if foo[0] < foo[1]:
                         blocks.append(foo)
@@ -473,9 +453,7 @@ class OffsetFragment(WriteBedGraph.WriteBedGraph):
         # Convert the stretch back to a list of tuples
         foo = np.array(foo)
         d = foo[1:] - foo[:-1]
-        idx = (
-            np.argwhere(d > 1).flatten().tolist()
-        )  # This now holds the interval bounds as a list
+        idx = np.argwhere(d > 1).flatten().tolist()  # This now holds the interval bounds as a list
         idx.append(-1)
         last = 0
         rv = []

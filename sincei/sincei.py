@@ -4,9 +4,10 @@
 import argparse
 import sys
 import os
+
 ## own functions
-#scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-#sys.path.append(scriptdir)
+# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
+# sys.path.append(scriptdir)
 from sincei._version import __version__
 
 
@@ -34,8 +35,10 @@ Each tool begins with the prefix sc<tool_name>, such as:
     scFindMarkers           [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
     scFeaturePlot           [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.
 
-""".format(__version__))
-
+""".format(
+            __version__
+        ),
+    )
 
     return parser
 

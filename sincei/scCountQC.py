@@ -37,8 +37,7 @@ def filter_adata(
         for key in filter_region_dict.keys():
             adata = adata[
                 :,
-                (adata.var[key] >= filter_region_dict[key][0])
-                & (adata.var[key] <= filter_region_dict[key][1]),
+                (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
             ]
 
     # 2. Cells
@@ -47,8 +46,7 @@ def filter_adata(
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
             adata = adata[
-                (adata.obs[key] >= filter_cell_dict[key][0])
-                & (adata.obs[key] <= filter_cell_dict[key][1]),
+                (adata.obs[key] >= filter_cell_dict[key][0]) & (adata.obs[key] <= filter_cell_dict[key][1]),
                 :,
             ]
 
@@ -205,19 +203,13 @@ def main(args=None):
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:
-        is_num_col = [
-            (pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x))
-            for x in adata.obs.dtypes
-        ]
+        is_num_col = [(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.obs.dtypes]
         cols = adata.obs.loc[:, is_num_col]
         sys.stdout.write("\n Cell metrics: \n")
         sys.stdout.write("Total cells: {} \n".format(adata.shape[0]))
         print(pd.DataFrame({"min": cols.min(), "max": cols.max()}))
 
-        is_num_row = [
-            (pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x))
-            for x in adata.var.dtypes
-        ]
+        is_num_row = [(pd.api.types.is_float_dtype(x) | pd.api.types.is_integer_dtype(x)) for x in adata.var.dtypes]
         rows = adata.var.loc[:, is_num_row]
         sys.stdout.write("\n Feature metrics: \n")
         sys.stdout.write("Total features: {} \n".format(adata.shape[1]))

@@ -137,12 +137,8 @@ def cluster_LSA(
 
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
-    knn_indices, knn_distances = _get_indices_distances_from_dense_matrix(
-        _distances, nk
-    )
-    distances, connectivities = _compute_connectivities_umap(
-        knn_indices, knn_distances, _distances.shape[0], nk
-    )
+    knn_indices, knn_distances = _get_indices_distances_from_dense_matrix(_distances, nk)
+    distances, connectivities = _compute_connectivities_umap(knn_indices, knn_distances, _distances.shape[0], nk)
 
     if modularityAlg == "leiden":
         if connectivity_graph:

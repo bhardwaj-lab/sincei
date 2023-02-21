@@ -73,9 +73,7 @@ def parseArguments(args=None):
                 suppress_args=["BED"],
             ),
             parserCommon.gtf_options(suppress=True),
-            ParserCommon.bamOptions(
-                default_opts={"binSize": 10000, "distanceBetweenBins": 0}
-            ),
+            ParserCommon.bamOptions(default_opts={"binSize": 10000, "distanceBetweenBins": 0}),
             read_args,
             filter_args,
             get_args(),

@@ -27,9 +27,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             required=True,
         )
     elif "bamfile" in opts:
-        group.add_argument(
-            "--bamfile", "-b", metavar="FILE", help="Indexed BAM file", required=True
-        )
+        group.add_argument("--bamfile", "-b", metavar="FILE", help="Indexed BAM file", required=True)
     if "whitelist" in opts:
         group.add_argument(
             "--whitelist",
@@ -62,8 +60,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
         group.add_argument(
             "--BED",
             help=show_or_hide(
-                "Limits the coverage analysis to "
-                "the regions specified in these files.",
+                "Limits the coverage analysis to " "the regions specified in these files.",
                 "BED",
                 suppress_args,
             ),
@@ -99,17 +96,11 @@ def otherOptions(args=None):
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group("Other options")
 
-    group.add_argument(
-        "--help", "-h", action="help", help="show this help message and exit"
-    )
+    group.add_argument("--help", "-h", action="help", help="show this help message and exit")
 
-    group.add_argument(
-        "--verbose", "-v", help="Set to see processing messages.", action="store_true"
-    )
+    group.add_argument("--verbose", "-v", help="Set to see processing messages.", action="store_true")
 
-    group.add_argument(
-        "--version", action="version", version="%(prog)s {}".format(__version__)
-    )
+    group.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
 
     return parser
 
@@ -370,8 +361,7 @@ def readOptions(args=None, suppress_args=None):
         "--minMappingQuality",
         metavar="INT",
         help=show_or_hide(
-            "If set, only reads that have a mapping "
-            "quality score of at least this are considered.",
+            "If set, only reads that have a mapping " "quality score of at least this are considered.",
             "minMappingQuality",
             suppress_args,
         ),
@@ -430,8 +420,7 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--maxFragmentLength",
         help=show_or_hide(
-            "The maximum fragment length needed for read/pair "
-            "inclusion. (Default: %(default)s)",
+            "The maximum fragment length needed for read/pair " "inclusion. (Default: %(default)s)",
             "maxFragmentLength",
             suppress_args,
         ),
@@ -566,9 +555,7 @@ def numberOfProcessors(string):
         try:
             numberOfProcessors = int(string)
         except ValueError:
-            raise argparse.ArgumentTypeError(
-                "{} is not a valid number of processors".format(string)
-            )
+            raise argparse.ArgumentTypeError("{} is not a valid number of processors".format(string))
 
         except Exception as e:
             raise argparse.ArgumentTypeError(
@@ -618,9 +605,7 @@ def validateInputs(args, process_barcodes=True):
             print("Only a single BAM file is allowed when --groupTag is specified.")
             exit(0)
         if not args.labels:
-            print(
-                "Please indicate the sample groups to be processed from the BAM file with --labels"
-            )
+            print("Please indicate the sample groups to be processed from the BAM file with --labels")
             exit(0)
     else:
         if args.labels and len(args.bamfiles) != len(args.labels):

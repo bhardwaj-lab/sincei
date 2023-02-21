@@ -136,18 +136,14 @@ class WriteBedGraph(cr.CountReadsPerBin):
         bam_handles = []
         for x in self.bamFilesList:
             if getStats:
-                bam, mapped, unmapped, stats = bamHandler.openBam(
-                    x, returnStats=True, nThreads=self.numberOfProcessors
-                )
+                bam, mapped, unmapped, stats = bamHandler.openBam(x, returnStats=True, nThreads=self.numberOfProcessors)
                 self.mappedList.append(mapped)
                 self.statsList.append(stats)
             else:
                 bam = bamHandler.openBam(x)
             bam_handles.append(bam)
 
-        genome_chunk_length = getGenomeChunkLength(
-            bam_handles, self.binLength, self.mappedList
-        )
+        genome_chunk_length = getGenomeChunkLength(bam_handles, self.binLength, self.mappedList)
         # check if both bam files correspond to the same species
         # by comparing the chromosome names:
         chrom_names_and_size, non_common = getCommonChrNames(bam_handles, verbose=False)
@@ -241,9 +237,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                     "{}_{}.bw".format(out_file_prefix, cl),
                 )
 
-    def writeBedGraph_worker(
-        self, chrom, start, end, func_to_call, func_args, bed_regions_list=None
-    ):
+    def writeBedGraph_worker(self, chrom, start, end, func_to_call, func_args, bed_regions_list=None):
         r"""Writes a bedgraph based on the read coverage per group of cells, indicated by cluster_info data frame.
 
         The given func is called to compute the desired bedgraph value
@@ -294,10 +288,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         >>> os.remove(tempFile[3])
         """
         if start > end:
-            raise NameError(
-                "start position ({0}) bigger "
-                "than end position ({1})".format(start, end)
-            )
+            raise NameError("start position ({0}) bigger " "than end position ({1})".format(start, end))
         coverage, _, r = self.count_reads_in_region(chrom, start, end)
 
         ## get groups (clusters)
@@ -332,21 +323,13 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
                 elif previous_value != value:
                     if not np.isnan(previous_value):
-                        _file.write(
-                            line_string.format(
-                                chrom, writeStart, writeEnd, previous_value
-                            )
-                        )
+                        _file.write(line_string.format(chrom, writeStart, writeEnd, previous_value))
                     previous_value = value
                     writeStart = writeEnd
                     writeEnd = min(writeStart + self.binLength, end)
 
             # write remaining value if not a nan
-            if (
-                previous_value is not None
-                and writeStart != end
-                and not np.isnan(previous_value)
-            ):
+            if previous_value is not None and writeStart != end and not np.isnan(previous_value):
                 _file.write(line_string.format(chrom, writeStart, end, previous_value))
 
             tempfilenames[cl] = _file.name

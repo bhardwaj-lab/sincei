@@ -25,9 +25,7 @@ from sincei import ParserCommon
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["bamfile", "whitelist", "outfile"], requiredOpts=["bamfile"]
-    )
+    io_args = ParserCommon.inputOutputOptions(opts=["bamfile", "whitelist", "outfile"], requiredOpts=["bamfile"])
     bam_args = ParserCommon.bamOptions(
         suppress_args=["labels", "smartLabels", "distanceBetweenBins", "region"],
         default_opts={"binSize": 100000},
@@ -78,9 +76,7 @@ def get_args():
         "--minMappingQuality",
         "-mq",
         metavar="INT",
-        help="If set, only reads that have a mapping "
-        "quality score of at least this are "
-        "considered.",
+        help="If set, only reads that have a mapping " "quality score of at least this are " "considered.",
         type=int,
     )
 
@@ -170,9 +166,7 @@ def main(args=None):
             barcodes = f.read().splitlines()
         args.whitelist = barcodes
 
-    bhs = bamHandler.openBam(
-        args.bamfile, returnStats=True, nThreads=args.numberOfProcessors
-    )[0]
+    bhs = bamHandler.openBam(args.bamfile, returnStats=True, nThreads=args.numberOfProcessors)[0]
     chrom_sizes = list(zip(bhs.references, bhs.lengths))
     bhs.close()
 
@@ -218,9 +212,7 @@ def main(args=None):
         ax.set_xlabel("Barcode Rank", fontsize=15)
         ax.set_ylabel("No. of nonzero bins (log10)", fontsize=15)
         ax.set_title("Ranked counts (#bins) for detected Barcodes", fontsize=15)
-        plt.xticks(
-            np.arange(0, max(df["count"]), int(max(df["count_rank"]) / 10)), fontsize=10
-        )
+        plt.xticks(np.arange(0, max(df["count"]), int(max(df["count_rank"]) / 10)), fontsize=10)
         plt.yticks(np.arange(0, 4, 0.1), fontsize=10)
 
         # Annotation

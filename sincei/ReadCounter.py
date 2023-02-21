@@ -282,9 +282,7 @@ class CountReadsPerBin(object):
                 if frag_len_dict:
                     self.defaultFragmentLength = int(frag_len_dict["median"])
                 else:
-                    exit(
-                        "*ERROR*: library is not paired-end. Please provide an extension length."
-                    )
+                    exit("*ERROR*: library is not paired-end. Please provide an extension length.")
                 if verbose:
                     print(
                         (
@@ -301,11 +299,7 @@ class CountReadsPerBin(object):
                 self.defaultFragmentLength = "read length"
 
             elif extendReads > 2000:
-                exit(
-                    "*ERROR*: read extension must be smaller that 2000. Value give: {} ".format(
-                        extendReads
-                    )
-                )
+                exit("*ERROR*: read extension must be smaller that 2000. Value give: {} ".format(extendReads))
             else:
                 self.defaultFragmentLength = int(extendReads)
 
@@ -348,9 +342,7 @@ class CountReadsPerBin(object):
 
         # check that wither numberOfSamples or stepSize are set
         if numberOfSamples is None and stepSize is None and bedFile is None:
-            raise ValueError(
-                "either stepSize, numberOfSamples or bedFile have to be set"
-            )
+            raise ValueError("either stepSize, numberOfSamples or bedFile have to be set")
 
         if self.defaultFragmentLength != "read length":
             self.maxPairedFragmentLength = 4 * self.defaultFragmentLength
@@ -383,17 +375,13 @@ class CountReadsPerBin(object):
             else:
                 # compute the step size, based on the number of samples
                 # and the length of the region studied
-                (chrom, start, end) = mapReduce.getUserRegion(chromSizes, self.region)[
-                    :3
-                ]
+                (chrom, start, end) = mapReduce.getUserRegion(chromSizes, self.region)[:3]
                 self.stepSize = max(int(float(end - start) / self.numberOfSamples), 1)
 
         # number of samples is better if large
         if np.mean(chrLengths) < self.stepSize and self.bedFile is None:
             min_num_of_samples = int(genomeSize / np.mean(chrLengths))
-            raise ValueError(
-                "numberOfSamples has to be bigger than {} ".format(min_num_of_samples)
-            )
+            raise ValueError("numberOfSamples has to be bigger than {} ".format(min_num_of_samples))
 
         max_mapped = 0
         if len(self.mappedList) > 0:
@@ -432,9 +420,7 @@ class CountReadsPerBin(object):
                 checkBAMtag(y, x, self.groupTag)
             bamFilesHandles.append(y)
 
-        chromsizes, non_common = deeptools.utilities.getCommonChrNames(
-            bamFilesHandles, verbose=self.verbose
-        )
+        chromsizes, non_common = deeptools.utilities.getCommonChrNames(bamFilesHandles, verbose=self.verbose)
 
         # skip chromosome in the list. This is usually for the
         # X chromosome which may have either one copy  in a male sample
@@ -451,9 +437,7 @@ class CountReadsPerBin(object):
         chunkSize = None
         if self.bedFile is None:
             if self.genomeChunkSize is None:
-                chunkSize = self.get_chunk_length(
-                    bamFilesHandles, genomeSize, chromsizes, chrLengths
-                )
+                chunkSize = self.get_chunk_length(bamFilesHandles, genomeSize, chromsizes, chrLengths)
             else:
                 chunkSize = self.genomeChunkSize
 
@@ -613,9 +597,7 @@ class CountReadsPerBin(object):
             regionNames = [x[2] for x in bed_regions_list]
             if self.bed_and_bin:
                 # further binning needs to be done inside the bed/gtf file (metagene counting, or computeMatrix bins)
-                transcriptsToConsider.append(
-                    [(x[1][0][0], x[1][0][1], self.binLength) for x in bed_regions_list]
-                )
+                transcriptsToConsider.append([(x[1][0][0], x[1][0][1], self.binLength) for x in bed_regions_list])
             else:
                 # simply take the whole regions
                 transcriptsToConsider = [x[1] for x in bed_regions_list]
@@ -630,9 +612,7 @@ class CountReadsPerBin(object):
                 for i in range(start, end, self.stepSize):
                     if i + self.binLength > end:
                         break
-                    if blackList is not None and blackList.findOverlaps(
-                        chrom, i, i + self.binLength
-                    ):
+                    if blackList is not None and blackList.findOverlaps(chrom, i, i + self.binLength):
                         continue
                     transcriptsToConsider.append([(i, i + self.binLength)])
 
@@ -700,9 +680,7 @@ class CountReadsPerBin(object):
                             # At the end of chromosomes (or due to blacklisted regions), there are bins smaller than the bin size
                             # Counts there are added to the bin before them, but range() will still try to include them.
                             break
-                        name = "{}_{}_{}::{}".format(
-                            chrom, startPos, min(startPos + exon[2], exon[1]), bedname
-                        )
+                        name = "{}_{}_{}::{}".format(chrom, startPos, min(startPos + exon[2], exon[1]), bedname)
                         regionList.append(name)
                         # _file.write(name+"\n")
                         idx += 1
@@ -736,9 +714,7 @@ class CountReadsPerBin(object):
 
         return subnum_reads_per_bin, _file_name, regionList
 
-    def get_coverage_of_region(
-        self, bamHandle, chrom, regions, fragmentFromRead_func=None
-    ):
+    def get_coverage_of_region(self, bamHandle, chrom, regions, fragmentFromRead_func=None):
         r"""
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
@@ -785,9 +761,7 @@ class CountReadsPerBin(object):
         # coverages = np.zeros(nbins, dtype='float64')
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
-        if (
-            self.groupTag and self.groupLabels
-        ):  # multi-sample BAM input, use the reconstructed labels
+        if self.groupTag and self.groupLabels:  # multi-sample BAM input, use the reconstructed labels
             for b in self.groupLabels:
                 coverages[b] = np.zeros(nbins, dtype="float64")
         else:
@@ -847,9 +821,7 @@ class CountReadsPerBin(object):
                 # bigWig input, currently unUSED
                 if bamHandle.chroms(chrom):
                     _ = np.array(
-                        bamHandle.stats(
-                            chrom, regStart, regEnd, type="mean", nBins=nRegBins
-                        ),
+                        bamHandle.stats(chrom, regStart, regEnd, type="mean", nBins=nRegBins),
                         dtype=np.float,
                     )
                     _[np.isnan(_)] = 0.0
@@ -858,9 +830,7 @@ class CountReadsPerBin(object):
                     continue
                 else:
                     raise NameError(
-                        "chromosome {} not found in bigWig file with chroms {}".format(
-                            chrom, bamHandle.chroms()
-                        )
+                        "chromosome {} not found in bigWig file with chroms {}".format(chrom, bamHandle.chroms())
                     )
 
             prev_pos = set()
@@ -873,10 +843,7 @@ class CountReadsPerBin(object):
                     continue
 
                 # filter reads based on SAM flag
-                if (
-                    self.samFlag_include
-                    and read.flag & self.samFlag_include != self.samFlag_include
-                ):
+                if self.samFlag_include and read.flag & self.samFlag_include != self.samFlag_include:
                     continue
                 if self.samFlag_exclude and read.flag & self.samFlag_exclude != 0:
                     continue
@@ -890,17 +857,12 @@ class CountReadsPerBin(object):
 
                 # Motif filter
                 if self.motifFilter:
-                    test = [
-                        checkMotifs(read, chrom, twoBitGenome, m[0], m[1])
-                        for m in self.motifFilter
-                    ]
+                    test = [checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in self.motifFilter]
                     if not any(test):
                         continue
                 # GC content filter
                 if self.GCcontentFilter:
-                    if not checkGCcontent(
-                        read, self.GCcontentFilter[0], self.GCcontentFilter[1]
-                    ):
+                    if not checkGCcontent(read, self.GCcontentFilter[0], self.GCcontentFilter[1]):
                         continue
 
                 # Aligned fraction filter
@@ -916,11 +878,7 @@ class CountReadsPerBin(object):
                         new_bc = "::".join([grp, bc])  # new barcode tag = sample+bc tag
                         if new_bc not in self.groupLabels:
                             if self.verbose:
-                                print(
-                                    "Encountered group: {}, not in provided labels. skipping..".format(
-                                        grp
-                                    )
-                                )
+                                print("Encountered group: {}, not in provided labels. skipping..".format(grp))
                             continue
                     else:
                         new_bc = bc
@@ -929,20 +887,12 @@ class CountReadsPerBin(object):
                 # also keep a counter for barcodes not in whitelist?
                 if bc not in self.barcodes:
                     if self.verbose:
-                        print(
-                            "Encountered barcode: {}, not in provided whitelist. skipping..".format(
-                                bc
-                            )
-                        )
+                        print("Encountered barcode: {}, not in provided whitelist. skipping..".format(bc))
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if self.duplicateFilter:
                     tup = getDupFilterTuple(read, new_bc, self.duplicateFilter)
-                    if (
-                        lpos is not None
-                        and lpos == read.reference_start
-                        and tup in prev_pos
-                    ):
+                    if lpos is not None and lpos == read.reference_start and tup in prev_pos:
                         continue
                     if lpos != read.reference_start:
                         prev_pos.clear()
@@ -1220,14 +1170,10 @@ class CountReadsPerBin(object):
 
         if self.center_read:
             fragmentCenter = fragmentEnd - (fragmentEnd - fragmentStart) / 2
-            fragmentStart = int(
-                fragmentCenter - read.infer_query_length(always=False) / 2
-            )
+            fragmentStart = int(fragmentCenter - read.infer_query_length(always=False) / 2)
             fragmentEnd = fragmentStart + read.infer_query_length(always=False)
 
-        assert (
-            fragmentStart < fragmentEnd
-        ), "fragment start greater than fragment" "end for read {}".format(
+        assert fragmentStart < fragmentEnd, "fragment start greater than fragment" "end for read {}".format(
             read.query_name
         )
         return [(fragmentStart, fragmentEnd)]
