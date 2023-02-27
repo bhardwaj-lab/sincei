@@ -12,8 +12,9 @@ saturation_eps = 10**-10
 
 class ExponentialFamily:
 
-    def __init__(self):
+    def __init__(self, family_params=None):
         self.family_name = 'base'
+        self.family_params = family_params
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -48,10 +49,14 @@ class ExponentialFamily:
 
         return expt - torch.log(f)
 
+    def compute_ancillary_params(self, X: torch.Tensor=None):
+        pass
+
 
 class Gaussian(ExponentialFamily):
-    def __init__(self):
+    def __init__(self, family_params=None):
         self.family_name = 'gaussian'
+        self.family_params = family_params
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -70,9 +75,9 @@ class Gaussian(ExponentialFamily):
 
 
 class Bernoulli(ExponentialFamily):
-    def __init__(self, max_val=30):
+    def __init__(self, family_params=None):
         self.family_name = 'bernoulli'
-        self.max_val = max_val
+        self.family_params = family_params if family_params else {'max_val': 30}
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -87,12 +92,13 @@ class Bernoulli(ExponentialFamily):
         return 1.
 
     def invert_g(self, X: torch.Tensor):
-        return torch.log(X/(X-1)).clip(-self.max_val, self.max_val)
+        return torch.log(X/(X-1)).clip(-self.family_params['max_val'], self.family_params['max_val'])
 
 
 class Poisson(ExponentialFamily):
-    def __init(self):
+    def __init(self, family_params=None):
         self.family_name = 'poisson'
+        self.family_params = family_params
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
