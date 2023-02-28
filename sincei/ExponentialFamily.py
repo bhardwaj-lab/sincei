@@ -49,6 +49,12 @@ class ExponentialFamily:
 
         return expt - torch.log(f)
 
+    def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor):
+        """Computes negative log-likelihood between dataset X and parameters theta"""
+        return - torch.sum(
+            self.log_distribution(X, theta)
+        )
+
     def compute_ancillary_params(self, X: torch.Tensor=None):
         pass
 
@@ -56,7 +62,7 @@ class ExponentialFamily:
 class Gaussian(ExponentialFamily):
     def __init__(self, family_params=None):
         self.family_name = 'gaussian'
-        self.family_params = family_params
+        self.family_params = family_params if family_params else {}
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -72,6 +78,12 @@ class Gaussian(ExponentialFamily):
 
     def invert_g(self, X: torch.Tensor):
         return X
+
+    def load_family_params_to_gpu(self, device):
+        self.family_params = {
+            k: self.family_params[k].to(device)
+            for j in self.family_params
+        }
 
 
 class Bernoulli(ExponentialFamily):
