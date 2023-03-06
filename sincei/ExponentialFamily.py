@@ -14,7 +14,7 @@ class ExponentialFamily:
 
     def __init__(self, family_params=None):
         self.family_name = 'base'
-        self.family_params = family_params
+        self.family_params = family_params if family_params else {}
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -51,12 +51,19 @@ class ExponentialFamily:
 
     def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor):
         """Computes negative log-likelihood between dataset X and parameters theta"""
-        return - torch.sum(
-            self.log_distribution(X, theta)
-        )
+        expt = self.exponential_term(X, theta) - self.log_partition(theta)
+        return - torch.sum(expt)
 
     def compute_ancillary_params(self, X: torch.Tensor=None):
         pass
+
+    def load_family_params_to_gpu(self, device):
+        self.family_params = {
+            k: self.family_params[k].to(device) 
+            if type(self.family_params[k]) is torch.Tensor 
+            else self.family_params[k]
+            for k in self.family_params
+        }
 
 
 class Gaussian(ExponentialFamily):
@@ -79,12 +86,6 @@ class Gaussian(ExponentialFamily):
     def invert_g(self, X: torch.Tensor):
         return X
 
-    def load_family_params_to_gpu(self, device):
-        self.family_params = {
-            k: self.family_params[k].to(device)
-            for j in self.family_params
-        }
-
 
 class Bernoulli(ExponentialFamily):
     def __init__(self, family_params=None):
@@ -106,11 +107,16 @@ class Bernoulli(ExponentialFamily):
     def invert_g(self, X: torch.Tensor):
         return torch.log(X/(X-1)).clip(-self.family_params['max_val'], self.family_params['max_val'])
 
+    def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor):
+        """Computes negative log-likelihood between dataset X and parameters theta"""
+        expt = self.exponential_term(X, theta) - self.log_partition(theta)
+        return - torch.sum(expt)
+
 
 class Poisson(ExponentialFamily):
-    def __init(self, family_params=None):
+    def __init__(self, family_params=None):
         self.family_name = 'poisson'
-        self.family_params = family_params
+        self.family_params = family_params if family_params else {'min_val': 1e-20}
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -125,7 +131,7 @@ class Poisson(ExponentialFamily):
         return 1/scipy.special.gamma(X+1)
 
     def invert_g(self, X: torch.Tensor):
-        return torch.log(X)
+        return torch.log(X).clip(self.family_params['min_val'])
 
     def log_distribution(self, X: torch.Tensor, theta: torch.Tensor):
         """The computation of gamma function for the base measure (h) would lead to inf, hence a re-design
