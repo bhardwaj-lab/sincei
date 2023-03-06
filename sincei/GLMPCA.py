@@ -16,22 +16,25 @@ from .ExponentialFamily import Normal
 from .ExponentialFamily import Poisson
 from .ExponentialFamily import Bernoulli
 
-#from .negative_binomial_routines import compute_dispersion
-#from .exponential_family import *
-#from .log_normal import LOG_NORMAL_ZERO_THRESHOLD
+# from .negative_binomial_routines import compute_dispersion
+# from .exponential_family import *
+# from .log_normal import LOG_NORMAL_ZERO_THRESHOLD
+
 
 class GLMPCA:
-
-    def __init__(self, n_pc, family,
-                 maxiter=1000,
-                 max_param = 10,
-                 learning_rate = 0.02,
-                 batch_size=128,
-                 step_size=20,
-                 gamma=0.5,
-                 n_init=1,
-                 n_jobs=1):
-
+    def __init__(
+        self,
+        n_pc,
+        family,
+        maxiter=1000,
+        max_param=10,
+        learning_rate=0.02,
+        batch_size=128,
+        step_size=20,
+        gamma=0.5,
+        n_init=1,
+        n_jobs=1,
+    ):
         self.n_pc = n_pc
         self.family = family
         self.maxiter = maxiter
@@ -57,5 +60,3 @@ class GLMPCA:
         self.exp_family_params = None
         self.loadings_learning_scores_ = []
         self.loadings_learning_rates_ = []
-
-

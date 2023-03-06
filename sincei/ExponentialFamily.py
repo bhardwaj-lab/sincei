@@ -4,16 +4,16 @@ import numpy as np
 import scipy
 from joblib import Parallel, delayed
 
-#from .beta_routines import compute_alpha, compute_alpha_gene, compute_mu_gene
-#from.log_normal import LOG_NORMAL_ZERO_THRESHOLD, pi_val
-#from .gamma import GAMMA_ZERO_THRESHOLD, compute_gamma_saturated_params_gene
+# from .beta_routines import compute_alpha, compute_alpha_gene, compute_mu_gene
+# from.log_normal import LOG_NORMAL_ZERO_THRESHOLD, pi_val
+# from .gamma import GAMMA_ZERO_THRESHOLD, compute_gamma_saturated_params_gene
 
 saturation_eps = 10**-10
 
-class ExponentialFamily:
 
+class ExponentialFamily:
     def __init__(self):
-        self.family_name = 'base'
+        self.family_name = "base"
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -22,19 +22,16 @@ class ExponentialFamily:
         return theta
 
     def log_partition(self, theta: torch.Tensor):
-        return 0.
+        return 0.0
 
     def base_measure(self, X: torch.Tensor):
-        return 1.
+        return 1.0
 
     def invert_g(self, X: torch.Tensor):
         return X
 
     def exponential_term(self, X: torch.Tensor, theta: torch.Tensor):
-        return torch.multiply(
-            self.sufficient_statistics(X),
-            self.natural_parametrization(theta)
-        )
+        return torch.multiply(self.sufficient_statistics(X), self.natural_parametrization(theta))
 
     def distribution(self, X: torch.Tensor, theta: torch.Tensor):
         f = self.base_measure(X)
@@ -51,7 +48,7 @@ class ExponentialFamily:
 
 class Gaussian(ExponentialFamily):
     def __init__(self):
-        self.family_name = 'gaussian'
+        self.family_name = "gaussian"
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -60,10 +57,10 @@ class Gaussian(ExponentialFamily):
         return theta
 
     def log_partition(self, theta: torch.Tensor):
-        return torch.square(theta) / 2.
+        return torch.square(theta) / 2.0
 
     def base_measure(self, X: torch.Tensor):
-        return torch.exp(-torch.square(X)/2.) / np.sqrt(2.*torch.pi)
+        return torch.exp(-torch.square(X) / 2.0) / np.sqrt(2.0 * torch.pi)
 
     def invert_g(self, X: torch.Tensor):
         return X
@@ -71,7 +68,7 @@ class Gaussian(ExponentialFamily):
 
 class Bernoulli(ExponentialFamily):
     def __init__(self, max_val=30):
-        self.family_name = 'bernoulli'
+        self.family_name = "bernoulli"
         self.max_val = max_val
 
     def sufficient_statistics(self, X: torch.Tensor):
@@ -81,18 +78,18 @@ class Bernoulli(ExponentialFamily):
         return theta
 
     def log_partition(self, theta: torch.Tensor):
-        return torch.log(1.+torch.exp(theta))
+        return torch.log(1.0 + torch.exp(theta))
 
     def base_measure(self, X: torch.Tensor):
-        return 1.
+        return 1.0
 
     def invert_g(self, X: torch.Tensor):
-        return torch.log(X/(X-1)).clip(-self.max_val, self.max_val)
+        return torch.log(X / (X - 1)).clip(-self.max_val, self.max_val)
 
 
 class Poisson(ExponentialFamily):
     def __init(self):
-        self.family_name = 'poisson'
+        self.family_name = "poisson"
 
     def sufficient_statistics(self, X: torch.Tensor):
         return X
@@ -104,7 +101,7 @@ class Poisson(ExponentialFamily):
         return torch.exp(theta)
 
     def base_measure(self, X: torch.Tensor):
-        return 1/scipy.special.gamma(X+1)
+        return 1 / scipy.special.gamma(X + 1)
 
     def invert_g(self, X: torch.Tensor):
         return torch.log(X)
@@ -112,9 +109,7 @@ class Poisson(ExponentialFamily):
     def log_distribution(self, X: torch.Tensor, theta: torch.Tensor):
         """The computation of gamma function for the base measure (h) would lead to inf, hence a re-design
         of the method."""
-        log_f = torch.lgamma(X+1)
+        log_f = torch.lgamma(X + 1)
         expt = self.exponential_term(X, theta) - self.log_partition(theta)
 
         return expt - log_f
-
-
