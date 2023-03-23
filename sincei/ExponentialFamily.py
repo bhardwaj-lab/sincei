@@ -9,7 +9,7 @@ saturation_eps = 10**-10
 
 class ExponentialFamily:
 
-    def __init__(self, family_params=None):
+    def __init__(self, family_params=None, **kwargs):
         self.family_name = 'base'
         self.family_params = family_params if family_params else {}
 
@@ -65,7 +65,7 @@ class ExponentialFamily:
 
 
 class Gaussian(ExponentialFamily):
-    def __init__(self, family_params=None):
+    def __init__(self, family_params=None, **kwargs):
         self.family_name = 'gaussian'
         self.family_params = family_params if family_params else {}
 
@@ -86,7 +86,7 @@ class Gaussian(ExponentialFamily):
 
 
 class Bernoulli(ExponentialFamily):
-    def __init__(self, family_params=None):
+    def __init__(self, family_params=None, **kwargs):
         self.family_name = 'bernoulli'
         self.family_params = family_params if family_params else {'max_val': 30}
 
@@ -112,7 +112,7 @@ class Bernoulli(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
-    def __init__(self, family_params=None):
+    def __init__(self, family_params=None, **kwargs):
         self.family_name = 'poisson'
         self.family_params = family_params if family_params else {'min_val': 1e-20}
 
@@ -203,28 +203,95 @@ class Beta(ExponentialFamily):
     def invert_g(self, X: torch.Tensor=None):
         """Dichotomy to find where derivative maxes out"""
 
+        # Initialize dichotomy parameters.
         min_val = torch.zeros(X.shape)
         max_val = torch.ones(X.shape)
         theta = (min_val + max_val) / 2
-        eps = 1e-4
-        max_iter = 100
 
         llik = self._derivative_log_likelihood(X, theta)
-        for idx in tqdm(range(max_iter)):
+        for idx in tqdm(range(self.family_params['maxiter'])):
             min_val[llik > 0] = theta[llik > 0]
             max_val[llik < 0] = theta[llik < 0]
             theta = (min_val + max_val) / 2
             llik = self._derivative_log_likelihood(X, theta)
 
-            if torch.max(torch.abs(llik)) < eps:
+            if torch.max(torch.abs(llik)) < self.family_params['eps']:
                 print('CONVERGENCE AFTER %s ITERATIONS'%(idx))
                 break
 
-        if idx == max_iter:
+        if idx == self.family_params['maxiter']:
             print('CONVERGENCE NOT REACHED')
 
         return theta
 
 
+class Gamma(ExponentialFamily):
+    def __init__(self, family_params=None, **kwargs):
+        self.family_name = 'beta'
+        if family_params is None or 'nu' not in family_params:
+            print("Gamma distribution not initialized yet")
+        default_family_params = {'min_val': 1e-5, 'n_jobs': 1, 'eps': 1e-4, 'maxiter': 100, 'maxval': 10e6}
+        self.family_params = family_params if family_params else default_family_params
+        for k in kwargs:
+            self.family_params[k] = kwargs[k]
 
+    def sufficient_statistics(self, X: torch.Tensor):
+        return torch.stack([torch.log(X), X])
 
+    def natural_parametrization(self, theta: torch.Tensor):
+        nat_params = torch.stack([
+            theta,
+            - torch.ones(theta.shape)*self.family_params['nu']
+        ])
+        if nat_params.shape[1] == 1:
+            nat_params = nat_params.flatten()
+        return nat_params
+
+    def log_partition(self, theta: torch.Tensor):
+        return torch.lgamma(theta+1) - (theta+1)*torch.log(self.family_params['nu'])
+
+    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor):
+        return torch.sum(torch.multiply(
+            self.sufficient_statistics(X),
+            self.natural_parametrization(theta)
+        ), axis=0)
+
+    def _digamma_implicit_function(self, X: torch.Tensor, theta: torch.Tensor):
+        return torch.digamma(theta+1) - torch.log(X*self.family_params['nu'])
+
+    def invert_g(self, X: torch.Tensor=None):
+        """Dichotomy to compute inverse of digamma function."""
+
+        # Initialize dichotomy parameters.
+        min_val = torch.zeros(X.shape)
+        max_val = torch.ones(X.shape) * self.family_params['maxval']
+        theta = (min_val + max_val) / 2
+
+        llik = self._digamma_implicit_function(X, theta)
+        for idx in tqdm(range(self.family_params['maxiter'])):
+            max_val[llik > 0] = theta[llik > 0]
+            min_val[llik < 0] = theta[llik < 0]
+            theta = (min_val + max_val) / 2
+            llik = self._digamma_implicit_function(X, theta)
+
+            if torch.max(torch.abs(llik)) < self.family_params['eps']:
+                print('CONVERGENCE AFTER %s ITERATIONS'%(idx))
+                break
+
+        if idx == self.family_params['maxiter']:
+            print('CONVERGENCE NOT REACHED')
+
+        return theta
+
+    def initialize_family_parameters(self, X: torch.Tensor=None):
+        p = X.shape[1]
+
+        self.family_params['nu'] = torch.Tensor(
+            Parallel(n_jobs=self.family_params['n_jobs'])(
+                delayed(scipy.stats.gamma.fit)(X[:,idx], floc=0)
+                for idx in tqdm(range(p))
+        ))
+        self.family_params['nu'] = 1. / self.family_params['nu'][:,-1]
+        assert self.family_params['nu'].shape[0] == p
+
+        return True
