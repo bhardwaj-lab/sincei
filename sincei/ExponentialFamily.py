@@ -63,7 +63,6 @@ class ExponentialFamily:
         """General method to initialize certain parameters (e.g. for Beta or Negative Binomial"""
         pass
 
-
 class Gaussian(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):
         self.family_name = 'gaussian'
@@ -83,7 +82,6 @@ class Gaussian(ExponentialFamily):
 
     def invert_g(self, X: torch.Tensor):
         return X
-
 
 class Bernoulli(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):
@@ -109,7 +107,6 @@ class Bernoulli(ExponentialFamily):
         """Computes negative log-likelihood between dataset X and parameters theta"""
         expt = self.exponential_term(X, theta) - self.log_partition(theta)
         return - torch.sum(expt)
-
 
 class Poisson(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):
@@ -224,10 +221,9 @@ class Beta(ExponentialFamily):
 
         return theta
 
-
 class Gamma(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):
-        self.family_name = 'beta'
+        self.family_name = 'gamma'
         if family_params is None or 'nu' not in family_params:
             print("Gamma distribution not initialized yet")
         default_family_params = {'min_val': 1e-5, 'n_jobs': 1, 'eps': 1e-4, 'maxiter': 100, 'maxval': 10e6}
