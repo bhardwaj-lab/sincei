@@ -291,3 +291,44 @@ class Gamma(ExponentialFamily):
         assert self.family_params['nu'].shape[0] == p
 
         return True
+
+class LogNormal(ExponentialFamily):
+    def __init__(self, family_params=None, **kwargs):
+        self.family_name = 'log_normal'
+        if family_params is None or 'nu' not in family_params:
+            print("Log Normal distribution not initialized yet")
+        default_family_params = {'min_val': 1e-8, 'n_jobs': 1, 'eps': 1e-4, 'maxiter': 100, 'maxval': 10e6}
+        self.family_params = family_params if family_params else default_family_params
+        for k in kwargs:
+            self.family_params[k] = kwargs[k]
+
+    def sufficient_statistics(self, X: torch.Tensor):
+        log_X = torch.log(X)
+        return torch.stack([log_X, torch.square(log_X)])
+
+    def natural_parametrization(self, theta: torch.Tensor):
+        nat_params = torch.stack([
+            theta / torch.square(self.family_params['nu']),
+            - torch.ones(theta.shape) / (2*torch.square(self.family_params['nu']))
+        ])
+        if nat_params.shape[1] == 1:
+            nat_params = nat_params.flatten()
+        return nat_params
+
+    def base_measure(self, X: torch.Tensor):
+        return 1/(np.sqrt(2*torch.pi) * X)
+
+    def log_partition(self, theta: torch.Tensor):
+        return torch.square(theta)/(2*torch.square(self.family_params['nu'])) + torch.log(self.family_params['nu'])
+
+    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor):
+        return torch.sum(torch.multiply(
+            self.sufficient_statistics(X),
+            self.natural_parametrization(theta)
+        ), axis=0)
+
+    def invert_g(self, X: torch.Tensor = None):
+        return torch.log(X.clip(self.family_params['min_val']))
+
+    def initialize_family_parameters(self, X: torch.Tensor=None):
+        self.family_params['nu'] = torch.sqrt(torch.var(torch.log(X), axis=0))

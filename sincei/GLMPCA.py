@@ -18,6 +18,7 @@ from .ExponentialFamily import Poisson
 from .ExponentialFamily import Bernoulli
 from .ExponentialFamily import Beta
 from .ExponentialFamily import Gamma
+from .ExponentialFamily import LogNormal
 
 #from .negative_binomial_routines import compute_dispersion
 #from .exponential_family import *
@@ -28,7 +29,9 @@ EXPONENTIAL_FAMILY_DICT = {
     'poisson': Poisson,
     'bernoulli': Bernoulli,
     'beta': Beta,
-    'gamma': Gamma
+    'gamma': Gamma,
+    'lognormal': LogNormal,
+    'log_normal': LogNormal
 }
 LEARNING_RATE_LIMIT = 10**(-10)
 
