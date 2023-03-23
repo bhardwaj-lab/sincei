@@ -2,11 +2,8 @@ import torch
 from copy import deepcopy
 import numpy as np
 import scipy
+from tqdm import tqdm
 from joblib import Parallel, delayed
-
-#from .beta_routines import compute_alpha, compute_alpha_gene, compute_mu_gene
-#from.log_normal import LOG_NORMAL_ZERO_THRESHOLD, pi_val
-#from .gamma import GAMMA_ZERO_THRESHOLD, compute_gamma_saturated_params_gene
 
 saturation_eps = 10**-10
 
@@ -26,7 +23,7 @@ class ExponentialFamily:
         return 0.
 
     def base_measure(self, X: torch.Tensor):
-        return 1.
+        return torch.ones(size=X.shape)
 
     def invert_g(self, X: torch.Tensor):
         return X
@@ -54,9 +51,6 @@ class ExponentialFamily:
         expt = self.exponential_term(X, theta) - self.log_partition(theta)
         return - torch.sum(expt)
 
-    def compute_ancillary_params(self, X: torch.Tensor=None):
-        pass
-
     def load_family_params_to_gpu(self, device):
         self.family_params = {
             k: self.family_params[k].to(device) 
@@ -64,6 +58,10 @@ class ExponentialFamily:
             else self.family_params[k]
             for k in self.family_params
         }
+
+    def initialize_family_parameters(self, X: torch.Tensor=None):
+        """General method to initialize certain parameters (e.g. for Beta or Negative Binomial"""
+        pass
 
 
 class Gaussian(ExponentialFamily):
@@ -140,5 +138,93 @@ class Poisson(ExponentialFamily):
         expt = self.exponential_term(X, theta) - self.log_partition(theta)
 
         return expt - log_f
+
+class Beta(ExponentialFamily):
+    def __init__(self, family_params=None, **kwargs):
+        self.family_name = 'beta'
+        if family_params is None or 'nu' not in family_params:
+            print("Beta distribution not initialized yet")
+        default_family_params = {'min_val': 1e-5, 'n_jobs': 1, 'eps': 1e-4, 'maxiter': 100}
+        self.family_params = family_params if family_params else default_family_params
+        for k in kwargs:
+            self.family_params[k] = kwargs[k]
+
+    def sufficient_statistics(self, X: torch.Tensor):
+        return torch.stack([
+            torch.log(X),
+            torch.log(1-X)
+        ])
+
+    def natural_parametrization(self, theta: torch.Tensor):
+        nat_params = torch.stack([
+            theta * self.family_params['nu'],
+            (1-theta) * self.family_params['nu']
+        ])
+        if nat_params.shape[1] == 1:
+            nat_params = nat_params.flatten()
+        return nat_params
+
+    def base_measure(self, X: torch.Tensor):
+        return torch.mul(X, 1-X)
+
+    def log_partition(self, theta: torch.Tensor):
+        numerator = torch.sum(
+            torch.lgamma(self.natural_parametrization(theta)),
+            axis=0
+        )
+        numerator = torch.sum(numerator, axis=0)
+        denominator = torch.lgamma(self.family_params['nu'])
+        return numerator - denominator
+
+    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor):
+        return torch.sum(torch.multiply(
+            self.sufficient_statistics(X),
+            self.natural_parametrization(theta)
+        ), axis=0)
+
+    def _derivative_log_likelihood(self, X: torch.Tensor, theta: torch.Tensor):
+        return torch.log(X/(1-X)) \
+               + torch.digamma((1-theta)*self.family_params['nu']) \
+               - torch.digamma(theta*self.family_params['nu'])
+
+    def initialize_family_parameters(self, X: torch.Tensor=None):
+        p = X.shape[1]
+
+        self.family_params['nu'] = torch.Tensor(
+            Parallel(n_jobs=self.family_params['n_jobs'])(
+                delayed(scipy.stats.beta.fit)(X[:,idx], floc=0, fscale=1)
+                for idx in tqdm(range(p))
+        ))
+        self.family_params['nu'] = torch.sum(self.family_params['nu'][:,:2], axis=1)
+        assert self.family_params['nu'].shape[0] == p
+
+        return True
+
+    def invert_g(self, X: torch.Tensor=None):
+        """Dichotomy to find where derivative maxes out"""
+
+        min_val = torch.zeros(X.shape)
+        max_val = torch.ones(X.shape)
+        theta = (min_val + max_val) / 2
+        eps = 1e-4
+        max_iter = 100
+
+        llik = self._derivative_log_likelihood(X, theta)
+        for idx in tqdm(range(max_iter)):
+            min_val[llik > 0] = theta[llik > 0]
+            max_val[llik < 0] = theta[llik < 0]
+            theta = (min_val + max_val) / 2
+            llik = self._derivative_log_likelihood(X, theta)
+
+            if torch.max(torch.abs(llik)) < eps:
+                print('CONVERGENCE AFTER %s ITERATIONS'%(idx))
+                break
+
+        if idx == max_iter:
+            print('CONVERGENCE NOT REACHED')
+
+        return theta
+
+
 
 

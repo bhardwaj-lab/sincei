@@ -16,6 +16,7 @@ from scipy.stats import gamma as gamma_dst
 from .ExponentialFamily import Gaussian
 from .ExponentialFamily import Poisson
 from .ExponentialFamily import Bernoulli
+from .ExponentialFamily import Beta
 
 #from .negative_binomial_routines import compute_dispersion
 #from .exponential_family import *
@@ -24,7 +25,8 @@ from .ExponentialFamily import Bernoulli
 EXPONENTIAL_FAMILY_DICT = {
     'gaussian': Gaussian,
     'poisson': Poisson,
-    'bernoulli': Bernoulli
+    'bernoulli': Bernoulli,
+    'beta': Beta
 }
 LEARNING_RATE_LIMIT = 10**(-10)
 
@@ -80,7 +82,7 @@ class GLMPCA:
 
     def fit(self, X):
         # Fit exponential family params (e.g., dispersion for negative binomial)
-        self.exponential_family.compute_ancillary_params(X)
+        self.exponential_family.initialize_family_parameters(X)
 
         # Compute saturated parameters, alongside exponential family parameters (if needed)
         saturated_parameters = self.exponential_family.invert_g(X)
