@@ -25,7 +25,7 @@ from sincei import ParserCommon
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(opts=["bamfile", "whitelist", "outfile"], requiredOpts=["bamfile"])
+    io_args = ParserCommon.inputOutputOptions(opts=["bamfile", "whitelist", "outFile"], requiredOpts=["bamfile"])
     bam_args = ParserCommon.bamOptions(
         suppress_args=["labels", "smartLabels", "distanceBetweenBins", "region"],
         default_opts={"binSize": 100000},
@@ -238,5 +238,5 @@ def main(args=None):
 
     for x in final_set:
         of.write(str(x) + "\n")
-    df.to_csv("~/programs/sincei/test_df.csv")
+    # df.to_csv("~/programs/sincei/test_df.csv")
     return 0
