@@ -37,6 +37,8 @@ dependencies = [
     "python-igraph",
     # for debug logging (referenced from the issue template)
     "session-info",
+    "torch",
+    "mctorch-lib"
     ]
 
 [project.scripts]
