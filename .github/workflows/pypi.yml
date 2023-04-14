@@ -1,5 +1,11 @@
 name: pypi
-on: [push]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 jobs:
   pypi:
     name: upload to pypi

@@ -17,7 +17,6 @@ import scanpy as sc
 # scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 # sys.path.append(scriptdir)
 from sincei import ParserCommon
-from sincei.Clustering import LSA_gensim
 
 
 def parseArguments():
