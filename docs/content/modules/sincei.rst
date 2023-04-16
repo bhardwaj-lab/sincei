@@ -4,14 +4,6 @@ sincei package
 Submodules
 ----------
 
-sincei.Clustering module
-------------------------
-
-.. automodule:: sincei.Clustering
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 sincei.FragmentFFT module
 -------------------------
 
@@ -24,6 +16,14 @@ sincei.GetStats module
 ----------------------
 
 .. automodule:: sincei.GetStats
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.GLMPCA module
+----------------------
+
+.. automodule:: sincei.GLMPCA
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,6 +48,14 @@ sincei.RegionQuery module
 -------------------------
 
 .. automodule:: sincei.RegionQuery
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.TopicModels module
+------------------------
+
+.. automodule:: sincei.TopicModels
    :members:
    :undoc-members:
    :show-inheritance:
