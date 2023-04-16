@@ -7,6 +7,7 @@ import copy
 import argparse
 import numpy as np
 import pandas as pd
+import torch
 from scipy import sparse, io
 from sklearn.preprocessing import binarize
 
@@ -136,7 +137,7 @@ def main(args=None):
     adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
 
     
-    mtx = sparse.csr_matrix(adata.X.copy().transpose())
+    mtx = sparse.csr_matrix(adata.X.copy().transpose()) # features x cells
     cells = copy.deepcopy(adata.obs_names.to_list())
     regions = copy.deepcopy(adata.var_names.to_list())
 
@@ -176,15 +177,15 @@ def main(args=None):
 
     elif args.method == "glmPCA":
         # convert mtx to torch tensor
-        mtx=torch.tensor(adata.X.todense()) # feature*cell tensor
+        mtx=torch.tensor(mtx.todense()) # feature*cell tensor
 
         ## glmPCA using mctorch
         model_object = GLMPCA(
-                            n_pcs=args.nPrinComps,
+                            n_pc=args.nPrinComps,
                             family=args.glmPCAfamily,
                         )
         model_object.fit(mtx)
-        cell_pcs = model_object.saturated_loadings_
+        cell_pcs = model_object.saturated_loadings_.detach().numpy()
 
         ## update the anndata object
         adata.obsm["X_pca"] = np.asarray(cell_pcs)
