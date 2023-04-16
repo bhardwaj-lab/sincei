@@ -9,7 +9,7 @@ sincei
     :target: https://zenodo.org/badge/latestdoi/271841139
     :alt: DOI
 
-Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
+Mourragui S. and Bhardwaj V. (2023) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
 
 Installation

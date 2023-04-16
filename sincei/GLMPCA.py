@@ -13,16 +13,7 @@ from scipy.stats import beta as beta_dst
 from scipy.stats import lognorm
 from scipy.stats import gamma as gamma_dst
 
-from .ExponentialFamily import Gaussian
-from .ExponentialFamily import Poisson
-from .ExponentialFamily import Bernoulli
-from .ExponentialFamily import Beta
-from .ExponentialFamily import Gamma
-from .ExponentialFamily import LogNormal
-
-#from .negative_binomial_routines import compute_dispersion
-#from .exponential_family import *
-#from .log_normal import LOG_NORMAL_ZERO_THRESHOLD
+from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal
 
 EXPONENTIAL_FAMILY_DICT = {
     'gaussian': Gaussian,

@@ -38,7 +38,8 @@ dependencies = [
     # for debug logging (referenced from the issue template)
     "session-info",
     "torch",
-    "mctorch-lib"
+    "mctorch-lib",
+    "gensim"
     ]
 
 [project.scripts]

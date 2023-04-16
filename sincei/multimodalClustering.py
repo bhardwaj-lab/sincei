@@ -13,7 +13,7 @@ from scipy import sparse
 import sys
 
 # own modules
-from sincei.Clustering import LSA_gensim
+from sincei.TopicModels import TOPICMODEL
 from sincei._deprecated import cluster_LSA
 
 # umap.__version__ : should be >= 0.5.1
@@ -72,13 +72,16 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK
     mode2_adata = mode2_adata[mode1_adata.obs[column_key].tolist()]
     # re-do LSA
     mtx = sparse.csr_matrix(mode2_adata.X.transpose())
-    corpus_lsi, cell_topic = LSA_gensim(
+    dat = TOPICMODEL(
         mtx,
         list(mode2_adata.obs.index),
         list(mode2_adata.var.index),
         nTopics=20,
         smartCode="lfu",
     )
+    dat.runLSA()
+    cell_topic = dat.get_cell_topic()
+
     # get graph
     chic_umap, G_chic = cluster_LSA(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
     mode2_adata.obsm["X_pca"] = cell_topic

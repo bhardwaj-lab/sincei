@@ -3,6 +3,7 @@
 
 import sys
 import os
+import copy
 import argparse
 import numpy as np
 import pandas as pd
@@ -27,7 +28,8 @@ import scanpy as sc
 # sys.path.append(scriptdir)
 
 from sincei import ParserCommon
-from sincei.Clustering import LSA_gensim
+from sincei.TopicModels import TOPICMODEL
+from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
 
 
 def parseArguments():
@@ -76,9 +78,18 @@ def get_args():
         "--method",
         "-m",
         type=str,
-        choices=["LSA"],
+        choices=["LSA", "LDA", "glmPCA"],
         default="LSA",
         help="The dimentionality reduction method for clustering. (Default: %(default)s)",
+    )
+
+    general.add_argument(
+        "--glmPCAfamily",
+        "-gf",
+        type=str,
+        choices=EXPONENTIAL_FAMILY_DICT.keys(),
+        default="poisson",
+        help="The choice of exponential family distribution to use for glmPCA method. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -124,21 +135,60 @@ def main(args=None):
 
     adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
 
-    ## LSA and clustering based on gensim
-    mtx = sparse.csr_matrix(adata.X.transpose())
+    
+    mtx = sparse.csr_matrix(adata.X.copy().transpose())
+    cells = copy.deepcopy(adata.obs_names.to_list())
+    regions = copy.deepcopy(adata.var_names.to_list())
+
     if args.binarize:
         mtx = binarize(mtx, copy=True)
-    corpus_lsi, cell_topic, corpus_tfidf = LSA_gensim(
-        mtx,
-        list(adata.obs.index),
-        list(adata.var.index),
-        nTopics=args.nPrinComps,
-        smartCode="lfu",
-    )
+    
+    if args.method == "LSA":
+        ## LSA using gensim
+        model_object = TOPICMODEL(
+                            mtx,
+                            cells,
+                            regions,
+                            n_topics=args.nPrinComps,
+                            smart_code="lfu",
+                        )
+        model_object.runLSA()
+        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
+        adata = adata[cell_topic.index]
+        adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
 
-    ## update the anndata object, drop cells which are not in the anndata
-    adata = adata[cell_topic.index]
-    adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
+    elif args.method == "LDA":
+        ## LDA using gensim
+        model_object = TOPICMODEL(
+                            mtx,
+                            cells,
+                            regions,
+                            n_topics=args.nPrinComps,
+                            n_passes=2, 
+                            n_workers=4,
+                        )
+        model_object.runLDA()
+        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
+        adata = adata[cell_topic.index]
+        adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
+
+    elif args.method == "glmPCA":
+        # convert mtx to torch tensor
+        mtx=torch.tensor(adata.X.todense()) # feature*cell tensor
+
+        ## glmPCA using mctorch
+        model_object = GLMPCA(
+                            n_pcs=args.nPrinComps,
+                            family=args.glmPCAfamily,
+                        )
+        model_object.fit(mtx)
+        cell_pcs = model_object.saturated_loadings_
+
+        ## update the anndata object
+        adata.obsm["X_pca"] = np.asarray(cell_pcs)
+
     sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=args.nNeighbors)
     sc.tl.leiden(adata, resolution=args.clusterResolution)
     sc.tl.paga(adata)
@@ -166,7 +216,7 @@ def main(args=None):
 
     # save if asked
     if args.outFileTrainedModel:
-        corpus_lsi.save(args.outFileTrainedModel)
+        model_object.lsi_model.save(args.outFileTrainedModel)
     #    if args.outGraph:
     # 'The output file for the Graph object (lgl format) which can be used for further clustering/integration.'
     #        graph.write_lgl(args.outGraph)
