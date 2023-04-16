@@ -1,8 +1,17 @@
 sincei package
 ==============
 
+
 Submodules
 ----------
+
+sincei.ExponentialFamily module
+-------------------------------
+
+.. automodule:: sincei.ExponentialFamily
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 sincei.FragmentFFT module
 -------------------------
@@ -12,18 +21,18 @@ sincei.FragmentFFT module
    :undoc-members:
    :show-inheritance:
 
-sincei.GetStats module
-----------------------
+sincei.GLMPCA module
+--------------------
 
-.. automodule:: sincei.GetStats
+.. automodule:: sincei.GLMPCA
    :members:
    :undoc-members:
    :show-inheritance:
 
-sincei.GLMPCA module
+sincei.GetStats module
 ----------------------
 
-.. automodule:: sincei.GLMPCA
+.. automodule:: sincei.GetStats
    :members:
    :undoc-members:
    :show-inheritance:
@@ -53,7 +62,7 @@ sincei.RegionQuery module
    :show-inheritance:
 
 sincei.TopicModels module
-------------------------
+-------------------------
 
 .. automodule:: sincei.TopicModels
    :members:
@@ -80,6 +89,86 @@ sincei.multimodalClustering module
 ----------------------------------
 
 .. automodule:: sincei.multimodalClustering
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scBAMops module
+----------------------
+
+.. automodule:: sincei.scBAMops
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scBulkCoverage module
+----------------------------
+
+.. automodule:: sincei.scBulkCoverage
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scClusterCells module
+----------------------------
+
+.. automodule:: sincei.scClusterCells
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scCombineCounts module
+-----------------------------
+
+.. automodule:: sincei.scCombineCounts
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scCountQC module
+-----------------------
+
+.. automodule:: sincei.scCountQC
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scCountReads module
+--------------------------
+
+.. automodule:: sincei.scCountReads
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scFilterBarcodes module
+------------------------------
+
+.. automodule:: sincei.scFilterBarcodes
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scFilterStats module
+---------------------------
+
+.. automodule:: sincei.scFilterStats
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.scJSD module
+-------------------
+
+.. automodule:: sincei.scJSD
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+sincei.sincei module
+--------------------
+
+.. automodule:: sincei.sincei
    :members:
    :undoc-members:
    :show-inheritance:

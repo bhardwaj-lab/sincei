@@ -42,7 +42,6 @@ class GLMPCA:
         init="spectral",
         n_jobs=1,
     ):
-
         self.n_pc = n_pc
         self.family = family
         self.family_params = family_params
@@ -226,7 +225,6 @@ class GLMPCA:
     def _optim_cost(
         self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
     ):
-
         n = batch_data.shape[0]
         intercept_term = intercept.unsqueeze(0).repeat(n, 1).to(self.device)
 

@@ -175,9 +175,7 @@ def main(args=None):
             "are absent from the bam file labels! \n"
             "Mismatched samples are: {} \n".format(df_not_in_labels)
         )
-        df = df.loc[
-            df["sample"].isin(set(args.labels)),
-        ]
+        df = df.loc[df["sample"].isin(set(args.labels)),]
     elif bool(labels_not_in_df):
         sys.stderr.write(
             "Some (or all) of the samples indicated in --labels "
