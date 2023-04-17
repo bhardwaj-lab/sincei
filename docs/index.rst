@@ -20,16 +20,15 @@ Create a new conda environment and install sincei using:
 
 .. code-block:: bash
 
-    cd <programs_folder>
-    conda create -n sincei -c bioconda -c conda-forge scanpy deeptools
+    conda create -n sincei -c anaconda python=3.8
     conda activate sincei
-    (sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
+    (sincei): pip install git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
 
 
 Getting Help
 ------------
 
-* For all kind of questions, suggesting changes/enhancements and to report bugs, please create an issue on `our GitHub repository <https://github.com/vivekbhr/sincei>`_
+* For all kind of questions, suggesting changes/enhancements or to report bugs, please create an issue on `our GitHub repository <https://github.com/vivekbhr/sincei>`_
 
 **Please Note that sincei is under active development.** Some features might be incomplete, untested or might be removed as we move towards a stable version.
 
