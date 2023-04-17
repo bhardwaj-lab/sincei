@@ -12,8 +12,7 @@ sincei is a command line toolkit based on python3, and can be installed using [c
 Create a new conda environment and install sincei stable release from github using:
 
 ```
-cd <your_programs_folder>
-conda create -n sincei -c conda-forge -c bioconda scanpy deeptools
+conda create -n sincei -c anaconda python=3.8
 conda activate sincei
 (sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
 ```
