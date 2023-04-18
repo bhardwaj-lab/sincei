@@ -1,0 +1,10 @@
+scanpy
+loompy
+umap-learn
+pandas
+deeptools
+gensim
+leidenalg
+networkx
+community
+python-igraph

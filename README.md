@@ -1,21 +1,27 @@
 
-<img src="./sincei.png" alt="sincei logo" style="height: 200px; width:400px;"/>
+## sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
-Bhardwaj V. (2022) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data. [![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139)
+[![DOI](https://zenodo.org/badge/271841139.svg)](https://zenodo.org/badge/latestdoi/271841139) [![Documentation Status](https://readthedocs.org/projects/sincei/badge/?version=latest)](https://sincei.readthedocs.io/en/latest/?badge=latest) [![PyPI Version](https://img.shields.io/pypi/v/sincei.svg?style=plastic)](https://pypi.org/project/sincei/) [![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg)](https://github.com/vivekbhr/sincei/actions/workflows/test.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-
+## [Full Documentation](http://sincei.rtfd.io/).
 
 ## Installation
 
 sincei is a command line toolkit based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
 
-Create a new conda environment and install sincei using:
+Create a new conda environment and install sincei stable release from github using:
 
 ```
-cd <programs_folder>
-conda create -n sincei -c bioconda -c conda-forge scanpy deeptools
+cd <your_programs_folder>
+conda create -n sincei -c conda-forge -c bioconda scanpy deeptools
 conda activate sincei
 (sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@master#egg=sincei
+```
+
+For the development version, try:
+
+```
+(sincei): pip install --editable=git+https://github.com/vivekbhr/sincei.git@develop#egg=sincei
 ```
 
 ## Usage
@@ -26,14 +32,4 @@ Each tool begins with the prefix sc<tool_name>, such as:
 
  $ scBulkCoverage -b file1.bam -g groupinfo.txt -o coverage
 
-[ Tools for a typical single-cell analysis workflow ] (WIP: work in progress/not available yet)
 
-    scFilterBarcodes        Identify and filter cell barcodes from BAM file (for droplet-based single-cell seq)
-    scFilterStats           Produce per-cell statistics after filtering reads by user-defined criteria.
-    scCountReads            Counts reads for each barcode on genomic bins or user-defined features.
-    scCountQC               Perform quality control and filter the output of scCountReads.
-    scCombineCounts         [WIP] Concatenate/merge the counts from different samples/batches or modalities
-    scClusterCells          Perform dimensionality reduction and clustering on the output of scCountReads.
-    scFindMarkers           [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
-    scBulkCoverage          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
-    scFeaturePlot           [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.

@@ -8,9 +8,11 @@ from deeptoolsintervals import GTF
 import numpy as np
 import py2bit
 import pandas as pd
+
 ## own functions
-scriptdir=os.path.join(os.path.abspath(os.pardir), "sincei")
-from Utilities import *
+scriptdir = os.path.join(os.path.abspath(os.pardir), "sincei")
+from sincei.Utilities import *
+
 
 def getStats_worker(arglist):
     r"""Computes statistics for each read in a bam file
@@ -63,7 +65,7 @@ def getStats_worker(arglist):
         prev_pos = set()
         lpos = None
         ## initiate a dict with all values to keep per read
-        info_list = []#dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
+        info_list = []  # dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
 
         for read in fh.fetch(chromUse, start, end):
             ## general filtering
@@ -78,16 +80,20 @@ def getStats_worker(arglist):
             if args.minAlignedFraction:
                 if not checkAlignedFraction(read, args.minAlignedFraction):
                     continue
-            if blackList and blackList.findOverlaps(chrom, read.reference_start, read.reference_start + read.infer_query_length(always=False) - 1):
+            if blackList and blackList.findOverlaps(
+                chrom,
+                read.reference_start,
+                read.reference_start + read.infer_query_length(always=False) - 1,
+            ):
                 continue
             if args.motifFilter:
-                test = [ checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter ]
+                test = [checkMotifs(read, chrom, twoBitGenome, m[0], m[1]) for m in args.motifFilter]
                 # if none given motif found, return true
                 if not any(test):
                     continue
 
             # now collect info
-            info = [None for n in range(0,8)]
+            info = [None for n in range(0, 8)]
             info[0] = chromUse
             if args.barcodes is not None:
                 bc = read.get_tag(args.cellTag)
@@ -102,9 +108,8 @@ def getStats_worker(arglist):
 
             ## Duplicates
             tup = getDupFilterTuple(read, bc, args.duplicateFilter)
-            if lpos is not None and lpos == read.reference_start \
-                    and tup in prev_pos:
-                info[3] = True# read is duplicate
+            if lpos is not None and lpos == read.reference_start and tup in prev_pos:
+                info[3] = True  # read is duplicate
                 info[4] = 0
             else:
                 info[3] = False

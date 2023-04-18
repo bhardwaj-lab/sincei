@@ -1,0 +1,125 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+
+[project]
+name = "sincei"
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data "
+readme = "README.md"
+requires-python = ">=3.8"
+dynamic = ["version"]
+license = {file = "LICENCE.txt"}
+authors = [
+    {name = "Vivek Bhardwaj"},
+]
+maintainers = [
+    {name = "Vivek Bhardwaj", email = "vivbhr@gmail.com"},
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3",
+]
+urls.Documentation = "https://sincei.readthedocs.io/"
+urls.Source = "https://github.com/vivekbhr/sincei"
+urls.Home-page = "https://github.com/vivekbhr/sincei"
+dependencies = [
+    "anndata",
+    "scanpy",
+    "loompy",
+    "umap-learn",
+    "pandas",
+    "deeptools",
+    "leidenalg",
+    "networkx",
+    "community",
+    "python-igraph",
+    # for debug logging (referenced from the issue template)
+    "session-info",
+    "torch",
+    "mctorch-lib",
+    "gensim"
+    ]
+
+[project.scripts]
+scBulkCoverage = "sincei.scBulkCoverage:main"
+scClusterCells = "sincei.scClusterCells:main"
+scCombineCounts = "sincei.scCombineCounts:main"
+scCountQC = "sincei.scCountQC:main"
+scCountReads = "sincei.scCountReads:main"
+scFilterBarcodes = "sincei.scFilterBarcodes:main"
+scFilterStats = "sincei.scFilterStats:main"
+scJSD = "sincei.scJSD:main"
+sincei = "sincei.sincei:main"
+
+
+[project.optional-dependencies]
+dev = [
+    # CLI for bumping the version number
+    "bump2version",
+    "pre-commit",
+    "twine>=4.0.2"
+]
+doc = [
+    "sphinx>=4",
+    "sphinx-book-theme>=0.3.3",
+    "myst-nb",
+    "sphinxcontrib-bibtex>=1.0.0",
+    "sphinx-autodoc-typehints",
+    "readthedocs-sphinx-ext",
+    "sphinx-argparse",
+    # For notebooks
+ #   "ipykernel",
+ #   "ipython",
+ #   "sphinx-copybutton",
+]
+test = [
+    "pytest"
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/sincei",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ['sincei']
+
+[tool.hatch.version]
+path = "sincei/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["sincei/test"]
+xfail_strict = true
+addopts = [
+    "--import-mode=importlib",  # allow using test files with same name
+]
+
+[tool.isort]
+include_trailing_comma = true
+multi_line_output = 3
+profile = "black"
+skip_glob = ["docs/*"]
+
+[tool.black]
+line-length = 120
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+  )/
+)
+'''
+

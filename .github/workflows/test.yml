@@ -1,0 +1,55 @@
+name: test
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  build:
+    name: Test installation
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      max-parallel: 5
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: [ "3.8" ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        channels: conda-forge,bioconda,defaults
+        auto-activate-base: false
+        activate-environment: sincei
+        environment-file: requirements.yml
+    - name: Check environment
+      run: |
+        conda info
+    - name: List tools
+      run: |
+        conda list
+    - name: Install sincei
+      run: |
+        pip install .
+        which sincei
+        sincei --help
+    - name: Test with pytest
+      run: |
+        conda install pytest
+        pytest
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: psf/black@stable

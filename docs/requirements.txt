@@ -1,0 +1,4 @@
+sphinx >=5.0
+sphinx-argparse >=0.2.5
+sphinx_rtd_theme
+numpydoc

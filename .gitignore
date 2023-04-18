@@ -3,3 +3,6 @@ bin/__pycache__
 notebooks
 .DS_Store
 .ipynb_checkpoints/
+.pytest_cache
+build
+docs/_build

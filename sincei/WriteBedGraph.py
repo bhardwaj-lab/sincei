@@ -14,7 +14,7 @@ from deeptools import utilities
 from deeptools.writeBedGraph import bedGraphToBigWig, getGenomeChunkLength
 
 # own modules
-import ReadCounter as cr
+from sincei import ReadCounter as cr
 
 debug = 0
 
@@ -24,7 +24,8 @@ def scaleCoverage(tile_coverage, args):
     Return coverage per cluster as sum of cells.
     tileCoverage should be an list with only one element
     """
-    return args['scaleFactor'] * tile_coverage
+    return args["scaleFactor"] * tile_coverage
+
 
 def writeBedGraph_wrapper(args):
     r"""
@@ -38,9 +39,7 @@ def writeBedGraph_wrapper(args):
     return WriteBedGraph.writeBedGraph_worker(*args)
 
 
-
 class WriteBedGraph(cr.CountReadsPerBin):
-
     r"""Reads bam files coverages and writes a bedgraph or bigwig file
 
     Extends the CountReadsPerBin object such that the coverage
@@ -102,7 +101,16 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
     """
 
-    def run(self, func_to_call, func_args, out_file_prefix, blackListFileName=None, format="bedgraph", smoothLength=0, normUsing=None):
+    def run(
+        self,
+        func_to_call,
+        func_args,
+        out_file_prefix,
+        blackListFileName=None,
+        format="bedgraph",
+        smoothLength=0,
+        normUsing=None,
+    ):
         r"""
         Given a list of bamfiles, a function and a function arguments,
         this method writes a bedgraph file (or bigwig) file
@@ -123,7 +131,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
 
         """
-        #self.__dict__["smoothLength"] = smoothLength
+        # self.__dict__["smoothLength"] = smoothLength
         getStats = len(self.mappedList) < len(self.bamFilesList)
         bam_handles = []
         for x in self.bamFilesList:
@@ -145,20 +153,28 @@ class WriteBedGraph(cr.CountReadsPerBin):
             self.region += ":{}".format(self.binLength)
 
         for x in list(self.__dict__.keys()):
-            if x in ["mappedList", "statsList", "barcodes", "clusterInfo", "groupLabels"]:
+            if x in [
+                "mappedList",
+                "statsList",
+                "barcodes",
+                "clusterInfo",
+                "groupLabels",
+            ]:
                 continue
             sys.stderr.write("{}: {}\n".format(x, self.__getattribute__(x)))
 
         # below we get the same ouput as in deeptools, except that the 3rd list
         # element contains multiple tmp file names, one tmp file per cluster
-        res = mapReduce.mapReduce([func_to_call, func_args],
-                                  writeBedGraph_wrapper,
-                                  chrom_names_and_size,
-                                  self_=self,
-                                  genomeChunkLength=genome_chunk_length,
-                                  region=self.region,
-                                  blackListFileName=blackListFileName,
-                                  numberOfProcessors=self.numberOfProcessors)
+        res = mapReduce.mapReduce(
+            [func_to_call, func_args],
+            writeBedGraph_wrapper,
+            chrom_names_and_size,
+            self_=self,
+            genomeChunkLength=genome_chunk_length,
+            region=self.region,
+            blackListFileName=blackListFileName,
+            numberOfProcessors=self.numberOfProcessors,
+        )
 
         # Determine the sorted order of the temp files
         chrom_order = dict()
@@ -172,15 +188,15 @@ class WriteBedGraph(cr.CountReadsPerBin):
         clusters = cluster_info.cluster.unique().tolist()
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
-            print('Writing output for group: {}'.format(str(cl)))
+            print("Writing output for group: {}".format(str(cl)))
             if pd.isna(cl):
                 continue
             # concatenate the coverages
             tmp_out = "/tmp/{}_{}.tmp".format(prefix, cl)
-            out_file = open(tmp_out, 'wb')
+            out_file = open(tmp_out, "wb")
             for r in res:
                 if r[3][cl]:
-                    _foo = open(r[3][cl], 'rb')
+                    _foo = open(r[3][cl], "rb")
                     shutil.copyfileobj(_foo, out_file)
                     _foo.close()
                     os.remove(r[3][cl])
@@ -189,34 +205,39 @@ class WriteBedGraph(cr.CountReadsPerBin):
             ## read back and normalize
             cl_idx = cluster_info.index[pd.Series(cluster_info.cluster == cl)].tolist()
             nCells = float(len(cl_idx))
-            out_file = pd.read_csv(tmp_out, sep = "\t", index_col=None, header = None)
+            out_file = pd.read_csv(tmp_out, sep="\t", index_col=None, header=None)
             # CPM norm
-            if normUsing=='CPM':
+            if normUsing == "CPM":
                 mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
                 if mil_reads_mapped < 0.00001:
-                    sys.stderr.write("\n No or too few reads counted for group: " + cl +
-                                     ". If this persists for all groups, please double-check that your barcodes"
-                                     " match between the groupInfo file and the BAM files and you specified the correct "
-                                     " --cellTag \n")
+                    sys.stderr.write(
+                        "\n No or too few reads counted for group: "
+                        + cl
+                        + ". If this persists for all groups, please double-check that your barcodes"
+                        " match between the groupInfo file and the BAM files and you specified the correct "
+                        " --cellTag \n"
+                    )
                     continue
                 else:
                     # per mil counts
                     out_file[3] *= 1.0 / (mil_reads_mapped)
-            elif normUsing=='Mean':
+            elif normUsing == "Mean":
                 # divided by nCells
-                out_file[3] *= 1.0/(nCells)
+                out_file[3] *= 1.0 / (nCells)
 
             # out
             bg_out = "{}_{}.bedgraph".format(out_file_prefix, cl)
 
-            out_file.to_csv(bg_out, sep ="\t", index = False, header = False)
+            out_file.to_csv(bg_out, sep="\t", index=False, header=False)
             os.remove(tmp_out)
-            if format == 'bigwig':
-                bedGraphToBigWig(chrom_names_and_size, [bg_out],
-                                         "{}_{}.bw".format(out_file_prefix, cl))
+            if format == "bigwig":
+                bedGraphToBigWig(
+                    chrom_names_and_size,
+                    [bg_out],
+                    "{}_{}.bw".format(out_file_prefix, cl),
+                )
 
     def writeBedGraph_worker(self, chrom, start, end, func_to_call, func_args, bed_regions_list=None):
-
         r"""Writes a bedgraph based on the read coverage per group of cells, indicated by cluster_info data frame.
 
         The given func is called to compute the desired bedgraph value
@@ -267,8 +288,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         >>> os.remove(tempFile[3])
         """
         if start > end:
-                raise NameError("start position ({0}) bigger "
-                                "than end position ({1})".format(start, end))
+            raise NameError("start position ({0}) bigger " "than end position ({1})".format(start, end))
         coverage, _, r = self.count_reads_in_region(chrom, start, end)
 
         ## get groups (clusters)
@@ -279,11 +299,11 @@ class WriteBedGraph(cr.CountReadsPerBin):
         for cl in clusters:
             if pd.isna(cl):
                 continue
-            _file = open(utilities.getTempFileName(suffix='.bg'), 'w')
+            _file = open(utilities.getTempFileName(suffix=".bg"), "w")
             previous_value = None
             line_string = "{}\t{}\t{}\t{:g}\n"
             cl_idx = cluster_info.index[pd.Series(cluster_info.cluster == cl)].tolist()
-#            nCells = len(cl_idx)
+            #            nCells = len(cl_idx)
 
             for tileIndex in range(coverage.shape[0]):
                 ## smoothing disabled for now
@@ -303,15 +323,14 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
                 elif previous_value != value:
                     if not np.isnan(previous_value):
-                        _file.write(
-                            line_string.format(chrom, writeStart, writeEnd, previous_value))
+                        _file.write(line_string.format(chrom, writeStart, writeEnd, previous_value))
                     previous_value = value
                     writeStart = writeEnd
                     writeEnd = min(writeStart + self.binLength, end)
 
             # write remaining value if not a nan
             if previous_value is not None and writeStart != end and not np.isnan(previous_value):
-                _file.write(line_string.format(chrom, writeStart,end, previous_value))
+                _file.write(line_string.format(chrom, writeStart, end, previous_value))
 
             tempfilenames[cl] = _file.name
             _file.close()
