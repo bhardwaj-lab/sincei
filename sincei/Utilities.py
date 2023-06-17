@@ -213,7 +213,7 @@ def colorPicker(name):
     return colors[name]
 
 
-def getDupFilterTuple(read, bc, filter):
+def getDupFilterTuple(read, bc, filterArg):
     r"""
     Returns a tuple with the information needed to filter duplicates, based on read and filter type.
     The tuple is composed of the barcode, the umi, the start and end positions
@@ -248,8 +248,8 @@ def getDupFilterTuple(read, bc, filter):
     """
 
     tLenDup = getTLen(read, notAbs=True)
-    filt = filter.split("_")
-    ## get read (or fragment) start/end
+    filt = filterArg.split("_")
+    
     # get fragment start and end for that read
     if tLenDup >= 0:
         s = read.pos
@@ -257,22 +257,28 @@ def getDupFilterTuple(read, bc, filter):
     else:
         s = read.pnext
         e = s - tLenDup
-    if read.reference_id != read.next_reference_id:
-        e = read.pnext
+
     if "end" not in filt:
-        # use only read (or fragment) start
+        # ignore read/fragment end and mate information
+        mate_refid = read.reference_id
         if read.is_reverse:
             s = None
         else:
             e = None
-    ## get UMI if asked
+    else:
+        # use mate info, reset fragment end to mate pos if read is chimeric
+        if read.reference_id != read.next_reference_id:
+            e = read.pnext
+        mate_refid = read.next_reference_id
+    
+    # get UMI if asked
     if "umi" in filt:
         umi = read.get_tag("RX")
     else:
         umi = None
-    tup = (bc, umi, s, e, read.next_reference_id, read.is_reverse)
-    return tup
 
+    tup = (bc, umi, s, e, mate_refid, read.is_reverse)
+    return tup
 
 def gini(i, X):
     r"""Computes the Gini coefficient for each row of a sparse matrix (Obs*Var).
