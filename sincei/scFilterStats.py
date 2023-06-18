@@ -114,6 +114,8 @@ def getFiltered_worker(arglist):
         filtered = {}
 
         for b in args.barcodes:
+            total[b] = 0  # This is only used to estimate the percentage affected
+            nFiltered[b] = 0
             blacklisted[b] = 0
             minMapq[b] = 0
             samFlagInclude[b] = 0
@@ -125,8 +127,7 @@ def getFiltered_worker(arglist):
             filterMotifs[b] = 0
             filterGC[b] = 0
             minAlignedFraction[b] = 0
-            nFiltered[b] = 0
-            total[b] = 0  # This is only used to estimate the percentage affected
+
 
         for read in fh.fetch(chromUse, start, end):
             bc = read.get_tag(args.cellTag)
@@ -275,7 +276,8 @@ def main(args=None):
         checkBAMtag(x, bam, args.cellTag)
         if args.groupTag:
             checkBAMtag(x, bam, args.groupTag)
-            sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \n")
+            sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \
+            Please split your BAM file by {} and re-run scFilterStats. \n".format(args.groupTag))
             exit(1)
         x.close()
 
@@ -311,6 +313,7 @@ def main(args=None):
     ]
 
     final_df = pd.DataFrame(data=np.concatenate(final_array), index=rowLabels, columns=colLabels)
+    final_df.index.name = 'Cell_ID'
     ## since stats are approximate, present results as %
     final_df.iloc[:, 1:] = final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
 
