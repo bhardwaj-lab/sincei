@@ -29,7 +29,7 @@ def parseArguments():
 
     io_args = ParserCommon.inputOutputOptions(opts=["bamfiles", "barcodes", "outFile"], requiredOpts=["barcodes"])
     bam_args = ParserCommon.bamOptions(
-        suppress_args=["region"],
+        suppress_args=["region", "groupTag"],
         default_opts={"binSize": 100000, "distanceBetweenBins": 1000000},
     )
     filter_args = ParserCommon.filterOptions()
