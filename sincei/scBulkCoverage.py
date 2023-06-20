@@ -146,20 +146,22 @@ def main(args=None):
     else:
         debug = 0
 
-    ## read the group info file (make it more robust)
+    ## read the group info file (TODO: write a validator)
+    df_err = """ *Error*:No. of columns in --groupInfo file not recognized.
+             Please provide either 3 (sample, barcode, group) or 4 (sample::barcode, umap1, umap2, group) column file"""
     ## if the no. of columns are 3, expect "sample", "barcode", "cluster", if 4, expect sample:bc, umap1, umap2, cluster
     df = pd.read_csv(args.groupInfo, sep="\t", index_col=None, comment="#")
     if len(df.columns) == 3:
         df.columns = ["sample", "barcode", "cluster"]
     elif len(df.columns) == 4:
-        df.columns = ["barcode", "umap1", "umap2", "cluster"]
-        df["sample"] = [x.split("::")[:-1] for x in df.barcode]
-        df["barcode"] = [x.split("::")[-1] for x in df.barcode]
+        df.columns = ["Cell_ID", "umap1", "umap2", "cluster"]
+        try:
+            df[["sample", "barcode"]] = df.Cell_ID.str.split("::", expand=True)
+        except:
+            sys.exit(df_err)
     else:
-        sys.exit(
-            "*Error*:No. of columns in --groupInfo file not recognized. "
-            "Please provide either 3 (sample, barcode, group) or 4 (sample::barcode, umap1, umap2, group) column file"
-        )
+        sys.exit(df_err)
+
     df.index = df[["sample", "barcode"]].apply(lambda x: "::".join(x), axis=1)
     # barcodes = groupInfo.barcode.unique().tolist()
 
