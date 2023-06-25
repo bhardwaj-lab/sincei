@@ -128,7 +128,6 @@ def getFiltered_worker(arglist):
             filterGC[b] = 0
             minAlignedFraction[b] = 0
 
-
         for read in fh.fetch(chromUse, start, end):
             bc = read.get_tag(args.cellTag)
             # also keep a counter for barcodes not in whitelist?
@@ -276,8 +275,12 @@ def main(args=None):
         checkBAMtag(x, bam, args.cellTag)
         if args.groupTag:
             checkBAMtag(x, bam, args.groupTag)
-            sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \
-            Please split your BAM file by {} and re-run scFilterStats. \n".format(args.groupTag))
+            sys.stderr.write(
+                "--groupTag is not implemented for scFilterStats yet! \
+            Please split your BAM file by {} and re-run scFilterStats. \n".format(
+                    args.groupTag
+                )
+            )
             exit(1)
         x.close()
 
@@ -313,7 +316,7 @@ def main(args=None):
     ]
 
     final_df = pd.DataFrame(data=np.concatenate(final_array), index=rowLabels, columns=colLabels)
-    final_df.index.name = 'Cell_ID'
+    final_df.index.name = "Cell_ID"
     ## since stats are approximate, present results as %
     final_df.iloc[:, 1:] = final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
 

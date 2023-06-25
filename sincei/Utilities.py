@@ -249,7 +249,7 @@ def getDupFilterTuple(read, bc, filterArg):
 
     tLenDup = getTLen(read, notAbs=True)
     filt = filterArg.split("_")
-    
+
     # get fragment start and end for that read
     if tLenDup >= 0:
         s = read.pos
@@ -270,7 +270,7 @@ def getDupFilterTuple(read, bc, filterArg):
         if read.reference_id != read.next_reference_id:
             e = read.pnext
         mate_refid = read.next_reference_id
-    
+
     # get UMI if asked
     if "umi" in filt:
         umi = read.get_tag("RX")
@@ -279,6 +279,7 @@ def getDupFilterTuple(read, bc, filterArg):
 
     tup = (bc, umi, s, e, mate_refid, read.is_reverse)
     return tup
+
 
 def gini(i, X):
     r"""Computes the Gini coefficient for each row of a sparse matrix (Obs*Var).
