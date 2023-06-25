@@ -665,7 +665,7 @@ class CountReadsPerBin(object):
             if regionNames is not None:
                 bedname = regionNames[i]
             else:
-                bedname = ""
+                bedname = None
 
             if len(trans[0]) != 3:
                 starts = ",".join([str(x[0]) for x in trans])
