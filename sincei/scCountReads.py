@@ -9,7 +9,6 @@ from scipy import sparse, io
 import re
 import pandas as pd
 import anndata as ad
-import scanpy as sc
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
 import warnings
