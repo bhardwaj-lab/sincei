@@ -229,7 +229,7 @@ def main(args=None):
                 "chrom": [x.split("_")[0] for x in rows],
                 "start": [x.split("_")[1] for x in rows],
                 "end": [y.split("::")[0] for y in [x.split("_")[2] for x in rows]],
-                "name": [x.split("::")[1] for x in rows]
+                "name": [x.split("::")[1] for x in rows],
             },
             index=rows,
         )
