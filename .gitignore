@@ -1,8 +1,42 @@
+
+notebooks
+
+# Docs
+/docs/_build/
+
+# tests
+/*coverage*
+/nunit/
+/.cache/
+/.pytest_cache/
+/sincei/tests/test*.h5ad
+/sincei/tests/figures/
+/sincei/tests/notebooks/figures/
+
+# Environment management
+/Pipfile
+/Pipfile.lock
+/requirements*.lock
+
+# always-ignore extensions
+*~
+
+# Python build files
 sincei/__pycache__
 bin/__pycache__
-notebooks
+__pycache__/
+/dist/
+/build/
+/sincei.egg-info/
+/*-env/
+/env-*/
+
+# OS stuff
 .DS_Store
+Thumbs.db
 .ipynb_checkpoints/
-.pytest_cache
-build
-docs/_build
+.directory
+
+# IDEs and editors
+/.idea/
+/.vscode/

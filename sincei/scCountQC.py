@@ -198,8 +198,8 @@ def main(args=None):
         mat = re.sub(".txt|.tsv|.csv", "", args.outMetrics)
         obs_tsv = mat + ".cells.tsv"
         var_tsv = mat + ".regions.tsv"
-        adata.obs.to_csv(obs_tsv, sep="\t", index_label="cell_id")
-        adata.var.to_csv(var_tsv, sep="\t", index_label="feature_id")
+        adata.obs.to_csv(obs_tsv, sep="\t", index_label="Cell_ID")
+        adata.var.to_csv(var_tsv, sep="\t", index_label="Feature_ID")
 
     # if --describe is asked, only print the numeric vars and obs columns
     if args.describe:

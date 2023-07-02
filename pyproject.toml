@@ -69,6 +69,7 @@ doc = [
     "sphinx-autodoc-typehints",
     "readthedocs-sphinx-ext",
     "sphinx-argparse",
+    "sphinx_toolbox"
     # For notebooks
  #   "ipykernel",
  #   "ipython",
@@ -122,4 +123,3 @@ exclude = '''
   )/
 )
 '''
-

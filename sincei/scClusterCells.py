@@ -204,7 +204,7 @@ def main(args=None):
         prefix = args.outFileUMAP.split(".")[0]
         umap_lsi = pd.DataFrame(adata.obsm["X_umap"], columns=["UMAP1", "UMAP2"], index=adata.obs.index)
         umap_lsi["cluster"] = adata.obs["leiden"]
-        umap_lsi.to_csv(prefix + ".tsv", sep="\t", index_label="cell_id")
+        umap_lsi.to_csv(prefix + ".tsv", sep="\t", index_label="Cell_ID")
         # plt.rcParams['font.size'] = 8.0
         # convert cm values to inches
         # fig = plt.figure(figsize=(args.plotWidth / 2.54, args.plotHeight / 2.54))
