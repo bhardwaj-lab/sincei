@@ -1,13 +1,20 @@
 
-sincei
-=======
 
-.. image:: ./content/images/sincei.png
-
+.. image:: ./content/images/sincei-logo.png
+      :align: left
+      :width: 350
 
 .. image:: https://zenodo.org/badge/271841139.svg
     :target: https://zenodo.org/badge/latestdoi/271841139
     :alt: DOI
+
+.. image:: https://readthedocs.org/projects/sincei/badge/?version=latest)]
+    :target: https://sincei.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+.. image:: https://img.shields.io/pypi/v/sincei.svg?style=plastic
+    :target: https://pypi.org/project/sincei/
+    :alt: PyPI Version
 
 Bhardwaj V. and Mourragui S. (2023) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
