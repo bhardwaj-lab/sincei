@@ -45,8 +45,10 @@ jobs:
         sincei --help
     - name: Test with pytest
       run: |
-        conda install pytest
-        pytest
+        conda install pytest pytest-cov
+        pytest -v --cov --color=yes
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
 
   lint:
     runs-on: ubuntu-latest
