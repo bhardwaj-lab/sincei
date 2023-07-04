@@ -43,9 +43,11 @@ jobs:
         pip install .
         which sincei
         sincei --help
-    - name: Test with pytest
+    - name: Install pytest
       run: |
         conda install pytest pytest-cov
+    - name: Run pytest
+      run: |
         pytest -v --cov --color=yes
     - name: Upload coverage
       uses: codecov/codecov-action@v3
