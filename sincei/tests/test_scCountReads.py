@@ -8,21 +8,25 @@ import numpy.testing as nt
 
 ROOT = os.path.dirname(os.path.abspath(__file__)) + "/_data/"
 
+
 def getCountReadsArgs(T):
     "return arg object based on input T"
     if T == "bins":
-        TYPE="bins -bs 10000"
+        TYPE = "bins -bs 10000"
     elif T == "gtf":
-        TYPE="features --BED {0}/Ogfrl.gtf".format(ROOT)
+        TYPE = "features --BED {0}/Ogfrl.gtf".format(ROOT)
     elif T == "bed":
-        TYPE="features --BED {0}/test_regions.bed".format(ROOT)
+        TYPE = "features --BED {0}/test_regions.bed".format(ROOT)
 
-    Args = "{1} -b {0}/SL2-1.bam {0}/SL2-2.bam" \
-            " -bc {0}/test_barcodes.txt -ct BC -o None --smartLabels " \
-            "--region chr1:23365000:23385000".format(ROOT, TYPE).split()
+    Args = (
+        "{1} -b {0}/SL2-1.bam {0}/SL2-2.bam"
+        " -bc {0}/test_barcodes.txt -ct BC -o None --smartLabels "
+        "--region chr1:23365000:23385000".format(ROOT, TYPE).split()
+    )
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(Args))
 
     return args, newlabels
+
 
 def getCountReadsOutput(arg, dedup):
     """
@@ -54,110 +58,135 @@ def getCountReadsOutput(arg, dedup):
 
 
 def getExpectedOutput(T, dedup):
-    if T == 'bins':
-        regions = np.array(['chr1_23360000_23370000::None',
-                                  'chr1_23370000_23380000::None',
-                                  'chr1_23380000_23385000::None'])
+    if T == "bins":
+        regions = np.array(
+            ["chr1_23360000_23370000::None", "chr1_23370000_23380000::None", "chr1_23380000_23385000::None"]
+        )
         if dedup is None:
-            counts = np.array([
-                [ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
-                [14.,  0.,  0., 32., 10.,  2.,  0., 22.,  4.,  3.],
-                [ 0.,  6.,  4.,  0.,  0.,  0.,  6.,  4.,  0.,  8.]
-                ])
-        if dedup == 'start_bc_umi':
-            counts = np.array([
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [6., 0., 0., 8., 6., 2., 0., 5., 2., 2.],
-                [0., 3., 2., 0., 0., 0., 3., 4., 0., 5.]
-                ])
+            counts = np.array(
+                [
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    [14.0, 0.0, 0.0, 32.0, 10.0, 2.0, 0.0, 22.0, 4.0, 3.0],
+                    [0.0, 6.0, 4.0, 0.0, 0.0, 0.0, 6.0, 4.0, 0.0, 8.0],
+                ]
+            )
+        if dedup == "start_bc_umi":
+            counts = np.array(
+                [
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    [6.0, 0.0, 0.0, 8.0, 6.0, 2.0, 0.0, 5.0, 2.0, 2.0],
+                    [0.0, 3.0, 2.0, 0.0, 0.0, 0.0, 3.0, 4.0, 0.0, 5.0],
+                ]
+            )
 
-    elif T == 'bed':
-        regions = np.array(['chr1_23365000_23377000::chr1:23365000-23377000',
-                                  'chr1_23365000_23377000::chr1:23365000-23377000_r1',
-                                  'chr1_23365000_23385000::chr1:23365000-23385000'])
+    elif T == "bed":
+        regions = np.array(
+            [
+                "chr1_23365000_23377000::chr1:23365000-23377000",
+                "chr1_23365000_23377000::chr1:23365000-23377000_r1",
+                "chr1_23365000_23385000::chr1:23365000-23385000",
+            ]
+        )
         if dedup is None:
-            counts = np.array([
-                [ 0.,  0.,  0., 32., 10.,  2.,  0.,  0.,  0.,  0.],
-                [ 0.,  0.,  0., 32., 10.,  2.,  0.,  0.,  0.,  0.],
-                [14.,  6.,  4., 32., 10.,  2.,  6., 26.,  4., 10.]
-                ])
-        if dedup == 'start_bc_umi':
-            counts = np.array([
-                [0., 0., 0., 8., 6., 2., 0., 0., 0., 0.],
-                [0., 0., 0., 8., 6., 2., 0., 0., 0., 0.],
-                [6., 3., 2., 8., 6., 2., 3., 9., 2., 6.]
-            ])
+            counts = np.array(
+                [
+                    [0.0, 0.0, 0.0, 32.0, 10.0, 2.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 32.0, 10.0, 2.0, 0.0, 0.0, 0.0, 0.0],
+                    [14.0, 6.0, 4.0, 32.0, 10.0, 2.0, 6.0, 26.0, 4.0, 10.0],
+                ]
+            )
+        if dedup == "start_bc_umi":
+            counts = np.array(
+                [
+                    [0.0, 0.0, 0.0, 8.0, 6.0, 2.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 8.0, 6.0, 2.0, 0.0, 0.0, 0.0, 0.0],
+                    [6.0, 3.0, 2.0, 8.0, 6.0, 2.0, 3.0, 9.0, 2.0, 6.0],
+                ]
+            )
 
-    elif T == 'gtf':
-        regions = np.array(['chr1_23366423_23383175::ENSMUST00000027343.5',
-                                  'chr1_23369723_23380801::ENSMUST00000186064.6',
-                                  'chr1_23370267_23397541::ENSMUST00000188677.1'])
+    elif T == "gtf":
+        regions = np.array(
+            [
+                "chr1_23366423_23383175::ENSMUST00000027343.5",
+                "chr1_23369723_23380801::ENSMUST00000186064.6",
+                "chr1_23370267_23397541::ENSMUST00000188677.1",
+            ]
+        )
         if dedup is None:
-            counts = np.array([
-                [14.,  6.,  0., 32., 10.,  2.,  6., 26.,  4., 10.],
-                [14.,  6.,  0., 32., 10.,  2.,  0., 26.,  4., 10.],
-                [14.,  6.,  4., 32.,  4.,  2.,  6., 26.,  4., 10.]
-                ])
-        if dedup == 'start_bc_umi':
-             counts = np.array([
-                [6., 3., 0., 8., 6., 2., 3., 9., 2., 6.],
-                [6., 3., 0., 8., 6., 2., 0., 9., 2., 6.],
-                [6., 3., 2., 8., 4., 2., 3., 9., 2., 6.]
-             ])
+            counts = np.array(
+                [
+                    [14.0, 6.0, 0.0, 32.0, 10.0, 2.0, 6.0, 26.0, 4.0, 10.0],
+                    [14.0, 6.0, 0.0, 32.0, 10.0, 2.0, 0.0, 26.0, 4.0, 10.0],
+                    [14.0, 6.0, 4.0, 32.0, 4.0, 2.0, 6.0, 26.0, 4.0, 10.0],
+                ]
+            )
+        if dedup == "start_bc_umi":
+            counts = np.array(
+                [
+                    [6.0, 3.0, 0.0, 8.0, 6.0, 2.0, 3.0, 9.0, 2.0, 6.0],
+                    [6.0, 3.0, 0.0, 8.0, 6.0, 2.0, 0.0, 9.0, 2.0, 6.0],
+                    [6.0, 3.0, 2.0, 8.0, 4.0, 2.0, 3.0, 9.0, 2.0, 6.0],
+                ]
+            )
 
     return counts, regions
 
 
 def testCountReads_bins_default():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('bins', None)
+    valid_counts, valid_regions = getExpectedOutput("bins", None)
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('bins', None)
+    observed_counts, observed_regions = getCountReadsOutput("bins", None)
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
+
 
 def testCountReads_bins_dedup():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('bins', 'start_bc_umi')
+    valid_counts, valid_regions = getExpectedOutput("bins", "start_bc_umi")
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('bins', 'start_bc_umi')
+    observed_counts, observed_regions = getCountReadsOutput("bins", "start_bc_umi")
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
+
 
 def testCountReads_bed_default():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('bed', None)
+    valid_counts, valid_regions = getExpectedOutput("bed", None)
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('bed', None)
+    observed_counts, observed_regions = getCountReadsOutput("bed", None)
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
+
 
 def testCountReads_bed_dedup():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('bed', 'start_bc_umi')
+    valid_counts, valid_regions = getExpectedOutput("bed", "start_bc_umi")
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('bed', 'start_bc_umi')
+    observed_counts, observed_regions = getCountReadsOutput("bed", "start_bc_umi")
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
+
 
 def testCountReads_gtf_default():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('gtf', None)
+    valid_counts, valid_regions = getExpectedOutput("gtf", None)
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('gtf', None)
+    observed_counts, observed_regions = getCountReadsOutput("gtf", None)
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
 
+
 def testCountReads_gtf_dedup():
     # Expected output
-    valid_counts, valid_regions = getExpectedOutput('gtf', 'start_bc_umi')
+    valid_counts, valid_regions = getExpectedOutput("gtf", "start_bc_umi")
     # Actual output
-    observed_counts, observed_regions = getCountReadsOutput('gtf', 'start_bc_umi')
+    observed_counts, observed_regions = getCountReadsOutput("gtf", "start_bc_umi")
     # Test
     nt.assert_array_equal(valid_regions, observed_regions)
     nt.assert_array_equal(valid_counts, observed_counts)
