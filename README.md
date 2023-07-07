@@ -17,6 +17,8 @@ sincei provides a flexible, easy-to-use command-line interface to work with sing
 
 ## [Full Documentation](http://sincei.rtfd.io/)
 
+Please browse the full documentation for tutorials on how to use sincei on command line, as well as details of our python API.
+
 ## Installation
 
 sincei is a command line toolkit based on python3, and can be installed using [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html).
