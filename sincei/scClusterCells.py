@@ -11,6 +11,13 @@ import torch
 from scipy import sparse, io
 from sklearn.preprocessing import binarize
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 # plotting
 import matplotlib
 import matplotlib.pyplot as plt
@@ -133,9 +140,11 @@ def get_args():
 
 def main(args=None):
     args = parseArguments().parse_args(args)
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
-
     mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
     cells = copy.deepcopy(adata.obs_names.to_list())
     regions = copy.deepcopy(adata.var_names.to_list())

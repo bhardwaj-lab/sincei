@@ -16,8 +16,11 @@ import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
+# logs
 import warnings
+import logging
 
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
@@ -94,6 +97,9 @@ def parseArguments(args=None):
 
 def main(args=None):
     args = ParserCommon.process_args(parseArguments().parse_args(args))
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     ## read the barcode file
     with open(args.barcodes, "r") as f:

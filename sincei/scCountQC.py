@@ -11,8 +11,12 @@ from scipy import sparse, io
 from itertools import compress
 import copy
 import scanpy as sc
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own Functions
@@ -178,6 +182,9 @@ def get_args():
 
 def main(args=None):
     args = parseArguments().parse_args(args)
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
     ## add QC stats to the anndata object

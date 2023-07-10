@@ -11,8 +11,12 @@ import pandas as pd
 import anndata as ad
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
@@ -146,6 +150,9 @@ def main(args=None):
 
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     if "BED" in args:
         bed_regions = args.BED

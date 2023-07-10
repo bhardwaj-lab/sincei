@@ -8,6 +8,13 @@ import numpy as np
 import pandas as pd
 from scipy import sparse, io
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 # single-cell stuff
 import anndata
 import scanpy as sc
@@ -93,6 +100,10 @@ def get_args():
 
 def main(args=None):
     args = parseArguments().parse_args(args)
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
+
     if args.method != "multi-sample":
         sys.stderr.write("Only multi-sample method is currently implemented")
         sys.exit(1)
