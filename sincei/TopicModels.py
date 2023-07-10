@@ -86,7 +86,9 @@ class TOPICMODEL:
         tfidf = models.TfidfModel(self.corpus, id2word=self.regions_dict, normalize=True, smartirs=self.smart_code)
         self.corpus_tfidf = tfidf[self.corpus]
         self.lsi_model = models.LsiModel(corpus_tfidf, id2word=self.regions_dict, num_topics=self.n_topics)
-        self.cell_topic_dist = self.lsi_model[corpus_tfidf] # lsi[X] computes U^-1*X, which equals V*S (its shape is num_docs * num_topics).
+        self.cell_topic_dist = self.lsi_model[
+            corpus_tfidf
+        ]  # lsi[X] computes U^-1*X, which equals V*S (its shape is num_docs * num_topics).
 
         # Compute Coherence Score
         coherence_model_lsa = models.CoherenceModel(

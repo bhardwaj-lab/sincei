@@ -9,8 +9,12 @@ import numpy as np
 import pandas as pd
 from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own Functions
@@ -145,6 +149,8 @@ def main(args=None):
         debug = 1
     else:
         debug = 0
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     ## read the group info file (TODO: write a validator)
     df_err = """ *Error*:No. of columns in --groupInfo file not recognized.
@@ -177,7 +183,9 @@ def main(args=None):
             "are absent from the bam file labels! \n"
             "Mismatched samples are: {} \n".format(df_not_in_labels)
         )
-        df = df.loc[df["sample"].isin(set(args.labels)),]
+        df = df.loc[
+            df["sample"].isin(set(args.labels)),
+        ]
     elif bool(labels_not_in_df):
         sys.stderr.write(
             "Some (or all) of the samples indicated in --labels "

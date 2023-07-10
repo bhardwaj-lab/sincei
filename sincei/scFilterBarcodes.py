@@ -12,9 +12,19 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from functools import reduce
-import matplotlib.pyplot as plt
-import warnings
 
+# plotting
+import matplotlib.pyplot as plt
+
+matplotlib.use("Agg")
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["svg.fonttype"] = "none"
+
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own functions
@@ -159,6 +169,9 @@ def getFiltered_worker(arglist):
 
 def main(args=None):
     args = parseArguments().parse_args(args)
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     # open barcode file and read the content in a list
     if args.whitelist:

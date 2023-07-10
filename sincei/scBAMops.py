@@ -11,8 +11,12 @@ from deeptools import parserCommon
 from deeptools.bamHandler import openBam
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
@@ -351,7 +355,9 @@ def convertBED(oname, tmpFiles, chromDict):
 
 def main(args=None):
     args = parseArguments().parse_args(args)
-
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
     # grouping and tagging the output alignments
     if args.groupInfo:
         if not args.outTagName:
