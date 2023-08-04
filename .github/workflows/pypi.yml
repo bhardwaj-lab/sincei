@@ -30,7 +30,7 @@ jobs:
     - name: upload
       if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
       env:
-        TWINE_USERNAME: ${{ secrets.pypi_username }}
-        TWINE_PASSWORD: ${{ secrets.pypi_password }}
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
         twine upload dist/*

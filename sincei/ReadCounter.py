@@ -665,7 +665,7 @@ class CountReadsPerBin(object):
             if regionNames is not None:
                 bedname = regionNames[i]
             else:
-                bedname = ""
+                bedname = None
 
             if len(trans[0]) != 3:
                 starts = ",".join([str(x[0]) for x in trans])
@@ -892,10 +892,11 @@ class CountReadsPerBin(object):
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if self.duplicateFilter:
                     tup = getDupFilterTuple(read, new_bc, self.duplicateFilter)
-                    if lpos is not None and lpos == read.reference_start and tup in prev_pos:
-                        continue
-                    if lpos != read.reference_start:
-                        prev_pos.clear()
+                    if lpos is not None:
+                        if tup in prev_pos:
+                            continue
+                        else:
+                            prev_pos.clear()
                     lpos = read.reference_start
                     prev_pos.add(tup)
 

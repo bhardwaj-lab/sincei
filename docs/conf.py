@@ -54,6 +54,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinxarg.ext",
+    "sphinx_toolbox.collapse",
 ]
 #    'numpydoc'
 

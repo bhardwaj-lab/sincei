@@ -297,7 +297,7 @@ def filterOptions(args=None, suppress_args=None):
             "This option checks for the motif at the 5-end of the read and at the 5-overhang in the genome, "
             "which is useful in identifying reads properly cut by a restriction-enzyme or MNAse. "
             'For example, if you want to search for an "A" at the 5\'-end of the read and "TA" at 5\'-overhang, '
-            "use \"-m 'A,TA'\". Reads not containing the given motif are discarded. ",
+            "use \"-m 'A,TA'\". Reads not containing the given motif are filtered out. ",
             "motifFilter",
             suppress_args,
         ),
@@ -324,8 +324,10 @@ def filterOptions(args=None, suppress_args=None):
         "-gc",
         metavar="STR",
         help=show_or_hide(
-            "Check whether the GC content of the read falls within the provided range. "
-            "If the GC content of the reads fall outside the range, they are discarded. ",
+            "Check whether the GC content of the read falls within the provided range "
+            "Input format must be '<low>,<high>' , where <low> is the lower bound and <high> is the "
+            "upper bound in the fraction of GC (eg. '0.1,0.9' ). "
+            "If the GC content of the reads fall outside the range, they are filtered out. ",
             "GCcontentFilter",
             suppress_args,
         ),

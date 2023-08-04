@@ -38,7 +38,8 @@ dependencies = [
     # for debug logging (referenced from the issue template)
     "session-info",
     "torch",
-    "mctorch-lib"
+    "mctorch-lib",
+    "gensim"
     ]
 
 [project.scripts]
@@ -68,6 +69,7 @@ doc = [
     "sphinx-autodoc-typehints",
     "readthedocs-sphinx-ext",
     "sphinx-argparse",
+    "sphinx_toolbox"
     # For notebooks
  #   "ipykernel",
  #   "ipython",
@@ -121,4 +123,3 @@ exclude = '''
   )/
 )
 '''
-
