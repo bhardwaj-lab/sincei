@@ -24,7 +24,7 @@ import scanpy as sc
 # scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
 # sys.path.append(scriptdir)
 from sincei import ParserCommon
-
+from sincei.ParserCommon import smartLabel
 
 def parseArguments():
     other_args = ParserCommon.otherOptions()
@@ -112,7 +112,8 @@ def main(args=None):
         print("The number of labels does not match the number of input files.")
         sys.exit(1)
     if not args.labels:
-        args.labels = [os.path.basename(x) for x in args.input]
+        # try smartlabel
+        args.labels = [smartLabel(x) for x in args.input]
     adata_list = [sc.read_loom(x, obs_names="obs_names", var_names="var_names") for x in args.input]
 
     ## concatenate labels and match chrom, start, end

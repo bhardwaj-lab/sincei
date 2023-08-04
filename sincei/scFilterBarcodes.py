@@ -14,6 +14,7 @@ from collections import Counter
 from functools import reduce
 
 # plotting
+import matplotlib
 import matplotlib.pyplot as plt
 
 matplotlib.use("Agg")
