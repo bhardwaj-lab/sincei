@@ -187,7 +187,11 @@ def filterWorker(arglist):
             continue
         total += 1
 
-        bc = read.get_tag(args.cellTag)
+        try:
+            bc = read.get_tag(args.cellTag)
+        except KeyError:
+            nFiltered += 1
+            continue
         if isinstance(args.groupInfo, pd.DataFrame):
             smpl = read.get_tag(args.groupTag)
             try:

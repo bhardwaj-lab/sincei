@@ -96,11 +96,14 @@ def getStats_worker(arglist):
             info = [None for n in range(0, 8)]
             info[0] = chromUse
             if args.barcodes is not None:
-                bc = read.get_tag(args.cellTag)
-                if bc in args.barcodes:
-                    info[1] = True
-                else:
-                    info[1] = False
+                try:
+                    bc = read.get_tag(args.cellTag)
+                    if bc in args.barcodes:
+                        info[1] = True
+                    else:
+                        info[1] = False
+                except KeyError:
+                    continue
             else:
                 info[1] = False
                 bc = None

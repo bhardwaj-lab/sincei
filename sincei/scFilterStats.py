@@ -133,7 +133,10 @@ def getFiltered_worker(arglist):
             minAlignedFraction[b] = 0
 
         for read in fh.fetch(chromUse, start, end):
-            bc = read.get_tag(args.cellTag)
+            try:
+                bc = read.get_tag(args.cellTag)
+            except KeyError:
+                continue
             # also keep a counter for barcodes not in whitelist?
             if bc not in args.barcodes:
                 continue
