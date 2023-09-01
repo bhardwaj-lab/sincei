@@ -167,6 +167,7 @@ def getFiltered_worker(arglist):
     # return the set with barcodes detected
     return BCset
 
+
 # count occurances of elements (barcodes) in a list of sets
 def count_occurrences(res):
     barcodes = set.union(*res)
@@ -207,14 +208,14 @@ def main(args=None):
     # final_set = list(set().union(*res))
     df = pd.DataFrame.from_dict(count_occurrences(res), orient="index", columns=["count"]).reset_index()
     df.columns = ["barcode", "count"]
-    df['selected'] = True
+    df["selected"] = True
 
     if args.minCount:
         if args.minCount > len(res):
             print("minCount bigger than No. of bins. Reducing to maximum")
             args.minCount = len(res)
         final_set = df.loc[df["count"] >= args.minCount]["barcode"].to_list()
-        df.loc[df["count"] < args.minCount, 'selected'] = False
+        df.loc[df["count"] < args.minCount, "selected"] = False
     else:
         final_set = df["barcode"].tolist()
 
@@ -222,15 +223,12 @@ def main(args=None):
     if args.rankPlot:
         df["count_log10"] = np.log10(df["count"])
         df["count_rank"] = df["count"].rank(method="min", ascending=False)
-        xrange = np.arange(0,
-          np.round( max(df["count_rank"]), -3),
-          np.round( int(max(df["count_rank"]) / 10), -3)
-         )
+        xrange = np.arange(0, np.round(max(df["count_rank"]), -3), np.round(int(max(df["count_rank"]) / 10), -3))
         yrange = np.arange(
-          np.round( min(df["count_log10"]), 2),
-          np.round( max(df["count_log10"]), 2),
-          np.round( max(df["count_log10"]) / 10, 2)
-         )
+            np.round(min(df["count_log10"]), 2),
+            np.round(max(df["count_log10"]), 2),
+            np.round(max(df["count_log10"]) / 10, 2),
+        )
 
         fig, ax = plt.subplots()
         plt.plot(
@@ -269,7 +267,7 @@ def main(args=None):
     else:
         of = open(args.outFile, "w")
 
-    #for x in final_set:
+    # for x in final_set:
     #    of.write(str(x) + "\n")
     df.to_csv(of, sep="\t")
 

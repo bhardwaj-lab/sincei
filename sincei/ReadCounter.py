@@ -878,7 +878,9 @@ class CountReadsPerBin(object):
                         new_bc = "::".join([grp, bc])  # new barcode tag = sample+bc tag
                         if new_bc not in self.groupLabels:
                             if self.verbose:
-                                sys.stderr.write("Encountered group: {}, not in provided labels. skipping..".format(grp))
+                                sys.stderr.write(
+                                    "Encountered group: {}, not in provided labels. skipping..".format(grp)
+                                )
                             continue
                     else:
                         new_bc = bc

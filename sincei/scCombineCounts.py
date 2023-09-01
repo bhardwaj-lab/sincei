@@ -26,6 +26,7 @@ import scanpy as sc
 from sincei import ParserCommon
 from sincei.ParserCommon import smartLabel
 
+
 def parseArguments():
     other_args = ParserCommon.otherOptions()
 
