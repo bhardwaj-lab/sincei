@@ -38,9 +38,11 @@ class GLMPCA:
     prior knowledge, GLM-PCA will find a collection of directions which maximise the
     reconstruction error, computed as the negative log-likelihood of the chosen 
     exponential family. 
+
     By making use of an alternative formulation, our implementation can exploit 
     automatic differentiation and can therefore rely on mini-batch Stochastic
-    Gradient Descent. As a consequence, it scales to very large dataset. 
+    Gradient Descent. As a consequence, it scales to very large dataset.
+
     Another interesting feature of our implementation is that it does not require 
     cumbersome Lagrangian derivations. If you wish to test an exponential family 
     distribution not present in our implementation, adding a class in ExponentialFamily 
@@ -75,6 +77,26 @@ class GLMPCA:
 
     batch_size : int
         Size of the batch in the SGD optimisation step. Default to 256.
+
+    step_size: int
+        Step size in optimiser scheduler. See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
+        Default to 20.
+
+    gamma: int
+        Reduction parameter for optimiser scheduler. See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
+        Default to 0.5
+
+    n_init: int
+        Number of GLM-PCA initializations. Useful if you want to explore different 
+        random seeds and starting points. Default to 1.
+
+    init: str
+        Method to initialize loadings. "spectral" performs SVD on  the saturated parameters from
+        a small random batch of the dataset, "random" performs a random initialization on the
+        Stiefel manifold. Default to "spectral".
+
+    n_jobs: int
+        Number of jobs used in parallel operations. Default to 1.
     """
 
     def __init__(
@@ -129,11 +151,31 @@ class GLMPCA:
             self.exponential_family = family
 
     def fit(self, X):
+        r"""Fits a GLM-PCA to a specific dataset.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.array
+            Dataset with cells in the rows and features in the columns.
+
+        Returns
+        -------
+        bool 
+            Returns True if the fitting procedure has been successful.
+        """
+
+        if isinstance(X, np.ndarray):
+            X_fit = torch.Tensor(X)
+        elif isinstance(X, torch.Tensor):
+            X_fit = X.clone()
+        else:
+            raise ValueError("X format unrecognised: %s != np.ndarray or torch.Tensor"%(type(X)))
+
         # Fit exponential family params (e.g., dispersion for negative binomial)
-        self.exponential_family.initialize_family_parameters(X)
+        self.exponential_family.initialize_family_parameters(X_fit)
 
         # Compute saturated parameters, alongside exponential family parameters (if needed)
-        saturated_parameters = self.exponential_family.invert_g(X)
+        saturated_parameters = self.exponential_family.invert_g(X_fit)
 
         # Use saturated parameters to find loadings by projected gradient descent
         self.saturated_loadings_ = []
@@ -146,12 +188,12 @@ class GLMPCA:
 
         # Compute loadings for different parameters
         for _ in range(self.n_init):
-            self._compute_saturated_loadings(X, saturated_parameters)
+            self._compute_saturated_loadings(X_fit, saturated_parameters)
 
         # Select best model
         training_cost = torch.Tensor(
             [
-                self._optim_cost(loadings, intercept, X, saturated_parameters)
+                self._optim_cost(loadings, intercept, X_fit, saturated_parameters)
                 for loadings, intercept in zip(self.saturated_loadings_, self.saturated_intercept_)
             ]
         )
@@ -159,7 +201,21 @@ class GLMPCA:
         self.saturated_intercept_ = self.saturated_intercept_[best_model_idx]
         self.saturated_loadings_ = self.saturated_loadings_[best_model_idx]
 
+        return True
+
     def transform(self, X):
+        r"""Transforms and project dataset X onto the principal components.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.array
+            Dataset with cells in the rows and features in the columns.
+
+        Returns
+        -------
+        torch.Tensor 
+            Projected saturated parameters.
+        """
         saturated_parameters = self.exponential_family.invert_g(X)
 
         # Compute intercept term
@@ -172,12 +228,27 @@ class GLMPCA:
         return projected_parameters
 
     def _compute_saturated_loadings(self, X, saturated_parameters):
-        # Train GLM-PCA with mcTorch.
+        # Runs one optimisation of the loadings, using mcTorch.
         loadings_ = self._saturated_loading_iter(saturated_parameters, X)
         self.saturated_loadings_.append(loadings_[0])
         self.saturated_intercept_.append(loadings_[1])
 
     def _saturated_loading_iter(self, saturated_parameters: torch.Tensor, X: torch.Tensor):
+        r"""Computes the loadings solution of the GLM-PCA optimisation problem.
+
+        Parameters
+        ----------
+        saturated_parameters : torch.Tensor
+            Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
+
+        X : torch.Tensor
+            Dataset with cells in the rows and features in the columns.
+
+        Returns
+        -------
+        torch.Tensor 
+            Projected saturated parameters.
+        """
         if self.learning_rate_ < LEARNING_RATE_LIMIT:
             raise ValueError("LEARNING RATE IS TOO SMALL : DID NOT CONVERGE")
 
@@ -192,6 +263,7 @@ class GLMPCA:
             parameters=saturated_parameters.data.clone(), X=X
         )
 
+        # Load dataset
         train_data = TensorDataset(X, saturated_parameters.data.clone())
         train_loader = DataLoader(
             dataset=train_data, 
@@ -200,6 +272,7 @@ class GLMPCA:
             drop_last=True
         )
 
+        # Run epoch in a for loop
         self._loadings_epochs = [_loadings.clone().detach()]
         self._intercept_epochs = [_intercept.clone().detach()]
         for _ in tqdm(range(self.max_iter)):
@@ -226,6 +299,7 @@ class GLMPCA:
             self._loadings_epochs.append(_loadings.clone().detach())
             self._intercept_epochs.append(_intercept.clone().detach())
 
+            # If NaN or Inf is found in the parameters, start over optimisation with reduced learning rate.
             if np.isinf(self.loadings_learning_scores_[-1][-1]) or np.isnan(self.loadings_learning_scores_[-1][-1]):
                 print("\tRESTART BECAUSE INF/NAN FOUND", flush=True)
                 self.learning_rate_ = self.learning_rate_ * self.gamma
@@ -248,6 +322,30 @@ class GLMPCA:
         return (_loadings, _intercept)
 
     def _create_saturated_loading_optim(self, parameters: torch.Tensor, X: torch.Tensor):
+        r"""Initialises the optimisation problem.
+
+        Parameters
+        ----------
+        saturated_parameters : torch.Tensor
+            Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
+
+        X : torch.Tensor
+            Dataset with cells in the rows and features in the columns.
+
+        Returns
+        -------
+        optimizer: mctorch.optim
+            mctorch optimiser instance
+
+        loadings: mnn.Parameter
+            mcTorch parameter instance with loadings constrained to the Stiefel manifold
+
+        intercept: mnn.Parameter
+            mcTorch parameter instance with intercept.
+
+        lr_scheduler: torch.optim.scheduler
+            Scheduler instance.
+        """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Initialize loadings with spectrum (2**13 as maximum value for SVD to be relatively fast)
@@ -289,7 +387,11 @@ class GLMPCA:
         return optimizer, loadings, intercept, lr_scheduler
 
     def _optim_cost(
-        self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
+        self, 
+        loadings: torch.Tensor, 
+        intercept: torch.Tensor, 
+        batch_data: torch.Tensor, 
+        batch_parameters: torch.Tensor
     ):
         n = batch_data.shape[0]
         intercept_term = intercept.unsqueeze(0).repeat(n, 1).to(self.device)
