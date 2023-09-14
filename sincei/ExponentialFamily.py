@@ -148,10 +148,14 @@ class Beta(ExponentialFamily):
             self.family_params[k] = kwargs[k]
 
     def sufficient_statistics(self, X: torch.Tensor):
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
         return torch.stack([torch.log(X), torch.log(1 - X)])
 
     def natural_parametrization(self, theta: torch.Tensor):
-        nat_params = torch.stack([theta * self.family_params["nu"], (1 - theta) * self.family_params["nu"]])
+        nat_params = torch.stack([
+            theta * self.family_params["nu"], 
+            (1 - theta) * self.family_params["nu"]
+        ])
         if nat_params.shape[1] == 1:
             nat_params = nat_params.flatten()
         return nat_params
@@ -160,15 +164,22 @@ class Beta(ExponentialFamily):
         return torch.mul(X, 1 - X)
 
     def log_partition(self, theta: torch.Tensor):
-        numerator = torch.sum(torch.lgamma(self.natural_parametrization(theta)), axis=0)
-        numerator = torch.sum(numerator, axis=0)
+        numerator = torch.sum(
+            torch.lgamma(self.natural_parametrization(theta)), 
+            axis=0
+        )
+        # numerator = torch.sum(numerator, axis=0)
         denominator = torch.lgamma(self.family_params["nu"])
         return numerator - denominator
 
     def exponential_term(self, X: torch.Tensor, theta: torch.Tensor):
-        return torch.sum(torch.multiply(self.sufficient_statistics(X), self.natural_parametrization(theta)), axis=0)
+        return torch.sum(
+            torch.multiply(self.sufficient_statistics(X), self.natural_parametrization(theta)),
+            axis=0
+        )
 
     def _derivative_log_likelihood(self, X: torch.Tensor, theta: torch.Tensor):
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
         return (
             torch.log(X / (1 - X))
             + torch.digamma((1 - theta) * self.family_params["nu"])
@@ -178,9 +189,15 @@ class Beta(ExponentialFamily):
     def initialize_family_parameters(self, X: torch.Tensor = None):
         p = X.shape[1]
 
+        def compute_beta_param(x):
+            y = x[x > self.family_params['eps']]
+            y = y[y < 1-self.family_params['eps']]
+            return scipy.stats.beta.fit(y, floc=0, fscale=1, method="MM")
+            
         self.family_params["nu"] = torch.Tensor(
-            Parallel(n_jobs=self.family_params["n_jobs"])(
-                delayed(scipy.stats.beta.fit)(X[:, idx], floc=0, fscale=1) for idx in tqdm(range(p))
+            Parallel(n_jobs=self.family_params["n_jobs"], batch_size=100, backend="threading")(
+                delayed(compute_beta_param)(X[:, idx]) 
+                for idx in tqdm(range(p))
             )
         )
         self.family_params["nu"] = torch.sum(self.family_params["nu"][:, :2], axis=1)
@@ -191,6 +208,8 @@ class Beta(ExponentialFamily):
     def invert_g(self, X: torch.Tensor = None):
         """Dichotomy to find where derivative maxes out"""
 
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        
         # Initialize dichotomy parameters.
         min_val = torch.zeros(X.shape)
         max_val = torch.ones(X.shape)
@@ -207,11 +226,103 @@ class Beta(ExponentialFamily):
                 print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
                 break
 
-        if idx == self.family_params["maxiter"]:
+        if idx <= self.family_params["maxiter"]:
             print("CONVERGENCE NOT REACHED")
 
         return theta
 
+class LogBeta(Beta):
+    """Same as Beta, but with a natural parameter equal to log(\theta)"""
+    def natural_parametrization(self, theta: torch.Tensor):
+        nat_params = torch.stack([
+            torch.exp(theta) * self.family_params["nu"], 
+            (1 - torch.exp(theta)) * self.family_params["nu"]
+        ])
+        if nat_params.shape[1] == 1:
+            nat_params = nat_params.flatten()
+        return nat_params
+
+
+    def _derivative_log_likelihood(self, X: torch.Tensor, exp_theta: torch.Tensor):
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        return (
+            torch.log(X / (1 - X))
+            + torch.digamma((1 - exp_theta) * self.family_params["nu"])
+            - torch.digamma(exp_theta * self.family_params["nu"])
+        )
+
+    def invert_g(self, X: torch.Tensor = None):
+        """Dichotomy to find where derivative maxes out"""
+
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        
+        # Initialize dichotomy parameters.
+        min_val = torch.zeros(X.shape)
+        max_val = torch.ones(X.shape)
+        exp_theta = (min_val + max_val) / 2
+
+        llik = self._derivative_log_likelihood(X, exp_theta)
+        for idx in tqdm(range(self.family_params["maxiter"])):
+            min_val[llik > 0] = exp_theta[llik > 0]
+            max_val[llik < 0] = exp_theta[llik < 0]
+            exp_theta = (min_val + max_val) / 2
+            llik = self._derivative_log_likelihood(X, exp_theta)
+
+            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
+                print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
+                break
+
+        if idx <= self.family_params["maxiter"]:
+            print("CONVERGENCE NOT REACHED")
+
+        return torch.log(exp_theta)
+
+
+class SigmoidBeta(Beta):
+    """Same as Beta, but with a natural parameter equal to sigmoid(\theta)"""
+    def natural_parametrization(self, theta: torch.Tensor):
+        nat_params = torch.stack([
+            torch.logit(theta) * self.family_params["nu"], 
+            (1 - torch.logit(theta)) * self.family_params["nu"]
+        ])
+        if nat_params.shape[1] == 1:
+            nat_params = nat_params.flatten()
+        return nat_params
+
+
+    def _derivative_log_likelihood(self, X: torch.Tensor, logit_theta: torch.Tensor):
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        return (
+            torch.log(X / (1 - X))
+            + torch.digamma((1 - logit_theta) * self.family_params["nu"])
+            - torch.digamma(logit_theta * self.family_params["nu"])
+        )
+
+    def invert_g(self, X: torch.Tensor = None):
+        """Dichotomy to find where derivative maxes out"""
+
+        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        
+        # Initialize dichotomy parameters.
+        min_val = torch.zeros(X.shape)
+        max_val = torch.ones(X.shape)
+        logit_theta = (min_val + max_val) / 2
+
+        llik = self._derivative_log_likelihood(X, logit_theta)
+        for idx in tqdm(range(self.family_params["maxiter"])):
+            min_val[llik > 0] = logit_theta[llik > 0]
+            max_val[llik < 0] = logit_theta[llik < 0]
+            logit_theta = (min_val + max_val) / 2
+            llik = self._derivative_log_likelihood(X, logit_theta)
+
+            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
+                print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
+                break
+
+        if idx <= self.family_params["maxiter"]:
+            print("CONVERGENCE NOT REACHED")
+
+        return torch.sigmoid(exp_theta)
 
 class Gamma(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):

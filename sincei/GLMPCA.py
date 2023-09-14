@@ -13,7 +13,7 @@ from scipy.stats import beta as beta_dst
 from scipy.stats import lognorm
 from scipy.stats import gamma as gamma_dst
 
-from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal
+from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal, LogBeta, SigmoidBeta
 
 EXPONENTIAL_FAMILY_DICT = {
     "gaussian": Gaussian,
@@ -23,6 +23,8 @@ EXPONENTIAL_FAMILY_DICT = {
     "gamma": Gamma,
     "lognormal": LogNormal,
     "log_normal": LogNormal,
+    "log_beta": LogBeta,
+    "sigmoid_beta": SigmoidBeta
 }
 LEARNING_RATE_LIMIT = 10 ** (-10)
 
@@ -96,7 +98,7 @@ class GLMPCA:
 
         # Compute loadings for different parameters
         for _ in range(self.n_init):
-            self._compute_saturated_loadings(X)
+            self._compute_saturated_loadings(X, saturated_parameters)
 
         # Select best model
         training_cost = torch.Tensor(
@@ -121,10 +123,7 @@ class GLMPCA:
 
         return projected_parameters
 
-    def _compute_saturated_loadings(self, X):
-        # Compute saturated parameters and load on divide
-        saturated_parameters = self.exponential_family.invert_g(X)
-
+    def _compute_saturated_loadings(self, X, saturated_parameters):
         # Train GLM-PCA with mcTorch.
         loadings_ = self._saturated_loading_iter(saturated_parameters, X)
         self.saturated_loadings_.append(loadings_[0])
@@ -146,8 +145,15 @@ class GLMPCA:
         )
 
         train_data = TensorDataset(X, saturated_parameters.data.clone())
-        train_loader = DataLoader(dataset=train_data, batch_size=self.batch_size, shuffle=True)
+        train_loader = DataLoader(
+            dataset=train_data, 
+            batch_size=self.batch_size, 
+            shuffle=True,
+            drop_last=True
+        )
 
+        self._loadings_epochs = [_loadings.clone().detach()]
+        self._intercept_epochs = [_intercept.clone().detach()]
         for _ in tqdm(range(self.max_iter)):
             loss_val = []
             for batch_data, batch_parameters in train_loader:
@@ -168,6 +174,10 @@ class GLMPCA:
                 self.loadings_learning_rates_[-1].append(_lr_scheduler.get_last_lr())
             _lr_scheduler.step()
 
+
+            self._loadings_epochs.append(_loadings.clone().detach())
+            self._intercept_epochs.append(_intercept.clone().detach())
+
             if np.isinf(self.loadings_learning_scores_[-1][-1]) or np.isnan(self.loadings_learning_scores_[-1][-1]):
                 print("\tRESTART BECAUSE INF/NAN FOUND", flush=True)
                 self.learning_rate_ = self.learning_rate_ * self.gamma
@@ -179,6 +189,9 @@ class GLMPCA:
                 if "cuda" in str(self.device):
                     torch.cuda.empty_cache()
 
+                self._loadings_epochs = []
+                self._intercept_epochs = []
+
                 return self._saturated_loading_iter(
                     saturated_parameters=saturated_parameters,
                     X=X,
@@ -189,8 +202,9 @@ class GLMPCA:
     def _create_saturated_loading_optim(self, parameters: torch.Tensor, X: torch.Tensor):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Initialize loadings with spectrum
-        random_idx = np.random.choice(np.arange(parameters.shape[0]), replace=False, size=self.batch_size)
+        # Initialize loadings with spectrum (2**13 as maximum value for SVD to be relatively fast)
+        random_batch_size = min(X.shape[0], 2**13)
+        random_idx = np.random.choice(np.arange(parameters.shape[0]), replace=False, size=random_batch_size)
         if self.init == "spectral":
             _, _, v = torch.linalg.svd(parameters[random_idx] - torch.mean(parameters[random_idx], axis=0))
             loadings = mnn.Parameter(data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc)).to(
@@ -214,9 +228,13 @@ class GLMPCA:
 
         # Create optimizer
         # TODO: allow for other optimizer to be used.
+        # TODO: learning rate for intercept.
         print("LEARNING RATE: %s" % (self.learning_rate_))
         optimizer = moptim.rAdagrad(
-            params=[{"params": loadings, "lr": self.learning_rate_}, {"params": intercept, "lr": self.learning_rate_}]
+            params=[
+                {"params": loadings, "lr": self.learning_rate_}, 
+                {"params": intercept, "lr": self.learning_rate_*.01}
+            ]
         )
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_size, gamma=self.gamma)
 
