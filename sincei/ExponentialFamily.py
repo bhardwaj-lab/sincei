@@ -9,6 +9,28 @@ saturation_eps = 10**-10
 
 
 class ExponentialFamily:
+    r"""Encodes an exponential family distribution using PyTorch autodiff structures.
+
+    ExponentialFamily corresponds to the superclass providing a backbone for
+    all exponential family.
+    Each subclass should contain the following methods, defined based on the
+    distribution of choice (same notation as [Mourragui et al, 2023]):
+        - sufficient_statistics ($T$),
+        - natural_parametrization ($\eta$),
+        - log_partition ($A$).
+        - invert_g ($g^{-1}$).
+        - initialize_family_parameters: computes parameters used in other
+        methods, e.g., gene-level dispersion for Negative Binomial.
+    We added a "base_measure" for sake of completeness, but this method is not
+    necessary for running GLM-PCA.
+    The log-likelihood and exponential term are defined directly from the
+    aforementionned methods.
+
+    Parameters
+    ----------
+    family_name : int
+        Name of the family.
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "base"
         self.family_params = family_params if family_params else {}
@@ -62,6 +84,11 @@ class ExponentialFamily:
 
 
 class Gaussian(ExponentialFamily):
+    r"""Gaussian with standard deviation one.
+
+    GLMPCA with Gaussian as family is equivalent to the standard PCA.
+    """
+
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "gaussian"
         self.family_params = family_params if family_params else {}
@@ -83,6 +110,12 @@ class Gaussian(ExponentialFamily):
 
 
 class Bernoulli(ExponentialFamily):
+    r"""Bernoulli distribution
+
+    family_params of interest:
+        - "max_val" (int) corresponding to the max value (replaces infinity).
+        Empirically, values above 10 yield similar results.
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "bernoulli"
         self.family_params = family_params if family_params else {"max_val": 30}
@@ -109,6 +142,11 @@ class Bernoulli(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
+    r"""Poisson distribution
+
+    family_params of interest:
+        - "min_val" (int) corresponding to the min value (replaces 0).
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "poisson"
         self.family_params = family_params if family_params else {"min_val": 1e-20}
@@ -138,17 +176,38 @@ class Poisson(ExponentialFamily):
 
 
 class Beta(ExponentialFamily):
+    r"""Beta distribution, using a standard formulation.
+
+    Original formulation presented in [Mourragui et al, 2023].
+
+    family_params of interest:
+        - "min_val" (int): min data value (replaces 0 and 1).
+        - "n_jobs" (int): number of jobs, specifically
+        for computing the "nu" parameter.
+        - "method" (str): method use to compute the "nu" parameter per
+        feature. Two possibles: "MLE" and "MM". Default to "MLE".
+        - "eps" (float): minimum difference used for inverting the g 
+        function. Default to 1e-4
+        - "maxiter" (int): maximum number of iterations for the inversion
+        of the g function. Default to 100.
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "beta"
         if family_params is None or "nu" not in family_params:
             print("Beta distribution not initialized yet")
-        default_family_params = {"min_val": 1e-5, "n_jobs": 1, "eps": 1e-4, "maxiter": 100}
+        default_family_params = {
+            "min_val": 1e-5, 
+            "n_jobs": 1, 
+            "eps": 1e-4, 
+            "maxiter": 100,
+            "method": "MLE"
+        }
         self.family_params = family_params if family_params else default_family_params
         for k in kwargs:
             self.family_params[k] = kwargs[k]
 
     def sufficient_statistics(self, X: torch.Tensor):
-        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
+        X = X.clip(self.family_params["min_val"], 1-self.family_params["min_val"])
         return torch.stack([torch.log(X), torch.log(1 - X)])
 
     def natural_parametrization(self, theta: torch.Tensor):
@@ -192,7 +251,12 @@ class Beta(ExponentialFamily):
         def compute_beta_param(x):
             y = x[x > self.family_params['eps']]
             y = y[y < 1-self.family_params['eps']]
-            return scipy.stats.beta.fit(y, floc=0, fscale=1, method="MM")
+            return scipy.stats.beta.fit(
+                y, 
+                floc=0, 
+                fscale=1, 
+                method=self.family_params["method"]
+            )
             
         self.family_params["nu"] = torch.Tensor(
             Parallel(n_jobs=self.family_params["n_jobs"], batch_size=100, backend="threading")(
@@ -231,55 +295,26 @@ class Beta(ExponentialFamily):
 
         return theta
 
-class LogBeta(Beta):
-    """Same as Beta, but with a natural parameter equal to log(\theta)"""
-    def natural_parametrization(self, theta: torch.Tensor):
-        nat_params = torch.stack([
-            torch.exp(theta) * self.family_params["nu"], 
-            (1 - torch.exp(theta)) * self.family_params["nu"]
-        ])
-        if nat_params.shape[1] == 1:
-            nat_params = nat_params.flatten()
-        return nat_params
-
-
-    def _derivative_log_likelihood(self, X: torch.Tensor, exp_theta: torch.Tensor):
-        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
-        return (
-            torch.log(X / (1 - X))
-            + torch.digamma((1 - exp_theta) * self.family_params["nu"])
-            - torch.digamma(exp_theta * self.family_params["nu"])
-        )
-
-    def invert_g(self, X: torch.Tensor = None):
-        """Dichotomy to find where derivative maxes out"""
-
-        X = X.clip(self.family_params['eps'], 1-self.family_params['eps'])
-        
-        # Initialize dichotomy parameters.
-        min_val = torch.zeros(X.shape)
-        max_val = torch.ones(X.shape)
-        exp_theta = (min_val + max_val) / 2
-
-        llik = self._derivative_log_likelihood(X, exp_theta)
-        for idx in tqdm(range(self.family_params["maxiter"])):
-            min_val[llik > 0] = exp_theta[llik > 0]
-            max_val[llik < 0] = exp_theta[llik < 0]
-            exp_theta = (min_val + max_val) / 2
-            llik = self._derivative_log_likelihood(X, exp_theta)
-
-            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
-                print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
-                break
-
-        if idx <= self.family_params["maxiter"]:
-            print("CONVERGENCE NOT REACHED")
-
-        return torch.log(exp_theta)
-
 
 class SigmoidBeta(Beta):
-    """Same as Beta, but with a natural parameter equal to sigmoid(\theta)"""
+    r"""Beta distribution re-parametrized using a Sigmoid.
+
+    This distribution is similar to the previous Beta (which it
+    inherits from) but the natural parameter is re-parametrized using
+    a Sigmoid. This is shown expeerimentally to stabilize the 
+    optimisation by removing the ]0,1[ constraint.
+
+    family_params of interest:
+        - "min_val" (int): min data value (replaces 0 and 1).
+        - "n_jobs" (int): number of jobs, specifically
+        for computing the "nu" parameter.
+        - "method" (str): method use to compute the "nu" parameter per
+        feature. Two possibles: "MLE" and "MM". Default to "MLE".
+        - "eps" (float): minimum difference used for inverting the g 
+        function. Default to 1e-4
+        - "maxiter" (int): maximum number of iterations for the inversion
+        of the g function. Default to 100.
+    """
     def natural_parametrization(self, theta: torch.Tensor):
         nat_params = torch.stack([
             torch.logit(theta) * self.family_params["nu"], 
@@ -325,11 +360,33 @@ class SigmoidBeta(Beta):
         return torch.sigmoid(logit_theta)
 
 class Gamma(ExponentialFamily):
+    r"""Gamma distribution using a standard formulation.
+
+    Original formulation presented in [Mourragui et al, 2023].
+
+    family_params of interest:
+        - "min_val" (int): min data value, default to 1e-5.
+        - "max_val" (int): max data value, default to 10e6.
+        - "n_jobs" (int): number of jobs, specifically
+        for computing the "nu" parameter.
+        - "method" (str): method use to compute the "nu" parameter per
+        feature. Two possibles: "MLE" and "MM". Default to "MLE".
+        - "eps" (float): minimum difference used for inverting the g 
+        function. Default to 1e-4
+        - "maxiter" (int): maximum number of iterations for the inversion
+        of the g function. Default to 100.
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "gamma"
         if family_params is None or "nu" not in family_params:
             print("Gamma distribution not initialized yet")
-        default_family_params = {"min_val": 1e-5, "n_jobs": 1, "eps": 1e-4, "maxiter": 100, "maxval": 10e6}
+        default_family_params = {
+            "min_val": 1e-5, 
+            "max_val": 10e6,
+            "n_jobs": 1, 
+            "eps": 1e-4, 
+            "maxiter": 100
+        }
         self.family_params = family_params if family_params else default_family_params
         for k in kwargs:
             self.family_params[k] = kwargs[k]
@@ -357,7 +414,7 @@ class Gamma(ExponentialFamily):
 
         # Initialize dichotomy parameters.
         min_val = torch.zeros(X.shape)
-        max_val = torch.ones(X.shape) * self.family_params["maxval"]
+        max_val = torch.ones(X.shape) * self.family_params["max_val"]
         theta = (min_val + max_val) / 2
 
         llik = self._digamma_implicit_function(X, theta)
@@ -391,11 +448,33 @@ class Gamma(ExponentialFamily):
 
 
 class LogNormal(ExponentialFamily):
+    r"""Log-normal distribution using a standard formulation.
+
+    Original formulation presented in [Mourragui et al, 2023].
+
+    family_params of interest:
+        - "min_val" (int): min data value, default to 1e-5.
+        - "max_val" (int): max data value, default to 10e6.
+        - "n_jobs" (int): number of jobs, specifically
+        for computing the "nu" parameter.
+        - "method" (str): method use to compute the "nu" parameter per
+        feature. Two possibles: "MLE" and "MM". Default to "MLE".
+        - "eps" (float): minimum difference used for inverting the g 
+        function. Default to 1e-4
+        - "maxiter" (int): maximum number of iterations for the inversion
+        of the g function. Default to 100.
+    """
     def __init__(self, family_params=None, **kwargs):
         self.family_name = "log_normal"
         if family_params is None or "nu" not in family_params:
             print("Log Normal distribution not initialized yet")
-        default_family_params = {"min_val": 1e-8, "n_jobs": 1, "eps": 1e-4, "maxiter": 100, "maxval": 10e6}
+        default_family_params = {
+            "min_val": 1e-8, 
+            "max_val": 10e6,
+            "n_jobs": 1, 
+            "eps": 1e-4, 
+            "maxiter": 100,
+        }
         self.family_params = family_params if family_params else default_family_params
         for k in kwargs:
             self.family_params[k] = kwargs[k]
