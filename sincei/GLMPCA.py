@@ -23,7 +23,6 @@ EXPONENTIAL_FAMILY_DICT = {
     "gamma": Gamma,
     "lognormal": LogNormal,
     "log_normal": LogNormal,
-    "log_beta": LogBeta,
     "sigmoid_beta": SigmoidBeta
 }
 LEARNING_RATE_LIMIT = 10 ** (-10)
