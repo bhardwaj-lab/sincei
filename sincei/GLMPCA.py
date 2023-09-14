@@ -30,20 +30,68 @@ LEARNING_RATE_LIMIT = 10 ** (-10)
 
 
 class GLMPCA:
+    r"""Performs GLM-PCA on a data matrix to reduce dimensionality
+
+    This class computes the generalized-linear model principal components (GLM-PC) 
+    of a dataset by exploiting the framework of saturated parameters.
+    Specifically, given an exponential family distribution choosen following some
+    prior knowledge, GLM-PCA will find a collection of directions which maximise the
+    reconstruction error, computed as the negative log-likelihood of the chosen 
+    exponential family. 
+    By making use of an alternative formulation, our implementation can exploit 
+    automatic differentiation and can therefore rely on mini-batch Stochastic
+    Gradient Descent. As a consequence, it scales to very large dataset. 
+    Another interesting feature of our implementation is that it does not require 
+    cumbersome Lagrangian derivations. If you wish to test an exponential family 
+    distribution not present in our implementation, adding a class in ExponentialFamily 
+    with the different density functionals defined there would suffice to use GLM-PCA.
+
+    Parameters
+    ----------
+    n_pc : int
+        Number of principal components.
+
+    family: str
+        Name of the exponential family distribution. Possible families: "gaussian", "poisson",
+        "bernoulli", "beta", "gamma", "log_normal", "log_beta":, "sigmoid_beta". Default to 
+        "gaussian"
+
+    family_params : dict
+        Dictionary with family parameters to be added. List of parameters depend on the
+        specific ExponentialFamily class chosen. Examples:
+            - "n_jobs" (int) for parallelization, specifically for "beta" and "gamma".
+            - "min_val" (float) for truncating in "poisson" or "beta".
+            - "eps" (float) for convergence in inverse computation in "beta".
+        Default to None.
+
+    max_iter : int
+        Maximum number of epochs in the GLM-PCA optimisation. Default to 100.
+
+    learning_rate: float
+        Learning rate to be used in the GLM-PCA optimisation. If learning_rate is too
+        high and lead to NaN, our implementation automatically restarts the optimisation
+        with a smaller value. Default to 0.2.
+
+
+    batch_size : int
+        Size of the batch in the SGD optimisation step. Default to 256.
+    """
+
     def __init__(
         self,
         n_pc,
-        family,
+        family="gaussian",
         family_params=None,
-        max_iter=1000,
-        learning_rate=0.02,
-        batch_size=128,
+        max_iter=100,
+        learning_rate=0.2,
+        batch_size=256,
         step_size=20,
         gamma=0.5,
         n_init=1,
         init="spectral",
         n_jobs=1,
     ):
+
         self.n_pc = n_pc
         self.family = family
         self.family_params = family_params

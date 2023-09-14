@@ -322,7 +322,7 @@ class SigmoidBeta(Beta):
         if idx <= self.family_params["maxiter"]:
             print("CONVERGENCE NOT REACHED")
 
-        return torch.sigmoid(exp_theta)
+        return torch.sigmoid(logit_theta)
 
 class Gamma(ExponentialFamily):
     def __init__(self, family_params=None, **kwargs):
