@@ -321,8 +321,8 @@ class SigmoidBeta(Beta):
     """
     def natural_parametrization(self, theta: torch.Tensor):
         nat_params = torch.stack([
-            torch.logit(theta) * self.family_params["nu"], 
-            (1 - torch.logit(theta)) * self.family_params["nu"]
+            torch.sigmoid(theta) * self.family_params["nu"], 
+            (1 - torch.sigmoid(theta)) * self.family_params["nu"]
         ])
         if nat_params.shape[1] == 1:
             nat_params = nat_params.flatten()
