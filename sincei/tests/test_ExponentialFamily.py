@@ -38,7 +38,7 @@ def testBernoulliDistribution():
 
     # Span possible values from -30 to 30
     theta_val = torch.linspace(-30,30,1000)
-    for theta in tqdm(theta_val):
+    for theta in theta_val:
         bernoulli_dist = Bernoulli()
         dist_bernoulli_values = np.array([
             bernoulli_dist.distribution(x, theta).detach().numpy() for x in X
@@ -53,7 +53,7 @@ def testPoissonDistribution():
 
     # Span possible values from -30 to 30
     theta_val = torch.linspace(-50,5,10)
-    for theta in tqdm(theta_val):
+    for theta in theta_val:
         poisson_dist = Poisson()
         log_dist_poisson_values = np.array([
             poisson_dist.log_distribution(x, theta).detach().numpy() for x in X
@@ -75,7 +75,7 @@ def testBetaDistribution():
     theta_val = torch.linspace(0.01,0.99,10)
     nu_val = torch.rand(20) * 10
     for nu in nu_val:
-        for theta in tqdm(theta_val):
+        for theta in theta_val:
             # Our definition
             beta_dist = Beta()
             beta_dist.family_params['nu'] = torch.Tensor([nu])
@@ -96,16 +96,17 @@ def testBetaDistribution():
             )
 
  def testSigmoidBetaDistribution():
-    # Verifies compliance of Beta definition using randomly selected points.
+    # Verifies compliance of SigmoidBeta definition using randomly selected points.
     X = torch.linspace(0+1e-4,1-1e-4,100)
 
-    # Possible parameters: scan through them
-    theta_val = torch.linspace(0.01,0.99,10)
+    # Possible parameters
+    theta_val = torch.logit(torch.linspace(0.01,0.99,10))
     nu_val = torch.rand(20) * 10
+
     for nu in nu_val:
-        for theta in tqdm(theta_val):
+        for theta in theta_val:
             # Our definition
-            beta_dist = Beta()
+            beta_dist = SigmoidBeta()
             beta_dist.family_params['nu'] = torch.Tensor([nu])
             log_dist_beta_values = np.array([
                 beta_dist.log_distribution(x, theta).detach().numpy() 
@@ -116,10 +117,35 @@ def testBetaDistribution():
                 for x in X
             ]).flatten()
 
-            # Compare to Scipy.
+            # Comparison to Scipy.
             np.testing.assert_array_almost_equal(
                 log_dist_beta_values,
-                scipy.stats.beta.logpdf(X, theta*nu, nu*(1-theta)),
+                scipy.stats.beta.logpdf(X, torch.sigmoid(theta)*nu, nu*(1-torch.sigmoid(theta))),
                 decimal=2
-            )    
+            )
+
+def testGammaDistribution():
+    # Verifies compliance of Gamma definition using randomly selected points.
+    X = torch.logspace(-8,5,1000)
+    theta_val = torch.logspace(-5,3,50)
+
+    # Possible parameters
+    nu_val = torch.rand(20) * 10
+
+    for nu in nu_val:
+        for theta in theta_val:
+        	# Our definition
+            gamma_dist = Gamma()
+            gamma_dist.family_params['nu'] = torch.Tensor([nu])
+            log_dist_gamma_values = np.array([
+                gamma_dist.distribution(torch.Tensor(x), torch.Tensor([theta])).detach().numpy() 
+                for x in X
+            ]).flatten()
+            
+            # Comparison to Scipy.
+            np.testing.assert_array_almost_equal(
+                scipy.stats.gamma.pdf(X, a=theta+1, loc=0, scale=1/nu),
+                log_dist_gamma_values,
+                decimal=2
+            )   
 
