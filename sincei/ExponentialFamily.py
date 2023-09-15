@@ -205,6 +205,10 @@ class Beta(ExponentialFamily):
         self.family_params = family_params if family_params else default_family_params
         for k in kwargs:
             self.family_params[k] = kwargs[k]
+        for k in default_family_params:
+            if k in self.family_params:
+                continue
+            self.family_params[k] = default_family_params[k]
 
     def sufficient_statistics(self, X: torch.Tensor):
         X = X.clip(self.family_params["min_val"], 1-self.family_params["min_val"])
