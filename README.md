@@ -43,7 +43,9 @@ For the development version, try:
 
 Each tool begins with the prefix sc<tool_name>, such as:
 
- $ scBulkCoverage -b file1.bam -g groupinfo.txt -o coverage
+```
+scBulkCoverage -b file1.bam -g groupinfo.txt -o coverage
+```
 
 ## Questions and discussions
 

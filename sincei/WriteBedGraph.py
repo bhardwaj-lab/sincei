@@ -185,10 +185,10 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
         # write output for each group
         cluster_info = self.clusterInfo
-        clusters = cluster_info.cluster.unique().tolist()
+        clusters = cluster_info['cluster'].unique().tolist()
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
-            print("Writing output for group: {}".format(str(cl)))
+            print("Writing output for group: {}".format(cl))
             if pd.isna(cl):
                 continue
             # concatenate the coverages
@@ -211,11 +211,10 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 mil_reads_mapped = float(np.sum(out_file[3])) / 1e6
                 if mil_reads_mapped < 0.00001:
                     sys.stderr.write(
-                        "\n No or too few reads counted for group: "
-                        + cl
-                        + ". If this persists for all groups, please double-check that your barcodes"
+                        "\n No or too few reads counted for group: {} ."
+                        ". If this persists for all groups, please double-check that your barcodes"
                         " match between the groupInfo file and the BAM files and you specified the correct "
-                        " --cellTag \n"
+                        " --cellTag \n".format(cl)
                     )
                     continue
                 else:
@@ -226,7 +225,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 out_file[3] *= 1.0 / (nCells)
 
             # out
-            bg_out = "{}_{}.bedgraph".format(out_file_prefix, cl)
+            bg_out = "{}_{}.bedgraph".format(out_file_prefix, str(cl))
 
             out_file.to_csv(bg_out, sep="\t", index=False, header=False)
             os.remove(tmp_out)
@@ -234,7 +233,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
                 bedGraphToBigWig(
                     chrom_names_and_size,
                     [bg_out],
-                    "{}_{}.bw".format(out_file_prefix, cl),
+                    "{}_{}.bw".format(out_file_prefix, str(cl)),
                 )
 
     def writeBedGraph_worker(self, chrom, start, end, func_to_call, func_args, bed_regions_list=None):

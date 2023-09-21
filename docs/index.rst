@@ -19,6 +19,8 @@
 Bhardwaj V. and Mourragui S. (2023) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
 
 
+
+
 Installation
 -------------------
 sincei is a command line toolkit based on python3, and can be installed using `conda <https://conda.io/projects/conda/en/latest/user-guide/install/index.html>`_

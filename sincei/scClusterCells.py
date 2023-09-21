@@ -209,7 +209,7 @@ def main(args=None):
     if args.outFileUMAP:
         ## plot UMAP
         fig = sc.pl.umap(adata, color="leiden", legend_loc="on data", return_fig=True, show=False)
-        fig.savefig(args.outFileUMAP, dpi=200, format=args.plotFileFormat)
+        fig.savefig(args.outFileUMAP, dpi=300, format=args.plotFileFormat)
         prefix = args.outFileUMAP.split(".")[0]
         umap_lsi = pd.DataFrame(adata.obsm["X_umap"], columns=["UMAP1", "UMAP2"], index=adata.obs.index)
         umap_lsi["cluster"] = adata.obs["leiden"]
