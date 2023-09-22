@@ -214,7 +214,7 @@ The parameters here are same as other sincei tools that work on BAM files, excep
 
 We can now inspect these bigwigs on `IGV <https://software.broadinstitute.org/software/igv/>`__,. We can clearly see some regions with cell-type specific signal, such as the ones here for genes Prim3 and Tmem131.
 
-.. image:: ./../images/igv_snapshot_1.png
+.. image:: ./../images/igv_snapshot_sortChIC.png
    :height: 500px
    :width: 6000 px
    :scale: 50 %

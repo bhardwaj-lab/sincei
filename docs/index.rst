@@ -71,6 +71,5 @@ Contents:
 
    content/list_of_tools
    content/tutorials
-   content/tutorials/sincei_tutorial
    content/modules/modules
    content/news
