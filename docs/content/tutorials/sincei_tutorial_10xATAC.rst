@@ -249,10 +249,10 @@ information based on FACS-sorting from sortChIC.
    ggsave(plot=pl, "sincei_output/atac/UMAP_compared_withOrig.png", dpi=300, width = 11, height = 6)
 
 
-   .. image:: ./../images/UMAP_compared_withOrig_10xATAC.png
-      :height: 800px
-      :width: 1600 px
-      :scale: 50 %
+.. image:: ./../images/UMAP_compared_withOrig_10xATAC.png
+    :height: 800px
+    :width: 1600 px
+    :scale: 50 %
 
 The figure above shows that we can easily replicate the expected
 cell-type results from the scATAC data using **sincei**. This was done
