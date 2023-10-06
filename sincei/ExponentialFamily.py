@@ -361,7 +361,7 @@ class SigmoidBeta(Beta):
         if idx <= self.family_params["maxiter"]:
             print("CONVERGENCE NOT REACHED")
 
-        return torch.sigmoid(logit_theta)
+        return torch.logit(logit_theta)
 
 class Gamma(ExponentialFamily):
     r"""Gamma distribution using a standard formulation.
