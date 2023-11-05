@@ -55,8 +55,12 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinxarg.ext",
     "sphinx_toolbox.collapse",
+    'nbsphinx',
 ]
 #    'numpydoc'
+
+# Do not execute tutorial notebooks
+nbsphinx_execute = 'never'
 
 # This is needed to suppress autosummary reordering
 numpydoc_show_class_members = False
