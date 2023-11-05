@@ -1,13 +1,10 @@
-from sincei.ExponentialFamily import Bernoulli
-from sincei.ExponentialFamily import Gaussian
-from sincei.ExponentialFamily import Poisson
-from sincei.ExponentialFamily import Beta
-from sincei.ExponentialFamily import SigmoidBeta
 
 import pandas as pd
 import numpy as np
 import numpy.testing as nt
-
+import torch
+import scipy
+from sincei.ExponentialFamily import Bernoulli, Gaussian, Poisson, Beta, SigmoidBeta, Gamma
 
 def testGaussianDistribution():
     # Verifies compliance of Gaussian definition using randomly selected points.
@@ -24,7 +21,7 @@ def testGaussianDistribution():
         scipy_gauss_val = scipy.stats.norm.pdf(X, loc=theta)
 
         # Assert equality
-        nt.testing.assert_array_almost_equal(dist_gauss_values, scipy_gauss_val, decimal=3)
+        nt.assert_array_almost_equal(dist_gauss_values, scipy_gauss_val, decimal=3)
 
 
 def testBernoulliDistribution():
