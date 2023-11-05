@@ -12,7 +12,7 @@ using sincei (see the parent tutorial for explanation).
 
 Define common bash variables:
 
-.. code:: {bash}
+.. code:: bash
 
    # create dir
    mkdir sincei_output/atac
@@ -39,7 +39,7 @@ quality cells in this data, such as:
 -  high level of secondary/supplementary alignments (filtered using
    ``--samFlagExclude/Include``)
 
-.. code:: {bash}
+.. code:: bash
 
 
    for r in 1 2
@@ -65,7 +65,7 @@ quality cells in this data, such as:
 visualized using the `MultiQC tool <https://multiqc.info/docs/>`__, to
 select appropriate list of cells to include for counting.
 
-.. code:: {bash}
+.. code:: bash
 
    multiqc sincei_output/atac/ # results in multiqc_report.html
 
@@ -85,7 +85,7 @@ count only high quality reads from our whitelist of barcodes.
 We avoid counting reads in blacklisted regions of the human genome
 (–blacklist).
 
-.. code:: {bash}
+.. code:: bash
 
    ## merge intervals from 2 peaks bed files
    for f in cellranger_output_rep*/outs/atac_peaks.bed; do awk '{if(NR>51) {print $0}}' $f >> repmerged.bed; done
@@ -122,7 +122,7 @@ statistics at region and cell level (labelled as .regions.tsv and
 visualized using the `MultiQC tool <https://multiqc.info/docs/>`__, to
 select appropriate metrics to filter out the unwanted cells/regions.
 
-.. code:: {bash}
+.. code:: bash
 
    # list the metrics we can use to filter cells/regions
    for r in 1 2; do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.loom --describe; done
@@ -140,7 +140,7 @@ cells with <500 and >10000 detected bins (``--filterRegionArgs``). Also,
 we exclude the regions that are detected in too few cells (<100) or in
 >90% of cells (``--filterCellArgs``).
 
-.. code:: {bash}
+.. code:: bash
 
    for r in 1 2
    do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.loom \
@@ -167,7 +167,7 @@ counts can now be combined for downstream analysis. We provide a tool
 common features. Concatenating the filtered cells for the 2 replicates
 would result in a total of >12K cells.
 
-.. code:: {bash}
+.. code:: bash
 
    scCombineCounts \
    -i sincei_output/atac/scCounts_atac_peaks_filtered_rep1.loom \
@@ -183,7 +183,7 @@ would result in a total of >12K cells.
 Finally, we will apply LSA on the filtered dataset to reduce the
 dimentionality to 30 Topics, combined with louvain clustering.
 
-.. code:: {bash}
+.. code:: bash
 
    scClusterCells -i sincei_output/atac/scCounts_atac_peaks_filtered.merged.loom \
    -m LSA --clusterResolution 1 \
@@ -202,7 +202,7 @@ a biologically meaningful way.
 We can color our UMAP output from ``scClusterCells`` with the cell-type
 information based on FACS-sorting from sortChIC.
 
-.. code:: {r}
+.. code:: r
 
    library(dplyr)
    library(magrittr)
@@ -275,7 +275,7 @@ files, except that we can ask for a normalized bulk signal (specified
 using ``--normalizeUsing`` option) . Below, we produce CPM-normalized
 bigwigs with 1kb bins.
 
-.. code:: {bash}
+.. code:: bash
 
    scBulkCoverage -p 20 --cellTag CB --normalizeUsing CPM --binSize 1000 \
    --minMappingQuality 10 --samFlagInclude 64 --samFlagExclude 2048 \
