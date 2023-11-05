@@ -23,7 +23,7 @@ EXPONENTIAL_FAMILY_DICT = {
     "gamma": Gamma,
     "lognormal": LogNormal,
     "log_normal": LogNormal,
-    "sigmoid_beta": SigmoidBeta
+    "sigmoid_beta": SigmoidBeta,
 }
 LEARNING_RATE_LIMIT = 10 ** (-10)
 
@@ -31,20 +31,20 @@ LEARNING_RATE_LIMIT = 10 ** (-10)
 class GLMPCA:
     r"""Performs GLM-PCA on a data matrix to reduce dimensionality
 
-    This class computes the generalized-linear model principal components (GLM-PC) 
+    This class computes the generalized-linear model principal components (GLM-PC)
     of a dataset by exploiting the framework of saturated parameters.
     Specifically, given an exponential family distribution choosen following some
     prior knowledge, GLM-PCA will find a collection of directions which maximise the
-    reconstruction error, computed as the negative log-likelihood of the chosen 
-    exponential family. 
+    reconstruction error, computed as the negative log-likelihood of the chosen
+    exponential family.
 
-    By making use of an alternative formulation, our implementation can exploit 
+    By making use of an alternative formulation, our implementation can exploit
     automatic differentiation and can therefore rely on mini-batch Stochastic
     Gradient Descent. As a consequence, it scales to very large dataset.
 
-    Another interesting feature of our implementation is that it does not require 
-    cumbersome Lagrangian derivations. If you wish to test an exponential family 
-    distribution not present in our implementation, adding a class in ExponentialFamily 
+    Another interesting feature of our implementation is that it does not require
+    cumbersome Lagrangian derivations. If you wish to test an exponential family
+    distribution not present in our implementation, adding a class in ExponentialFamily
     with the different density functionals defined there would suffice to use GLM-PCA.
 
     Parameters
@@ -54,7 +54,7 @@ class GLMPCA:
 
     family: str
         Name of the exponential family distribution. Possible families: "gaussian", "poisson",
-        "bernoulli", "beta", "gamma", "log_normal", "log_beta":, "sigmoid_beta". Default to 
+        "bernoulli", "beta", "gamma", "log_normal", "log_beta":, "sigmoid_beta". Default to
         "gaussian"
 
     family_params : dict
@@ -86,7 +86,7 @@ class GLMPCA:
         Default to 0.5
 
     n_init: int
-        Number of GLM-PCA initializations. Useful if you want to explore different 
+        Number of GLM-PCA initializations. Useful if you want to explore different
         random seeds and starting points. Default to 1.
 
     init: str
@@ -112,7 +112,6 @@ class GLMPCA:
         init="spectral",
         n_jobs=1,
     ):
-
         self.n_pc = n_pc
         self.family = family
         self.family_params = family_params
@@ -159,7 +158,7 @@ class GLMPCA:
 
         Returns
         -------
-        bool 
+        bool
             Returns True if the fitting procedure has been successful.
         """
 
@@ -168,7 +167,7 @@ class GLMPCA:
         elif isinstance(X, torch.Tensor):
             X_fit = X.clone()
         else:
-            raise ValueError("X format unrecognised: %s != np.ndarray or torch.Tensor"%(type(X)))
+            raise ValueError("X format unrecognised: %s != np.ndarray or torch.Tensor" % (type(X)))
 
         # Fit exponential family params (e.g., dispersion for negative binomial)
         self.exponential_family.initialize_family_parameters(X_fit)
@@ -212,7 +211,7 @@ class GLMPCA:
 
         Returns
         -------
-        torch.Tensor 
+        torch.Tensor
             Projected saturated parameters.
         """
         saturated_parameters = self.exponential_family.invert_g(X)
@@ -245,7 +244,7 @@ class GLMPCA:
 
         Returns
         -------
-        torch.Tensor 
+        torch.Tensor
             Projected saturated parameters.
         """
         if self.learning_rate_ < LEARNING_RATE_LIMIT:
@@ -264,12 +263,7 @@ class GLMPCA:
 
         # Load dataset
         train_data = TensorDataset(X, saturated_parameters.data.clone())
-        train_loader = DataLoader(
-            dataset=train_data, 
-            batch_size=self.batch_size, 
-            shuffle=True,
-            drop_last=True
-        )
+        train_loader = DataLoader(dataset=train_data, batch_size=self.batch_size, shuffle=True, drop_last=True)
 
         # Run epoch in a for loop
         self._loadings_epochs = [_loadings.clone().detach()]
@@ -293,7 +287,6 @@ class GLMPCA:
                 _optimizer.zero_grad()
                 self.loadings_learning_rates_[-1].append(_lr_scheduler.get_last_lr())
             _lr_scheduler.step()
-
 
             self._loadings_epochs.append(_loadings.clone().detach())
             self._intercept_epochs.append(_intercept.clone().detach())
@@ -377,8 +370,8 @@ class GLMPCA:
         print("LEARNING RATE: %s" % (self.learning_rate_))
         optimizer = moptim.rAdagrad(
             params=[
-                {"params": loadings, "lr": self.learning_rate_}, 
-                {"params": intercept, "lr": self.learning_rate_*.01}
+                {"params": loadings, "lr": self.learning_rate_},
+                {"params": intercept, "lr": self.learning_rate_ * 0.01},
             ]
         )
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_size, gamma=self.gamma)
@@ -386,11 +379,7 @@ class GLMPCA:
         return optimizer, loadings, intercept, lr_scheduler
 
     def _optim_cost(
-        self, 
-        loadings: torch.Tensor, 
-        intercept: torch.Tensor, 
-        batch_data: torch.Tensor, 
-        batch_parameters: torch.Tensor
+        self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
     ):
         n = batch_data.shape[0]
         intercept_term = intercept.unsqueeze(0).repeat(n, 1).to(self.device)

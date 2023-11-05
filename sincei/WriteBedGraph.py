@@ -185,7 +185,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
         # write output for each group
         cluster_info = self.clusterInfo
-        clusters = cluster_info['cluster'].unique().tolist()
+        clusters = cluster_info["cluster"].unique().tolist()
         prefix = os.path.splitext(os.path.basename(out_file_prefix))[0]
         for cl in clusters:
             print("Writing output for group: {}".format(cl))
