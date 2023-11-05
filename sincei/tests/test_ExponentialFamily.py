@@ -1,10 +1,10 @@
-
 import pandas as pd
 import numpy as np
 import numpy.testing as nt
 import torch
 import scipy
 from sincei.ExponentialFamily import Bernoulli, Gaussian, Poisson, Beta, SigmoidBeta, Gamma
+
 
 def testGaussianDistribution():
     # Verifies compliance of Gaussian definition using randomly selected points.
