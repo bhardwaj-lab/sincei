@@ -19,9 +19,9 @@ and processed using the standard 10x genomics `cellranger-arc
 workflow <https://support.10xgenomics.com/single-cell-multiome-atac-gex/software/pipelines/latest/algorithms/overview>`__.
 Below is the structure of the output directory from the workflow:
 
-.. code:: {bash}
+.. code:: bash
 
-   <output_dir>/outs:
+   <output_di>/outs:
    ├── analysis
    ├── atac_cut_sites.bigwig
    ├── atac_fragments.tsv.gz
@@ -49,7 +49,7 @@ sincei. These files can also be produced as part of the
 For convenience, we provide a subset of this data (only chromosome 2)
 `here <>`__
 
-.. code:: {bash}
+.. code:: bash
 
    mkdir 10x_multiome && wget -O 10x_multiome/10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/41303289
    tar -xvzf 10x_multiome/10x_multiome_testdata.tar.gz ## releases 7 files
@@ -65,7 +65,7 @@ sincei also allows you to extract per barcode count distributions,
 indicating which barcodes should be removed. This can be done using the
 ``scFilerBarcodes`` tool.
 
-.. code:: {bash}
+.. code:: bash
 
    barcodes=737K-arc-v1.txt # cellranger-arc barcodes in this case
    for r in 1 2
@@ -95,13 +95,13 @@ of the barcode counts.
 2. scATAC-seq analysis
 ----------------------
 
-Please follow - :doc:`this tutorial <sincei_tutorial_10xATAC>` for further analysis of scATAC-seq
+Please follow :doc:`this tutorial <sincei_tutorial_10xATAC>` for further analysis of scATAC-seq
 samples from the above data.
 
 3. scRNA-seq analysis
 ---------------------
 
-Please follow `this tutorial <>`__ for further analysis of scRNA-seq
+Please follow :doc: `this tutorial <sincei_tutorial_10xATAC>` for further analysis of scRNA-seq
 samples from the above data.
 
 4. Joint analysis

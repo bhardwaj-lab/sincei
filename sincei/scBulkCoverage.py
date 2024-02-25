@@ -206,7 +206,7 @@ def main(args=None):
         sort=False,
     )
     groupInfo = groupInfo.reset_index()[["sample", "barcode", "cluster"]]
-    groupInfo['cluster'] = groupInfo['cluster'].astype('category')
+    groupInfo["cluster"] = groupInfo["cluster"].astype("category")
     # re-construct new labels (sample+bc)
     newlabels = ["::".join([x, y]) for x, y in zip(groupInfo["sample"], groupInfo["barcode"])]
     # Normalization options
