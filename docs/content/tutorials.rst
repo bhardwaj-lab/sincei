@@ -17,5 +17,5 @@ Tutorials for using sincei inside python
 .. toctree::
     :maxdepth: 1
 
-    tutorials/snmC2Tseq_preprocessing
-    tutorials/GLM_PCA_analysis
+    tutorials/snmCATseq_preprocessing
+    tutorials/snmCATseq_glmPCA_analysis

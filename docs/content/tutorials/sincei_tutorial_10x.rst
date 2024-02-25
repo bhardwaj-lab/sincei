@@ -47,7 +47,7 @@ We will use the ``gex_possorted_bam.bam`` for gene-expression data and
 sincei. These files can also be produced as part of the
 ``cellranger count`` workflow for scRNA-seq or scATAC-seq data alone.
 For convenience, we provide a subset of this data (only chromosome 2)
-`here <>`__
+`here`
 
 .. code:: bash
 
