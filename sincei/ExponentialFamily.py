@@ -73,9 +73,11 @@ class ExponentialFamily:
 
     def load_family_params_to_gpu(self, device):
         self.family_params = {
-            k: self.family_params[k].to(device)
-            if type(self.family_params[k]) is torch.Tensor
-            else self.family_params[k]
+            k: (
+                self.family_params[k].to(device)
+                if type(self.family_params[k]) is torch.Tensor
+                else self.family_params[k]
+            )
             for k in self.family_params
         }
 
