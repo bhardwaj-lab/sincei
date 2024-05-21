@@ -10,6 +10,7 @@ Tutorials for using sincei on the command line
     tutorials/sincei_tutorial_sortChIC.rst
     tutorials/sincei_tutorial_10x.rst
     tutorials/sincei_tutorial_10xATAC.rst
+    tutorials/sincei_tutorial_10xRNA.rst
 
 Tutorials for using sincei inside python
 -----------------------------------------

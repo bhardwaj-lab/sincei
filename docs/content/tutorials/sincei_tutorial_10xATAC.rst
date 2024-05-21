@@ -285,7 +285,7 @@ bigwigs with 1kb bins.
    --labels rep1_atac_rep1 rep2_atac_rep2 \
    -i sincei_output/atac/scClusterCells_UMAP.tsv \
    -o sincei_output/atac/sincei_cluster
-   # creates 6 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 9
+   # creates 9 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 9
 
 We can now inspect these bigwigs on IGV. We can clearly see some regions
 with cell-type specific signal, such as the markers described in the

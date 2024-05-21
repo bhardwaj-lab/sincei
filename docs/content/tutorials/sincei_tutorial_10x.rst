@@ -95,16 +95,17 @@ of the barcode counts.
 2. scATAC-seq analysis
 ----------------------
 
-Please follow :doc:`this tutorial <sincei_tutorial_10xATAC>` for further analysis of scATAC-seq
-samples from the above data.
+Please follow :doc:`this tutorial <sincei_tutorial_10xATAC>` for further analysis of scATAC-seq samples from the above data.
 
 3. scRNA-seq analysis
 ---------------------
 
-Please follow :doc: `this tutorial <sincei_tutorial_10xATAC>` for further analysis of scRNA-seq
-samples from the above data.
+Please follow :doc: `this tutorial <sincei_tutorial_10xRNA>` for further analysis of scRNA-seq samples from the above data.
 
-4. Joint analysis
------------------
+Notes
+------------
 
-Tutorial in preparation.
+Currently, sincei doesn't provide a method for **doublet estimation and removal**, which is an important step in the analysis of droplet-based data.
+Instead, we use simpler filters of min and max number of detected features per cell, which, to some extent mitigates this issue. However, this could
+lead to some differences in results compared to the published data in used here. Despite this difference, the major published cell types can be separated
+with sincei for both ATAC and RNA fraction of the data, as shown in the 2 tutorials above.
