@@ -9,8 +9,12 @@ import numpy as np
 import pandas as pd
 from deeptools.getScaleFactor import get_scale_factor
 from deeptools.bamHandler import openBam
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own Functions
@@ -145,6 +149,8 @@ def main(args=None):
         debug = 1
     else:
         debug = 0
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     ## read the group info file (TODO: write a validator)
     df_err = """ *Error*:No. of columns in --groupInfo file not recognized.
@@ -200,6 +206,7 @@ def main(args=None):
         sort=False,
     )
     groupInfo = groupInfo.reset_index()[["sample", "barcode", "cluster"]]
+    groupInfo["cluster"] = groupInfo["cluster"].astype("category")
     # re-construct new labels (sample+bc)
     newlabels = ["::".join([x, y]) for x, y in zip(groupInfo["sample"], groupInfo["barcode"])]
     # Normalization options

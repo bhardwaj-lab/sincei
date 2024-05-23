@@ -9,7 +9,6 @@ from networkx import convert_matrix
 from sklearn.metrics import pairwise_distances
 import leidenalg as la
 
-# import community
 import umap
 from scanpy._utils import get_igraph_from_adjacency
 from scanpy.neighbors import (
@@ -26,31 +25,25 @@ class TOPICMODEL:
 
     Parameters
     ----------
-    mat : numpy array
-        Matrix of shape (cells, regions)
+    mat : scipy.sparse.csr_matrix
+        Sparse matrix of shape (cells, regions)
 
     cells : list
-        List of cells
+        List of Cell IDs (corresponding to the input matrix rows)
 
     regions : list
-        List of regions
+        List of Regions (corresponding to the input matrix columns)
 
-    nTopics : int
-        Number of topics
+    n_topics : int
+        Number of Topics / Principal Components
 
-    smartCode : str
-        Smart code for tfidf
+    smart_code : str
+        SMART (System for the Mechanical Analysis and Retrieval of Text) code for weighting of input matrix for TFIDF.
+        Only valid for the LSA model. The default ("lfu") corresponds to "log"TF * IDF, and "pivoted unique" normalization of document length. For more information, see: https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
 
     Returns
     -------
-    corpus_lsi : gensim corpus
-        LSA corpus
-
-    cell_topic : pandas dataframe
-        Cell-topic matrix
-
-    corpus_tfidf : gensim corpus
-        TFIDF corpus
+    An object of class TOPICMODELS.
     """
 
     def __init__(
@@ -74,15 +67,27 @@ class TOPICMODEL:
         self.lda_model = None
         self.cell_topic_dist = None
         self.topic_region_dist = None
+        self.shape = (len(cells), len(regions))
 
     def runLSA(self):
-        r"Computes LSA for a given matrix and returns the updated object"
+        r"""
+        Computes LSA for a given matrix and returns the updated object
+
+        Returns
+        -------
+        corpus_tfidf : gensim corpus
+            TFIDF normalized corpus
+        corpus_lsi : gensim corpus
+            LSA corpus
+        """
 
         # LSA
         tfidf = models.TfidfModel(self.corpus, id2word=self.regions_dict, normalize=True, smartirs=self.smart_code)
-        corpus_tfidf = tfidf[self.corpus]
-        self.lsi_model = models.LsiModel(corpus_tfidf, id2word=self.regions_dict, num_topics=self.n_topics)
-        self.cell_topic_dist = self.lsi_model[corpus_tfidf]
+        self.corpus_tfidf = tfidf[self.corpus]
+        self.lsi_model = models.LsiModel(self.corpus_tfidf, id2word=self.regions_dict, num_topics=self.n_topics)
+        self.cell_topic_dist = self.lsi_model[
+            self.corpus_tfidf
+        ]  # lsi[X] computes U^-1*X, which equals V*S (its shape is num_docs * num_topics).
 
         # Compute Coherence Score
         coherence_model_lsa = models.CoherenceModel(
@@ -92,7 +97,14 @@ class TOPICMODEL:
         print("\nCoherence Score: ", coherence_lsa)
 
     def runLDA(self):
-        r"Computes LDA model for a given matrix and returns the updated object"
+        r"""
+        Computes LDA model for a given matrix and returns the updated object
+
+        Returns
+        -------
+        cell_topic : pandas dataframe
+            Cell-topic matrix
+        """
 
         self.lda_model = models.LdaMulticore(
             corpus=self.corpus, num_topics=self.n_topics, passes=self.n_passes, workers=self.n_workers
@@ -103,7 +115,14 @@ class TOPICMODEL:
         self.topic_region_dist = self.lda_model.get_topics()
 
     def get_cell_topic(self, pop_sparse_cells=False):
-        r"Returns cell-topic matrix from the updated object"
+        r"""
+        Get cell-topic matrix from the updated object
+
+        Returns
+        -------
+        cell_topic : pandas dataframe
+            Cell-topic matrix
+        """
 
         cells = copy.deepcopy(self.cells)
         ## make cell-topic df
@@ -116,9 +135,10 @@ class TOPICMODEL:
             print("{} Cells were detected which don't contribute to all {} topics.".format(len(bad_idx), self.n_topics))
             if pop_sparse_cells:
                 print("Removing these cells from the analysis")
-                [li_val.pop(x) for x in bad_idx]
-                [li.pop(x) for x in bad_idx]
-                [cells.pop(x) for x in bad_idx]
+                for x in bad_idx:
+                    li_val.pop(x)
+                    li.pop(x)
+                    cells.pop(x)
             else:
                 print("Not implemented! Need to fill these entries with zeros")
 

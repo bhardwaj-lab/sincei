@@ -14,7 +14,7 @@ authors = [
     {name = "Vivek Bhardwaj"},
 ]
 maintainers = [
-    {name = "Vivek Bhardwaj", email = "vivbhr@gmail.com"},
+    {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
 ]
 classifiers = [
     "Intended Audience :: Science/Research",
@@ -33,7 +33,6 @@ dependencies = [
     "deeptools",
     "leidenalg",
     "networkx",
-    "community",
     "python-igraph",
     # for debug logging (referenced from the issue template)
     "session-info",

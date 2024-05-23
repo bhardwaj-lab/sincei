@@ -134,6 +134,7 @@ def cluster_LSA(
     G : igraph object
         Graph object.
     """
+    import community
 
     # cluster on cel-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)

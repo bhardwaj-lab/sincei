@@ -13,8 +13,12 @@ from deeptoolsintervals import GTF
 import numpy as np
 import py2bit
 import pandas as pd
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own functions
@@ -129,7 +133,10 @@ def getFiltered_worker(arglist):
             minAlignedFraction[b] = 0
 
         for read in fh.fetch(chromUse, start, end):
-            bc = read.get_tag(args.cellTag)
+            try:
+                bc = read.get_tag(args.cellTag)
+            except KeyError:
+                continue
             # also keep a counter for barcodes not in whitelist?
             if bc not in args.barcodes:
                 continue
@@ -262,6 +269,9 @@ def getFiltered_worker(arglist):
 
 def main(args=None):
     args, rowLabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     if args.outFile is None:
         of = sys.stdout

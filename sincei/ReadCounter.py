@@ -878,7 +878,9 @@ class CountReadsPerBin(object):
                         new_bc = "::".join([grp, bc])  # new barcode tag = sample+bc tag
                         if new_bc not in self.groupLabels:
                             if self.verbose:
-                                print("Encountered group: {}, not in provided labels. skipping..".format(grp))
+                                sys.stderr.write(
+                                    "Encountered group: {}, not in provided labels. skipping..".format(grp)
+                                )
                             continue
                     else:
                         new_bc = bc
@@ -887,7 +889,7 @@ class CountReadsPerBin(object):
                 # also keep a counter for barcodes not in whitelist?
                 if bc not in self.barcodes:
                     if self.verbose:
-                        print("Encountered barcode: {}, not in provided whitelist. skipping..".format(bc))
+                        sys.stderr.write("Encountered barcode: {}, not in provided whitelist. skipping..".format(bc))
                     continue
                 # get rid of duplicate reads with same barcode, startpos and optionally, endpos/umi
                 if self.duplicateFilter:

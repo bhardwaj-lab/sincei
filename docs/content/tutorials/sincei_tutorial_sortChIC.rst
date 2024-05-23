@@ -188,7 +188,7 @@ We can color our UMAP output from :ref:`scClusterCells` with the cell-type infor
         ggsave(plot=pl, "sincei_output/UMAP_compared_withOrig.png", dpi=300, width = 11, height = 6)
 
 
-.. image:: ./../images/UMAP_compared_withOrig.png
+.. image:: ./../images/UMAP_compared_withOrig_sortChIC.png
    :height: 800px
    :width: 1600 px
    :scale: 50 %
@@ -214,7 +214,7 @@ The parameters here are same as other sincei tools that work on BAM files, excep
 
 We can now inspect these bigwigs on `IGV <https://software.broadinstitute.org/software/igv/>`__,. We can clearly see some regions with cell-type specific signal, such as the ones here for genes Prim3 and Tmem131.
 
-.. image:: ./../images/igv_snapshot_1.png
+.. image:: ./../images/igv_snapshot_sortChIC.png
    :height: 500px
    :width: 6000 px
    :scale: 50 %

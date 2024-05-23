@@ -11,8 +11,12 @@ import pandas as pd
 import anndata as ad
 from deeptools import parserCommon
 from deeptools.utilities import smartLabels
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
@@ -146,6 +150,9 @@ def main(args=None):
 
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     if "BED" in args:
         bed_regions = args.BED
@@ -193,11 +200,11 @@ def main(args=None):
 
     num_reads_per_bin, regionList = c.run(allArgs=args)
 
-    sys.stderr.write("Number of bins " "found: {}\n".format(num_reads_per_bin.shape[0]))
+    sys.stderr.write("Number of bins/features " "found: {}\n".format(num_reads_per_bin.shape[0]))
 
     if num_reads_per_bin.shape[0] < 1:
         exit(
-            "ERROR: too few non zero bins found.\n"
+            "ERROR: too few non zero bins/features found.\n"
             "If using --region please check that this "
             "region is covered by reads.\n"
         )

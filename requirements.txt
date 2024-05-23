@@ -6,5 +6,4 @@ deeptools
 gensim
 leidenalg
 networkx
-community
 python-igraph

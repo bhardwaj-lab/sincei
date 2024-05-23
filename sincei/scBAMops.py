@@ -11,8 +11,12 @@ from deeptools import parserCommon
 from deeptools.bamHandler import openBam
 from deeptools.mapReduce import mapReduce
 from deeptools.utilities import getTLen, smartLabels, getTempFileName
-import warnings
 
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # own functions
@@ -183,7 +187,11 @@ def filterWorker(arglist):
             continue
         total += 1
 
-        bc = read.get_tag(args.cellTag)
+        try:
+            bc = read.get_tag(args.cellTag)
+        except KeyError:
+            nFiltered += 1
+            continue
         if isinstance(args.groupInfo, pd.DataFrame):
             smpl = read.get_tag(args.groupTag)
             try:
@@ -351,7 +359,9 @@ def convertBED(oname, tmpFiles, chromDict):
 
 def main(args=None):
     args = parseArguments().parse_args(args)
-
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
     # grouping and tagging the output alignments
     if args.groupInfo:
         if not args.outTagName:

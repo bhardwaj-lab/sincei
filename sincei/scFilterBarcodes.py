@@ -12,9 +12,20 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from functools import reduce
-import matplotlib.pyplot as plt
-import warnings
 
+# plotting
+import matplotlib
+import matplotlib.pyplot as plt
+
+matplotlib.use("Agg")
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["svg.fonttype"] = "none"
+
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ## own functions
@@ -157,8 +168,21 @@ def getFiltered_worker(arglist):
     return BCset
 
 
+# count occurances of elements (barcodes) in a list of sets
+def count_occurrences(res):
+    barcodes = set.union(*res)
+    counts = {barcode: 0 for barcode in barcodes}
+    for set_ in res:
+        for barcode in set_:
+            counts[barcode] += 1
+    return counts
+
+
 def main(args=None):
     args = parseArguments().parse_args(args)
+    if not args.verbose:
+        logger.setLevel(logging.CRITICAL)
+        warnings.filterwarnings("ignore")
 
     # open barcode file and read the content in a list
     if args.whitelist:
@@ -182,42 +206,49 @@ def main(args=None):
     )
     ## res, should be a list of sets
     # final_set = list(set().union(*res))
-    df = pd.DataFrame(
-        Counter(reduce(lambda x, y: list(x) + list(y), res)).items(),
-        columns=["barcode", "count"],
-    )
+    df = pd.DataFrame.from_dict(count_occurrences(res), orient="index", columns=["count"]).reset_index()
+    df.columns = ["barcode", "count"]
+    df["selected"] = True
 
     if args.minCount:
         if args.minCount > len(res):
             print("minCount bigger than No. of bins. Reducing to maximum")
             args.minCount = len(res)
         final_set = df.loc[df["count"] >= args.minCount]["barcode"].to_list()
+        df.loc[df["count"] < args.minCount, "selected"] = False
     else:
         final_set = df["barcode"].tolist()
 
     # convert count to log10
-    df["count"] = np.log10(df["count"])
     if args.rankPlot:
+        df["count_log10"] = np.log10(df["count"])
         df["count_rank"] = df["count"].rank(method="min", ascending=False)
+        xrange = np.arange(0, np.round(max(df["count_rank"]), -3), np.round(int(max(df["count_rank"]) / 10), -3))
+        yrange = np.arange(
+            np.round(min(df["count_log10"]), 2),
+            np.round(max(df["count_log10"]), 2),
+            np.round(max(df["count_log10"]) / 10, 2),
+        )
+
         fig, ax = plt.subplots()
         plt.plot(
             "count_rank",
-            "count",
+            "count_log10",
             data=df,
             linestyle="none",
             marker="o",
             color="grey",
-            markersize=6,
+            markersize=0.5,
         )
-        ax.set_xlabel("Barcode Rank", fontsize=15)
-        ax.set_ylabel("No. of nonzero bins (log10)", fontsize=15)
-        ax.set_title("Ranked counts (#bins) for detected Barcodes", fontsize=15)
-        plt.xticks(np.arange(0, max(df["count"]), int(max(df["count_rank"]) / 10)), fontsize=10)
-        plt.yticks(np.arange(0, 4, 0.1), fontsize=10)
+        ax.set_xlabel("Barcode Rank", fontsize=12)
+        ax.set_ylabel("No. of nonzero bins (log10)", fontsize=12)
+        ax.set_title("Ranked counts (#bins) for detected Barcodes", fontsize=13)
+        plt.xticks(xrange, fontsize=10)
+        plt.yticks(yrange, fontsize=10)
 
         # Annotation
         if args.minCount:
-            plt.axhline(args.minCount, color="r")
+            plt.axhline(np.log10(args.minCount), color="r")
 
         fig.tight_layout()
         plt.savefig(
@@ -236,7 +267,8 @@ def main(args=None):
     else:
         of = open(args.outFile, "w")
 
-    for x in final_set:
-        of.write(str(x) + "\n")
-    # df.to_csv("~/programs/sincei/test_df.csv")
+    # for x in final_set:
+    #    of.write(str(x) + "\n")
+    df.to_csv(of, sep="\t")
+
     return 0

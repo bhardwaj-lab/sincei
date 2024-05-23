@@ -273,7 +273,11 @@ def getDupFilterTuple(read, bc, filterArg):
 
     # get UMI if asked
     if "umi" in filt:
-        umi = read.get_tag("RX")
+        try:
+            umi = read.get_tag("RX")
+        except KeyError:
+            sys.stderr.write("UMI tag (RX) absent, skipping UMI check")
+            umi = None
     else:
         umi = None
 
