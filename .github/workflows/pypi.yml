@@ -1,11 +1,7 @@
 name: pypi
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  release:
+    types: [published]
 jobs:
   pypi:
     name: upload to pypi
@@ -28,7 +24,7 @@ jobs:
         rm -f dist/*
         hatch build -t sdist
     - name: upload
-      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
+      #if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
