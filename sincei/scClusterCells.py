@@ -86,7 +86,7 @@ def get_args():
         "--method",
         "-m",
         type=str,
-        choices=["LSA", "LDA", "glmPCA"],
+        choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
         help="The dimentionality reduction method for clustering. (Default: %(default)s)",
     )
@@ -152,7 +152,13 @@ def main(args=None):
     if args.binarize:
         mtx = binarize(mtx, copy=True)
 
-    if args.method == "LSA":
+    if args.method == "logPCA":
+        ## log1p+PCA using scanpy
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
+        sc.pp.pca(adata, args.nPrinComps)
+
+    elif args.method == "LSA":
         ## LSA using gensim
         model_object = TOPICMODEL(
             mtx,
