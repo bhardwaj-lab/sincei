@@ -20,10 +20,12 @@ The test data here contains:
 
 .. code:: bash
 
-    mkdir sortchic_testdata && wget -O
-    sortchic_testdata/sortChIC_testdata.tar.gz
-    https://figshare.com/ndownloader/files/41303289 tar -xvzf
-    sortchic_testdata/sortChIC_testdata.tar.gz ## releases 12 files
+    mkdir sortchic_testdata && cd sortchic_testdata && \
+    wget -O sortChIC_testdata.zip https://figshare.com/ndownloader/articles/23544774/versions/2 && \
+    unzip sortChIC_testdata.zip && \
+    tar -xvzf sortChIC_testdata.tar.gz ## releases 12 files
+
+    rm sortChIC_testdata.tar.gz sortChIC_testdata.zip && cd ../ # cleanup
 
     ## save as bash variables
 
