@@ -12,7 +12,7 @@ import leidenalg as la
 import umap
 from scanpy._utils import get_igraph_from_adjacency
 from scanpy.neighbors import (
-    _compute_connectivities_umap,
+    #    _compute_connectivities_umap,
     _get_indices_distances_from_dense_matrix,
 )
 

@@ -32,12 +32,10 @@ import scanpy as sc
 
 
 ## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
-
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
-from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
+
+# from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
 
 
 def parseArguments():
@@ -190,6 +188,9 @@ def main(args=None):
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
 
     elif args.method == "glmPCA":
+        # import glmPCA (not imported on top due to special optional import of mctorch)
+        from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
+
         # convert mtx to torch tensor
         mtx = torch.tensor(mtx.todense())  # feature*cell tensor
 

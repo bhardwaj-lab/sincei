@@ -1,17 +1,21 @@
 import numpy as np
 import pandas as pd
-import torch, os
-import torch.optim
 from copy import deepcopy
 from joblib import Parallel, delayed
-import mctorch.nn as mnn
 from pickle import dump, load
-import mctorch.optim as moptim
+import torch, os
+import torch.optim
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 from tqdm import tqdm
 from scipy.stats import beta as beta_dst
 from scipy.stats import lognorm
 from scipy.stats import gamma as gamma_dst
+
+try:
+    import mctorch.nn as mnn
+    import mctorch.optim as moptim
+except ImportError:
+    raise ImportError("Please install mctorch package via `pip install --user mctorch")
 
 from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal, SigmoidBeta
 

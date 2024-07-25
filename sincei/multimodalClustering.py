@@ -2,7 +2,7 @@ import umap
 import pandas as pd
 import scanpy as sc
 from scanpy.neighbors import (
-    _compute_connectivities_umap,
+    #    _compute_connectivities_umap,
     _get_indices_distances_from_dense_matrix,
 )
 from scanpy._utils import get_igraph_from_adjacency
