@@ -35,7 +35,7 @@ import scanpy as sc
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
 
-# from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
+from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT # , GLMPCA
 
 
 def parseArguments():
@@ -189,7 +189,7 @@ def main(args=None):
 
     elif args.method == "glmPCA":
         # import glmPCA (not imported on top due to special optional import of mctorch)
-        from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
+        from sincei.GLMPCA import GLMPCA
 
         # convert mtx to torch tensor
         mtx = torch.tensor(mtx.todense())  # feature*cell tensor
