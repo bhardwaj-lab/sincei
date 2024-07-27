@@ -35,7 +35,7 @@ import scanpy as sc
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
 
-from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT # , GLMPCA
+from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # , GLMPCA
 
 
 def parseArguments():
