@@ -4,10 +4,6 @@
       :align: left
       :width: 350
 
-.. image:: https://zenodo.org/badge/271841139.svg
-    :target: https://zenodo.org/badge/latestdoi/271841139
-    :alt: DOI
-
 .. image:: https://readthedocs.org/projects/sincei/badge/?version=latest)]
     :target: https://sincei.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
@@ -20,7 +16,10 @@
     :target: http://bioconda.github.io/recipes/sincei/README.html
     :alt: Install with bioconda
 
-Bhardwaj V. and Mourragui S. (2023) sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
+sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
+
+
+sincei is described in our preprint: `Bhardwaj V. , Mourragui, S. (2024) User-friendly exploration of epigenomic data in single cells using sincei. <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`__
 
 
 
