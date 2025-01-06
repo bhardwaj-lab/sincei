@@ -4,20 +4,7 @@ import pandas as pd
 from gensim import corpora, matutils, models
 import copy
 
-# Louvain clustering and UMAP
-from networkx import convert_matrix
-from sklearn.metrics import pairwise_distances
-import leidenalg as la
-
-import umap
-from scanpy._utils import get_igraph_from_adjacency
-from scanpy.neighbors import (
-    #    _compute_connectivities_umap,
-    _get_indices_distances_from_dense_matrix,
-)
-
 ### ------ Functions ------
-
 
 class TOPICMODEL:
     r"""
