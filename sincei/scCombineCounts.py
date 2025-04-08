@@ -115,7 +115,7 @@ def main(args=None):
     if not args.labels:
         # try smartlabel
         args.labels = [smartLabel(x) for x in args.input]
-    adata_list = [sc.read_loom(x, obs_names="obs_names", var_names="var_names") for x in args.input]
+    adata_list = [sc.read_h5ad(x)#, obs_names="obs_names", var_names="var_names") for x in args.input]
 
     ## concatenate labels and match chrom, start, end
     var_list = []
@@ -141,5 +141,5 @@ def main(args=None):
 
     sys.stdout.write("Combined cells: {} \n".format(adata.shape[0]))
     sys.stdout.write("Combined features: {} \n".format(adata.shape[1]))
-    adata.write_loom(args.outFile)
+    adata.write_h5ad(args.outFile)
     return 0

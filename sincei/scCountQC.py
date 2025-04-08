@@ -186,7 +186,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
+    adata = sc.read_h5ad(args.input)#, obs_names="obs_names", var_names="var_names")
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:
@@ -266,6 +266,6 @@ def main(args=None):
         )
         sys.stdout.write("Remaining cells: {} \n".format(adata_filt.shape[0]))
         sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
-        adata_filt.write_loom(args.outFile)
+        adata_filt.write_h5ad(args.outFile)
 
     return 0

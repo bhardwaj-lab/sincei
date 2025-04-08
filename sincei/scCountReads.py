@@ -130,8 +130,8 @@ def get_args():
     optional.add_argument(
         "--outFileFormat",
         type=str,
-        default="loom",
-        choices=["loom", "mtx"],
+        default="h5ad",
+        choices=["h5ad", "mtx"],
         help="Output file format. Default is to write an anndata object of name "
         "<prefix>.loom, which can either be opened in scanpy, or by downstream tools. "
         '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
@@ -242,4 +242,4 @@ def main(args=None):
         )
 
         # export as loom
-        adata.write_loom(args.outFilePrefix + ".loom")
+        adata.write_h5ad(args.outFilePrefix + ".h5ad")
