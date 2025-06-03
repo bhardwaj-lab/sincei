@@ -126,10 +126,10 @@ Below, we perform a basic filtering using :ref:`scCountQC`. We exclude the cells
    # Remaining cells: 1333
    # Remaining features: 2561
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
-The tool :ref:`scClusterCells` provides a range of options to reduce the dimentionality of our count data, while preserving biological signal. This can be specified with ``--method`` option. Below, we will use a topic modeling method called Latent Schemantic Analysis to reduce the dimentionality of our data to 20 principle components (the default). The tool then uses distance between nearest neighbors to perform a graph-based clustering, and presents a UMAP (2-dimention) plot of the output (``--outFileUMAP`` option). This option also creates a tsv file with UMAP coordinates and assigned clusters for each cell in our data.
+The tool :ref:`scClusterCells` provides a range of options to reduce the dimensionality of our count data, while preserving biological signal. This can be specified with ``--method`` option. Below, we will use a topic modeling method called Latent Schemantic Analysis to reduce the dimensionality of our data to 20 principle components (the default). The tool then uses distance between nearest neighbors to perform a graph-based clustering, and presents a UMAP (2-dimention) plot of the output (``--outFileUMAP`` option). This option also creates a tsv file with UMAP coordinates and assigned clusters for each cell in our data.
 
 
 .. code:: bash
