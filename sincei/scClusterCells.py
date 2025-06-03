@@ -47,7 +47,7 @@ def parseArguments():
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimentionality reduction,
+        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimensionality reduction,
         community detection and 2D projection (UMAP) of the cells. The result is an updated h5ad object, and (optionally) a plot file
         and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
@@ -86,7 +86,7 @@ def get_args():
         type=str,
         choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
-        help="The dimentionality reduction method for clustering. (Default: %(default)s)",
+        help="The dimensionality reduction method for clustering. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -101,7 +101,7 @@ def get_args():
     general.add_argument(
         "--binarize",
         action="store_true",
-        help="Binarize the counts per region before dimentionality reduction (only for LSA/LDA)",
+        help="Binarize the counts per region before dimensionality reduction (only for LSA/LDA)",
     )
 
     general.add_argument(
@@ -109,7 +109,7 @@ def get_args():
         "-n",
         default=20,
         type=int,
-        help="Number of principle components to reduce the dimentionality to. "
+        help="Number of principle components to reduce the dimensionality to. "
         "Use higher number for samples with more expected heterogenity. (Default: %(default)s)",
     )
 
