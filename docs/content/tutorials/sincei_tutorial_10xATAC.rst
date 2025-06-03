@@ -177,11 +177,11 @@ would result in a total of >12K cells.
    # Combined cells: 12262
    # Combined features: 13249
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
 Finally, we will apply LSA on the filtered dataset to reduce the
-dimentionality to 30 Topics, combined with louvain clustering.
+dimensionality to 30 Topics, combined with louvain clustering.
 
 .. code:: bash
 

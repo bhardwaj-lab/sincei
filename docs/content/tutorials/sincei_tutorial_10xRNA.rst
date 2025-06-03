@@ -161,12 +161,12 @@ We provide a tool `scCombineCounts`, which can concatenate counts for cells base
    #Combined cells: 10208
    #Combined features: 48059
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
 Finally, we will apply glmPCA to this data, assuming the data follows a
 poisson distribution (which is nearly appropritate for count-based data
-such as scRNA-seq), we will reduce the dimentionality of the data to 20
+such as scRNA-seq), we will reduce the dimensionality of the data to 20
 principle components (the default), followed by a graph-based (louvain)
 clustering of the output.
 
