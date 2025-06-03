@@ -12,14 +12,14 @@ sincei provides a flexible, easy-to-use command-line interface to work with sing
 
  - Aggregate signal in bins, genes or any feature of interest from single-cells.
  - Perform read-level and count-level quality control.
- - Perform dimentionality reduction and clustering of all kinds of single-cell data (open chromatin, histone marks, methylation, gene expression etc..).
+ - Perform dimensionality reduction and clustering of all kinds of single-cell data (open chromatin, histone marks, methylation, gene expression etc..).
  - Create coverage files (bigwigs) for visualization.
 
 For details, please [**read our preprint**](https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1) describing sincei.
 
 ## [Full Documentation](http://sincei.rtfd.io/)
 
-Please browse the full documentation for tutorials on how to use sincei on command line, as well as details of our python API.
+Please browse the full documentation for tutorials on how to use sincei on the command line, as well as details of our python API.
 
 ## Installation
 
@@ -36,7 +36,7 @@ Alternatively, a development version can be installed via GitHub.
 ```
 conda create -n sincei -c anaconda python=3.8
 conda activate sincei
-(sincei): pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@master#egg=sincei
+(sincei): pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
 ```
 
 ## Usage

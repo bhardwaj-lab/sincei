@@ -27,7 +27,6 @@ urls.Home-page = "https://github.com/vivekbhr/sincei"
 dependencies = [
     "anndata",
     "scanpy",
-    #"loompy",
     "umap-learn",
     "pandas",
     "deeptools",

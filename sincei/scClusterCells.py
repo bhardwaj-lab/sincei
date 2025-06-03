@@ -39,7 +39,7 @@ from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # , GLMPCA
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(opts=["loomfile", "outFile"], requiredOpts=["outFile"])
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
 
@@ -48,10 +48,10 @@ def parseArguments():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
         description="""
         This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimentionality reduction,
-        community detection and 2D projection (UMAP) of the cells. The result is an updated loom object, and (optionally) a plot file
+        community detection and 2D projection (UMAP) of the cells. The result is an updated h5ad object, and (optionally) a plot file
         and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
-        usage="Example usage: scClusterCells -i cellCounts.loom -o clustered.loom -op <umap_prefix>.png  > log.txt",
+        usage="Example usage: scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op <umap_prefix>.png  > log.txt",
         add_help=False,
     )
 

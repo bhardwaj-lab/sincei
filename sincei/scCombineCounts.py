@@ -35,10 +35,10 @@ def parseArguments():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="""
         This tool combines multiple count matrices (output of scCountReads) into one, either assuming they are different samples (multi-sample)
-        or different measurements on the same set of cells (multi-modal). The result is a .loom file with combined counts. NOTE: it doesn't perform
+        or different measurements on the same set of cells (multi-modal). The result is a .h5ad file with combined counts. NOTE: it doesn't perform
         any 'batch effect correction' or 'integration' of data from different technologies, which requires more sophisticated methods.
         """,
-        usage="Example usage: scCombineCounts -i sample1.loom sample2.loom -o combined.loom  > log.txt",
+        usage="Example usage: scCombineCounts -i sample1.h5ad sample2.h5ad -o combined.h5ad  > log.txt",
         add_help=False,
     )
 
@@ -53,8 +53,8 @@ def get_args():
     general.add_argument(
         "--input",
         "-i",
-        metavar="LOOM",
-        help="Input files in .loom format",
+        metavar="H5AD",
+        help="Input files in .h5ad format",
         nargs="+",
         required=True,
     )
@@ -64,7 +64,7 @@ def get_args():
         "-o",
         type=str,
         help="The file to write results to. For method: `multi-sample`, the output "
-        "file is an updated .loom object, which can be used by other tools. "
+        "file is an updated .h5ad object, which can be used by other tools. "
         "For method: `multi-omic`, the output file is an .hdf5 file. This file can only be "
         "used by scClusterCells, to perform multi-modal clustering. ",
         required=True,
@@ -115,7 +115,7 @@ def main(args=None):
     if not args.labels:
         # try smartlabel
         args.labels = [smartLabel(x) for x in args.input]
-    adata_list = [sc.read_h5ad(x)#, obs_names="obs_names", var_names="var_names") for x in args.input]
+    adata_list = sc.read_h5ad(x)
 
     ## concatenate labels and match chrom, start, end
     var_list = []

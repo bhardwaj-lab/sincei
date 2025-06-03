@@ -133,7 +133,7 @@ def get_args():
         default="h5ad",
         choices=["h5ad", "mtx"],
         help="Output file format. Default is to write an anndata object of name "
-        "<prefix>.loom, which can either be opened in scanpy, or by downstream tools. "
+        "<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. "
         '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
         "<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
     )
@@ -241,5 +241,5 @@ def main(args=None):
             index=rows,
         )
 
-        # export as loom
+        # export as h5ad
         adata.write_h5ad(args.outFilePrefix + ".h5ad")
