@@ -10,7 +10,6 @@ import re
 import pandas as pd
 import anndata as ad
 from deeptools import parserCommon
-from deeptools.utilities import smartLabels
 
 # logs
 import warnings
@@ -36,7 +35,7 @@ def parseArguments(args=None):
             ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
             The analysis can be performed for the entire genome by running the program in 'bins' mode.
             If you want to count the read coverage for specific regions only, use the ``features`` mode instead.
-            The standard output of ``scCountReads`` is a ".loom" file with counts, along with rowName (features) and colNames (cell barcodes).
+            The standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames (cell barcodes).
 
             A detailed sub-commands help is available by typing:
 
