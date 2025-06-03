@@ -36,7 +36,7 @@ Alternatively, a development version can be installed via GitHub.
 ```
 conda create -n sincei -c anaconda python=3.8
 conda activate sincei
-(sincei): pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
+pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
 ```
 
 ## Usage
