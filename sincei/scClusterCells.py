@@ -142,7 +142,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_h5ad(args.input)#, obs_names="obs_names", var_names="var_names")
+    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
     mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
     cells = copy.deepcopy(adata.obs_names.to_list())
     regions = copy.deepcopy(adata.var_names.to_list())
@@ -211,7 +211,7 @@ def main(args=None):
     sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
-    adata.write_h5ad(args.outFile)#, write_obsm_varm=True)
+    adata.write_h5ad(args.outFile)  # , write_obsm_varm=True)
 
     if args.outFileUMAP:
         ## plot UMAP

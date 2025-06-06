@@ -186,7 +186,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_h5ad(args.input)#, obs_names="obs_names", var_names="var_names")
+    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:
