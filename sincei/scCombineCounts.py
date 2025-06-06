@@ -115,7 +115,7 @@ def main(args=None):
     if not args.labels:
         # try smartlabel
         args.labels = [smartLabel(x) for x in args.input]
-    adata_list = sc.read_h5ad(x)
+    adata_list = [sc.read_h5ad(x) for x in args.input]
 
     ## concatenate labels and match chrom, start, end
     var_list = []
