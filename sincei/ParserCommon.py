@@ -9,12 +9,12 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
     group = parser.add_argument_group("Input/Output options")
 
     ## inputs
-    if "loomfile" in opts:
+    if "h5adfile" in opts:
         group.add_argument(
             "--input",
             "-i",
-            metavar="LOOM",
-            help="Input file in .loom format",
+            metavar="H5AD",
+            help="Input file in .h5ad format",
             required=True,
         )
     elif "bamfiles" in opts:
@@ -86,7 +86,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             type=str,
             help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` "
             "and `scJSD`, the output file is a .txt file. For other tools, the output file is "
-            "an updated .loom object with the result of the requested operation. ",
+            "an updated .h5ad object with the result of the requested operation. ",
             required=True if "outFile" in requiredOpts else False,
         )
     return parser

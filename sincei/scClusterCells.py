@@ -39,7 +39,7 @@ from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # , GLMPCA
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(opts=["loomfile", "outFile"], requiredOpts=["outFile"])
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
 
@@ -47,11 +47,11 @@ def parseArguments():
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimentionality reduction,
-        community detection and 2D projection (UMAP) of the cells. The result is an updated loom object, and (optionally) a plot file
+        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimensionality reduction,
+        community detection and 2D projection (UMAP) of the cells. The result is an updated h5ad object, and (optionally) a plot file
         and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
-        usage="Example usage: scClusterCells -i cellCounts.loom -o clustered.loom -op <umap_prefix>.png  > log.txt",
+        usage="Example usage: scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op <umap_prefix>.png  > log.txt",
         add_help=False,
     )
 
@@ -86,7 +86,7 @@ def get_args():
         type=str,
         choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
-        help="The dimentionality reduction method for clustering. (Default: %(default)s)",
+        help="The dimensionality reduction method for clustering. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -101,7 +101,7 @@ def get_args():
     general.add_argument(
         "--binarize",
         action="store_true",
-        help="Binarize the counts per region before dimentionality reduction (only for LSA/LDA)",
+        help="Binarize the counts per region before dimensionality reduction (only for LSA/LDA)",
     )
 
     general.add_argument(
@@ -109,7 +109,7 @@ def get_args():
         "-n",
         default=20,
         type=int,
-        help="Number of principle components to reduce the dimentionality to. "
+        help="Number of principle components to reduce the dimensionality to. "
         "Use higher number for samples with more expected heterogenity. (Default: %(default)s)",
     )
 
@@ -142,7 +142,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
+    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
     mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
     cells = copy.deepcopy(adata.obs_names.to_list())
     regions = copy.deepcopy(adata.var_names.to_list())
@@ -211,7 +211,7 @@ def main(args=None):
     sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
-    adata.write_loom(args.outFile, write_obsm_varm=True)
+    adata.write_h5ad(args.outFile)  # , write_obsm_varm=True)
 
     if args.outFileUMAP:
         ## plot UMAP

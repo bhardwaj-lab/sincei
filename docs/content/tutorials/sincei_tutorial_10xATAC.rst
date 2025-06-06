@@ -125,10 +125,10 @@ select appropriate metrics to filter out the unwanted cells/regions.
 .. code:: bash
 
    # list the metrics we can use to filter cells/regions
-   for r in 1 2; do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.loom --describe; done
+   for r in 1 2; do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.h5ad --describe; done
 
    # export the single-cell level metrices
-   for r in 1 2; do scCountQC -i sincei_output/atac/scCounts_atac_peaks.loom -om sincei_output/atac/countqc_atac_peaks_rep${r} & done
+   for r in 1 2; do scCountQC -i sincei_output/atac/scCounts_atac_peaks.h5ad -om sincei_output/atac/countqc_atac_peaks_rep${r} & done
 
    # visualize output using multiQC
    multiqc sincei_output/atac/ # see results in multiqc_report.html
@@ -143,8 +143,8 @@ we exclude the regions that are detected in too few cells (<100) or in
 .. code:: bash
 
    for r in 1 2
-   do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.loom \
-   -o sincei_output/atac/scCounts_atac_peaks_filtered_rep${r}.loom \
+   do scCountQC -i sincei_output/atac/scCounts_atac_peaks_rep${r}.h5ad \
+   -o sincei_output/atac/scCounts_atac_peaks_filtered_rep${r}.h5ad \
    --filterRegionArgs "n_cells_by_counts: 100, 5500" \
    --filterCellArgs "n_genes_by_counts: 500, 10000"
    done
@@ -170,25 +170,25 @@ would result in a total of >12K cells.
 .. code:: bash
 
    scCombineCounts \
-   -i sincei_output/atac/scCounts_atac_peaks_filtered_rep1.loom \
-   sincei_output/atac/scCounts_atac_peaks_filtered_rep2.loom \
-   -o sincei_output/atac/scCounts_atac_peaks_filtered.merged.loom \
+   -i sincei_output/atac/scCounts_atac_peaks_filtered_rep1.h5ad \
+   sincei_output/atac/scCounts_atac_peaks_filtered_rep2.h5ad \
+   -o sincei_output/atac/scCounts_atac_peaks_filtered.merged.h5ad \
    --method multi-sample --labels rep1 rep2
    # Combined cells: 12262
    # Combined features: 13249
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
 Finally, we will apply LSA on the filtered dataset to reduce the
-dimentionality to 30 Topics, combined with louvain clustering.
+dimensionality to 30 Topics, combined with louvain clustering.
 
 .. code:: bash
 
-   scClusterCells -i sincei_output/atac/scCounts_atac_peaks_filtered.merged.loom \
+   scClusterCells -i sincei_output/atac/scCounts_atac_peaks_filtered.merged.h5ad \
    -m LSA --clusterResolution 1 \
    -op sincei_output/atac/scClusterCells_UMAP.png \
-   -o sincei_output/atac/scCounts_atac_peaks_clustered.loom
+   -o sincei_output/atac/scCounts_atac_peaks_clustered.h5ad
    # Coherence Score:  -1.83
    # also produces the tsv file "sincei_output/scClusterCells_UMAP.tsv"
 

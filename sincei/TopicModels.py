@@ -6,6 +6,7 @@ import copy
 
 ### ------ Functions ------
 
+
 class TOPICMODEL:
     r"""
     Computes LSA or LDA for a given matrix and returns the cell-topic matrix

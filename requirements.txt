@@ -1,5 +1,4 @@
 scanpy
-loompy
 umap-learn
 pandas
 deeptools

@@ -317,7 +317,10 @@ def gini(i, X):
     # from:
     # http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
     # All values are treated equally, arrays must be 1d:
-    array = X[i, :].A.flatten()  # get all bins from i'th cell
+    try:
+        array = X[i, :].toarray().flatten()  # get all bins from i'th cell
+    except AttributeError:
+        array = X[i, :].flatten()
     array = array[array.nonzero()]
 
     if array.shape[0] <= 1:

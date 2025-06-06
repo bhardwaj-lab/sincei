@@ -103,10 +103,10 @@ The tool :ref:`scCountQC` can be used for count-level QC and filtering of count 
 .. code:: bash
 
     # list the metrics we can use to filter cells/regions
-    scCountQC -i sincei_output/scCounts_50kb_bins.loom --describe
+    scCountQC -i sincei_output/scCounts_50kb_bins.h5ad --describe
 
     # export the single-cell level metrices
-    scCountQC -i sincei_output/scCounts_50kb_bins.loom \
+    scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
     -om sincei_output/countqc_50kb_bins
 
     # visualize output using multiQC
@@ -118,26 +118,26 @@ Below, we perform a basic filtering using :ref:`scCountQC`. We exclude the cells
 
 .. code:: bash
 
-   scCountQC -i sincei_output/scCounts_50kb_bins.loom \
-   -o sincei_output/scCounts_50kb_bins_filtered.loom \
+   scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
+   -o sincei_output/scCounts_50kb_bins_filtered.h5ad \
    --filterRegionArgs "n_cells_by_counts: 50, 2000" \
    --filterCellArgs "n_genes_by_counts: 100, 3000"
    # Applying filters
    # Remaining cells: 1333
    # Remaining features: 2561
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
-The tool :ref:`scClusterCells` provides a range of options to reduce the dimentionality of our count data, while preserving biological signal. This can be specified with ``--method`` option. Below, we will use a topic modeling method called Latent Schemantic Analysis to reduce the dimentionality of our data to 20 principle components (the default). The tool then uses distance between nearest neighbors to perform a graph-based clustering, and presents a UMAP (2-dimention) plot of the output (``--outFileUMAP`` option). This option also creates a tsv file with UMAP coordinates and assigned clusters for each cell in our data.
+The tool :ref:`scClusterCells` provides a range of options to reduce the dimensionality of our count data, while preserving biological signal. This can be specified with ``--method`` option. Below, we will use a topic modeling method called Latent Schemantic Analysis to reduce the dimensionality of our data to 20 principle components (the default). The tool then uses distance between nearest neighbors to perform a graph-based clustering, and presents a UMAP (2-dimention) plot of the output (``--outFileUMAP`` option). This option also creates a tsv file with UMAP coordinates and assigned clusters for each cell in our data.
 
 
 .. code:: bash
 
-    scClusterCells -i sincei_output/scCounts_50kb_bins_filtered.loom \
+    scClusterCells -i sincei_output/scCounts_50kb_bins_filtered.h5ad \
     --method LSA --clusterResolution 0.7 \
     --outFileUMAP sincei_output/scClusterCells_UMAP.png \
-    -o sincei_output/scCounts_50kb_bins_clustered.loom
+    -o sincei_output/scCounts_50kb_bins_clustered.h5ad
     # Coherence Score:  -1.5
     # also produces the tsv file "sincei_output/scClusterCells_UMAP.tsv"
 

@@ -109,10 +109,10 @@ filter out the unwanted cells/regions.
 .. code:: bash
 
    # list the metrics we can use to filter cells/regions
-   for r in 1 2; do scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${r}.loom --describe; done
+   for r in 1 2; do scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${r}.h5ad --describe; done
 
    # export the single-cell level metrices
-   for r in 1 2; do scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${r}.loom \
+   for r in 1 2; do scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${r}.h5ad \
    -om sincei_output/rna/countqc_rna_genes_rep${r} & done
 
    # visualize output using multiQC
@@ -128,8 +128,8 @@ too many (approax >90%) of cells (``--filterCellArgs``).
 .. code:: bash
 
   for r in 1 2 do scCountQC -i
-  sincei_output/rna/scCounts_rna_genes_rep\ :math:`{r}.loom \
-  -o sincei_output/rna/scCounts_rna_genes_filtered_rep`\ {r}.loom
+  sincei_output/rna/scCounts_rna_genes_rep\ :math:`{r}.h5ad \
+  -o sincei_output/rna/scCounts_rna_genes_filtered_rep`\ {r}.h5ad
   –filterRegionArgs “n_cells_by_counts: 100, 6000”
   –filterCellArgs “n_genes_by_counts: 500, 15000” done
 
@@ -154,28 +154,28 @@ We provide a tool `scCombineCounts`, which can concatenate counts for cells base
 .. code:: bash
 
    scCombineCounts \
-   -i sincei_output/rna/scCounts_rna_genes_filtered_rep1.loom \
-   sincei_output/rna/scCounts_rna_genes_filtered_rep2.loom \
-   -o sincei_output/rna/scCounts_rna_genes_filtered.merged.loom \
+   -i sincei_output/rna/scCounts_rna_genes_filtered_rep1.h5ad \
+   sincei_output/rna/scCounts_rna_genes_filtered_rep2.h5ad \
+   -o sincei_output/rna/scCounts_rna_genes_filtered.merged.h5ad \
    --method multi-sample --labels rep1 rep2
    #Combined cells: 10208
    #Combined features: 48059
 
-5. Dimentionality reduction and clustering
+5. Dimensionality reduction and clustering
 ------------------------------------------
 
 Finally, we will apply glmPCA to this data, assuming the data follows a
 poisson distribution (which is nearly appropritate for count-based data
-such as scRNA-seq), we will reduce the dimentionality of the data to 20
+such as scRNA-seq), we will reduce the dimensionality of the data to 20
 principle components (the default), followed by a graph-based (louvain)
 clustering of the output.
 
 .. code:: bash
 
-    scClusterCells -i sincei_output/rna/scCounts_rna_genes_filtered.merged.loom \
+    scClusterCells -i sincei_output/rna/scCounts_rna_genes_filtered.merged.h5ad \
     -m glmPCA -gf poisson --clusterResolution 1 \
     -op sincei_output/rna/scClusterCells_UMAP.png \
-    -o sincei_output/rna/scCounts_rna_genes_clustered.loom
+    -o sincei_output/rna/scCounts_rna_genes_clustered.h5ad
 
     # Coherence Score:  Coherence Score:  -0.9893882070519782
     # also produces the tsv file "sincei_output/rna/scClusterCells_UMAP.tsv"

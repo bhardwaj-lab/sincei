@@ -61,7 +61,7 @@ Create a new conda environment and install sincei in it using pip from GitHub:
 
 .. code-block:: bash
 
-    conda create -n sincei -c anaconda python=3.8
+    conda create -n sincei python=3.8
     conda activate sincei
     (sincei): pip install git+https://github.com/bhardwaj-lab/sincei.git@master#egg=sincei
 
