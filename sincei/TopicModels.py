@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from gensim import corpora, matutils, models
 import copy
-
+from sklearn.preprocessing import binarize
 ### ------ Functions ------
 
 
@@ -36,26 +36,29 @@ class TOPICMODEL:
 
     def __init__(
         self,
-        mat,
-        cells,
-        regions,
+        adata,
         n_topics,
+        binarize=False,
         smart_code="lfu",
         n_passes=1,
         n_workers=1,
     ):
+        self.cells = adata.obs_names.to_list()
+        self.regions_dict = corpora.dictionary.Dictionary([adata.var_names.to_list()])
+        mtx = adata.X.copy().transpose()
+        if binarize:
+            mtx = binarize(mtx, copy=True)
+        self.corpus = matutils.Sparse2Corpus(mtx)
+        self.shape = (adata.shape)
         self.n_topics = n_topics
         self.smart_code = smart_code
-        self.cells = cells
-        self.regions_dict = corpora.dictionary.Dictionary([regions])
-        self.corpus = matutils.Sparse2Corpus(mat)
         self.n_passes = n_passes
         self.n_workers = n_workers
         self.lsi_model = None
         self.lda_model = None
         self.cell_topic_dist = None
         self.topic_region_dist = None
-        self.shape = (len(cells), len(regions))
+
 
     def runLSA(self):
         r"""

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from scipy.stats import beta as beta_dst
 from scipy.stats import lognorm
 from scipy.stats import gamma as gamma_dst
+import anndata as ad
 
 try:
     import mctorch.nn as mnn
@@ -157,7 +158,7 @@ class GLMPCA:
 
         Parameters
         ----------
-        X : torch.Tensor or np.array
+        X : torch.Tensor, np.array or anndata object
             Dataset with cells in the rows and features in the columns.
 
         Returns
@@ -165,8 +166,9 @@ class GLMPCA:
         bool
             Returns True if the fitting procedure has been successful.
         """
-
-        if isinstance(X, np.ndarray):
+        if isinstance(X, ad.AnnData):
+            X_fit = torch.Tensor(X.X.toarray())
+        elif isinstance(X, np.ndarray):
             X_fit = torch.Tensor(X)
         elif isinstance(X, torch.Tensor):
             X_fit = X.clone()

@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 from scipy import sparse, io
-from sklearn.preprocessing import binarize
 
 # logs
 import warnings
@@ -143,12 +142,12 @@ def main(args=None):
         warnings.filterwarnings("ignore")
 
     adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
-    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
-    cells = copy.deepcopy(adata.obs_names.to_list())
-    regions = copy.deepcopy(adata.var_names.to_list())
+#    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
+#    cells = copy.deepcopy(adata.obs_names.to_list())
+#    regions = copy.deepcopy(adata.var_names.to_list())
 
-    if args.binarize:
-        mtx = binarize(mtx, copy=True)
+#    if args.binarize:
+#        mtx = binarize(mtx, copy=True)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -159,9 +158,8 @@ def main(args=None):
     elif args.method == "LSA":
         ## LSA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             smart_code="lfu",
         )
@@ -174,9 +172,8 @@ def main(args=None):
     elif args.method == "LDA":
         ## LDA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             n_passes=2,
             n_workers=4,
@@ -192,14 +189,14 @@ def main(args=None):
         from sincei.GLMPCA import GLMPCA
 
         # convert mtx to torch tensor
-        mtx = torch.tensor(mtx.todense())  # feature*cell tensor
+        #mtx = torch.tensor(mtx.todense())  # feature*cell tensor
 
         ## glmPCA using mctorch
         model_object = GLMPCA(
             n_pc=args.nPrinComps,
             family=args.glmPCAfamily,
         )
-        model_object.fit(mtx)
+        model_object.fit(adata)
         cell_pcs = model_object.saturated_loadings_.detach().numpy()
 
         ## update the anndata object
