@@ -15,7 +15,7 @@ authors = [
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
-    {name = "Fernando Sancho Gómez", email = f.sanchogomez@uu.nl},
+    {name = "Fernando Sancho Gómez", email = "f.sanchogomez@uu.nl"},
 ]
 classifiers = [
     "Intended Audience :: Science/Research",
