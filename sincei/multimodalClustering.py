@@ -26,7 +26,7 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 
-def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None, column_key=None, nK=20):
+def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None, column_key=None, nK=20, n_topics=20):
     r"""
     Performs multi-graph clustering on matched keys(barcodes) of a mudata object.
 
@@ -43,7 +43,9 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
     column_key : str, optional
         Column name for the barcode. If None, the index of obs for each modality is used.
     nK : int
-        Number of clusters to use for clustering
+        Number of clusters to use for clustering.
+    n_topics : int
+        Number of topics to use for topic model. Default is 20.
 
     Returns
     -------
@@ -88,7 +90,7 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
         if top == "LSA":
             dat = TOPICMODEL(
                 adata,
-                n_topics=20,
+                n_topics=n_topics,
                 binarize=False,
                 smart_code="lfu",
             )
@@ -101,7 +103,7 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
         elif top == "LDA":
             dat = TOPICMODEL(
                 adata,
-                n_topics=20,
+                n_topics=n_topics,
                 binarize=False,
                 n_passes=2,
                 n_workers=4,
