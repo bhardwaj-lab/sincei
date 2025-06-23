@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import os
 import argparse
-import numpy as np
-import pandas as pd
-from scipy import sparse, io
 
 # logs
 import warnings
@@ -16,29 +12,28 @@ logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # single-cell stuff
-import anndata
+import anndata as ad
+import mudata as mu
 import scanpy as sc
 
-
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei import ParserCommon
 from sincei.ParserCommon import smartLabel
 
 
 def parseArguments():
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfiles"])
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
-        parents=[get_args(), other_args],
+        parents=[io_args, get_args(), other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="""
         This tool combines multiple count matrices (output of scCountReads) into one, either assuming they are different samples (multi-sample)
-        or different measurements on the same set of cells (multi-modal). The result is a .h5ad file with combined counts. NOTE: it doesn't perform
-        any 'batch effect correction' or 'integration' of data from different technologies, which requires more sophisticated methods.
+        or different measurements on the same set of cells (multi-modal). The result is a .h5ad (AnnData) file with combined counts in
+        multi-sample mode or a .h5mu (MuData) file in multi-modal mode. NOTE: it doesn't perform any 'batch effect correction' or 'integration'
+        of data from different technologies, which requires more sophisticated methods.
         """,
-        usage="Example usage: scCombineCounts -i sample1.h5ad sample2.h5ad -o combined.h5ad  > log.txt",
+        usage="Example usage: scCombineCounts -i sample1.h5ad sample2.h5ad -o combined.h5ad -m multi-sample > log.txt",
         add_help=False,
     )
 
@@ -60,12 +55,24 @@ def get_args():
     )
 
     general.add_argument(
+        "--modalities",
+        "-md",
+        metavar="modalities",
+        help="This option is used only in multi-modal mode to specify the labels to store "
+        "each of the input .h5ad files in the output .h5mu file. Multiple modalities have "
+        "to be separated by a space, e.g. --modalities RNA ATAC CHiC",
+        nargs="+",
+        type=str,
+        required=False,
+    )
+
+    general.add_argument(
         "--outFile",
         "-o",
         type=str,
         help="The file to write results to. For method: `multi-sample`, the output "
         "file is an updated .h5ad object, which can be used by other tools. "
-        "For method: `multi-omic`, the output file is an .hdf5 file. This file can only be "
+        "For method: `multi-modal`, the output file is an .h5mu file. This file can only be "
         "used by scClusterCells, to perform multi-modal clustering. ",
         required=True,
     )
@@ -105,10 +112,6 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    if args.method != "multi-sample":
-        sys.stderr.write("Only multi-sample method is currently implemented")
-        sys.exit(1)
-
     if args.labels and len(args.input) != len(args.labels):
         print("The number of labels does not match the number of input files.")
         sys.exit(1)
@@ -117,29 +120,44 @@ def main(args=None):
         args.labels = [smartLabel(x) for x in args.input]
     adata_list = [sc.read_h5ad(x) for x in args.input]
 
-    ## concatenate labels and match chrom, start, end
-    var_list = []
-    var_cols = ["chrom", "start", "end"]
-    for lab, ad in zip(args.labels, adata_list):
-        obs = ad.obs_names.to_list()
-        lab = [lab] * len(obs)
-        new_names = ["_".join([x, y]) for x, y in zip(lab, obs)]
-        ad.obs_names = new_names
-        hasinfo = all([x in ad.var.columns for x in var_cols])
-        var_list.append(hasinfo)
+    if args.method == "multi-sample":
+        ## concatenate labels and match chrom, start, end
+        var_list = []
+        var_cols = ["chrom", "start", "end"]
+        for lab, adata in zip(args.labels, adata_list):
+            obs = adata.obs_names.to_list()
+            lab = [lab] * len(obs)
+            new_names = ["_".join([x, y]) for x, y in zip(lab, obs)]
+            adata.obs_names = new_names
+            hasinfo = all([x in adata.var.columns for x in var_cols])
+            var_list.append(hasinfo)
 
-    ## keep the chrom, start, end from original sample if present
-    adata = anndata.concat(adata_list)
-    if all(var_list):
-        var_df = adata_list[0].var[var_cols]
-        adata.var = adata.var.join(var_df)
+        ## keep the chrom, start, end from original sample if present
+        adata = ad.concat(adata_list)
+        if all(var_list):
+            var_df = adata_list[0].var[var_cols]
+            adata.var = adata.var.join(var_df)
+        else:
+            sys.stderr.write(
+                "WARNING: Not all input files contain the 'chrom', 'start', 'end' information. "
+                "The output will lack these fields. This might cause an error in some downstream tools"
+            )
+
+        sys.stdout.write("Combined cells: {} \n".format(adata.shape[0]))
+        sys.stdout.write("Combined features: {} \n".format(adata.shape[1]))
+        adata.write_h5ad(args.outFile)
+
+    elif args.method == "multi-modal":
+        adata_dict = dict(zip(args.modalities, adata_list))
+        mdata = mu.MuData(adata_dict)
+
+        sys.stdout.write("Combined modalities: {} \n".format(len(mdata.mod)))
+        sys.stdout.write("Combined cells: {} \n".format(mdata.shape[0]))
+        sys.stdout.write("Combined features: {} \n".format(mdata.shape[1]))
+        mdata.write_h5mu(args.outFile)
+
     else:
-        sys.stderr.write(
-            "WARNING: Not all input files contain the 'chrom', 'start', 'end' information. "
-            "The output will lack these fields. This might cause an error in some downstream tools"
-        )
+        sys.stderr.write("Choose a valid method: multi-sample or multi-modal.\n")
+        sys.exit(1)
 
-    sys.stdout.write("Combined cells: {} \n".format(adata.shape[0]))
-    sys.stdout.write("Combined features: {} \n".format(adata.shape[1]))
-    adata.write_h5ad(args.outFile)
     return 0
