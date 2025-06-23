@@ -3,11 +3,9 @@
 
 import argparse
 import sys
-import os
 
-from deeptools import parserCommon, bamHandler, utilities
+from deeptools import bamHandler, utilities
 from deeptools.mapReduce import mapReduce
-from deeptools.utilities import smartLabels
 from deeptoolsintervals import GTF
 
 import numpy as np
@@ -21,10 +19,10 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
-from sincei.Utilities import *
+from sincei.Utilities import (
+    checkMotifs, checkGCcontent, checkBAMtag,
+    checkAlignedFraction, getDupFilterTuple,
+)
 from sincei import ParserCommon
 
 

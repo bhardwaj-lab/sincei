@@ -2,14 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import os
 import re
 import argparse
-import numpy as np
 import pandas as pd
-from scipy import sparse, io
-from itertools import compress
-import copy
 import scanpy as sc
 
 # logs
@@ -19,9 +14,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei import ParserCommon
 from sincei.Utilities import gini
 

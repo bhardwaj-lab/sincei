@@ -3,8 +3,6 @@ import sys
 import shutil
 import numpy as np
 import pandas as pd
-import pyBigWig
-import math
 
 # deeptools modules
 from deeptools import mapReduce
@@ -15,8 +13,6 @@ from deeptools.writeBedGraph import bedGraphToBigWig, getGenomeChunkLength
 
 # own modules
 from sincei import ReadCounter as cr
-
-debug = 0
 
 
 def scaleCoverage(tile_coverage, args):

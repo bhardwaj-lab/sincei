@@ -10,8 +10,6 @@ from deeptools.mapReduce import mapReduce
 from deeptoolsintervals import GTF
 import numpy as np
 import pandas as pd
-from collections import Counter
-from functools import reduce
 
 # plotting
 import matplotlib
@@ -28,9 +26,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei.Utilities import *
 from sincei import ParserCommon
 
@@ -267,8 +262,6 @@ def main(args=None):
     else:
         of = open(args.outFile, "w")
 
-    # for x in final_set:
-    #    of.write(str(x) + "\n")
     df.to_csv(of, sep="\t")
 
     return 0

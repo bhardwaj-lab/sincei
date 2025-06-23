@@ -32,7 +32,7 @@ class TOPICMODEL:
 
     Returns
     -------
-    An object of class TOPICMODELS.
+    An object of class TOPICMODEL.
     """
 
     def __init__(

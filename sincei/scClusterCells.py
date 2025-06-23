@@ -1,14 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import copy
 import argparse
 import numpy as np
 import pandas as pd
-import torch
-from scipy import sparse, io
 
 # logs
 import warnings
@@ -26,15 +21,14 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
 
 # single-cell stuff
-import anndata
+import anndata as ad
 import scanpy as sc
 
 
-## own Functions
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
 
-from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # , GLMPCA
+from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # GLMPCA
 
 
 def parseArguments():
@@ -141,13 +135,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
-    #    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
-    #    cells = copy.deepcopy(adata.obs_names.to_list())
-    #    regions = copy.deepcopy(adata.var_names.to_list())
-
-    #    if args.binarize:
-    #        mtx = binarize(mtx, copy=True)
+    adata = sc.read_h5ad(args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -187,9 +175,6 @@ def main(args=None):
     elif args.method == "glmPCA":
         # import glmPCA (not imported on top due to special optional import of mctorch)
         from sincei.GLMPCA import GLMPCA
-
-        # convert mtx to torch tensor
-        # mtx = torch.tensor(mtx.todense())  # feature*cell tensor
 
         ## glmPCA using mctorch
         model_object = GLMPCA(

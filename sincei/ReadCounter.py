@@ -14,8 +14,10 @@ from deeptoolsintervals import GTF
 import pyBigWig
 import py2bit
 
-## own functions
-from sincei.Utilities import *
+from sincei.Utilities import (
+    checkBAMtag, checkMotifs, checkGCcontent,
+    checkAlignedFraction, getDupFilterTuple,
+)
 
 debug = 0
 old_settings = np.seterr(all="ignore")

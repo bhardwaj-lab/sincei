@@ -3,11 +3,7 @@
 
 import argparse
 import sys
-import os
 
-## own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei._version import __version__
 
 
