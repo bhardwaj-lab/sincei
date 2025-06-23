@@ -15,6 +15,7 @@ authors = [
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
+    {name = "Fernando Sancho Gómez", email = f.sanchogomez@uu.nl},
 ]
 classifiers = [
     "Intended Audience :: Science/Research",
@@ -26,6 +27,7 @@ urls.Source = "https://github.com/vivekbhr/sincei"
 urls.Home-page = "https://github.com/vivekbhr/sincei"
 dependencies = [
     "anndata",
+    "mudata",
     "scanpy",
     "umap-learn",
     "pandas",
