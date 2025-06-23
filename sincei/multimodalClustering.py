@@ -3,15 +3,11 @@ import pandas as pd
 import scanpy as sc
 
 from scanpy._utils import get_igraph_from_adjacency
-import igraph as ig
 import leidenalg as la
-from scipy import sparse
-
-import sys
 
 # own modules
 from sincei.TopicModels import TOPICMODEL
-from sincei._deprecated import cluster_LSA
+from sincei.Utilities import cluster_topic
 
 # umap.__version__ : should be >= 0.5.1
 
@@ -30,18 +26,22 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 
-def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK=20):
+def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None, column_key=None, nK=20):
     r"""
-    Performs multi-graph clustering on matched keys(barcodes) bw two anndata objects.
+    Performs multi-graph clustering on matched keys(barcodes) of a mudata object.
 
     Parameters
     ----------
-    mode1_adata : AnnData
-        AnnData object for mode 1
-    mode2_adata : AnnData
-        AnnData object for mode 2
-    column_key : str
-        Column name for the barcode in mode 1 and 2
+    mudata : MuData
+        MuData object containing several data modalities
+    modalities : list[str]
+        List of modalities to use for clustering, e.g. ["RNA", "CHiC"]
+    topic : list[str]
+        Whether to use topic modeling for each modality. Choose between "False", "LSA" or "LDA". If None, no topic modeling is performed.
+    modal_weights : list[float]
+        Weights for each modality in the clustering process. Default is equal weighting. E.g. for RNA and CHiC, use [2, 1].
+    column_key : str, optional
+        Column name for the barcode. If None, the index of obs for each modality is used.
     nK : int
         Number of clusters to use for clustering
 
@@ -49,60 +49,101 @@ def multiModal_clustering(mode1_adata, mode2_adata, column_key="barcode_nla", nK
     -------
     multi_umap : DataFrame
         DataFrame with UMAP coordinates and cluster labels
-    mode1_adata : AnnData
-        AnnData object for mode 1
-    mode2_adata : AnnData
-        AnnData object for mode 2
+    mudata : MuData
+        MuData object containing several data modalities
     """
 
-    # subset RNA anndata
-    mode1_adata = mode1_adata[[i for i, v in enumerate(mode1_adata.obs[column_key]) if v in mode2_adata.obs.index]]
-    # re-compute distances/clusters/umap
-    sc.pp.neighbors(mode1_adata, n_neighbors=nK)
-    sc.tl.louvain(mode1_adata)
-    sc.tl.umap(mode1_adata, min_dist=0.5, spread=5, init_pos="random", random_state=42)
-    # get graph
-    G_rna = get_igraph_from_adjacency(mode1_adata.obsp["connectivities"], directed=True)
+    # check if modalities are provided, otherwise use all
+    if modalities is None:
+        raise ValueError(f"Provide modalities to use for clustering.")
+    # check if modalities are in mudata object
+    for mod in modalities:
+        if mod not in mdata.mod.keys():
+            raise ValueError(f"Modality {mod} not found in MuData object.")
+    # check if topic is provided, otherwise use False for all
+    if topic is None:
+        topic = [False] * len(modalities)
+    # check if modalities and topic lists have the same length
+    if len(modalities) != len(topic):
+        raise ValueError(f"Modalities and topic lists must have the same length.")
+    # check if modal_weights are provided, otherwise use equal weights
+    if modal_weights is None:
+        modal_weights = [1] * len(modalities)
+    # check if modal_weights and modalities lists have the same length
+    if len(modal_weights) != len(modalities):
+        raise ValueError(f"Modalities and modal_weights lists must have the same length.")
+    
+    # Find common barcodes in provided modalities
+    if column_key is None:
+        barcodes = set.intersection(*(set(mdata[mod].obs.index) for mod in modalities))
+    else:
+        barcodes = set.intersection(*(set(mod.obs[column_key]) for mod in modalities))
+    barcodes = list(barcodes)
 
-    # subset chic anndata
-    # mode2_adata=mode2_adata[[i for i,v in enumerate(mode2_adata.obs_names.to_list()) if v in set(mode1_adata.obs[column_key])]]
-    mode2_adata = mode2_adata[mode1_adata.obs[column_key].tolist()]
-    # re-do LSA
-    mtx = sparse.csr_matrix(mode2_adata.X.transpose())
-    dat = TOPICMODEL(
-        mtx,
-        list(mode2_adata.obs.index),
-        list(mode2_adata.var.index),
-        nTopics=20,
-        smartCode="lfu",
-    )
-    dat.runLSA()
-    cell_topic = dat.get_cell_topic()
+    graphs = []
+    umaps = []
+    for mod, top in zip(modalities, topic):
+        adata = mdata.mod[mod][barcodes]
 
-    # get graph
-    chic_umap, G_chic = cluster_LSA(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
-    mode2_adata.obsm["X_pca"] = cell_topic
-    mode2_adata.obsm["X_umap"] = chic_umap
+        if top == "LSA":
+            dat = TOPICMODEL(
+                adata,
+                n_topics=20,
+                binarize=False,
+                smart_code="lfu",
+            )
+            dat.runLSA()
+            cell_topic = dat.get_cell_topic()
+            # get graph and umap
+            umap, graph = cluster_topic(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
+            adata.obsm["X_pca"] = cell_topic
+            adata.obsm["X_umap"] = umap
+        elif top == "LDA":
+            dat = TOPICMODEL(
+                adata,
+                n_topics=20,
+                binarize=False,
+                n_passes=2,
+                n_workers=4,
+            )
+            dat.runLDA()
+            cell_topic = dat.get_cell_topic()
+            # get graph and umap
+            umap, graph = cluster_topic(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
+            adata.obsm["X_pca"] = cell_topic
+            adata.obsm["X_umap"] = umap
+        else:
+            sc.pp.neighbors(adata, n_neighbors=nK)
+            sc.tl.leiden(adata)
+            sc.tl.umap(adata, min_dist=0.5, spread=5, init_pos="random", random_state=42)
+            # get graph and umap
+            graph = get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True)
+            umap = pd.DataFrame(adata.obsm["X_umap"], columns=["UMAP1", "UMAP2"])
+            umap.index = adata.obs.index
+            umap["cluster_mod"] = adata.obs.leiden
+
+        graphs.append(graph)
+        umaps.append(umap)
+
     # leiden multi-layer clustering
     optimiser = la.Optimiser()
-    part_rna = la.ModularityVertexPartition(G_rna)
-    part_chic = la.ModularityVertexPartition(G_chic)
-    #
-    # part_rna = la.CPMVertexPartition(G_rna, resolution=res_layer1)
-    # part_chic = la.CPMVertexPartition(G_chic, resolution=res_layer2)
-    optimiser.optimise_partition_multiplex([part_rna, part_chic], layer_weights=[2, 1], n_iterations=-1)
-    print("Detected clusters: ", set(part_chic.membership))
-    chic_umap["cluster_multi"] = part_chic.membership
+    parts = []
+    for graph in graphs:
+        part = la.ModularityVertexPartition(graph)
+        parts.append(part)
 
-    # merge RNA and ChIC UMAPs
-    rna_umap = pd.DataFrame(mode1_adata.obsm["X_umap"], columns=["RNA_UMAP1", "RNA_UMAP2"])
-    rna_umap.index = mode1_adata.obs.index
-    rna_umap["cluster_mode1"] = mode1_adata.obs.louvain
-    rna_umap[column_key] = mode1_adata.obs[column_key]
-    multi_umap = rna_umap.merge(chic_umap, left_index=False, right_index=True, left_on=column_key)
-    multi_umap["cluster_mode1"] = [int(x) for x in multi_umap["cluster_mode1"].to_list()]
+    optimiser.optimise_partition_multiplex(parts, layer_weights=modal_weights, n_iterations=-1)
+    print("Detected clusters: ", set(parts[-1].membership))
+    umap[-1]["cluster_multi"] = parts[-1].membership
 
-    return multi_umap, mode1_adata, mode2_adata
+    # merge modality UMAPs
+    multi_umap = umaps[0].copy()
+
+    for i, umap in enumerate(umaps[1:], start=1):
+        multi_umap = multi_umap.merge(umap, left_index=False, right_index=True, left_on=column_key)
+    multi_umap["cluster_mod"] = [int(x) for x in multi_umap["cluster_mod"].to_list()]
+
+    return multi_umap, mdata
 
 
 ## run aligned UMAPs between two dfs with PCs
