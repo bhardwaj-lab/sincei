@@ -351,21 +351,31 @@ class GLMPCA:
         random_idx = np.random.choice(np.arange(parameters.shape[0]), replace=False, size=random_batch_size)
         if self.init == "spectral":
             _, _, v = torch.linalg.svd(parameters[random_idx] - torch.mean(parameters[random_idx], axis=0))
-            loadings = mnn.Parameter(data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True)#.to(
-                #self.device
-            #)
+            loadings = mnn.Parameter(
+                data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
+            )  # .to(
+            # self.device
+            # )
         elif self.init == "random":
-            loadings = mnn.Parameter(manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True)#.to(self.device)
+            loadings = mnn.Parameter(
+                manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
+            )  # .to(self.device)
 
         # Initialize intercept
         if self.exponential_family.family_name in ["poisson"]:
             intercept = mnn.Parameter(
-                torch.median(parameters[random_idx], axis=0).values, manifold=mnn.Euclidean(parameters.shape[1]), requires_grad=True)
-            #).to(self.device)
+                torch.median(parameters[random_idx], axis=0).values,
+                manifold=mnn.Euclidean(parameters.shape[1]),
+                requires_grad=True,
+            )
+            # ).to(self.device)
         else:
             intercept = mnn.Parameter(
-                torch.mean(parameters[random_idx], axis=0), manifold=mnn.Euclidean(parameters.shape[1]), requires_grad=True)
-            #).to(self.device)
+                torch.mean(parameters[random_idx], axis=0),
+                manifold=mnn.Euclidean(parameters.shape[1]),
+                requires_grad=True,
+            )
+            # ).to(self.device)
 
         # Load ExponentialFamily params to GPU (if they exist)
         self.exponential_family.load_family_params_to_gpu(self.device)
@@ -388,7 +398,7 @@ class GLMPCA:
         self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
     ):
         n = batch_data.shape[0]
-        intercept_term = intercept.unsqueeze(0).repeat(n, 1)#.to(self.device)
+        intercept_term = intercept.unsqueeze(0).repeat(n, 1)  # .to(self.device)
 
         projected_parameters = batch_parameters - intercept_term
         projected_parameters = projected_parameters.matmul(loadings).matmul(loadings.T)

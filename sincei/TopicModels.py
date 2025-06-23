@@ -4,6 +4,7 @@ import pandas as pd
 from gensim import corpora, matutils, models
 import copy
 from sklearn.preprocessing import binarize
+
 ### ------ Functions ------
 
 
@@ -49,7 +50,7 @@ class TOPICMODEL:
         if binarize:
             mtx = binarize(mtx, copy=True)
         self.corpus = matutils.Sparse2Corpus(mtx)
-        self.shape = (adata.shape)
+        self.shape = adata.shape
         self.n_topics = n_topics
         self.smart_code = smart_code
         self.n_passes = n_passes
@@ -58,7 +59,6 @@ class TOPICMODEL:
         self.lda_model = None
         self.cell_topic_dist = None
         self.topic_region_dist = None
-
 
     def runLSA(self):
         r"""

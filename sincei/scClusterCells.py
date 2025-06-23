@@ -142,12 +142,12 @@ def main(args=None):
         warnings.filterwarnings("ignore")
 
     adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
-#    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
-#    cells = copy.deepcopy(adata.obs_names.to_list())
-#    regions = copy.deepcopy(adata.var_names.to_list())
+    #    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
+    #    cells = copy.deepcopy(adata.obs_names.to_list())
+    #    regions = copy.deepcopy(adata.var_names.to_list())
 
-#    if args.binarize:
-#        mtx = binarize(mtx, copy=True)
+    #    if args.binarize:
+    #        mtx = binarize(mtx, copy=True)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -189,7 +189,7 @@ def main(args=None):
         from sincei.GLMPCA import GLMPCA
 
         # convert mtx to torch tensor
-        #mtx = torch.tensor(mtx.todense())  # feature*cell tensor
+        # mtx = torch.tensor(mtx.todense())  # feature*cell tensor
 
         ## glmPCA using mctorch
         model_object = GLMPCA(
