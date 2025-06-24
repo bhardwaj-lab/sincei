@@ -130,7 +130,7 @@ class TOPICMODEL:
                     li_val.pop(x)
                     li.pop(x)
                     cells.pop(x)
-                
+
                 li_val = np.stack(li_val)
                 cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
             else:

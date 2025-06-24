@@ -238,4 +238,3 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
     # Update the mudata object with the aligned UMAP coordinates
     for i, mod in enumerate(modalities):
         mdata[mod].obsm["X_umap_aligned"] = aligned_umap.embeddings_[i]
-    
