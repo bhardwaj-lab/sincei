@@ -123,18 +123,24 @@ class TOPICMODEL:
         # if all documents don't have same set of topics, (optionally) remove them
         if len(set([len(x) for x in li_val])) > 1:
             bad_idx = sorted([i for i, v in enumerate(li_val) if len(v) != self.n_topics], reverse=True)
-            print("{} Cells were detected which don't contribute to all {} topics.".format(len(bad_idx), self.n_topics))
+            print(f"{len(bad_idx)} cells were detected which don't contribute to all {self.n_topics} topics.")
             if pop_sparse_cells:
                 print("Removing these cells from the analysis")
                 for x in bad_idx:
                     li_val.pop(x)
                     li.pop(x)
                     cells.pop(x)
+                
+                li_val = np.stack(li_val)
+                cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
             else:
-                print("Not implemented! Need to fill these entries with zeros")
+                cell_topic = np.zeros((len(li_val), self.n_topics))
+                for i, v in enumerate(li_val):
+                    for j, val in enumerate(v):
+                        print(f"Index [{i}, {li[i][j]}] = {val}")
+                        cell_topic[i, li[i][j]] = val
+                cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
 
-        li_val = np.stack(li_val)
-        cell_topic = pd.DataFrame(li_val, columns=li[0])
         cell_topic.index = cells
 
         return cell_topic

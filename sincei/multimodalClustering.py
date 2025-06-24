@@ -1,3 +1,4 @@
+import numpy as np
 import umap
 import pandas as pd
 import scanpy as sc
@@ -7,7 +8,7 @@ import leidenalg as la
 
 # own modules
 from sincei.TopicModels import TOPICMODEL
-from sincei.Utilities import cluster_topic
+from sincei.ParserCommon import numberOfProcessors
 
 # umap.__version__ : should be >= 0.5.1
 
@@ -26,48 +27,57 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 
-def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None, column_key=None, nK=20, n_topics=20):
+def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=None, column_key=None, nK=30,
+                          nPrinComps=20, clusterResolution=1.0, binarize=False, glmPCAfamily="poisson"):
     r"""
-    Performs multi-graph clustering on matched keys(barcodes) of a mudata object.
+    Performs multi-graph clustering on matched keys(barcodes) of a mudata object and stores the clustering results
+    in mdata.obs["cluster_multi"]. It also stores the UMAP coordinates for each of the specified modalities in
+    mdata[mod].obsm["X_umap"], where mod is the modality.
+    Note: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
+    in the case of logPCA.
 
     Parameters
     ----------
     mudata : MuData
         MuData object containing several data modalities
     modalities : list[str]
-        List of modalities to use for clustering, e.g. ["RNA", "CHiC"]
-    topic : list[str]
-        Whether to use topic modeling for each modality. Choose between "False", "LSA" or "LDA". If None, no topic modeling is performed.
+        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "CHiC"]
+    method : list[str]
+        What processing method to use for each modality. Choose between "PCA", "logPCA", "glmPCA", "LSA" or "LDA".
+        Default is "PCA" for all modalities.
     modal_weights : list[float]
         Weights for each modality in the clustering process. Default is equal weighting. E.g. for RNA and CHiC, use [2, 1].
     column_key : str, optional
-        Column name for the barcode. If None, the index of obs for each modality is used.
+        Column name for the barcode. If None, the index of .obs for each modality is used.
     nK : int
-        Number of clusters to use for clustering.
-    n_topics : int
-        Number of topics to use for topic model. Default is 20.
-
-    Returns
-    -------
-    multi_umap : DataFrame
-        DataFrame with UMAP coordinates and cluster labels
-    mudata : MuData
-        MuData object containing several data modalities
+        Number of nearest neighbours to consider for clustering and UMAP. This number should be chosen considering 
+        the total number of cells and expected number of clusters. Smaller number will lead to more fragmented clusters.
+    nPrinComps : int or list[int]
+        Number of principal components (for logPCA or glmPCA) or number of topics (for LSA and LDA) to use for model.
+        Use higher number for samples with more expected heterogenity. If list is provided, it must contain a value for each
+        modality. Default is 20.
+    clusteResolution : float
+        Resolution parameter for clustering. Values lower than 1.0 result in less clusters, while higher values lead to
+        splitting of clusters. In most cases, the optimum value would be between 0.8 and 1.2. Default is 1.0 .
+    binarize : bool
+        Whether to binarize the counts per region before dimensionality reduction (only for LSA/LDA).
+    glmPCAfamily : str
+        The choice of exponential family distribution to use for glmPCA method. Default is "poisson".
     """
 
     # check if modalities are provided, otherwise use all
     if modalities is None:
-        raise ValueError(f"Provide modalities to use for clustering.")
+        raise ValueError(f"Choose modalities to use for clustering.")
     # check if modalities are in mudata object
     for mod in modalities:
         if mod not in mdata.mod.keys():
             raise ValueError(f"Modality {mod} not found in MuData object.")
-    # check if topic is provided, otherwise use False for all
-    if topic is None:
-        topic = [False] * len(modalities)
-    # check if modalities and topic lists have the same length
-    if len(modalities) != len(topic):
-        raise ValueError(f"Modalities and topic lists must have the same length.")
+    # check if method is provided, otherwise use "PCA" for all
+    if method == "PCA":
+        method = ["PCA"] * len(modalities)
+    # check if modalities and method lists have the same length
+    if len(modalities) != len(method):
+        raise ValueError(f"Modalities and method lists must have the same length.")
     # check if modal_weights are provided, otherwise use equal weights
     if modal_weights is None:
         modal_weights = [1] * len(modalities)
@@ -77,55 +87,76 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
 
     # Find common barcodes in provided modalities
     if column_key is None:
-        barcodes = set.intersection(*(set(mdata[mod].obs.index) for mod in modalities))
+        barcodes = set.intersection(*(set(mdata.mod[mod].obs.index) for mod in modalities))
     else:
-        barcodes = set.intersection(*(set(mod.obs[column_key]) for mod in modalities))
+        barcodes = set.intersection(*(set(mdata.mod[mod].obs[column_key]) for mod in modalities))
     barcodes = list(barcodes)
 
+    adatas = []
     graphs = []
-    umaps = []
-    for mod, top in zip(modalities, topic):
+    for mod, met in zip(modalities, method):
         adata = mdata.mod[mod][barcodes]
 
-        if top == "LSA":
-            dat = TOPICMODEL(
+        if met == "PCA":
+            # if no method is provided, use PCA
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.pca(adata, nPrinComps)
+
+        elif met == "logPCA":
+            ## log1p+PCA using scanpy
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.pca(adata, nPrinComps)
+
+        elif met == "LSA":
+        ## LSA using gensim
+            model_object = TOPICMODEL(
                 adata,
-                n_topics=n_topics,
-                binarize=False,
+                n_topics=nPrinComps,
+                binarize=binarize,
                 smart_code="lfu",
             )
-            dat.runLSA()
-            cell_topic = dat.get_cell_topic()
-            # get graph and umap
-            umap, graph = cluster_topic(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
-            adata.obsm["X_pca"] = cell_topic
-            adata.obsm["X_umap"] = umap
-        elif top == "LDA":
-            dat = TOPICMODEL(
-                adata,
-                n_topics=n_topics,
-                binarize=False,
-                n_passes=2,
-                n_workers=4,
-            )
-            dat.runLDA()
-            cell_topic = dat.get_cell_topic()
-            # get graph and umap
-            umap, graph = cluster_topic(cell_topic, modularityAlg="leiden", resolution=1, nk=nK)
-            adata.obsm["X_pca"] = cell_topic
-            adata.obsm["X_umap"] = umap
-        else:
-            sc.pp.neighbors(adata, n_neighbors=nK)
-            sc.tl.leiden(adata)
-            sc.tl.umap(adata, min_dist=0.5, spread=5, init_pos="random", random_state=42)
-            # get graph and umap
-            graph = get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True)
-            umap = pd.DataFrame(adata.obsm["X_umap"], columns=["UMAP1", "UMAP2"])
-            umap.index = adata.obs.index
-            umap["cluster_mod"] = adata.obs.leiden
+            model_object.runLSA()
+            adata.obsm["X_pca"] = model_object.get_cell_topic()
 
+        elif met == "LDA":
+        ## LDA using gensim
+            model_object = TOPICMODEL(
+                adata,
+                n_topics=nPrinComps,
+                binarize=binarize,
+                n_passes=2,
+                n_workers=numberOfProcessors("max"),
+            )
+            model_object.runLDA()
+            adata.obsm["X_pca"] = model_object.get_cell_topic()
+
+        elif met == "glmPCA":
+            # import glmPCA (not imported on top due to special optional import of mctorch)
+            from sincei.GLMPCA import GLMPCA
+
+            ## glmPCA using mctorch
+            model_object = GLMPCA(
+                n_pc=nPrinComps,
+                family=glmPCAfamily,
+            )
+            model_object.fit(adata)
+            cell_pcs = model_object.saturated_loadings_.detach().numpy()
+
+            ## update the anndata object
+            adata.obsm["X_pca"] = np.asarray(cell_pcs)
+
+        sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=nK)
+        sc.tl.leiden(adata, resolution=clusterResolution)
+        sc.tl.paga(adata)
+        sc.pl.paga(adata, plot=False, threshold=0.1)
+        sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
+
+        # get graph
+        graph = get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True)
+
+        adatas.append(adata)
         graphs.append(graph)
-        umaps.append(umap)
 
     # leiden multi-layer clustering
     optimiser = la.Optimiser()
@@ -135,66 +166,64 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
         parts.append(part)
 
     optimiser.optimise_partition_multiplex(parts, layer_weights=modal_weights, n_iterations=-1)
-    print("Detected clusters: ", set(parts[-1].membership))
-    umap[-1]["cluster_multi"] = parts[-1].membership
+    print("Detected clusters: ", set(parts[0].membership))
+    mdata.obs["cluster_multi"] = parts[0].membership
 
-    # merge modality UMAPs
-    multi_umap = umaps[0].copy()
-
-    for i, umap in enumerate(umaps[1:], start=1):
-        multi_umap = multi_umap.merge(umap, left_index=False, right_index=True, left_on=column_key)
-    multi_umap["cluster_mod"] = [int(x) for x in multi_umap["cluster_mod"].to_list()]
-
-    return multi_umap, mdata
+    for mod, adata in zip(modalities, adatas):
+            mdata.mod[mod] = adata
 
 
-## run aligned UMAPs between two dfs with PCs
-def umap_aligned(pca_mode1, pca_mode2, nK=15, distance_metric="eucledian"):
+def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric="euclidean"):
     r"""
-    Aligns two UMAP embeddings using the UMAP AlignedUMAP class
+    Aligns the UMAP embeddings of the selected modalities in a mudata object using the UMAP AlignedUMAP
+    class and stores them in mdata[mod].obsm["X_umap_aligned"], where mod is the modality. This produces
+    an aligned UMAP for each modality, since the alignment for each may be slightly different.
 
     Parameters
     ----------
-    pca_mode1 : pandas.DataFrame
-        UMAP embedding of RNA data
-    pca_mode2 : pandas.DataFrame
-        UMAP embedding of CHiC data
+    mudata : MuData
+        MuData object containing several data modalities
+    modalities : list[str]
+        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "CHiC"]
+    column_key : str, optional
+        Column name for the barcode. If None, the index of .obs for each modality is used.
     nK : int
         Number of nearest neighbors to use for UMAP
     distance_metric : str
-        Distance metric to use for UMAP
-
-    Returns
-    -------
-    pandas.DataFrame
-        Aligned UMAP embedding of RNA data
-    pandas.DataFrame
-        Aligned UMAP embedding of CHiC data
-
-    Examples
-    --------
-
-    >>> test = Tester()
-    >>> pca_mode1 = test.pca_mode1
-    >>> pca_mode2 = test.pca_mode2
-    >>> umap_aligned(pca_mode1, pca_mode2)
-    (                 aligned_UMAP1  aligned_UMAP2
-    0  -0.012995  0.001206
-    1   0.
+        Distance metric to use for UMAP, e.g. "euclidean", "cosine", etc.
     """
+    # check if modalities are provided, otherwise use all
+    if modalities is None:
+        raise ValueError(f"Choose modalities to use to align UMAP.")
+    # check if modalities are in mudata object
+    for mod in modalities:
+        if mod not in mdata.mod.keys():
+            raise ValueError(f"Modality {mod} not found in MuData object.")
 
-    pca_mode1 = pca_mode1.loc[pca_mode2.index]
-    keys = [x for x in range(len(pca_mode1.index))]
-    values = []
-    for x in pca_mode1.index:
-        values.append([i for i, v in enumerate(pca_mode2.index) if v == x])
-    values = [x[0] for x in values]
-    relation_dict = {i: v for i, v in zip(keys, values)}
+    # Find common barcodes in provided modalities
+    if column_key is None:
+        barcodes = set.intersection(*(set(mdata.mod[mod].obs.index) for mod in modalities))
+    else:
+        barcodes = set.intersection(*(set(mdata.mod[mod].obs[column_key]) for mod in modalities))
+    barcodes = list(barcodes)
 
-    chic_idx = pca_mode2.index
-    rna_idx = pca_mode1.index
-    pca_mode2 = pca_mode2.reset_index().drop("index", axis=1)
-    pca_mode1 = pca_mode1.reset_index().drop("index", axis=1)
+    adatas = []
+    umaps = []
+    for mod in modalities:
+        adata = mdata.mod[mod][barcodes]
+        try:
+            um = adata.obs[:, f"UMAP1_{mod}", f"UMAP2_{mod}"]
+        except KeyError:
+            raise KeyError(f"UMAP coordinates for modality {mod} not found. Please run UMAP first.")
+
+        adatas.append(adata)
+        umaps.append(um)
+
+    # AlignedUMAP requires a mapping of relations between modalities.
+    # In our case, the numerical index of each cell barcode to itself are the relations.
+    relation_dict = {i: i for i in range(len(barcodes))}
+    relation_dicts = [relation_dict.copy() for i in range(len(modalities) - 1)]
+
     # UMAP
     UA = umap.AlignedUMAP(
         spread=10,
@@ -204,13 +233,9 @@ def umap_aligned(pca_mode1, pca_mode2, nK=15, distance_metric="eucledian"):
         init="random",
         random_state=42,
     )
-    aligned_umap = UA.fit([pca_mode1, pca_mode2], relations=[relation_dict])
+    aligned_umap = UA.fit(umaps, relations=relation_dicts)
 
-    mode1_umap_aligned = pd.DataFrame(aligned_umap.embeddings_[0])
-    mode2_umap_aligned = pd.DataFrame(aligned_umap.embeddings_[1])
-    mode2_umap_aligned.index = chic_idx
-    mode1_umap_aligned.index = rna_idx
-    mode2_umap_aligned.columns = ["aligned_UMAP1", "aligned_UMAP2"]
-    mode1_umap_aligned.columns = ["aligned_UMAP1", "aligned_UMAP2"]
-
-    return mode1_umap_aligned, mode2_umap_aligned
+    # Update the mudata object with the aligned UMAP coordinates
+    for i, mod in enumerate(modalities):
+        mdata[mod].obsm["X_umap_aligned"] = aligned_umap.embeddings_[i]
+    
