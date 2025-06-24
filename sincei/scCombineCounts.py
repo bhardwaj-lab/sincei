@@ -13,7 +13,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # single-cell stuff
 import anndata as ad
-import mudata as mu
+import mudata as md
 import scanpy as sc
 
 from sincei import ParserCommon
@@ -149,7 +149,7 @@ def main(args=None):
 
     elif args.method == "multi-modal":
         adata_dict = dict(zip(args.modalities, adata_list))
-        mdata = mu.MuData(adata_dict)
+        mdata = md.MuData(adata_dict)
 
         sys.stdout.write("Combined modalities: {} \n".format(len(mdata.mod)))
         sys.stdout.write("Combined cells: {} \n".format(mdata.shape[0]))

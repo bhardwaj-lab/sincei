@@ -193,7 +193,7 @@ def main(args=None):
     sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
-    adata.write_h5ad(args.outFile)  # , write_obsm_varm=True)
+    adata.write_h5ad(args.outFile)
 
     if args.outFileUMAP:
         ## plot UMAP
