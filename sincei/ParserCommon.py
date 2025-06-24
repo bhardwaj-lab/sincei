@@ -89,7 +89,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             nargs="+",
             required=True if "BED" in requiredOpts else False,
         )
-        
+
     ## outputs
     if "outFilePrefix" in opts:
         group.add_argument(
@@ -372,7 +372,7 @@ def filterOptions(args=None, suppress_args=None):
         type=float,
         required=False,
     )
-    
+
     return parser
 
 

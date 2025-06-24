@@ -6,8 +6,10 @@ from deeptoolsintervals import GTF
 import py2bit
 
 from sincei.Utilities import (
-    checkMotifs, checkGCcontent,
-    checkAlignedFraction, getDupFilterTuple,
+    checkMotifs,
+    checkGCcontent,
+    checkAlignedFraction,
+    getDupFilterTuple,
 )
 
 

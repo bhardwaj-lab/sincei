@@ -338,13 +338,14 @@ def gini(i, X):
 # Imports for cluster_topic
 from sklearn.metrics import pairwise_distances
 from scanpy.neighbors import (
-_compute_connectivities_umap,
-_get_indices_distances_from_dense_matrix,
+    _compute_connectivities_umap,
+    _get_indices_distances_from_dense_matrix,
 )
 from scanpy._utils import get_igraph_from_adjacency
 import leidenalg as la
 import umap
 import pandas as pd
+
 
 def cluster_topic(
     cell_topic,

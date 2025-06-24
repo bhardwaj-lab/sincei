@@ -20,8 +20,11 @@ logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 from sincei.Utilities import (
-    checkMotifs, checkGCcontent, checkBAMtag,
-    checkAlignedFraction, getDupFilterTuple,
+    checkMotifs,
+    checkGCcontent,
+    checkBAMtag,
+    checkAlignedFraction,
+    getDupFilterTuple,
 )
 from sincei import ParserCommon
 

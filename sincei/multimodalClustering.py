@@ -74,7 +74,7 @@ def multiModal_clustering(mdata, modalities=None, topic=None, modal_weights=None
     # check if modal_weights and modalities lists have the same length
     if len(modal_weights) != len(modalities):
         raise ValueError(f"Modalities and modal_weights lists must have the same length.")
-    
+
     # Find common barcodes in provided modalities
     if column_key is None:
         barcodes = set.intersection(*(set(mdata[mod].obs.index) for mod in modalities))

@@ -47,7 +47,7 @@ def parseArguments():
         usage="Example usage: scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt",
         add_help=False,
     )
-    
+
     return parser
 
 

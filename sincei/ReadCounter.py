@@ -15,8 +15,11 @@ import pyBigWig
 import py2bit
 
 from sincei.Utilities import (
-    checkBAMtag, checkMotifs, checkGCcontent,
-    checkAlignedFraction, getDupFilterTuple,
+    checkBAMtag,
+    checkMotifs,
+    checkGCcontent,
+    checkAlignedFraction,
+    getDupFilterTuple,
 )
 
 debug = 0
