@@ -27,8 +27,18 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 
-def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=None, column_key=None, nK=30,
-                          nPrinComps=20, clusterResolution=1.0, binarize=False, glmPCAfamily="poisson"):
+def multiModal_clustering(
+    mdata,
+    modalities=None,
+    method="PCA",
+    modal_weights=None,
+    column_key=None,
+    nK=30,
+    nPrinComps=20,
+    clusterResolution=1.0,
+    binarize=False,
+    glmPCAfamily="poisson",
+):
     r"""
     Performs multi-graph clustering on matched keys(barcodes) of a mudata object and stores the clustering results
     in mdata.obs["cluster_multi"]. It also stores the UMAP coordinates for each of the specified modalities in
@@ -50,7 +60,7 @@ def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=No
     column_key : str, optional
         Column name for the barcode. If None, the index of .obs for each modality is used.
     nK : int
-        Number of nearest neighbours to consider for clustering and UMAP. This number should be chosen considering 
+        Number of nearest neighbours to consider for clustering and UMAP. This number should be chosen considering
         the total number of cells and expected number of clusters. Smaller number will lead to more fragmented clusters.
     nPrinComps : int or list[int]
         Number of principal components (for logPCA or glmPCA) or number of topics (for LSA and LDA) to use for model.
@@ -109,7 +119,7 @@ def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=No
             sc.pp.pca(adata, nPrinComps)
 
         elif met == "LSA":
-        ## LSA using gensim
+            ## LSA using gensim
             model_object = TOPICMODEL(
                 adata,
                 n_topics=nPrinComps,
@@ -120,7 +130,7 @@ def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=No
             adata.obsm["X_pca"] = model_object.get_cell_topic()
 
         elif met == "LDA":
-        ## LDA using gensim
+            ## LDA using gensim
             model_object = TOPICMODEL(
                 adata,
                 n_topics=nPrinComps,
@@ -170,7 +180,7 @@ def multiModal_clustering(mdata, modalities=None, method="PCA", modal_weights=No
     mdata.obs["cluster_multi"] = parts[0].membership
 
     for mod, adata in zip(modalities, adatas):
-            mdata.mod[mod] = adata
+        mdata.mod[mod] = adata
 
 
 def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric="euclidean"):
