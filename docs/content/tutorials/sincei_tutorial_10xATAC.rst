@@ -200,7 +200,8 @@ provided with our files to see if our clustering separates celltypes in
 a biologically meaningful way.
 
 We can color our UMAP output from ``scClusterCells`` with the cell-type
-information based on FACS-sorting from sortChIC.
+information from `Persad et.
+al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide in `on figshare <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__
 
 .. code:: r
 
