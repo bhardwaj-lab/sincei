@@ -160,7 +160,7 @@ class GLMPCA:
             Returns True if the fitting procedure has been successful.
         """
         if isinstance(X, ad.AnnData):
-            X_fit = torch.Tensor(X.X.transpose().toarray())
+            X_fit = torch.Tensor(X.X.transpose().toarray() if hasattr(X.X, "toarray") else X.X.transpose())
         elif isinstance(X, np.ndarray):
             X_fit = torch.Tensor(X)
         elif isinstance(X, torch.Tensor):
