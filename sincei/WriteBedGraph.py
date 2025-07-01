@@ -30,7 +30,6 @@ def writeBedGraph_wrapper(args):
     the constrains from the multiprocessing module.
     The args var, contains as first element the 'self' value
     from the WriteBedGraph object
-
     """
     return WriteBedGraph.writeBedGraph_worker(*args)
 
@@ -50,7 +49,6 @@ class WriteBedGraph(cr.CountReadsPerBin):
 
     Examples
     --------
-
     Given the following distribution of reads that cover 200 on
     a chromosome named '3R'::
 
@@ -93,8 +91,6 @@ class WriteBedGraph(cr.CountReadsPerBin):
     ['3R\t0\t100\t0\n', '3R\t100\t200\t1.5\n']
     >>> f.close()
     >>> outFile.close()
-
-
     """
 
     def run(
@@ -121,11 +117,8 @@ class WriteBedGraph(cr.CountReadsPerBin):
             for each bam file at each position into a single value.
         func_args : dict
             dict of arguments to pass to `func`. E.g. {'scaleFactor':1.0}
-
         out_file_prefix : str
             name of the file to save the resulting data.
-
-
         """
         # self.__dict__["smoothLength"] = smoothLength
         getStats = len(self.mappedList) < len(self.bamFilesList)
@@ -298,7 +291,6 @@ class WriteBedGraph(cr.CountReadsPerBin):
             previous_value = None
             line_string = "{}\t{}\t{}\t{:g}\n"
             cl_idx = cluster_info.index[pd.Series(cluster_info.cluster == cl)].tolist()
-            #            nCells = len(cl_idx)
 
             for tileIndex in range(coverage.shape[0]):
                 ## smoothing disabled for now

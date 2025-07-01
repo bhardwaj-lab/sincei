@@ -22,7 +22,6 @@ def getStats_worker(arglist):
     ----------
     bamfiles : list
         List containing the names of indexed bam files. E.g. ['file1.bam', 'file2.bam']
-
     binSize : int
         Length of the window/bin. This value is overruled by ``bedFile`` if present.
     barcodes : list
@@ -64,7 +63,7 @@ def getStats_worker(arglist):
         prev_pos = set()
         lpos = None
         ## initiate a dict with all values to keep per read
-        info_list = []  # dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
+        info_list = []
 
         for read in fh.fetch(chromUse, start, end):
             ## general filtering

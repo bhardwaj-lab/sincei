@@ -186,10 +186,8 @@ def main(args=None):
     except IndexError:  # not enough genes/regions
         sys.stderr.write("\n Error: Too few regions in the input file to perform QC \n")
         exit()
-    # pool = multiprocessing.Pool(args.numberOfProcessors)
 
-    # func=partial(gini, X=adata.X)
-    # gini_list = pool.map(func, range(adata.shape[0]) )
+    # 2. sincei metrics
     gini_list = [gini(i, adata.X) for i in range(adata.shape[0])]
     adata.obs["gini_coefficient"] = gini_list
 

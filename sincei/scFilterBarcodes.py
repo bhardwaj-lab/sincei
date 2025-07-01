@@ -200,7 +200,6 @@ def main(args=None):
         verbose=args.verbose,
     )
     ## res, should be a list of sets
-    # final_set = list(set().union(*res))
     df = pd.DataFrame.from_dict(count_occurrences(res), orient="index", columns=["count"]).reset_index()
     df.columns = ["barcode", "count"]
     df["selected"] = True

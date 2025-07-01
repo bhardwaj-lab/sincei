@@ -215,8 +215,8 @@ def main(args=None):
     # save if asked
     if args.outFileTrainedModel:
         model_object.lsi_model.save(args.outFileTrainedModel)
-    #    if args.outGraph:
+    # if args.outGraph:
     # 'The output file for the Graph object (lgl format) which can be used for further clustering/integration.'
-    #        graph.write_lgl(args.outGraph)
+    #   graph.write_lgl(args.outGraph)
 
     return 0

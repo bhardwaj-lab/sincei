@@ -10,26 +10,24 @@ from sklearn.preprocessing import binarize
 
 class TOPICMODEL:
     r"""
-    Computes LSA or LDA for a given matrix and returns the cell-topic matrix
+    Computes LSA or LDA for a given matrix and returns the cell-topic matrix.
 
     Parameters
     ----------
-    mat : scipy.sparse.csr_matrix
-        Sparse matrix of shape (cells, regions)
-
-    cells : list
-        List of Cell IDs (corresponding to the input matrix rows)
-
-    regions : list
-        List of Regions (corresponding to the input matrix columns)
-
+    adata : AnnData
+        AnnData object containing the data matrix in adata.X, with cells in adata.obs_names and regions in adata.var_names.
     n_topics : int
-        Number of Topics / Principal Components
-
+        Number of Topics / Principal Components for modeling.
+    binarize : bool, optional
+        If True, the input matrix will be binarized (default is False). Recommended for LDA.
     smart_code : str
         SMART (System for the Mechanical Analysis and Retrieval of Text) code for weighting of input matrix for TFIDF.
         Only valid for the LSA model. The default ("lfu") corresponds to "log"TF * IDF, and "pivoted unique" normalization of document length. For more information, see: https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
-
+    n_passes : int, optional
+        Number of passes for the LDA model. Default is 1.
+    n_workers : int, optional
+        Number of workers for the LDA model. Default is 1.
+    
     Returns
     -------
     An object of class TOPICMODEL.
@@ -63,13 +61,6 @@ class TOPICMODEL:
     def runLSA(self):
         r"""
         Computes LSA for a given matrix and returns the updated object
-
-        Returns
-        -------
-        corpus_tfidf : gensim corpus
-            TFIDF normalized corpus
-        corpus_lsi : gensim corpus
-            LSA corpus
         """
 
         # LSA
@@ -90,11 +81,6 @@ class TOPICMODEL:
     def runLDA(self):
         r"""
         Computes LDA model for a given matrix and returns the updated object
-
-        Returns
-        -------
-        cell_topic : pandas dataframe
-            Cell-topic matrix
         """
 
         self.lda_model = models.LdaMulticore(

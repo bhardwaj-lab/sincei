@@ -67,7 +67,6 @@ def countReadsInRegions_wrapper(args):
     the constrains from the multiprocessing module.
     The args var, contains as first element the 'self' value
     from the countReadsPerBin object
-
     """
     return CountReadsPerBin.count_reads_in_region(*args)
 
@@ -85,7 +84,6 @@ class CountReadsPerBin(object):
     ----------
     bamFilesList : list
         List containing the names of indexed bam files. E.g. ['file1.bam', 'file2.bam']
-
     binLength : int
         Length of the window/bin. This value is overruled by ``bedFile`` if present.
     barcodes : list
@@ -95,25 +93,18 @@ class CountReadsPerBin(object):
         with a window/bin length equal to ``binLength``. This value is overruled
         by ``stepSize`` in case such value is present and by ``bedFile`` in which
         case the number of samples and bins are defined in the bed file
-
     numberOfProcessors : int
         Number of processors to use. Default is 4
-
     verbose : bool
         Output messages. Default: False
-
     region : str
         Region to limit the computation in the form chrom:start:end.
-
     bedFile : list of file_handles.
         Each file handle corresponds to a bed file containing the regions for which to compute the coverage. This option
         overrules ``binLength``, ``numberOfSamples`` and ``stepSize``.
-
     blackListFileName : str
         A string containing a BED file with blacklist regions.
-
     extendReads : bool, int
-
         Whether coverage should be computed for the extended read length (i.e. the region covered
         by the two mates or the regions expected to be covered by single-reads).
         If the value is 'int', then then this is interpreted as the fragment length to extend reads
@@ -122,79 +113,57 @@ class CountReadsPerBin(object):
         approximated by the fragment lengths computed when preparing the library for sequencing. If the value
         is of the variable is true and not value is given, the fragment size is sampled from the library but
         only if the library is paired-end. Default: False
-
-
     minMappingQuality : int
         Reads of a mapping quality less than the give value are not considered. Default: None
-
     duplicateFilter : str
         Type of duplicate filter to use (same start, end position, umi and barcodes. If paired-end, same start-end for mates) are
         to be excluded. Default: None
-
     chrToSkip: list
         List with names of chromosomes that do not want to be included in the coverage computation.
         This is useful to remove unwanted chromosomes (e.g. 'random' or 'Het').
-
     stepSize : int
         the positions for which the coverage is computed are defined as follows:
         ``range(start, end, stepSize)``. Thus, a stepSize of 1, will compute
         the coverage at each base pair. If the stepSize is equal to the
         binLength then the coverage is computed for consecutive bins. If seepSize is
         smaller than the binLength, then teh bins will overlap.
-
     center_read : bool
         Determines if reads should be centered with respect to the fragment length.
-
     samFlag_include : int
         Extracts only those reads having the SAM flag. For example, to get only
         reads that are the first mates a samFlag of 64 could be used. Similarly, the
         samFlag_include can be used to select only reads mapping on the reverse strand
         or to get only properly paired reads.
-
     samFlag_exclude : int
         Removes reads that match the SAM flag. For example to get all reads
         that map to the forward strand a samFlag_exlude 16 should be used. Which
         translates into exclude all reads that map to the reverse strand.
-
     zerosToNans : bool
         If true, zero values encountered are transformed to Nans. Default false.
-
     skipZeroOverZero : bool
         If true, skip bins where all input BAM files have no coverage (only applicable to bamCompare).
-
     minFragmentLength : int
         If greater than 0, fragments below this size are excluded.
-
     maxFragmentLength : int
         If greater than 0, fragments above this size are excluded.
-
     minAlignedFraction : float
         fragments where less than the given fraction of bases align are excluded.
-
     motifFilter : list
         Only alignments with reads containing the given motif at 5'-end and genome 5'-end are counted.
-
     GCcontentFilter : list
         Only alignments with given min and max GC content are counted.
-
     genome2bit : str
         2 bit file for the genome (if motifFilter is specified)
-
     out_file_for_raw_data : str
         File name to save the raw counts computed
-
     statsList : list
         For each BAM file in bamFilesList, the associated per-chromosome statistics returned by openBam
-
     mappedList : list
         For each BAM file in bamFilesList, the number of mapped reads in the file.
-
     bed_and_bin : boolean
         If true AND a bedFile is given, compute coverage of each bin of the given size in each region of bedFile
-
     sumCoveragePerBin : boolean
         If true return cumulative coverage per bin, instead of total read counts (for plotFingerPrint)
-
     genomeChunkSize : int
         If not None, the length of the genome used for multiprocessing.
 
@@ -205,10 +174,8 @@ class CountReadsPerBin(object):
         Each row correspond to each bin/bed region and each column correspond to each of
         the bamFiles.
 
-
     Examples
     --------
-
     The test data contains reads for 200 bp.
 
     >>> test = Tester()
@@ -552,7 +519,6 @@ class CountReadsPerBin(object):
             The result is a numpy array that as rows each bin
             and as columns each bam file.
 
-
         Examples
         --------
         Initialize some useful values
@@ -621,12 +587,6 @@ class CountReadsPerBin(object):
                         continue
                     transcriptsToConsider.append([(i, i + self.binLength)])
 
-        #        if self.save_data:
-        #            _file = open(deeptools.utilities.getTempFileName(suffix='.bed'), 'w+t')
-        #            _file_name = _file.name
-        #        else:
-        #            _file_name = ''
-
         # array to keep the read counts for the regions
         subnum_reads_per_bin = []
         for trans in transcriptsToConsider:
@@ -661,8 +621,7 @@ class CountReadsPerBin(object):
                     )
         else:
             subnum_reads_per_bin = np.concatenate(subnum_reads_per_bin).transpose()
-        ## convert the output to a sparse matrix
-        # subnum_reads_per_bin = sc.sparse.csr_matrix(subnum_reads_per_bin)
+
         ## prepare list of regions
         regionList = []
         idx = 0
@@ -687,7 +646,6 @@ class CountReadsPerBin(object):
                             break
                         name = "{}_{}_{}::{}".format(chrom, startPos, min(startPos + exon[2], exon[1]), bedname)
                         regionList.append(name)
-                        # _file.write(name+"\n")
                         idx += 1
 
         # save region data as text (if the mtx file is asked)
@@ -763,7 +721,7 @@ class CountReadsPerBin(object):
                 nbins += (reg[1] - reg[0]) // reg[2]
                 if (reg[1] - reg[0]) % reg[2] > 0:
                     nbins += 1
-        # coverages = np.zeros(nbins, dtype='float64')
+
         ## instead of an array, the coverages object is a dict with keys = barcodes, values = np arrays
         coverages = {}
         if self.groupTag and self.groupLabels:  # multi-sample BAM input, use the reconstructed labels
@@ -924,8 +882,7 @@ class CountReadsPerBin(object):
                     fragmentLength = fragmentEnd - fragmentStart
                     if fragmentLength == 0:
                         continue
-                    # skip reads that are not in the region being
-                    # evaluated.
+                    # skip reads that are not in the region being evaluated.
                     if fragmentEnd <= reg[0] or fragmentStart >= reg[1]:
                         continue
 
@@ -1077,10 +1034,6 @@ class CountReadsPerBin(object):
         When reads are extended the cigar information is
         skipped.
 
-        Parameters
-        ----------
-        read: pysam object.
-
         The following values are defined (for forward reads)::
 
 
@@ -1111,13 +1064,13 @@ class CountReadsPerBin(object):
         ----------
         read : pysam read object
 
-
         Returns
         -------
         list of tuples
             [(fragment start, fragment end)]
 
-
+        Examples
+        --------
         >>> test = Tester()
         >>> c = CountReadsPerBin([], 1, 1, 200, extendReads=True)
         >>> c.defaultFragmentLength=100
@@ -1206,7 +1159,6 @@ class CountReadsPerBin(object):
 
         Examples
         --------
-
         >>> c = CountReadsPerBin([], 1, 1, 1, 0)
         >>> c.getSmoothRange(5, 1, 3, 10)
         (4, 7)

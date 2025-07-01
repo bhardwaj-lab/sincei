@@ -224,7 +224,6 @@ class Beta(ExponentialFamily):
 
     def log_partition(self, theta: torch.Tensor):
         numerator = torch.sum(torch.lgamma(self.natural_parametrization(theta)), axis=0)
-        # numerator = torch.sum(numerator, axis=0)
         denominator = torch.lgamma(self.family_params["nu"])
         return numerator - denominator
 

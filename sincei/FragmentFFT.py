@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-## fast fouriour transform
+## Fast Fourier Transform
 def ffttable(selected):
     r"""Computes the FFT of the fragment length distribution
 
@@ -25,7 +25,6 @@ def ffttable(selected):
 
     Examples
     --------
-
     >>> test = Tester()
     >>> c = CountReadsPerBin([test.bamFile1, test.bamFile2], 50, 4)
     >>> num_reads_per_bin, regionList = c.run()
@@ -57,7 +56,6 @@ def fragment_distribution(fragment_len_dict, length_plot):
     ----------
     fragment_len_dict : dict
         Dictionary containing the fragment length for each barcode.
-
     length_plot : str
         File name to save the plot.
 
@@ -69,7 +67,6 @@ def fragment_distribution(fragment_len_dict, length_plot):
 
     Examples
     --------
-
     >>> test = Tester()
     >>> fragment_len_dict = {'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
     ...                      'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]}
@@ -115,7 +112,6 @@ def fftplot(outdict, plot):
     ----------
     outdict : dict
         Dictionary containing the fragment distribution for each barcode
-
     plot : str
         File name to save the plot
 
@@ -126,7 +122,6 @@ def fftplot(outdict, plot):
 
     Examples
     --------
-
     >>> test = Tester()
     >>> d = test.get_fragment_distribution()
     >>> fftplot(d, 'test.png')
@@ -149,17 +144,11 @@ def fftplot(outdict, plot):
         mononuc_periodicity = np.mean(d2.loc[[int(x) in p1 for x in 1 / d2.freq], "value"])
         dinuc_periodicity = np.mean(d2.loc[[int(x) in p2 for x in 1 / d2.freq], "value"])
 
-        # if int(mean_value) in p1:
-        #    col='red'
-        # elif int(mean_value) in p2:
-        #    col='blue'
-        # else:
         col = "grey"
         ax.plot(1 / d2.freq, 10 * np.log10(d2.value + 1), color=col, alpha=0.2)
 
         periodicity[barcode] = [mononuc_periodicity, dinuc_periodicity]
 
-    # ax.axvline(max_y_pos,color = 'r',linestyle= '--')
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     ax.set_xlim(0, 400)

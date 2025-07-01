@@ -140,7 +140,6 @@ def main(args=None):
     all of same length or from genomic regions from the BED file
 
     2. save data for further plotting
-
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
     if not args.verbose:

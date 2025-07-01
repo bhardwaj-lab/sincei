@@ -121,16 +121,12 @@ def cluster_topic(
     ----------
     cell_topic : pandas dataframe
         cell_topic dataframe with cell names as index and topic proportions as columns.
-
     distance_metric : str
         Distance metric to use. Default: 'cosine'
-
     nk : int
         Number of nearest neighbors to use. Default: 30
-
     resolution : float
         Resolution parameter for modularity algorithm. Default: 1.0
-
     connectivity_graph : bool
         Whether to use a connectivity graph or a distance graph. Default: True
 
@@ -138,7 +134,6 @@ def cluster_topic(
     -------
     umap_df : pandas dataframe
         UMAP embedding with cluster labels.
-
     G : igraph object
         Graph object.
     """

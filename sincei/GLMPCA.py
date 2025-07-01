@@ -237,7 +237,6 @@ class GLMPCA:
         ----------
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
-
         X : torch.Tensor
             Dataset with cells in the rows and features in the columns.
 
@@ -319,7 +318,6 @@ class GLMPCA:
         ----------
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
-
         X : torch.Tensor
             Dataset with cells in the rows and features in the columns.
 
@@ -346,13 +344,11 @@ class GLMPCA:
             _, _, v = torch.linalg.svd(parameters[random_idx] - torch.mean(parameters[random_idx], axis=0))
             loadings = mnn.Parameter(
                 data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
-            )  # .to(
-            # self.device
-            # )
+            )
         elif self.init == "random":
             loadings = mnn.Parameter(
                 manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
-            )  # .to(self.device)
+            )
 
         # Initialize intercept
         if self.exponential_family.family_name in ["poisson"]:
@@ -361,14 +357,12 @@ class GLMPCA:
                 manifold=mnn.Euclidean(parameters.shape[1]),
                 requires_grad=True,
             )
-            # ).to(self.device)
         else:
             intercept = mnn.Parameter(
                 torch.mean(parameters[random_idx], axis=0),
                 manifold=mnn.Euclidean(parameters.shape[1]),
                 requires_grad=True,
             )
-            # ).to(self.device)
 
         # Load ExponentialFamily params to GPU (if they exist)
         self.exponential_family.load_family_params_to_gpu(self.device)
@@ -391,7 +385,7 @@ class GLMPCA:
         self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
     ):
         n = batch_data.shape[0]
-        intercept_term = intercept.unsqueeze(0).repeat(n, 1)  # .to(self.device)
+        intercept_term = intercept.unsqueeze(0).repeat(n, 1)
 
         projected_parameters = batch_parameters - intercept_term
         projected_parameters = projected_parameters.matmul(loadings).matmul(loadings.T)
