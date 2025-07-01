@@ -46,15 +46,6 @@ def get_args():
     general = parser.add_argument_group("General Options")
 
     general.add_argument(
-        "--input",
-        "-i",
-        metavar="H5AD",
-        help="Input files in .h5ad format",
-        nargs="+",
-        required=True,
-    )
-
-    general.add_argument(
         "--modalities",
         "-md",
         metavar="modalities",
