@@ -97,14 +97,34 @@ def get_args():
     return parser
 
 
-## get hamming dist between 2 sequences
+##
 def ham_dist(s1, s2):
+    r"""get hamming dist between 2 sequences
+
+    Parameters
+    ----------
+    s1, s2 : string, sequences
+
+    Returns
+    ----------
+    integer hamming distance
+    """
     if len(s1) != len(s2):
         raise ValueError("Undefined")
     return sum(ch1 != ch2 for ch1, ch2 in zip(s1, s2))
 
 
 def getFiltered_worker(arglist):
+    r"""get a set of filtered barcodes based on the provided criteria
+
+    Parameters
+    ----------
+    arglist : list of filtering arguments
+
+    Returns
+    ----------
+    BCset: a set of barcodes
+    """
     chrom, start, end, args = arglist
     # Fix the bounds
     if end <= start:
@@ -163,8 +183,18 @@ def getFiltered_worker(arglist):
     return BCset
 
 
-# count occurances of elements (barcodes) in a list of sets
+#
 def count_occurrences(res):
+    r"""count occurances of elements (barcodes) in a list of sets
+
+    Parameters
+    ----------
+    res : list of sets of barcodes
+
+    Returns
+    ----------
+    counts
+    """
     barcodes = set.union(*res)
     counts = {barcode: 0 for barcode in barcodes}
     for set_ in res:
