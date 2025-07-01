@@ -2,14 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import os
 import re
 import argparse
-import numpy as np
 import pandas as pd
-from scipy import sparse, io
-from itertools import compress
-import copy
 import scanpy as sc
 
 # logs
@@ -19,9 +14,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei import ParserCommon
 from sincei.Utilities import gini
 
@@ -194,10 +186,8 @@ def main(args=None):
     except IndexError:  # not enough genes/regions
         sys.stderr.write("\n Error: Too few regions in the input file to perform QC \n")
         exit()
-    # pool = multiprocessing.Pool(args.numberOfProcessors)
 
-    # func=partial(gini, X=adata.X)
-    # gini_list = pool.map(func, range(adata.shape[0]) )
+    # 2. sincei metrics
     gini_list = [gini(i, adata.X) for i in range(adata.shape[0])]
     adata.obs["gini_coefficient"] = gini_list
 

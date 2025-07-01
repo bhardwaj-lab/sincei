@@ -1,15 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import copy
 import argparse
 import numpy as np
 import pandas as pd
-import torch
-from scipy import sparse, io
-from sklearn.preprocessing import binarize
 
 # logs
 import warnings
@@ -27,15 +21,14 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
 
 # single-cell stuff
-import anndata
+import anndata as ad
 import scanpy as sc
 
 
-## own Functions
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
 
-from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # , GLMPCA
+from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # GLMPCA
 
 
 def parseArguments():
@@ -142,13 +135,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
-    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
-    cells = copy.deepcopy(adata.obs_names.to_list())
-    regions = copy.deepcopy(adata.var_names.to_list())
-
-    if args.binarize:
-        mtx = binarize(mtx, copy=True)
+    adata = sc.read_h5ad(args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -159,9 +146,8 @@ def main(args=None):
     elif args.method == "LSA":
         ## LSA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             smart_code="lfu",
         )
@@ -174,9 +160,8 @@ def main(args=None):
     elif args.method == "LDA":
         ## LDA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             n_passes=2,
             n_workers=4,
@@ -191,15 +176,12 @@ def main(args=None):
         # import glmPCA (not imported on top due to special optional import of mctorch)
         from sincei.GLMPCA import GLMPCA
 
-        # convert mtx to torch tensor
-        mtx = torch.tensor(mtx.todense())  # feature*cell tensor
-
         ## glmPCA using mctorch
         model_object = GLMPCA(
             n_pc=args.nPrinComps,
             family=args.glmPCAfamily,
         )
-        model_object.fit(mtx)
+        model_object.fit(adata)
         cell_pcs = model_object.saturated_loadings_.detach().numpy()
 
         ## update the anndata object
@@ -211,7 +193,7 @@ def main(args=None):
     sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
-    adata.write_h5ad(args.outFile)  # , write_obsm_varm=True)
+    adata.write_h5ad(args.outFile)
 
     if args.outFileUMAP:
         ## plot UMAP
@@ -233,8 +215,8 @@ def main(args=None):
     # save if asked
     if args.outFileTrainedModel:
         model_object.lsi_model.save(args.outFileTrainedModel)
-    #    if args.outGraph:
+    # if args.outGraph:
     # 'The output file for the Graph object (lgl format) which can be used for further clustering/integration.'
-    #        graph.write_lgl(args.outGraph)
+    #   graph.write_lgl(args.outGraph)
 
     return 0

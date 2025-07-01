@@ -17,6 +17,31 @@ The raw fastq files were downloaded from
 `GEO <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE200046>`__
 and processed using the standard 10x genomics `cellranger-arc
 workflow <https://support.10xgenomics.com/single-cell-multiome-atac-gex/software/pipelines/latest/algorithms/overview>`__.
+
+.. code:: bash
+
+    # Download using sra-tools
+    prefetch --force all --max-size 10t -O GSM6005302_CD34_Rep1_Multiome_RNA_Homo_sapiens_RNA-Seq SRR18590099 SRR18590100 && \
+    cd GSM6005302_CD34_Rep1_Multiome_RNA_Homo_sapiens_RNA-Seq && vdb-validate SRR18590099 SRR18590100 && \
+    fasterq-dump -m 10000MB -b 100MB -c 1000MB --temp /<path>/<to>/tempdir \
+    -e 20 -p --split-files --include-technical -O . SRR18590099 SRR18590100
+
+    # Run cellranger-arc
+    for rep in rep1 rep2
+    do cellranger-arc count --disable-ui --reference \
+      /<path>/<to>/cellranger_indicies/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/ \
+      --localcores 20 --localmem 200 --id output_${rep} --libraries cellranger_samplesheet_${rep}.csv
+    done
+
+Below is the structure of samplesheet that was used for cellranger:
+
+.. code:: bash
+
+    fastqs,sample,library_type
+    /path/to/10x_multiome/fastq,CD34_Rep1_Multiome_ATAC,Chromatin Accessibility
+    /path/to/10x_multiome/fastq,CD34_Rep1_Multiome_RNA,Gene Expression
+
+
 Below is the structure of the output directory from the workflow:
 
 .. code:: bash
@@ -46,13 +71,13 @@ We will use the ``gex_possorted_bam.bam`` for gene-expression data and
 ``atac_possorted_bam.bam`` for chromatin accessibility analysis using
 sincei. These files can also be produced as part of the
 ``cellranger count`` workflow for scRNA-seq or scATAC-seq data alone.
-For convenience, we provide a subset of this data (only chromosome 2)
-`here`
+For convenience, we provide a subset of this data (only a small chunk of chromosome 2)
+`here <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__
 
 .. code:: bash
 
-   mkdir 10x_multiome && wget -O 10x_multiome/10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/41303289
-   tar -xvzf 10x_multiome/10x_multiome_testdata.tar.gz ## releases 7 files
+   mkdir 10x_multiome && wget -O 10x_multiome/10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/55726430
+   tar -xvzf 10x_multiome/10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files and 2 metadata files.
 
 (optional) pre-filtering of barcodes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -100,7 +125,7 @@ Please follow :doc:`this tutorial <sincei_tutorial_10xATAC>` for further analysi
 3. scRNA-seq analysis
 ---------------------
 
-Please follow :doc: `this tutorial <sincei_tutorial_10xRNA>` for further analysis of scRNA-seq samples from the above data.
+Please follow :doc:`this tutorial <sincei_tutorial_10xRNA>` for further analysis of scRNA-seq samples from the above data.
 
 Notes
 ------------

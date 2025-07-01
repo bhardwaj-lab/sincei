@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import sys
 import argparse
 import numpy as np
 from scipy import sparse, io
-import re
 import pandas as pd
 import anndata as ad
 from deeptools import parserCommon
@@ -17,10 +15,6 @@ import logging
 
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
-
-# own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 
 from sincei import ReadCounter as countR
 from sincei import ParserCommon
@@ -146,7 +140,6 @@ def main(args=None):
     all of same length or from genomic regions from the BED file
 
     2. save data for further plotting
-
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
     if not args.verbose:

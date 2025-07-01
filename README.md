@@ -51,7 +51,7 @@ scBulkCoverage -b file1.bam -g groupinfo.txt -o coverage
 
 ## Citation
 
-Please cite sincei as: "Bhardwaj V. , Mourragui, S. (2024) User-friendly exploration of epigenomic data in single cells using sincei. biorXiv. doi: 10.1101/2024.07.27.605424"
+Please cite sincei as: "Bhardwaj V. , Mourragui, S. (2024) User-friendly exploration of epigenomic data in single cells using sincei. biorXiv. [doi: 10.1101/2024.07.27.605424](https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1.full)"
 
 ## Questions and discussions
 

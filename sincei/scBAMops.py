@@ -19,10 +19,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-# own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
-
 from sincei import ParserCommon
 from sincei.Utilities import checkMotifs, checkGCcontent, getDupFilterTuple
 from sincei._version import __version__
@@ -51,6 +47,7 @@ def parseArguments():
         usage="Example usage: scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt",
         add_help=False,
     )
+
     return parser
 
 

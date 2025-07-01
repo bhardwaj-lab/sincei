@@ -1,3 +1,5 @@
+anndata
+mudata
 scanpy
 umap-learn
 pandas

@@ -3,12 +3,9 @@
 
 import argparse
 import sys
-import os
 import itertools
 import numpy as np
 import pandas as pd
-from deeptools.getScaleFactor import get_scale_factor
-from deeptools.bamHandler import openBam
 
 # logs
 import warnings
@@ -16,10 +13,6 @@ import logging
 
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
-
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 
 from sincei import ParserCommon
 from sincei import WriteBedGraph

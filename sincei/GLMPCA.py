@@ -1,15 +1,9 @@
 import numpy as np
-import pandas as pd
-from copy import deepcopy
-from joblib import Parallel, delayed
-from pickle import dump, load
-import torch, os
+import torch
 import torch.optim
-from torch.utils.data import Dataset, TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
-from scipy.stats import beta as beta_dst
-from scipy.stats import lognorm
-from scipy.stats import gamma as gamma_dst
+import anndata as ad
 
 try:
     import mctorch.nn as mnn
@@ -157,7 +151,7 @@ class GLMPCA:
 
         Parameters
         ----------
-        X : torch.Tensor or np.array
+        X : torch.Tensor, np.array or anndata object
             Dataset with cells in the rows and features in the columns.
 
         Returns
@@ -165,8 +159,9 @@ class GLMPCA:
         bool
             Returns True if the fitting procedure has been successful.
         """
-
-        if isinstance(X, np.ndarray):
+        if isinstance(X, ad.AnnData):
+            X_fit = torch.Tensor(X.X.transpose().toarray() if hasattr(X.X, "toarray") else X.X.transpose())
+        elif isinstance(X, np.ndarray):
             X_fit = torch.Tensor(X)
         elif isinstance(X, torch.Tensor):
             X_fit = X.clone()
@@ -242,7 +237,6 @@ class GLMPCA:
         ----------
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
-
         X : torch.Tensor
             Dataset with cells in the rows and features in the columns.
 
@@ -324,7 +318,6 @@ class GLMPCA:
         ----------
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
-
         X : torch.Tensor
             Dataset with cells in the rows and features in the columns.
 
@@ -349,21 +342,25 @@ class GLMPCA:
         random_idx = np.random.choice(np.arange(parameters.shape[0]), replace=False, size=random_batch_size)
         if self.init == "spectral":
             _, _, v = torch.linalg.svd(parameters[random_idx] - torch.mean(parameters[random_idx], axis=0))
-            loadings = mnn.Parameter(data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc)).to(
-                self.device
+            loadings = mnn.Parameter(
+                data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
             )
         elif self.init == "random":
-            loadings = mnn.Parameter(manifold=mnn.Stiefel(parameters.shape[1], self.n_pc)).to(self.device)
+            loadings = mnn.Parameter(manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True)
 
         # Initialize intercept
         if self.exponential_family.family_name in ["poisson"]:
             intercept = mnn.Parameter(
-                torch.median(parameters[random_idx], axis=0).values, manifold=mnn.Euclidean(parameters.shape[1])
-            ).to(self.device)
+                torch.median(parameters[random_idx], axis=0).values,
+                manifold=mnn.Euclidean(parameters.shape[1]),
+                requires_grad=True,
+            )
         else:
             intercept = mnn.Parameter(
-                torch.mean(parameters[random_idx], axis=0), manifold=mnn.Euclidean(parameters.shape[1])
-            ).to(self.device)
+                torch.mean(parameters[random_idx], axis=0),
+                manifold=mnn.Euclidean(parameters.shape[1]),
+                requires_grad=True,
+            )
 
         # Load ExponentialFamily params to GPU (if they exist)
         self.exponential_family.load_family_params_to_gpu(self.device)
@@ -386,7 +383,7 @@ class GLMPCA:
         self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
     ):
         n = batch_data.shape[0]
-        intercept_term = intercept.unsqueeze(0).repeat(n, 1).to(self.device)
+        intercept_term = intercept.unsqueeze(0).repeat(n, 1)
 
         projected_parameters = batch_parameters - intercept_term
         projected_parameters = projected_parameters.matmul(loadings).matmul(loadings.T)
