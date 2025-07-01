@@ -629,14 +629,14 @@ def validateInputs(args, process_barcodes=True):
     if args.groupTag:
         # in case of --groupTag, use args.labels as groups
         if len(args.bamfiles) > 1:
-            print("Only a single BAM file is allowed when --groupTag is specified.")
+            sys.stderr.write("Only a single BAM file is allowed when --groupTag is specified.")
             exit(0)
         if not args.labels:
-            print("Please indicate the sample groups to be processed from the BAM file with --labels")
+            sys.stderr.write("Please indicate the sample groups to be processed from the BAM file with --labels")
             exit(0)
     else:
         if args.labels and len(args.bamfiles) != len(args.labels):
-            print(
+            sys.stderr.write(
                 "The number of labels does not match the number of bam files. "
                 "This is only allowed if a single BAM file is provided and --groupTag is specified."
             )
@@ -647,7 +647,7 @@ def validateInputs(args, process_barcodes=True):
     ## Motif and GC filter
     if args.motifFilter:
         if not args.genome2bit:
-            print("MotifFilter asked but genome (2bit) file not provided.")
+            sys.stderr.write("MotifFilter asked but genome (2bit) file not provided.")
             sys.exit(1)
         else:
             args.motifFilter = [x.strip(" ").split(",") for x in args.motifFilter]
