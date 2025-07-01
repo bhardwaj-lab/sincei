@@ -27,7 +27,7 @@ class TOPICMODEL:
         Number of passes for the LDA model. Default is 1.
     n_workers : int, optional
         Number of workers for the LDA model. Default is 1.
-    
+
     Returns
     -------
     An object of class TOPICMODEL.

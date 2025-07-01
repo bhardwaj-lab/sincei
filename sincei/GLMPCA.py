@@ -346,9 +346,7 @@ class GLMPCA:
                 data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
             )
         elif self.init == "random":
-            loadings = mnn.Parameter(
-                manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
-            )
+            loadings = mnn.Parameter(manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True)
 
         # Initialize intercept
         if self.exponential_family.family_name in ["poisson"]:
