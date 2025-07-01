@@ -185,7 +185,7 @@ def getFiltered_worker(arglist):
 
 #
 def count_occurrences(res):
-    r"""count occurances of elements (barcodes) in a list of sets
+    r"""count occurrences of elements (barcodes) in a list of sets
 
     Parameters
     ----------
