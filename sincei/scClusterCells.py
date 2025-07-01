@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 
 # logs
+import sys
 import warnings
 import logging
-
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -135,7 +135,11 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_h5ad(args.input)
+    try:
+        adata = sc.read_h5ad(args.input)
+    except:
+        sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
+        exit()
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
