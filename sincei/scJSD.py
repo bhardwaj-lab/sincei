@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import time
-import sys
 import argparse
 import numpy as np
 import pandas as pd
 from deeptools.plotFingerprint import getSyntheticJSD
-from deeptools import parserCommon
 
 from matplotlib.pyplot import plot
 import matplotlib
@@ -23,9 +19,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
-## own functions
 from sincei import ReadCounter as countR
 from sincei import ParserCommon
 

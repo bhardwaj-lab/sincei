@@ -1,17 +1,16 @@
-import sys
 import os
 
-from deeptools import parserCommon, bamHandler, utilities
-from deeptools.mapReduce import mapReduce
+from deeptools import bamHandler, utilities
 from deeptoolsintervals import GTF
 
-import numpy as np
 import py2bit
-import pandas as pd
 
-## own functions
-scriptdir = os.path.join(os.path.abspath(os.pardir), "sincei")
-from sincei.Utilities import *
+from sincei.Utilities import (
+    checkMotifs,
+    checkGCcontent,
+    checkAlignedFraction,
+    getDupFilterTuple,
+)
 
 
 def getStats_worker(arglist):
@@ -23,7 +22,6 @@ def getStats_worker(arglist):
     ----------
     bamfiles : list
         List containing the names of indexed bam files. E.g. ['file1.bam', 'file2.bam']
-
     binSize : int
         Length of the window/bin. This value is overruled by ``bedFile`` if present.
     barcodes : list
@@ -65,7 +63,7 @@ def getStats_worker(arglist):
         prev_pos = set()
         lpos = None
         ## initiate a dict with all values to keep per read
-        info_list = []  # dict.fromkeys(['barcode', 'position', 'duplicate', 'GCcontent', 'strand'])
+        info_list = []
 
         for read in fh.fetch(chromUse, start, end):
             ## general filtering

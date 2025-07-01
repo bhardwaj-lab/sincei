@@ -1,15 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import copy
 import argparse
 import numpy as np
 import pandas as pd
-import torch
-from scipy import sparse, io
-from sklearn.preprocessing import binarize
 
 # logs
 import warnings
@@ -27,21 +21,18 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
 
 # single-cell stuff
-import anndata
+import anndata as ad
 import scanpy as sc
 
 
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
-
 from sincei import ParserCommon
 from sincei.TopicModels import TOPICMODEL
-from sincei.GLMPCA import GLMPCA, EXPONENTIAL_FAMILY_DICT
+
+from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # GLMPCA
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(opts=["loomfile", "outFile"], requiredOpts=["outFile"])
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
 
@@ -49,11 +40,11 @@ def parseArguments():
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimentionality reduction,
-        community detection and 2D projection (UMAP) of the cells. The result is an updated loom object, and (optionally) a plot file
+        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimensionality reduction,
+        community detection and 2D projection (UMAP) of the cells. The result is an updated h5ad object, and (optionally) a plot file
         and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
         """,
-        usage="Example usage: scClusterCells -i cellCounts.loom -o clustered.loom -op <umap_prefix>.png  > log.txt",
+        usage="Example usage: scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op <umap_prefix>.png  > log.txt",
         add_help=False,
     )
 
@@ -88,7 +79,7 @@ def get_args():
         type=str,
         choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
-        help="The dimentionality reduction method for clustering. (Default: %(default)s)",
+        help="The dimensionality reduction method for clustering. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -103,7 +94,7 @@ def get_args():
     general.add_argument(
         "--binarize",
         action="store_true",
-        help="Binarize the counts per region before dimentionality reduction (only for LSA/LDA)",
+        help="Binarize the counts per region before dimensionality reduction (only for LSA/LDA)",
     )
 
     general.add_argument(
@@ -111,7 +102,7 @@ def get_args():
         "-n",
         default=20,
         type=int,
-        help="Number of principle components to reduce the dimentionality to. "
+        help="Number of principle components to reduce the dimensionality to. "
         "Use higher number for samples with more expected heterogenity. (Default: %(default)s)",
     )
 
@@ -144,13 +135,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
-    mtx = sparse.csr_matrix(adata.X.copy().transpose())  # features x cells
-    cells = copy.deepcopy(adata.obs_names.to_list())
-    regions = copy.deepcopy(adata.var_names.to_list())
-
-    if args.binarize:
-        mtx = binarize(mtx, copy=True)
+    adata = sc.read_h5ad(args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -161,9 +146,8 @@ def main(args=None):
     elif args.method == "LSA":
         ## LSA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             smart_code="lfu",
         )
@@ -176,9 +160,8 @@ def main(args=None):
     elif args.method == "LDA":
         ## LDA using gensim
         model_object = TOPICMODEL(
-            mtx,
-            cells,
-            regions,
+            adata,
+            binarize=args.binarize,
             n_topics=args.nPrinComps,
             n_passes=2,
             n_workers=4,
@@ -190,15 +173,15 @@ def main(args=None):
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
 
     elif args.method == "glmPCA":
-        # convert mtx to torch tensor
-        mtx = torch.tensor(mtx.todense())  # feature*cell tensor
+        # import glmPCA (not imported on top due to special optional import of mctorch)
+        from sincei.GLMPCA import GLMPCA
 
         ## glmPCA using mctorch
         model_object = GLMPCA(
             n_pc=args.nPrinComps,
             family=args.glmPCAfamily,
         )
-        model_object.fit(mtx)
+        model_object.fit(adata)
         cell_pcs = model_object.saturated_loadings_.detach().numpy()
 
         ## update the anndata object
@@ -210,7 +193,7 @@ def main(args=None):
     sc.pl.paga(adata, plot=False, threshold=0.1)
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
-    adata.write_loom(args.outFile, write_obsm_varm=True)
+    adata.write_h5ad(args.outFile)
 
     if args.outFileUMAP:
         ## plot UMAP
@@ -232,8 +215,8 @@ def main(args=None):
     # save if asked
     if args.outFileTrainedModel:
         model_object.lsi_model.save(args.outFileTrainedModel)
-    #    if args.outGraph:
+    # if args.outGraph:
     # 'The output file for the Graph object (lgl format) which can be used for further clustering/integration.'
-    #        graph.write_lgl(args.outGraph)
+    #   graph.write_lgl(args.outGraph)
 
     return 0

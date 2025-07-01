@@ -2,6 +2,7 @@ from sincei.scCountReads import *
 from sincei import ReadCounter as countR
 from sincei.Utilities import *
 
+import os
 import pandas as pd
 import numpy as np
 import numpy.testing as nt

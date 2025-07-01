@@ -75,13 +75,10 @@ def checkGCcontent(read, lowFilter, highFilter, returnGC=False):
     ----------
     read : pysam.AlignedSegment
         A pysam AlignedSegment object
-
     lowFilter : float
         Minimum GC content
-
     highFilter : float
         Maximum GC content
-
     returnGC : bool
         If true, return the GC content of the read
 
@@ -92,7 +89,6 @@ def checkGCcontent(read, lowFilter, highFilter, returnGC=False):
 
     Examples
     --------
-
     >>> test = Tester()
     >>> read = test.bamFile1.fetch().next()
     >>> checkGCcontent(read, 0.3, 0.7)
@@ -145,7 +141,6 @@ def colorPicker(name):
 
     Examples
     --------
-
     >>> colorPicker('twentyfive')
     ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
 
@@ -222,25 +217,21 @@ def getDupFilterTuple(read, bc, filterArg):
     Parameters
     ----------
     read : pysam.AlignedSegment
-        A pysam.AlignedSegment object
-
+        A pysam.AlignedSegment object.
     bc : str
-        The barcode
-
+        The barcode.
     filter : str
         A string with the type of filter to use.
 
     Returns
     -------
     tuple
-
         A tuple with the information needed to filter duplicates.
         The tuple is composed of the barcode, the umi, the start and end positions
         and the chromosome name.
 
     Examples
     --------
-
     >>> test = Tester()
     >>> read = test.bamFile1.fetch().next()
     >>> getDupFilterTuple(read, 'ATCG', 'end_umi')
@@ -302,7 +293,6 @@ def gini(i, X):
 
     Examples
     --------
-
     >>> X = np.matrix([[1,2,3,4],[5,6,7,8],[9,10,11,12]])
     >>> gini(0, X)
     0.0
@@ -317,7 +307,10 @@ def gini(i, X):
     # from:
     # http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
     # All values are treated equally, arrays must be 1d:
-    array = X[i, :].A.flatten()  # get all bins from i'th cell
+    try:
+        array = X[i, :].toarray().flatten()  # get all bins from i'th cell
+    except AttributeError:
+        array = X[i, :].flatten()
     array = array[array.nonzero()]
 
     if array.shape[0] <= 1:

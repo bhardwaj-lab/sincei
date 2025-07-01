@@ -10,8 +10,6 @@ from deeptools.mapReduce import mapReduce
 from deeptoolsintervals import GTF
 import numpy as np
 import pandas as pd
-from collections import Counter
-from functools import reduce
 
 # plotting
 import matplotlib
@@ -28,9 +26,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei.Utilities import *
 from sincei import ParserCommon
 
@@ -102,14 +97,34 @@ def get_args():
     return parser
 
 
-## get hamming dist between 2 sequences
+##
 def ham_dist(s1, s2):
+    r"""get hamming dist between 2 sequences
+
+    Parameters
+    ----------
+    s1, s2 : string, sequences
+
+    Returns
+    ----------
+    integer hamming distance
+    """
     if len(s1) != len(s2):
         raise ValueError("Undefined")
     return sum(ch1 != ch2 for ch1, ch2 in zip(s1, s2))
 
 
 def getFiltered_worker(arglist):
+    r"""get a set of filtered barcodes based on the provided criteria
+
+    Parameters
+    ----------
+    arglist : list of filtering arguments
+
+    Returns
+    ----------
+    BCset: a set of barcodes
+    """
     chrom, start, end, args = arglist
     # Fix the bounds
     if end <= start:
@@ -168,8 +183,18 @@ def getFiltered_worker(arglist):
     return BCset
 
 
-# count occurances of elements (barcodes) in a list of sets
+#
 def count_occurrences(res):
+    r"""count occurrences of elements (barcodes) in a list of sets
+
+    Parameters
+    ----------
+    res : list of sets of barcodes
+
+    Returns
+    ----------
+    counts
+    """
     barcodes = set.union(*res)
     counts = {barcode: 0 for barcode in barcodes}
     for set_ in res:
@@ -205,7 +230,6 @@ def main(args=None):
         verbose=args.verbose,
     )
     ## res, should be a list of sets
-    # final_set = list(set().union(*res))
     df = pd.DataFrame.from_dict(count_occurrences(res), orient="index", columns=["count"]).reset_index()
     df.columns = ["barcode", "count"]
     df["selected"] = True
@@ -267,8 +291,6 @@ def main(args=None):
     else:
         of = open(args.outFile, "w")
 
-    # for x in final_set:
-    #    of.write(str(x) + "\n")
     df.to_csv(of, sep="\t")
 
     return 0

@@ -18,10 +18,8 @@ def get_gtf_adata_olaps(adata, gtf):
     dict
         Dictionary with overlaps for each gene in adata.
 
-
     Examples
     --------
-
     >>> test = Tester()
     >>> gtf = GTF(test.gtfFile)
     >>> adata = sc.read_10x_mtx(test.input_matrix_dir, var_names='gene_symbols', cache=True)
@@ -57,10 +55,8 @@ def get_bins_by_gene(dict, gene, firstBin=False):
     ----------
     dict : dict
         Dictionary of bins and genes.
-
     gene : str
         Gene name.
-
     firstBin : bool
         If true, return only the first bin of the gene.
 
@@ -71,7 +67,6 @@ def get_bins_by_gene(dict, gene, firstBin=False):
 
     Examples
     --------
-
     >>> dict = {'chr1_1': [('gene1', '+'), ('gene2', '-')], 'chr1_2': [('gene1', '+')]}
     >>> get_bins_by_gene(dict, 'gene1')
     ['chr1_1', 'chr1_2']

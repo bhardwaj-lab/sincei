@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import sys
 import argparse
 import numpy as np
 from scipy import sparse, io
-import re
 import pandas as pd
 import anndata as ad
 from deeptools import parserCommon
-from deeptools.utilities import smartLabels
 
 # logs
 import warnings
@@ -18,10 +15,6 @@ import logging
 
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
-
-# own functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 
 from sincei import ReadCounter as countR
 from sincei import ParserCommon
@@ -36,7 +29,7 @@ def parseArguments(args=None):
             ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
             The analysis can be performed for the entire genome by running the program in 'bins' mode.
             If you want to count the read coverage for specific regions only, use the ``features`` mode instead.
-            The standard output of ``scCountReads`` is a ".loom" file with counts, along with rowName (features) and colNames (cell barcodes).
+            The standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames (cell barcodes).
 
             A detailed sub-commands help is available by typing:
 
@@ -130,10 +123,10 @@ def get_args():
     optional.add_argument(
         "--outFileFormat",
         type=str,
-        default="loom",
-        choices=["loom", "mtx"],
+        default="h5ad",
+        choices=["h5ad", "mtx"],
         help="Output file format. Default is to write an anndata object of name "
-        "<prefix>.loom, which can either be opened in scanpy, or by downstream tools. "
+        "<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. "
         '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
         "<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
     )
@@ -147,7 +140,6 @@ def main(args=None):
     all of same length or from genomic regions from the BED file
 
     2. save data for further plotting
-
     """
     args, newlabels = ParserCommon.validateInputs(parseArguments().parse_args(args))
     if not args.verbose:
@@ -241,5 +233,5 @@ def main(args=None):
             index=rows,
         )
 
-        # export as loom
-        adata.write_loom(args.outFilePrefix + ".loom")
+        # export as h5ad
+        adata.write_h5ad(args.outFilePrefix + ".h5ad")

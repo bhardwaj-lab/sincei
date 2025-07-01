@@ -9,14 +9,33 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
     group = parser.add_argument_group("Input/Output options")
 
     ## inputs
-    if "loomfile" in opts:
+    if "h5adfile" in opts:
         group.add_argument(
             "--input",
             "-i",
-            metavar="LOOM",
-            help="Input file in .loom format",
+            metavar="H5AD",
+            help="Input file in .h5ad format",
             required=True,
         )
+    elif "h5adfiles" in opts:
+        group.add_argument(
+            "--input",
+            "-i",
+            metavar="H5AD",
+            help="List of .h5ad files separated by spaces.",
+            nargs="+",
+            required=True,
+        )
+
+    if "h5mufile" in opts:
+        group.add_argument(
+            "--input",
+            "-i",
+            metavar="H5MU",
+            help="Input file in .h5mu format",
+            required=True,
+        )
+
     elif "bamfiles" in opts:
         group.add_argument(
             "--bamfiles",
@@ -28,6 +47,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
         )
     elif "bamfile" in opts:
         group.add_argument("--bamfile", "-b", metavar="FILE", help="Indexed BAM file", required=True)
+
     if "whitelist" in opts:
         group.add_argument(
             "--whitelist",
@@ -45,6 +65,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             metavar="TXT",
             required=True if "barcodes" in requiredOpts else False,
         )
+
     if "groupInfo" in opts:
         group.add_argument(
             "--groupInfo",
@@ -68,6 +89,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             nargs="+",
             required=True if "BED" in requiredOpts else False,
         )
+
     ## outputs
     if "outFilePrefix" in opts:
         group.add_argument(
@@ -86,9 +108,10 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             type=str,
             help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` "
             "and `scJSD`, the output file is a .txt file. For other tools, the output file is "
-            "an updated .loom object with the result of the requested operation. ",
+            "an updated .h5ad object with the result of the requested operation. ",
             required=True if "outFile" in requiredOpts else False,
         )
+
     return parser
 
 
@@ -133,6 +156,7 @@ def plotOptions(args=None):
         "overrides the image format based on the plotFile "
         "ending. (Default: %(default)s)",
     )
+
     return parser
 
 
@@ -348,6 +372,7 @@ def filterOptions(args=None, suppress_args=None):
         type=float,
         required=False,
     )
+
     return parser
 
 

@@ -96,33 +96,37 @@ def preprocess_mtx(sparse_mtx, rownames, colnames, min_cell_sum, min_region_sum)
     return adata
 
 
-def cluster_LSA(
+# Imports for cluster_topic
+# from sklearn.metrics import pairwise_distances
+# from scanpy.neighbors import (
+#     _compute_connectivities_umap,
+#     _get_indices_distances_from_dense_matrix,
+# )
+# from scanpy._utils import get_igraph_from_adjacency
+# import leidenalg as la
+# import umap
+# import pandas as pd
+
+
+def cluster_topic(
     cell_topic,
-    modularityAlg="leiden",
     distance_metric="cosine",
     nk=30,
     resolution=1.0,
     connectivity_graph=True,
 ):
-    r"""Cluster cells using the output of LSA_gensim
+    r"""Cluster cells using the output of LSA_gensim or LDA_gensim using the Leiden algorithm.
 
     Parameters
     ----------
     cell_topic : pandas dataframe
         cell_topic dataframe with cell names as index and topic proportions as columns.
-
-    modularityAlg : str
-        Modularity algorithm to use. Default: 'leiden'
-
     distance_metric : str
         Distance metric to use. Default: 'cosine'
-
     nk : int
         Number of nearest neighbors to use. Default: 30
-
     resolution : float
         Resolution parameter for modularity algorithm. Default: 1.0
-
     connectivity_graph : bool
         Whether to use a connectivity graph or a distance graph. Default: True
 
@@ -130,37 +134,27 @@ def cluster_LSA(
     -------
     umap_df : pandas dataframe
         UMAP embedding with cluster labels.
-
     G : igraph object
         Graph object.
     """
-    import community
 
-    # cluster on cel-topic dist
+    # cluster on cell-topic dist
     _distances = pairwise_distances(cell_topic.iloc[:, 1:], metric=distance_metric)
     knn_indices, knn_distances = _get_indices_distances_from_dense_matrix(_distances, nk)
     distances, connectivities = _compute_connectivities_umap(knn_indices, knn_distances, _distances.shape[0], nk)
 
-    if modularityAlg == "leiden":
-        if connectivity_graph:
-            G = get_igraph_from_adjacency(connectivities, directed=True)
-        else:
-            G = get_igraph_from_adjacency(distances, directed=True)
-        partition = la.find_partition(
-            G,
-            la.RBConfigurationVertexPartition,
-            weights="weight",
-            seed=42,
-            resolution_parameter=resolution,
-        )
-        cell_topic["cluster"] = partition.membership
+    if connectivity_graph:
+        G = get_igraph_from_adjacency(connectivities, directed=True)
     else:
-        if connectivity_graph:
-            G = convert_matrix.from_numpy_array(connectivities)
-        else:
-            G = convert_matrix.from_numpy_array(distances)
-        partition = community.best_partition(G, resolution=resolution, random_state=42)
-        cell_topic["cluster"] = partition.values()
+        G = get_igraph_from_adjacency(distances, directed=True)
+    partition = la.find_partition(
+        G,
+        la.RBConfigurationVertexPartition,
+        weights="weight",
+        seed=42,
+        resolution_parameter=resolution,
+    )
+    cell_topic["cluster"] = partition.membership
 
     # umap on cell-topic dist
     um = umap.UMAP(

@@ -2,14 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import os
 import re
 import argparse
-import numpy as np
 import pandas as pd
-from scipy import sparse, io
-from itertools import compress
-import copy
 import scanpy as sc
 
 # logs
@@ -19,9 +14,6 @@ import logging
 logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-## own Functions
-# scriptdir=os.path.abspath(os.path.join(__file__, "../../sincei"))
-# sys.path.append(scriptdir)
 from sincei import ParserCommon
 from sincei.Utilities import gini
 
@@ -103,18 +95,18 @@ def make_plots(adata, fname=None):
 
 
 def parseArguments():
-    io_args = ParserCommon.inputOutputOptions(opts=["loomfile", "outFile"])
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool performs calculates multiple quality controls metrics on the input .loom file (output of scCountReads)
+        This tool performs calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads)
         and (optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an
-        updated .loom object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
+        updated .h5ad object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
         """,
-        usage="Example usage: scCountQC -i cellCounts.loom -om qc_metrics.tsv > log.txt",
+        usage="Example usage: scCountQC -i cellCounts.h5ad -om qc_metrics.tsv > log.txt",
         add_help=False,
     )
 
@@ -145,7 +137,7 @@ def get_args():
         "-fc",
         type=str,
         help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ...." '
-        "where arg_name is the QC metric for cells present in the input loom file. In order to view all available "
+        "where arg_name is the QC metric for cells present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
     )
@@ -155,7 +147,7 @@ def get_args():
         "-fr",
         type=str,
         help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ...." '
-        "where arg_name is the QC metric for regions present in the input loom file. In order to view all available "
+        "where arg_name is the QC metric for regions present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
     )
@@ -186,7 +178,7 @@ def main(args=None):
         logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
-    adata = sc.read_loom(args.input, obs_names="obs_names", var_names="var_names")
+    adata = sc.read_h5ad(args.input)  # , obs_names="obs_names", var_names="var_names")
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:
@@ -194,10 +186,8 @@ def main(args=None):
     except IndexError:  # not enough genes/regions
         sys.stderr.write("\n Error: Too few regions in the input file to perform QC \n")
         exit()
-    # pool = multiprocessing.Pool(args.numberOfProcessors)
 
-    # func=partial(gini, X=adata.X)
-    # gini_list = pool.map(func, range(adata.shape[0]) )
+    # 2. sincei metrics
     gini_list = [gini(i, adata.X) for i in range(adata.shape[0])]
     adata.obs["gini_coefficient"] = gini_list
 
@@ -266,6 +256,6 @@ def main(args=None):
         )
         sys.stdout.write("Remaining cells: {} \n".format(adata_filt.shape[0]))
         sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
-        adata_filt.write_loom(args.outFile)
+        adata_filt.write_h5ad(args.outFile)
 
     return 0

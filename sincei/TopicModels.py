@@ -3,82 +3,64 @@ import numpy as np
 import pandas as pd
 from gensim import corpora, matutils, models
 import copy
-
-# Louvain clustering and UMAP
-from networkx import convert_matrix
-from sklearn.metrics import pairwise_distances
-import leidenalg as la
-
-import umap
-from scanpy._utils import get_igraph_from_adjacency
-from scanpy.neighbors import (
-    _compute_connectivities_umap,
-    _get_indices_distances_from_dense_matrix,
-)
+from sklearn.preprocessing import binarize
 
 ### ------ Functions ------
 
 
 class TOPICMODEL:
     r"""
-    Computes LSA or LDA for a given matrix and returns the cell-topic matrix
+    Computes LSA or LDA for a given matrix and returns the cell-topic matrix.
 
     Parameters
     ----------
-    mat : scipy.sparse.csr_matrix
-        Sparse matrix of shape (cells, regions)
-
-    cells : list
-        List of Cell IDs (corresponding to the input matrix rows)
-
-    regions : list
-        List of Regions (corresponding to the input matrix columns)
-
+    adata : AnnData
+        AnnData object containing the data matrix in adata.X, with cells in adata.obs_names and regions in adata.var_names.
     n_topics : int
-        Number of Topics / Principal Components
-
+        Number of Topics / Principal Components for modeling.
+    binarize : bool, optional
+        If True, the input matrix will be binarized (default is False). Recommended for LDA.
     smart_code : str
         SMART (System for the Mechanical Analysis and Retrieval of Text) code for weighting of input matrix for TFIDF.
         Only valid for the LSA model. The default ("lfu") corresponds to "log"TF * IDF, and "pivoted unique" normalization of document length. For more information, see: https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
+    n_passes : int, optional
+        Number of passes for the LDA model. Default is 1.
+    n_workers : int, optional
+        Number of workers for the LDA model. Default is 1.
 
     Returns
     -------
-    An object of class TOPICMODELS.
+    An object of class TOPICMODEL.
     """
 
     def __init__(
         self,
-        mat,
-        cells,
-        regions,
+        adata,
         n_topics,
+        binarize=False,
         smart_code="lfu",
         n_passes=1,
         n_workers=1,
     ):
+        self.cells = adata.obs_names.to_list()
+        self.regions_dict = corpora.dictionary.Dictionary([adata.var_names.to_list()])
+        mtx = adata.X.copy().transpose()
+        if binarize:
+            mtx = binarize(mtx, copy=True)
+        self.corpus = matutils.Sparse2Corpus(mtx)
+        self.shape = adata.shape
         self.n_topics = n_topics
         self.smart_code = smart_code
-        self.cells = cells
-        self.regions_dict = corpora.dictionary.Dictionary([regions])
-        self.corpus = matutils.Sparse2Corpus(mat)
         self.n_passes = n_passes
         self.n_workers = n_workers
         self.lsi_model = None
         self.lda_model = None
         self.cell_topic_dist = None
         self.topic_region_dist = None
-        self.shape = (len(cells), len(regions))
 
     def runLSA(self):
         r"""
         Computes LSA for a given matrix and returns the updated object
-
-        Returns
-        -------
-        corpus_tfidf : gensim corpus
-            TFIDF normalized corpus
-        corpus_lsi : gensim corpus
-            LSA corpus
         """
 
         # LSA
@@ -99,11 +81,6 @@ class TOPICMODEL:
     def runLDA(self):
         r"""
         Computes LDA model for a given matrix and returns the updated object
-
-        Returns
-        -------
-        cell_topic : pandas dataframe
-            Cell-topic matrix
         """
 
         self.lda_model = models.LdaMulticore(
@@ -132,18 +109,24 @@ class TOPICMODEL:
         # if all documents don't have same set of topics, (optionally) remove them
         if len(set([len(x) for x in li_val])) > 1:
             bad_idx = sorted([i for i, v in enumerate(li_val) if len(v) != self.n_topics], reverse=True)
-            print("{} Cells were detected which don't contribute to all {} topics.".format(len(bad_idx), self.n_topics))
+            print(f"{len(bad_idx)} cells were detected which don't contribute to all {self.n_topics} topics.")
             if pop_sparse_cells:
                 print("Removing these cells from the analysis")
                 for x in bad_idx:
                     li_val.pop(x)
                     li.pop(x)
                     cells.pop(x)
-            else:
-                print("Not implemented! Need to fill these entries with zeros")
 
-        li_val = np.stack(li_val)
-        cell_topic = pd.DataFrame(li_val, columns=li[0])
+                li_val = np.stack(li_val)
+                cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
+            else:
+                cell_topic = np.zeros((len(li_val), self.n_topics))
+                for i, v in enumerate(li_val):
+                    for j, val in enumerate(v):
+                        print(f"Index [{i}, {li[i][j]}] = {val}")
+                        cell_topic[i, li[i][j]] = val
+                cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
+
         cell_topic.index = cells
 
         return cell_topic

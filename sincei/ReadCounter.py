@@ -14,8 +14,13 @@ from deeptoolsintervals import GTF
 import pyBigWig
 import py2bit
 
-## own functions
-from sincei.Utilities import *
+from sincei.Utilities import (
+    checkBAMtag,
+    checkMotifs,
+    checkGCcontent,
+    checkAlignedFraction,
+    getDupFilterTuple,
+)
 
 debug = 0
 old_settings = np.seterr(all="ignore")
@@ -37,8 +42,16 @@ def estimateSizeFactors(m):
     Compute size factors in the same way as DESeq2.
     The inverse of that is returned, as it's then compatible with bamCoverage.
 
+    Parameters
+    ----------
     m : a numpy ndarray
 
+    Returns
+    -------
+    sf : list of size factors
+
+    Examples
+    --------
     >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
     >>> sf = estimateSizeFactors(m)
     >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))
