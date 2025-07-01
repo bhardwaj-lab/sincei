@@ -46,18 +46,6 @@ def get_args():
     general = parser.add_argument_group("General Options")
 
     general.add_argument(
-        "--modalities",
-        "-md",
-        metavar="modalities",
-        help="This option is used only in multi-modal mode to specify the labels to store "
-        "each of the input .h5ad files in the output .h5mu file. Multiple modalities have "
-        "to be separated by a space, e.g. --modalities RNA ATAC CHiC",
-        nargs="+",
-        type=str,
-        required=False,
-    )
-
-    general.add_argument(
         "--outFile",
         "-o",
         type=str,
@@ -74,7 +62,8 @@ def get_args():
         metavar="sample1 sample2",
         help="User defined labels instead of default labels from "
         "file names. Multiple labels have to be separated by a space, e.g. "
-        "--labels sample1 sample2 sample3",
+        "--labels sample1 sample2 sample3. In case of --method 'multi-modal' "
+        "the --labels can be used as the labels of different data modalities (eg. RNA, ATAC)",
         nargs="+",
     )
 
@@ -139,7 +128,7 @@ def main(args=None):
         adata.write_h5ad(args.outFile)
 
     elif args.method == "multi-modal":
-        adata_dict = dict(zip(args.modalities, adata_list))
+        adata_dict = dict(zip(args.labels, adata_list))
         mdata = md.MuData(adata_dict)
 
         sys.stdout.write("Combined modalities: {} \n".format(len(mdata.mod)))
