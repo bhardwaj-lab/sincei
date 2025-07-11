@@ -212,7 +212,8 @@ def main(args=None):
         io.mmwrite(mtxFile, sp, field="integer")
     else:
         # write anndata
-        adata = ad.AnnData(num_reads_per_bin.T)
+        sp = sparse.csr_matrix(num_reads_per_bin)
+        adata = ad.AnnData(sp.T)
         adata.obs = pd.DataFrame(
             {
                 "sample": [x.split("::")[-2] for x in newlabels],
