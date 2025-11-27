@@ -42,10 +42,10 @@ def parseArguments():
         parents=[io_args, get_args(), bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool identifies barcodes present in a BAM files and produces a list. You can optionally filter these
-        barcodes by matching them to a whitelist or based on total counts.
-        """,
-        usage="Example usage: scFilterBarcodes -b sample.bam -w whitelist.txt > barcodes_detected.txt",
+``scFilterBarcodes`` identifies barcodes present in a BAM files and produces a list. You can
+optionally filter these barcodes by matching them to a whitelist or based on total counts.
+""",
+        usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt" "",
         add_help=False,
     )
 
@@ -91,7 +91,7 @@ def get_args():
         "-rp",
         type=parserCommon.writableFile,
         help='The output file name to plot the ranked counts per barcode (similar to the "knee plot",'
-        "but counts in this case would be the number of non-zero bins)",
+        "but counts are be the number of non-zero bins in this case).",
     )
 
     return parser

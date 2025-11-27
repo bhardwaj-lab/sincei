@@ -35,7 +35,7 @@ def writeBedGraph_wrapper(args):
 
 
 class WriteBedGraph(cr.CountReadsPerBin):
-    r"""Reads bam files coverages and writes a bedgraph or bigwig file
+    r"""Reads bam file coverages and writes a bedgraph or bigwig file
 
     Extends the CountReadsPerBin object such that the coverage
     of bam files is writen to multiple bedgraph files at once.

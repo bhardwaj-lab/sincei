@@ -102,11 +102,11 @@ def parseArguments():
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool performs calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads)
-        and (optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an
-        updated .h5ad object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
-        """,
-        usage="Example usage: scCountQC -i cellCounts.h5ad -om qc_metrics.tsv > log.txt",
+``scCountQC`` calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads) and
+(optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an updated .h5ad
+object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
+""",
+        usage="scCountQC -i cellCounts.h5ad -o qc_metrics.tsv",
         add_help=False,
     )
 
@@ -257,8 +257,8 @@ def main(args=None):
             bad_chrom=badchrom,
             bad_cells=badcells,
         )
-        sys.stdout.write("Remaining cells: {} \n".format(adata_filt.shape[0]))
-        sys.stdout.write("Remaining features: {} \n".format(adata_filt.shape[1]))
+        sys.stdout.write("Cells post-filtering: {} \n".format(adata_filt.shape[0]))
+        sys.stdout.write("Features post-filtering: {} \n".format(adata_filt.shape[1]))
         adata_filt.write_h5ad(args.outFile)
 
     return 0

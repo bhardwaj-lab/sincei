@@ -43,8 +43,11 @@ def parseArguments():
             otherParser,
         ],
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="This tool filters alignments in a BAM/CRAM file according the the specified parameters. It can optionally output to BEDPE format.",
-        usage="Example usage: scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics log.txt",
+        description="""
+``scBAMops`` filters alignments in a BAM/CRAM file according the the specified parameters. It can
+optionally output to BEDPE format.
+""",
+        usage="scBAMops -b sample1.bam -o sample1.filtered.bam --minMappingQuality 10 --filterMetrics metrics.tsv",
         add_help=False,
     )
 

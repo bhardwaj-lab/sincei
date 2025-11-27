@@ -4,19 +4,20 @@ from itertools import compress
 ## get overlap of GTF object (deeptoolsintervals) with anndata object (from sincei)
 ## output: dict (region->gene mapping)
 def get_gtf_adata_olaps(adata, gtf):
-    r"""Get overlaps between adata and gtf
+    r"""Get overlaps between AnnData features and GTF regions.
 
     Parameters
     ----------
     adata : AnnData
-        Annotated data matrix.
+        AnnData with regions to overlap.
+
     gtf : GTF
-        GTF object
+        GTF object with regions to overlap.
 
     Returns
     -------
     dict
-        Dictionary with overlaps for each gene in adata.
+        Dictionary with overlaps for each feature in adata.
 
     Examples
     --------

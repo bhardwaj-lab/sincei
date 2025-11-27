@@ -5,6 +5,10 @@ import sys
 
 
 def checkBAMtag(bam, name, tag):
+    """
+    Check whether a given tag is present in the BAM file.
+    """
+
     bctag = [read.has_tag(tag) for read in bam.head(1000)]
     if not any(bctag):
         sys.stderr.write("WARNING: Input file {} seems to lack the tag {}. Output might be empty. \n".format(name, tag))
@@ -30,7 +34,13 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
     This function can look for any arbitrary motif in read and corresponding genome, but in the
     same orientation as described above.
 
-    :return: bool
+    Returns
+    -------
+    bool
+        True if the motif is present in the read and reference genome.
+
+    Examples
+    --------
 
     >>> import pysam
     >>> import os
@@ -113,7 +123,10 @@ def checkAlignedFraction(read, lowFilter):
     the given threshold. Aligned fraction includes the max allowed mismatches tolerated by
     the aligner, and excludes InDels and Clippings.
 
-    Return: Bool
+    Returns
+    -------
+    bool
+        True if the fraction of read length aligns to the reference.
     """
     cig = read.cigartuples
     tot = read.infer_read_length()

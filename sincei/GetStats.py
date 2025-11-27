@@ -28,7 +28,7 @@ def getStats_worker(arglist):
         list of barcodes to count the reads from.
     numberOfSamples : int
         Total number of samples. The genome is divided into ``numberOfSamples``, each
-        with a window/bin length equal to ``binLength``. This value is overruled
+        with a window/bin length equal to ``binSize``. This value is overruled
         by ``stepSize`` in case such value is present and by ``bedFile`` in which
         case the number of samples and bins are defined in the bed file
 

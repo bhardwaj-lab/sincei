@@ -1,7 +1,13 @@
 Python API
 ===========
 
-Following modules are available for users who would like to use sincei directly in python.
+The following modules are available for use directly in python.
+
+Import sincei as:
+
+.. code-block:: python
+
+   import sincei
 
 .. toctree::
    :maxdepth: 2

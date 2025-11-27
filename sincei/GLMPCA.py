@@ -9,7 +9,7 @@ try:
     import mctorch.nn as mnn
     import mctorch.optim as moptim
 except ImportError:
-    raise ImportError("Please install mctorch package via `pip install --user mctorch")
+    raise ImportError("Please install mctorch package via `pip install --user mctorch-lib")
 
 from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal, SigmoidBeta
 
@@ -27,73 +27,78 @@ LEARNING_RATE_LIMIT = 10 ** (-10)
 
 
 class GLMPCA:
-    r"""Performs GLM-PCA on a data matrix to reduce dimensionality
+    r"""Performs GLM-PCA on a data matrix to reduce its dimensionality.
 
-    This class computes the generalized-linear model principal components (GLM-PC)
-    of a dataset by exploiting the framework of saturated parameters.
-    Specifically, given an exponential family distribution choosen following some
-    prior knowledge, GLM-PCA will find a collection of directions which maximise the
-    reconstruction error, computed as the negative log-likelihood of the chosen
-    exponential family.
+    This class computes the generalized-linear model principal components (GLM-PCs)
+    of a dataset by exploiting the framework of saturated parameters. Specifically,
+    given an exponential distribution chosen based on prior knowledge, GLM-PCA will find
+    a collection of directions which minimize the reconstruction error, computed as the
+    negative log-likelihood of the chosen exponential distribution.
 
     By making use of an alternative formulation, our implementation can exploit
     automatic differentiation and can therefore rely on mini-batch Stochastic
-    Gradient Descent. As a consequence, it scales to very large dataset.
+    Gradient Descent. As a consequence, it scales to large datasets.
 
     Another interesting feature of our implementation is that it does not require
-    cumbersome Lagrangian derivations. If you wish to test an exponential family
-    distribution not present in our implementation, adding a class in ExponentialFamily
-    with the different density functionals defined there would suffice to use GLM-PCA.
+    any cumbersome Lagrangian derivations. If you wish to test an exponential family
+    distribution not present in our implementation, you may add it by creating a
+    subclass of `sincei.ExponentialFamily.ExponentialFamily`, with its corresponding
+    density function. This would suffice to use it for GLM-PCA.
 
     Parameters
     ----------
     n_pc : int
-        Number of principal components.
+        Number of principal components to compute.
 
     family: str
-        Name of the exponential family distribution. Possible families: "gaussian", "poisson",
-        "bernoulli", "beta", "gamma", "log_normal", "log_beta":, "sigmoid_beta". Default to
-        "gaussian"
+        Name of the exponential distribution to use. Possible families: "gaussian",
+        "poisson", "bernoulli", "beta", "gamma", "log_normal", "log_beta", "sigmoid_beta".
+        Defaults to "gaussian".
 
     family_params : dict
-        Dictionary with family parameters to be added. List of parameters depend on the
-        specific ExponentialFamily class chosen. Examples:
+        Dictionary with additional exponential distribution parameters. The list of
+        parameters depends on the specific `ExponentialFamily` class chosen.
+
+        Examples:
+
             - "n_jobs" (int) for parallelization, specifically for "beta" and "gamma".
             - "min_val" (float) for truncating in "poisson" or "beta".
             - "eps" (float) for convergence in inverse computation in "beta".
-        Default to None.
+
+        Defaults to None.
 
     max_iter : int
-        Maximum number of epochs in the GLM-PCA optimisation. Default to 100.
+        Maximum number of epochs in the GLM-PCA optimisation. Defaults to 100.
 
     learning_rate: float
         Learning rate to be used in the GLM-PCA optimisation. If learning_rate is too
         high and lead to NaN, our implementation automatically restarts the optimisation
-        with a smaller value. Default to 0.2.
-
+        with a smaller value. Defaults to 0.2.
 
     batch_size : int
-        Size of the batch in the SGD optimisation step. Default to 256.
+        Size of the batch in the SGD optimisation step. Defaults to 256.
 
     step_size: int
-        Step size in optimiser scheduler. See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
-        Default to 20.
+        Step size in optimiser scheduler. Defaults to 20.
+        See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
 
     gamma: int
-        Reduction parameter for optimiser scheduler. See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
-        Default to 0.5
+        Reduction parameter for optimiser scheduler. Defaults to 0.5.
+        See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
+
 
     n_init: int
         Number of GLM-PCA initializations. Useful if you want to explore different
-        random seeds and starting points. Default to 1.
+        random seeds and starting points. Defaults to 1.
 
     init: str
         Method to initialize loadings. "spectral" performs SVD on  the saturated parameters from
         a small random batch of the dataset, "random" performs a random initialization on the
-        Stiefel manifold. Default to "spectral".
+        Stiefel manifold. Defaults to "spectral".
 
     n_jobs: int
-        Number of jobs used in parallel operations. Default to 1.
+        Number of jobs used in parallel operations. Defaults to 1.
+
     """
 
     def __init__(
@@ -151,13 +156,13 @@ class GLMPCA:
 
         Parameters
         ----------
-        X : torch.Tensor, np.array or anndata object
-            Dataset with cells in the rows and features in the columns.
+        X : torch.Tensor, np.ndarray or AnnData
+            Dataset with cells in rows and features in columns.
 
         Returns
         -------
         bool
-            Returns True if the fitting procedure has been successful.
+            Returns True if the fitting procedure was been successful.
         """
         if isinstance(X, ad.AnnData):
             X_fit = torch.Tensor(X.X.transpose().toarray() if hasattr(X.X, "toarray") else X.X.transpose())
@@ -201,12 +206,12 @@ class GLMPCA:
         return True
 
     def transform(self, X):
-        r"""Transforms and project dataset X onto the principal components.
+        r"""Transforms and projects dataset X onto the principal components.
 
         Parameters
         ----------
-        X : torch.Tensor or np.array
-            Dataset with cells in the rows and features in the columns.
+        X : torch.Tensor or np.ndarray
+            Dataset with cells in rows and features in columns.
 
         Returns
         -------
@@ -238,7 +243,7 @@ class GLMPCA:
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
         X : torch.Tensor
-            Dataset with cells in the rows and features in the columns.
+            Dataset with cells in rows and features in columns.
 
         Returns
         -------
@@ -312,14 +317,14 @@ class GLMPCA:
         return (_loadings, _intercept)
 
     def _create_saturated_loading_optim(self, parameters: torch.Tensor, X: torch.Tensor):
-        r"""Initialises the optimisation problem.
+        r"""Initializes the optimisation problem.
 
         Parameters
         ----------
         saturated_parameters : torch.Tensor
             Saturated parameters of the dataset X ($g^{-1}\left(X\right)$)
         X : torch.Tensor
-            Dataset with cells in the rows and features in the columns.
+            Dataset with cells in rows and features in columns.
 
         Returns
         -------
