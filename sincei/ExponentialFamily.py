@@ -276,7 +276,7 @@ class Beta(ExponentialFamily):
                 print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
                 break
 
-        if idx == self.family_params["maxiter"]-1:
+        if idx == self.family_params["maxiter"] - 1:
             print("CONVERGENCE NOT REACHED")
 
         return theta
@@ -336,7 +336,7 @@ class SigmoidBeta(Beta):
                 print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
                 break
 
-        if idx == self.family_params["maxiter"]-1:
+        if idx == self.family_params["maxiter"] - 1:
             print("CONVERGENCE NOT REACHED")
 
         return torch.logit(logit_theta)
@@ -409,7 +409,7 @@ class Gamma(ExponentialFamily):
                 print("CONVERGENCE AFTER %s ITERATIONS" % (idx))
                 break
 
-        if idx == self.family_params["maxiter"]-1:
+        if idx == self.family_params["maxiter"] - 1:
             print("CONVERGENCE NOT REACHED")
 
         return theta
