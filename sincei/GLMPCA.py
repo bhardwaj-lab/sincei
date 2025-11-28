@@ -59,11 +59,9 @@ class GLMPCA:
         Dictionary with additional exponential distribution parameters. The list of
         parameters depends on the specific `ExponentialFamily` class chosen.
 
-        Examples:
-
-            - "n_jobs" (int) for parallelization, specifically for "beta" and "gamma".
-            - "min_val" (float) for truncating in "poisson" or "beta".
-            - "eps" (float) for convergence in inverse computation in "beta".
+        - "n_jobs" (int) for parallelization, specifically for "beta" and "gamma".
+        - "min_val" (float) for truncating in "poisson" or "beta".
+        - "eps" (float) for convergence in inverse computation in "beta".
 
         Defaults to None.
 

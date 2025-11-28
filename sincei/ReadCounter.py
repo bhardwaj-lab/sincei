@@ -1087,12 +1087,7 @@ class CountReadsPerBin(object):
         When reads are extended the cigar information is
         skipped.
 
-        Parameters
-        ----------
-        read: pysam read object.
-
         The following values are defined (for forward reads)::
-
 
                  |--          -- read.tlen --              --|
                  |-- read.alen --|
@@ -1120,7 +1115,6 @@ class CountReadsPerBin(object):
         Parameters
         ----------
         read : pysam read object
-
 
         Returns
         -------

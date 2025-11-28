@@ -23,13 +23,14 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
     like this below.
 
     Forwards aligned read: read has 'A', upstream has T
-    R1 ........A------->
-    ----------TA------------\ Ref (+)
 
-    Rev aligned read: read has 'T', downstream has A
+        R1 ........A------->
+        ----------TA------------\ Ref (+)
 
-    <-------T....... R1
-    --------TA------------\ Ref (+)
+        Rev aligned read: read has 'T', downstream has A
+
+        <-------T....... R1
+        --------TA------------\ Ref (+)
 
     This function can look for any arbitrary motif in read and corresponding genome, but in the
     same orientation as described above.
