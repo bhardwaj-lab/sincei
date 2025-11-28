@@ -122,7 +122,6 @@ class CountReadsPerBin(object):
         A string containing a BED file with blacklist regions.
 
     extendReads : bool, int
-
         Whether coverage should be computed for the extended read length (i.e. the region covered
         by the two mates or the regions expected to be covered by single-reads).
         If the value is 'int', then then this is interpreted as the fragment length to extend reads
@@ -208,7 +207,6 @@ class CountReadsPerBin(object):
 
     Examples
     --------
-
     The test data contains reads for 200 bp.
 
     >>> test = Tester()
@@ -723,6 +721,27 @@ class CountReadsPerBin(object):
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
 
+        Parameters
+        ----------
+        bamHandle : pysam.AlignmentFile
+            An open pysam.AlignmentFile object representing the BAM file to read from.
+        chrom : str
+            The name of the chromosome to analyze.
+        regions : list of tuples
+            A list of tuples specifying the regions to analyze. Each tuple should contain start and end positions.
+        fragmentFromRead_func : function, optional
+            A function to extract fragment information from a read. If not provided, the default method
+            ``get_fragment_from_read`` is used.
+
+        Returns
+        -------
+        np.ndarray
+            Array of coverage values for each tile.
+
+        Examples
+        --------
+        Initialize some useful values
+
         >>> test = Tester()
         >>> import pysam
         >>> c = CountReadsPerBin([], stepSize=1, extendReads=300)
@@ -1121,7 +1140,8 @@ class CountReadsPerBin(object):
         list of tuples
             [(fragment start, fragment end)]
 
-
+        Examples
+        --------
         >>> test = Tester()
         >>> c = CountReadsPerBin([], 1, 1, 200, extendReads=True)
         >>> c.defaultFragmentLength=100
@@ -1229,7 +1249,6 @@ class CountReadsPerBin(object):
 
         Examples
         --------
-
         >>> c = CountReadsPerBin([], 1, 1, 1, 0)
         >>> c.getSmoothRange(5, 1, 3, 10)
         (4, 7)
@@ -1284,6 +1303,8 @@ def estimateSizeFactors(m):
     m : np.ndarray
         Dataset with cells in rows and features in columns.
 
+    Examples
+    --------
     >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
     >>> sf = estimateSizeFactors(m)
     >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))
