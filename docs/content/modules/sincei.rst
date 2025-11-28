@@ -62,6 +62,15 @@ sincei.RegionQuery module
    :show-inheritance:
    :exclude-members:
 
+sincei.scFindVCRs module
+-------------------------
+
+.. automodule:: sincei.scFindVCRs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members:
+
 sincei.TopicModels module
 -------------------------
 

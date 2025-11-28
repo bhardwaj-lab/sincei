@@ -13,6 +13,7 @@ Command Line tools
     tools/scCombineCounts
     tools/scClusterCells
     tools/scBulkCoverage
+    tools/scFindVCRs
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.
 
@@ -27,6 +28,7 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scCountQC`
 * :doc:`tools/scCombineCounts`
 * :doc:`tools/scClusterCells`
+* :doc:`tools/scFindVCRs`
 
 The table below summarizes input and output of each tool:
 
@@ -49,4 +51,6 @@ The table below summarizes input and output of each tool:
 |:ref:`scClusterCells`                 | analysis         | h5ad object           | .tsv file with clusters, png with UMAP      | Perform dimensionality reduction and clustering on the output of scCountReads.                              |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scBulkCoverage`                 | analysis         | tsv file + BAM file   | bigwig files                                | Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).    |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scFindVCRs`                     | analysis         | h5ad object           | bed files                                   | Call variable chromatin regions (VCRs) from binned chromatin data.                                          |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+

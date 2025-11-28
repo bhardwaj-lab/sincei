@@ -92,6 +92,7 @@ exclude_patterns = [
 #     "numpy", "pandas", "scipy", "scanpy", "anndata", "mudata", "umap", "leidenalg",
 #     "matplotlib", "networkx", "igraph", "torch", "mctorch", "deeptools", "gensim",
 #     "tqdm", "deeptoolsintervals", "sklearn", "pysam", "pyBigWig", "joblib", "py2bit",
+#     "ruptures",
 # ]
 
 

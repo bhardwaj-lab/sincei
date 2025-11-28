@@ -39,7 +39,8 @@ dependencies = [
     "session-info",
     "torch",
     "mctorch-lib",
-    "gensim"
+    "gensim",
+    "ruptures",
     ]
 
 [project.scripts]
@@ -48,6 +49,7 @@ scClusterCells = "sincei.scClusterCells:main"
 scCombineCounts = "sincei.scCombineCounts:main"
 scCountQC = "sincei.scCountQC:main"
 scCountReads = "sincei.scCountReads:main"
+scFindVCRs = "sincei.scFindVCRs:main"
 scFilterBarcodes = "sincei.scFilterBarcodes:main"
 scFilterStats = "sincei.scFilterStats:main"
 scJSD = "sincei.scJSD:main"
