@@ -2,6 +2,7 @@ anndata
 mudata
 scanpy
 umap-learn
+numpy
 pandas
 deeptools
 gensim

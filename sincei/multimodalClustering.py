@@ -40,7 +40,7 @@ def multiModal_clustering(
     glmPCAfamily="poisson",
 ):
     r"""
-    Performs multi-graph clustering on matched keys(barcodes) of a mudata object and stores the clustering results
+    Performs multi-graph clustering on matched keys (barcodes) of a mudata object and stores the clustering results
     in mdata.obs["cluster_multi"]. It also stores the UMAP coordinates for each of the specified modalities in
     mdata[mod].obsm["X_umap"], where mod is the modality.
     Note: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
@@ -51,12 +51,12 @@ def multiModal_clustering(
     mudata : MuData
         MuData object containing several data modalities
     modalities : list[str]
-        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "CHiC"]
+        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "ChIC"]
     method : list[str]
         What processing method to use for each modality. Choose between "PCA", "logPCA", "glmPCA", "LSA" or "LDA".
         Default is "PCA" for all modalities.
     modal_weights : list[float]
-        Weights for each modality in the clustering process. Default is equal weighting. E.g. for RNA and CHiC, use [2, 1].
+        Weights for each modality in the clustering process. Default is equal weighting. E.g. for RNA and ChIC, use [2, 1].
     column_key : str, optional
         Column name for the barcode. If None, the index of .obs for each modality is used.
     nK : int
@@ -194,7 +194,7 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
     mudata : MuData
         MuData object containing several data modalities
     modalities : list[str]
-        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "CHiC"]
+        List of modalities to use for clustering, e.g. ["RNA", "ATAC", "ChIC"]
     column_key : str, optional
         Column name for the barcode. If None, the index of .obs for each modality is used.
     nK : int

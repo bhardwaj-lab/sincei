@@ -5,7 +5,6 @@ import sys
 import multiprocessing
 import numpy as np
 
-# import scipy as sc
 # deepTools packages
 import deeptools.utilities
 from deeptools import bamHandler
@@ -44,11 +43,13 @@ def estimateSizeFactors(m):
 
     Parameters
     ----------
-    m : a numpy ndarray
+    m : np.ndarray
+        Dataset with cells in rows and features in columns.
 
     Returns
     -------
-    sf : list of size factors
+    list [np.float]
+        List of size factors.
 
     Examples
     --------
@@ -121,7 +122,6 @@ class CountReadsPerBin(object):
         A string containing a BED file with blacklist regions.
 
     extendReads : bool, int
-
         Whether coverage should be computed for the extended read length (i.e. the region covered
         by the two mates or the regions expected to be covered by single-reads).
         If the value is 'int', then then this is interpreted as the fragment length to extend reads
@@ -130,7 +130,6 @@ class CountReadsPerBin(object):
         approximated by the fragment lengths computed when preparing the library for sequencing. If the value
         is of the variable is true and not value is given, the fragment size is sampled from the library but
         only if the library is paired-end. Default: False
-
 
     minMappingQuality : int
         Reads of a mapping quality less than the give value are not considered. Default: None
@@ -206,17 +205,8 @@ class CountReadsPerBin(object):
     genomeChunkSize : int
         If not None, the length of the genome used for multiprocessing.
 
-    Returns
-    -------
-    numpy array
-
-        Each row correspond to each bin/bed region and each column correspond to each of
-        the bamFiles.
-
-
     Examples
     --------
-
     The test data contains reads for 200 bp.
 
     >>> test = Tester()
@@ -527,7 +517,8 @@ class CountReadsPerBin(object):
                 )
 
     def count_reads_in_region(self, chrom, start, end, bed_regions_list=None):
-        """Counts the reads in each bam file at each 'stepSize' position
+        """
+        Counts the reads in each bam file at each 'stepSize' position
         within the interval (start, end) for a window or bin of size binLength.
 
         The stepSize controls the distance between bins. For example,
@@ -556,10 +547,8 @@ class CountReadsPerBin(object):
 
         Returns
         -------
-        numpy array
-            The result is a numpy array that as rows each bin
-            and as columns each bam file.
-
+        np.ndarray
+            The result is a numpy array that as rows each bin and as columns each bam file.
 
         Examples
         --------
@@ -731,6 +720,27 @@ class CountReadsPerBin(object):
         r"""
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
+
+        Parameters
+        ----------
+        bamHandle : pysam.AlignmentFile
+            An open pysam.AlignmentFile object representing the BAM file to read from.
+        chrom : str
+            The name of the chromosome to analyze.
+        regions : list of tuples
+            A list of tuples specifying the regions to analyze. Each tuple should contain start and end positions.
+        fragmentFromRead_func : function, optional
+            A function to extract fragment information from a read. If not provided, the default method
+            ``get_fragment_from_read`` is used.
+
+        Returns
+        -------
+        np.ndarray
+            Array of coverage values for each tile.
+
+        Examples
+        --------
+        Initialize some useful values
 
         >>> test = Tester()
         >>> import pysam
@@ -1011,6 +1021,18 @@ class CountReadsPerBin(object):
         return coverages
 
     def getReadLength(self, read):
+        """
+        Returns the length of the read.
+
+        Parameters
+        ----------
+        read : pysam read object
+
+        Returns
+        -------
+        int
+            Length of the read.
+        """
         return len(read)
 
     @staticmethod
@@ -1020,7 +1042,6 @@ class CountReadsPerBin(object):
         the same chromosome and are not to far away. The sam flag for proper pair can not
         always be trusted. Note that if the fragment size is > maxPairedFragmentLength (~2kb
         usually) that False will be returned.
-        :return: bool
 
         >>> import pysam
         >>> import os
@@ -1085,12 +1106,7 @@ class CountReadsPerBin(object):
         When reads are extended the cigar information is
         skipped.
 
-        Parameters
-        ----------
-        read: pysam object.
-
         The following values are defined (for forward reads)::
-
 
                  |--          -- read.tlen --              --|
                  |-- read.alen --|
@@ -1119,13 +1135,13 @@ class CountReadsPerBin(object):
         ----------
         read : pysam read object
 
-
         Returns
         -------
         list of tuples
             [(fragment start, fragment end)]
 
-
+        Examples
+        --------
         >>> test = Tester()
         >>> c = CountReadsPerBin([], 1, 1, 200, extendReads=True)
         >>> c.defaultFragmentLength=100
@@ -1204,17 +1220,35 @@ class CountReadsPerBin(object):
 
 
              ---------------|==================|------------------
-                        tileStart
+                        tileIndex
                    |--------------------------------------|
                    |    <--      smoothRange     -->      |
                    |
-             tileStart - (smoothRange-tileSize)/2
+             tileIndex - (smoothRange-tileSize)/2
 
         Test for a smooth range that spans 3 tiles.
 
+        Parameters
+        ----------
+        tileIndex : int
+            Start index.
+
+        tileSize : int
+            Length of the tile.
+
+        smoothRange : int
+            Range over which to smooth.
+
+        maxPosition : int
+            Maximum index allowed.
+
+        Returns
+        -------
+        tuple
+            (startIndex, endIndex)
+
         Examples
         --------
-
         >>> c = CountReadsPerBin([], 1, 1, 1, 0)
         >>> c.getSmoothRange(5, 1, 3, 10)
         (4, 7)
@@ -1253,7 +1287,7 @@ class CountReadsPerBin(object):
 
 
 def remove_row_of_zeros(matrix):
-    r"remove rows containing all zeros or all nans"
+    r"Remove all-zeros or all-nan rows from matrix."
     _mat = np.nan_to_num(matrix)
     to_keep = _mat.sum(1) != 0
     return matrix[to_keep, :]
@@ -1264,8 +1298,13 @@ def estimateSizeFactors(m):
     Compute size factors in the same way as DESeq2.
     The inverse of that is returned, as it's then compatible with bamCoverage.
 
-    m : a numpy ndarray
+    Parameters
+    ----------
+    m : np.ndarray
+        Dataset with cells in rows and features in columns.
 
+    Examples
+    --------
     >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
     >>> sf = estimateSizeFactors(m)
     >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))

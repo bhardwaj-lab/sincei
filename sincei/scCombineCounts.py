@@ -28,12 +28,16 @@ def parseArguments():
         parents=[io_args, get_args(), other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="""
-        This tool combines multiple count matrices (output of scCountReads) into one, either assuming they are different samples (multi-sample)
-        or different measurements on the same set of cells (multi-modal). The result is a .h5ad (AnnData) file with combined counts in
-        multi-sample mode or a .h5mu (MuData) file in multi-modal mode. NOTE: it doesn't perform any 'batch effect correction' or 'integration'
-        of data from different technologies, which requires more sophisticated methods.
-        """,
-        usage="Example usage: scCombineCounts -i sample1.h5ad sample2.h5ad -o combined.h5ad -m multi-sample > log.txt",
+``scCombineCounts`` combines multiple count matrices (output of scCountReads) into one, either
+assuming they are different samples (``multi-sample``) or different measurements on the same set of cells
+(``multi-modal``). The result is a .h5ad (AnnData) file with combined counts in multi-sample mode or a .h5mu
+(MuData) file in multi-modal mode. NOTE: it doesn't perform any 'batch effect correction' or 'integration'
+of data from different technologies, which requires more sophisticated methods.
+""",
+        usage="""
+scCombineCounts -i sample1.h5ad sample2.h5ad -o combined.h5ad -m multi-sample
+scCombineCounts -i modality1.h5ad modality2.h5ad -o combined.h5mu -m multi-modal
+""",
         add_help=False,
     )
 
@@ -49,9 +53,9 @@ def get_args():
         "--outFile",
         "-o",
         type=str,
-        help="The file to write results to. For method: `multi-sample`, the output "
+        help="The file to write results to. For method: ``multi-sample``, the output "
         "file is an updated .h5ad object, which can be used by other tools. "
-        "For method: `multi-modal`, the output file is an .h5mu file. This file can only be "
+        "For method: ``multi-modal``, the output file is an .h5mu file. This file can only be "
         "used by scClusterCells, to perform multi-modal clustering. ",
         required=True,
     )
@@ -74,10 +78,10 @@ def get_args():
         choices=["multi-sample", "multi-modal"],
         default="multi-sample",
         help="How to merge the counts from the provided samples. "
-        "`multi-sample`: assumes that each sample is the independent, "
+        "``multi-sample``: assumes that each sample is the independent, "
         "but were counted in the same manner (i.e. on same features), therefore "
         "it looks for feature overlaps, but not for barcode overlaps. "
-        "`multi-modal`: assumes that the counts were generated in 2 different ways, "
+        "``multi-modal``: assumes that the counts were generated in 2 different ways, "
         "but from the same set of cells (for example, using a multi-omic technology), "
         "therefore it looks for the overlap of cell barcodes, but not for the overlaps "
         "of features (Default: %(default)s)",
