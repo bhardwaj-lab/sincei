@@ -123,6 +123,10 @@ class TOPICMODEL:
                         cell_topic[i, li[i][j]] = val
                 cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
 
+        else:
+            li_val = np.stack(li_val)
+            cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
+
         cell_topic.index = cells
 
         return cell_topic
