@@ -98,7 +98,11 @@ def get_args():
         "--outFile",
         "-o",
         type=str,
-        help="Prefix for the output BED files with genome segmentation. ",
+        help="""
+        Name of the output file (BED format) with genome segmentation result. The penalty threshold that defines
+        each segment is saved in the "score" column of the BED file, and the BED file can be filtered based on this
+        column to obtain non-overlapping segments.
+        """,
         required=True,
     )
 
@@ -135,6 +139,8 @@ def main(args=None):
         region=args.region,
     )
 
-    for pen in args.penalties:
-        out_bed_df = pen_bed_df[pen_bed_df["penalty"] == pen][["chrom", "start", "end"]]
-        out_bed_df.to_csv(f"{args.outFile}_pen{pen}.bed", sep="\t", header=False, index=False)
+    pen_bed_df.to_csv(args.outFile, sep="\t", header=False, index=False)
+
+#    for pen in args.penalties:
+#        out_bed_df = pen_bed_df[pen_bed_df["penalty"] == pen][["chrom", "start", "end"]]
+#        out_bed_df.to_csv(f"{args.outFile}_pen{pen}.bed", sep="\t", header=False, index=False)

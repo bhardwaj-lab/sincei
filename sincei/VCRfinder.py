@@ -168,7 +168,7 @@ def VCRfinder(
         adata = adata[:, (adata.var["chrom"] == chrom) & (adata.var["start"] >= start) & (adata.var["end"] <= end)]
 
     chroms = adata.var["chrom"].unique()
-    pen_bed_df = pd.DataFrame(columns=["penalty", "chrom", "start", "end"])
+    pen_bed_df = pd.DataFrame(columns=["chrom", "start", "end", "name", "score", "strand"])
 
     for chrom in chroms:
         adata_chrom = adata[:, adata.var["chrom"] == chrom]
@@ -226,10 +226,13 @@ def VCRfinder(
             prevs = [0, *bkps[:-1]]
             bkp_df = pd.DataFrame(
                 {
-                    "penalty": pen,
-                    "chrom": chrom,
-                    "start": [int(start + prev * binsize) for prev in prevs],
-                    "end": [int(start + bkp * binsize) for bkp in bkps],
+                    "chrom": "chr1",
+                    "start": [int(start + prev * 2000) for prev in prevs],
+                    "end": [int(start + bkp * 2000) for bkp in bkps],
+                    "name": ["pen-{}_brkpoint-{}".format(pen, bkp) for bkp in bkps],
+                    "score": pen,
+                    "strand": "*"
+
                 }
             )
 
