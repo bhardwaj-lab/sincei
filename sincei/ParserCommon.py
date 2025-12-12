@@ -687,6 +687,9 @@ def validateInputs(args, process_barcodes=True):
         with open(args.barcodes, "r") as f:
             barcodes = f.read().splitlines()
         f.close()
+        # if barcodes is .tsv, take second column
+        if "\t" in barcodes[0]:
+            barcodes = [x.split("\t")[1] for x in barcodes]
         args.barcodes = barcodes
         newlabels = ["{}::{}".format(a, b) for a in args.labels for b in barcodes]
         return args, newlabels

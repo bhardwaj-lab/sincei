@@ -43,7 +43,8 @@ def multiModal_clustering(
     Performs multi-graph clustering on matched keys (barcodes) of a mudata object and stores the clustering results
     in mdata.obs["cluster_multi"]. It also stores the UMAP coordinates for each of the specified modalities in
     mdata[mod].obsm["X_umap"], where mod is the modality.
-    Note: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
+
+    `Note`: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
     in the case of logPCA.
 
     Parameters
@@ -177,7 +178,8 @@ def multiModal_clustering(
 
     optimiser.optimise_partition_multiplex(parts, layer_weights=modal_weights, n_iterations=-1)
     print("Detected clusters: ", set(parts[0].membership))
-    mdata.obs["cluster_multi"] = parts[0].membership
+    groups = np.array(parts[0].membership)
+    mdata.obs["cluster_multi"] = pd.Categorical(values=groups.astype("U"))
 
     for mod, adata in zip(modalities, adatas):
         mdata.mod[mod] = adata
@@ -222,7 +224,7 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
     for mod in modalities:
         adata = mdata.mod[mod][barcodes]
         try:
-            um = adata.obs[:, f"UMAP1_{mod}", f"UMAP2_{mod}"]
+            um = adata.obsm["X_umap"]
         except KeyError:
             raise KeyError(f"UMAP coordinates for modality {mod} not found. Please run UMAP first.")
 
