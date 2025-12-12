@@ -118,6 +118,7 @@ def VCRfinder(
     n_kernels=20,
     penalties=[1],
     region=None,
+    verbose=False,
 ):
     """
     Detects variable chromatin regions (VCRs) from a anndata object containing genomic signal data
@@ -151,12 +152,15 @@ def VCRfinder(
         List of penalty values for the change-point detection algorithm. Default is [1].
     region : str, optional
         Genomic region to limit the analysis to (e.g., 'chr1:100000:200000'). Default is None.
+    verbose : bool, optional
+        Print additional messages.
 
     Returns
     -------
     output : pd.DataFrame
         Output DataFrame with detected variable chromatin regions at each penalty.
     """
+    adata.var[["start", "end"]] = adata.var[["start", "end"]].apply(pd.to_numeric)
 
     if region is not None:
         chrom, start, end = region.split(":")
@@ -181,11 +185,16 @@ def VCRfinder(
 
         # Calculate the number of diagonals needed
         k = max(round(4.0 * np.max(sigmas)), adata_chrom.shape[1])
-
+        # Sort the bins
+        adata_chrom = adata_chrom[:, adata_chrom.var.sort_values(by=["start", "end"], axis=0).index]
+        # Get bin-bin correlations
         ctime = time.time()
         corr = sparse_band_corr(adata_chrom.X, k=k)
         ctime = time.time() - ctime
-        print(f"Band correlation with {k} diagonals calculated in {ctime:.2f} seconds")
+        if verbose:
+            sys.stdout.write(
+                f"Chromosome {chrom}: Band correlation with {k} diagonals calculated in {ctime:.2f} seconds"
+            )
 
         scores = np.zeros((len(sigmas), corr.shape[0]))
 
@@ -201,13 +210,15 @@ def VCRfinder(
                 scores[i, pos] = np.sum(pad_state[pos : pos + k_width, pos : pos + k_width] * kernel)
 
         # Change-point detection
+        if verbose:
+            sys.stdout.write(f"Chromosome {chrom}: Applying changepoint detection..")
         cpd = rpt.KernelCPD(kernel="rbf")
 
         for pen in penalties:
             try:
                 bkps = cpd.fit_predict(corr, n_bkps=None, pen=pen)
             except BadSegmentationParameters:
-                print(f" - No breakpoints detected for penalty {pen} in chrom {chrom}.")
+                sys.stderr.write(f" - No breakpoints detected for penalty {pen} in chrom {chrom}.")
                 continue
 
             sys.stdout.write(f"Detected {len(bkps)} VCRs in chromosome {chrom} with penalty {pen}\n")
