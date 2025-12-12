@@ -38,7 +38,7 @@ def get_version(path=VPATH):
 
 project = "sincei"
 copyright = "2025, Vivek Bhardwaj"
-author = "Vivek Bhardwaj"
+author = "Vivek Bhardwaj & Fernando Sancho Gómez"
 
 # The full version, including alpha/beta/rc tags
 release = get_version()
@@ -118,7 +118,11 @@ html_theme_options = {
 html_logo = "./content/images/sincei-logo-transparent.png"
 html_show_sphinx = False
 
+# Show subcommands and subcommand options in the sidebar TOC
+html_theme_options = {"show_toc_level": 3}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ['_static']
+html_static_path = ["content/_static"]
+html_css_files = ["custom.css"]

@@ -2,8 +2,8 @@ Analysis of sc-sortChIC data using sincei
 =========================================
 
 Below, we demonstrate how to use sincei to explore data from the protocol single-cell sortChIC,
-presented in `Zeller, Yueng et.al. <https://www.nature.com/articles/s41588-022-01260-3>`__. This
-dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me1** histone
+presented in `Zeller, Yueng et. al. (2023) <https://www.nature.com/articles/s41588-022-01260-3>`__. This
+dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me3** histone
 mark in single-cells from adult mouse bone marrow. We will also use a metadata file that contain the
 cell labels defined using celltype-specific surface markers identified by FACS. This will provide
 independent confirmation that our clustering captures known cell-types.
@@ -152,7 +152,7 @@ appropriate metrics to filter out the unwanted cells/regions.
     # list the metrics we can use to filter cells/regions
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad --describe
 
-    # export the single-cell level matrices
+    # export the single-cell level metrics
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
     -om sincei_output/countqc_50kb_bins
 
@@ -179,7 +179,7 @@ many cells (using ``--filterCellArgs``).
 The tool :ref:`scClusterCells` provides a range of options to reduce the dimensionality of our count
 data, while preserving biological signal. This can be specified with ``--method`` option. Below, we
 will use a topic modeling method called Latent Semantic Analysis (LSA) to reduce the dimensionality
-of our data to 30 topics (the default). The tool then performs Leiden clustering, and presents a
+of our data to 30 topics. The tool then performs Leiden clustering, and presents a
 UMAP (dimensionality reduction to 2 dimensions) plot of the output (``--outFileUMAP`` option). This
 option also creates a tsv file with the UMAP coordinates and assigned cluster for each cell in our
 data.
@@ -188,8 +188,7 @@ data.
 .. code:: bash
 
     scClusterCells -i sincei_output/scCounts_50kb_bins_filtered.h5ad \
-        --method LSA \
-        --clusterResolution 0.7 \
+        --method LSA -n 30 --clusterResolution 0.7 \
         --outFileUMAP sincei_output/scClusterCells_UMAP.png \
         -o sincei_output/scCounts_50kb_bins_clustered.h5ad
     # Coherence Score:  -1.5

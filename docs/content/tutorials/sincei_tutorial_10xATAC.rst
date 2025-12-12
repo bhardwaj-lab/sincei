@@ -20,11 +20,9 @@ Define common bash variables:
 
 .. code:: bash
 
+   cd 10x_multiome_testdata
    # create dir
    mkdir sincei_output/atac
-
-   # save as bash variables
-   blacklist=hg38-blacklist.v2.bed.gz
 
 2. Quality control - I (read-level)
 -----------------------------------
@@ -34,34 +32,40 @@ statistics from :ref:`scFilterStats`. Low quality cells in this data can be iden
 criteria, such as:
 
 - high number of PCR duplicates (filtered using `--duplicateFilter`)
-- high fraction of reads aligned to blacklisted regions (filtered using `--blacklist`)
+- high fraction of reads aligned to blacklisted regions (filtered using `--blackListFileName`)
 - high fraction of reads with poor mapping quality (filtered using `--minMappingQuality`)
 - vey high/low GC content of the aligned reads, indicating the reads were mostly aligned to
   low-complexity regions (filtered using `--GCcontentFilter`)
 - high level of secondary/supplementary alignments (filtered using `--samFlagExclude/Include`)
 
+We can obtain a blacklist file for human hg38 genome from the `ENCODE project
+<https://github.com/Boyle-Lab/Blacklist/tree/master/lists>`__.
+
 .. code:: bash
 
+   wget -O hg38_blacklist.v2.bed.gz https://raw.githubusercontent.com/Boyle-Lab/Blacklist/master/lists/hg38-blacklist.v2.bed.gz
+   gunzip hg38_blacklist.v2.bed.gz
+
+.. code:: bash
 
    for rep in rep1 rep2
    do
-      dir=cellranger_output_${rep}/outs/
-      bamfile=${dir}/atac_possorted_bam.bam
-      barcodes=${dir}/filtered_feature_bc_matrix/barcodes.tsv.gz # from sincei or cellranger output
-      zcat ${barcodes} > ${dir}/filtered_barcodes.txt
+      bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
+      barcodes=sincei_output/atac/atac_barcodes_${rep}.txt # from sincei or cellranger output
+      blacklist=hg38_blacklist.v2.bed
 
-      scFilterStats -p 20 \
+      scFilterStats -p 8 \
          --region chr1 \
          --GCcontentFilter '0.2,0.8' \
          --minMappingQuality 10 \
          --samFlagInclude 64 \
          --samFlagExclude 256 \
          --samFlagExclude 2048 \
-         --barcodes ${dir}/filtered_barcodes.txt \
+         --blackListFileName ${blacklist}  \
+         --barcodes ${barcodes} \
          --cellTag CB \
-         -bl ${blacklist}  \
-         --label atac_${rep} \
-         -o sincei_output/atac/scFilterStats_output_${rep}.txt \
+         --label sincei_output/atac/atac_barcodes_${rep}.txt \
+         -o sincei_output/atac/scFilterStats_output_${rep}.tsv \
          -b ${bamfile}
    done
 
@@ -84,40 +88,31 @@ detected on each sample.
 
 If needed, we can use the same parameters as in :ref:`scFilterStats` to count only high quality reads
 from our whitelist of barcodes. We avoid counting reads in blacklisted regions of the human genome
-(--blacklist).
+(--blackListFileName).
 
 .. code:: bash
 
-   ## merge intervals from 2 peaks bed files
-   for f in cellranger_output_rep*/outs/atac_peaks.bed
-   do
-      awk '{if(NR>51) {print $0}}' $f >> repmerged.bed
-   done
-
-   sort -k1,1 -k2n,2 repmerged.bed | bedtools merge -i - > atac_peaks_merged.bed
-
-   # count reads on merged bed file
    for rep in rep1 rep2
    do
-      dir=cellranger_output_${rep}/outs/
-      bamfile=${dir}/atac_possorted_bam.bam
-      barcodes=${dir}/filtered_barcodes.txt
+      bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
+      barcodes=sincei_output/atac/atac_barcodes_${rep}.txt # from sincei or cellranger output
+      peaks_bed=atacPeaks_replicateMerged.bed
 
-      scCountReads features -p 20 \
-         --BED atac_peaks_merged.bed --cellTag CB \
+      scCountReads features -p 8 \
          --region chr1 \
+         --BED ${peaks_bed} \
          --minMappingQuality 10 \
          --samFlagInclude 64 \
          --samFlagExclude 2048 \
          --extendReads \
-         -bl ${blacklist} \
-         -bc ${barcodes} \
+         --blackListFileName ${blacklist} \
+         --barcodes ${barcodes} \
          --cellTag CB \
          -o sincei_output/atac/scCounts_atac_peaks_${rep} \
          --label atac_${rep} \
          -b ${bamfile}
    done
-   # Number of bins found: 18527
+   # Number of features found: 33740
 
 4. Quality control - II (count-level)
 -------------------------------------
@@ -147,7 +142,7 @@ appropriate metrics to filter out the unwanted cells/regions.
 
 .. code:: bash
 
-   # export the single-cell level matrices
+   # export the single-cell level metrics
    for rep in rep1 rep2
    do
       scCountQC -i sincei_output/atac/scCounts_atac_peaks_${rep}.h5ad -om sincei_output/atac/countqc_atac_peaks_${rep}
@@ -167,19 +162,20 @@ Below, we perform some basic filtering using :ref:`scCountQC`. We exclude the ce
    for rep in rep1 rep2
    do
       scCountQC -i sincei_output/atac/scCounts_atac_peaks_${rep}.h5ad \
-         -o sincei_output/atac/scCounts_atac_peaks_filtered_${rep} \
+         -o sincei_output/atac/scCounts_atac_peaks_filtered_${rep}.h5ad \
+         -om sincei_output/atac/scCounts_atac_peaks_filtered_${rep} \
          --filterRegionArgs "n_cells_by_counts: 100, 5500" \
-         --filterCellArgs "n_genes_by_counts: 500, 10000"
+         --filterCellArgs "n_genes_by_counts: 200, 5000"
    done
 
    ## rep 1
-   #Applying filters
-   # Cells post-filtering: 6153
-   # Features post-filtering: 13502
+   # Applying filters
+   # Cells post-filtering: 1092
+   # Features post-filtering: 7642
    ## rep 2
-   #Applying filters
-   # Cells post-filtering: 6109
-   # Features post-filtering: 13911
+   # Applying filters
+   # Cells post-filtering: 1038
+   # Features post-filtering: 7923
 
 5. Combine counts for the 2 replicates
 --------------------------------------
@@ -200,8 +196,8 @@ Concatenating the filtered cells for the 2 replicates results in a total of ~12K
       -o sincei_output/atac/scCounts_atac_peaks_filtered.merged.h5ad \
       --method multi-sample \
       --labels rep1 rep2
-   # Combined cells: 12262
-   # Combined features: 13249
+   # Combined cells: 2130
+   # Combined features: 7399
 
 5. Dimensionality reduction and clustering
 ------------------------------------------
@@ -222,7 +218,7 @@ data.
       --clusterResolution 1 \
       -op sincei_output/atac/scClusterCells_UMAP.png \
       -o sincei_output/atac/scCounts_atac_peaks_clustered.h5ad
-   # Coherence Score:  -1.83
+   # Coherence Score:  -1.6229714432102043
    # also produces the tsv file "sincei_output/scClusterCells_UMAP.tsv"
 
 (optional) Confirmation of clustering using metadata
@@ -235,51 +231,53 @@ We can color our UMAP output from :ref:`scClusterCells` with the cell-type infor
 al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide `here
 <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
 
-.. code:: r
+.. collapse:: Clustering validation with metadata (click for R code)
 
-   library(dplyr)
-   library(magrittr)
-   library(ggplot2)
-   library(patchwork)
+   .. code:: r
 
-   umap <- read.delim("sincei_output/atac/scClusterCells_UMAP.tsv")
-   meta <- read.csv("metadata_cd34_atac.csv", row.names = 1)
-   umap$celltype <- meta[gsub("rep1_", "", umap$Cell_ID), "celltype"]
+      library(dplyr)
+      library(magrittr)
+      library(ggplot2)
+      library(patchwork)
 
-   # keep only cells with published labels
-   umap %<>% filter(!is.na(celltype))
+      umap <- read.delim("sincei_output/atac/scClusterCells_UMAP.tsv")
+      meta <- read.csv("metadata_cd34_atac.csv", row.names = 1)
+      umap$celltype <- meta[gsub("rep1_", "", umap$Cell_ID), "celltype"]
 
-   ## make plots
-   df_center <- group_by(umap, cluster) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
-   df_center2 <- group_by(umap, celltype) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
+      # keep only cells with published labels
+      umap %<>% filter(!is.na(celltype))
 
-   # colors for metadata (12 celltypes)
-   col_pallete <- c("#808080", RColorBrewer::brewer.pal(8, "Paired"))
-   names(col_pallete) <- unique(umap$celltype) # grey is for NA
+      ## make plots
+      df_center <- group_by(umap, cluster) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
+      df_center2 <- group_by(umap, celltype) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
 
-   # colors for sincei UMAP (9 clusters)
-   colors_cluster <- c("#315e66", "#808080", "#315e66", RColorBrewer::brewer.pal(12, "Paired"))
-   names(colors_cluster) <- unique(umap$cluster)
+      # colors for metadata (12 celltypes)
+      col_pallete <- c("#808080", RColorBrewer::brewer.pal(8, "Paired"))
+      names(col_pallete) <- unique(umap$celltype) # grey is for NA
+
+      # colors for sincei UMAP (9 clusters)
+      colors_cluster <- c("#315e66", "#808080", "#315e66", RColorBrewer::brewer.pal(12, "Paired"))
+      names(colors_cluster) <- unique(umap$cluster)
 
 
-   p1 <- umap %>%
-     ggplot(., aes(UMAP1, UMAP2, color=factor(cluster), label=cluster)) +
-     geom_point() + geom_label(data = df_center, aes(UMAP1, UMAP2)) +
-     scale_color_manual(values = colors_cluster) + theme_minimal(base_size = 12) +
-     theme(legend.position = "none") + #labs(x="UMAP1", y="UMAP2") +
-     ggtitle("sincei clusters (LSA + Leiden)")
+      p1 <- umap %>%
+      ggplot(., aes(UMAP1, UMAP2, color=factor(cluster), label=cluster)) +
+      geom_point() + geom_label(data = df_center, aes(UMAP1, UMAP2)) +
+      scale_color_manual(values = colors_cluster) + theme_minimal(base_size = 12) +
+      theme(legend.position = "none") + #labs(x="UMAP1", y="UMAP2") +
+      ggtitle("sincei clusters (LSA + Leiden)")
 
-   p2 <- umap %>% filter(!is.na(celltype)) %>%
-     ggplot(., aes(UMAP1, UMAP2, color=factor(celltype), label=celltype)) +
-       geom_point() + geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
-       scale_color_manual(values = col_pallete) +
-       labs(color="Cluster") + theme_minimal(base_size = 12) +
-       theme(legend.position = "none") +
-     ggtitle("Published Cell Types")
+      p2 <- umap %>% filter(!is.na(celltype)) %>%
+      ggplot(., aes(UMAP1, UMAP2, color=factor(celltype), label=celltype)) +
+         geom_point() + geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
+         scale_color_manual(values = col_pallete) +
+         labs(color="Cluster") + theme_minimal(base_size = 12) +
+         theme(legend.position = "none") +
+      ggtitle("Published Cell Types")
 
-   pl <- p1 + p2
-   pl
-   ggsave(plot=pl, "sincei_output/atac/UMAP_compared_withOrig.png", dpi=300, width = 11, height = 6)
+      pl <- p1 + p2
+      pl
+      ggsave(plot=pl, "sincei_output/atac/UMAP_compared_withOrig.png", dpi=300, width = 11, height = 6)
 
 
 .. image:: ./../images/UMAP_compared_withOrig_10xATAC.png
@@ -306,21 +304,21 @@ CPM-normalized bigwigs at 1kb resolution.
 
 .. code:: bash
 
-   scBulkCoverage -p 20 \
-   --cellTag CB \
-   --normalizeUsing CPM \
-   --binSize 1000 \
-   --minMappingQuality 10 \
-   --samFlagInclude 64 \
-   --samFlagExclude 2048 \
-   --duplicateFilter 'start_bc_umi' \
-   --extendReads \
-   -b cellranger_output_rep1/outs/atac_possorted_bam.bam \
-   cellranger_output_rep2/outs/atac_possorted_bam.bam \
-   --labels rep1_atac_rep1 rep2_atac_rep2 \
-   -i sincei_output/atac/scClusterCells_UMAP.tsv \
-   -o sincei_output/atac/sincei_cluster
-   # creates 9 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 9
+   scBulkCoverage -p 8 \
+      --cellTag CB \
+      --normalizeUsing CPM \
+      --binSize 1000 \
+      --minMappingQuality 10 \
+      --samFlagInclude 64 \
+      --samFlagExclude 2048 \
+      --duplicateFilter 'start_bc_umi' \
+      --extendReads \
+      -b cellranger_output_rep1_atac_possorted_bam.bam \
+      cellranger_output_rep2_atac_possorted_bam.bam \
+      --labels rep1_atac_rep1 rep2_atac_rep2 \
+      -i sincei_output/atac/scClusterCells_UMAP.tsv \
+      -o sincei_output/atac/sincei_cluster
+   # creates 5 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 4
 
 We can now inspect our bigwigs on `IGV <https://software.broadinstitute.org/software/igv/>`__. We
 can clearly see some regions with cell-type specific signal, such as the markers described in the

@@ -247,7 +247,10 @@ def main(args=None):
     if args.rankPlot:
         df["count_log10"] = np.log10(df["count"])
         df["count_rank"] = df["count"].rank(method="min", ascending=False)
-        xrange = np.arange(0, np.round(max(df["count_rank"]), -3), np.round(int(max(df["count_rank"]) / 10), -3))
+        try:
+            xrange = np.arange(0, np.round(max(df["count_rank"]), -3), np.round(int(max(df["count_rank"]) / 10), -3))
+        except ValueError:
+            xrange = np.arange(0, max(df["count_rank"]), max(int(max(df["count_rank"]) / 10), 1))
         yrange = np.arange(
             np.round(min(df["count_log10"]), 2),
             np.round(max(df["count_log10"]), 2),

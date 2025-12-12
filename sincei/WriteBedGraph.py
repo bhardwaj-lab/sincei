@@ -18,7 +18,7 @@ from sincei import ReadCounter as cr
 def scaleCoverage(tile_coverage, args):
     r"""
     Return coverage per cluster as sum of cells.
-    tileCoverage should be an list with only one element
+    tileCoverage should be a list with only one element.
     """
     return args["scaleFactor"] * tile_coverage
 
@@ -44,8 +44,8 @@ class WriteBedGraph(cr.CountReadsPerBin):
     into a bigwig file if necessary.
 
     The constructor arguments are the same as for CountReadsPerBin. However,
-    when calling the `run` method, the following parameters have
-    to be passed
+    when calling the ``run`` method, the extra parameters `function_to_call`,
+    `func_args`, `out_file_prefix` need to be passed.
 
     Examples
     --------
@@ -104,7 +104,7 @@ class WriteBedGraph(cr.CountReadsPerBin):
         normUsing=None,
     ):
         r"""
-        Given a list of bamfiles, a function and a function arguments,
+        Given a list of bamfiles, a function, and function arguments,
         this method writes a bedgraph file (or bigwig) file
         for a partition of the genome into tiles of given size
         and a value for each tile that corresponds to the given function

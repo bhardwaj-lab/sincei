@@ -12,6 +12,7 @@ Define common bash variables:
 
 .. code:: bash
 
+   cd 10x_multiome_testdata
    # create dir
    mkdir sincei_output/rna
 
@@ -23,31 +24,38 @@ statistics from :ref:`scFilterStats`. Low quality cells in this data can be iden
 criteria, such as:
 
 - high number of PCR duplicates (filtered using `--duplicateFilter`)
-- high fraction of reads aligned to blacklisted regions (filtered using `--blacklist`)
+- high fraction of reads aligned to blacklisted regions (filtered using `--blackListFileName`)
 - high fraction of reads with poor mapping quality (filtered using `--minMappingQuality`)
 - vey high/low GC content of the aligned reads, indicating the reads were mostly aligned to
   low-complexity regions (filtered using `--GCcontentFilter`)
 - high level of secondary/supplementary alignments (filtered using `--samFlagExclude/Include`)
 
+We can obtain a blacklist file for human hg38 genome from the `ENCODE project
+<https://github.com/Boyle-Lab/Blacklist/tree/master/lists>`__.
+
+.. code:: bash
+
+   wget -O hg38_blacklist.v2.bed.gz https://raw.githubusercontent.com/Boyle-Lab/Blacklist/master/lists/hg38-blacklist.v2.bed.gz
+   gunzip hg38_blacklist.v2.bed.gz
+
 .. code:: bash
 
    for rep in rep1 rep2
    do
-      dir=cellranger_output_${rep}/outs/
-      bamfile=${dir}/gex_possorted_bam.bam
-      barcodes=${dir}/filtered_feature_bc_matrix/barcodes.tsv.gz # from sincei or cellranger output
-      zcat ${barcodes} > ${dir}/filtered_barcodes.txt
+      bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
+      barcodes=sincei_output/rna/rna_barcodes_${rep}.txt # from sincei or cellranger output
+      blacklist=hg38_blacklist.v2.bed
 
-      scFilterStats -p 20 \
-         --region chr1 \
+      scFilterStats -p 8 \
          --GCcontentFilter '0.2,0.8' \
          --minMappingQuality 10 \
          --samFlagExclude 256 \
          --samFlagExclude 2048 \
-         --barcodes ${dir}/filtered_barcodes.txt \
+         --blackListFileName ${blacklist} \
+         --barcodes ${barcodes} \
          --cellTag CB \
-         --label rna_rep${rep} \
-         -o sincei_output/rna/scFilterStats_output_rep${rep}.txt \
+         --label rna_${rep} \
+         -o sincei_output/rna/scFilterStats_output_${rep}.tsv \
          -b ${bamfile}
    done
 
@@ -71,27 +79,25 @@ reads from our whitelist of barcodes.
 .. code:: bash
 
    ## Download the GTF file
-   curl -o sincei_output/hg38.gtf.gz \
-   http://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.refGene.gtf.gz
+   curl -o sincei_output/hg38.gtf.gz http://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.refGene.gtf.gz
    gunzip sincei_output/hg38.gtf.gz
 
    # count reads on the GTF file
-   for rep in 1 2
+   for rep in rep1 rep2
    do
-      dir=cellranger_output_rep${rep}/outs/
-      bamfile=${dir}/gex_possorted_bam.bam
-      barcodes=${dir}/filtered_barcodes.txt
-      
-      scCountReads features -p 20 \
-         --BED sincei_output/hg38.gtf \
-         --cellTag CB \
+      bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
+      barcodes=sincei_output/rna/rna_barcodes_${rep}.txt # from sincei or cellranger output
+      genes_gtf=hg38.gtf
+
+      scCountReads features -p 8 \
+         --BED ${genes_gtf} \
          --minMappingQuality 10 \
          --samFlagExclude 256 \
          --samFlagExclude 2048  \
-         -bc ${barcodes} \
+         --barcodes ${barcodes} \
          --cellTag CB \
-         -o sincei_output/rna/scCounts_rna_genes_rep${rep} \
-         --label rna_rep${rep} \
+         -o sincei_output/rna/scCounts_rna_genes_${rep} \
+         --label rna_${rep} \
          -b ${bamfile}
    done
    # Number of bins found: 74538
@@ -113,7 +119,7 @@ cells/regions.
    # list the metrics we can use to filter cells/regions
    for rep in rep1 rep2
    do
-      scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${rep}.h5ad --describe
+      scCountQC -i sincei_output/rna/scCounts_rna_genes_${rep}.h5ad --describe
    done
 
 The tool :ref:`scCountQC` can be used for count-level QC and filtering of count data. With the
@@ -124,11 +130,11 @@ appropriate metrics to filter out the unwanted cells/regions.
 
 .. code:: bash
 
-   # export the single-cell level metrices
+   # export the single-cell level metrics
    for rep in rep1 rep2
    do
-      scCountQC -i sincei_output/rna/scCounts_rna_genes_rep${rep}.h5ad \
-      -om sincei_output/rna/countqc_rna_genes_rep${rep}
+      scCountQC -i sincei_output/rna/scCounts_rna_genes_${rep}.h5ad \
+      -om sincei_output/rna/countqc_rna_genes_${rep}
    done
    
    # visualize output using multiQC
@@ -142,21 +148,23 @@ Below, we perform some basic filtering using :ref:`scCountQC`. We exclude the ce
 
 .. code:: bash
 
-   for rep in rep1 rep2 do
-   scCountQC -i sincei_output/rna/scCounts_rna_genes_${rep}.h5ad \
-      -o sincei_output/rna/scCounts_rna_genes_filtered_${rep} \
-      --filterRegionArgs “n_cells_by_counts: 100, 6000” \
-      --filterCellArgs “n_genes_by_counts: 500, 15000”
+   for rep in rep1 rep2
+   do
+      scCountQC -i sincei_output/rna/scCounts_rna_genes_${rep}.h5ad \
+         -o sincei_output/rna/scCounts_rna_genes_filtered_${rep}.h5ad \
+         -om sincei_output/rna/scCounts_rna_genes_${rep} \
+         --filterRegionArgs "n_cells_by_counts: 100, 1500" \
+         --filterCellArgs "n_genes_by_counts: 500, 15000"
    done
 
    ## rep 1
-   #Applying filters
-   # Cells post-filtering: 5314
-   # Features post-filtering: 48219
+   # Applying filters
+   # Cells post-filtering: 1092
+   # Features post-filtering: 32888
    ## rep 2
-   #Applying filters
-   # Cells post-filtering: 4894
-   # Features post-filtering: 48660
+   # Applying filters
+   # Cells post-filtering: 1038
+   # Features post-filtering: 32793
 
 
 5. Combine counts for the 2 replicates
@@ -176,9 +184,10 @@ Concatenating the filtered cells for the 2 replicates results in a total of ~12K
       -i sincei_output/rna/scCounts_rna_genes_filtered_rep1.h5ad \
       sincei_output/rna/scCounts_rna_genes_filtered_rep2.h5ad \
       -o sincei_output/rna/scCounts_rna_genes_filtered.merged.h5ad \
-      --method multi-sample --labels rep1 rep2
-   #Combined cells: 10208
-   #Combined features: 48059
+      --method multi-sample \
+      --labels rep1 rep2
+   # Combined cells: 2130
+   # Combined features: 31976
 
 5. Dimensionality reduction and clustering
 ------------------------------------------
@@ -209,58 +218,60 @@ We can color our UMAP output from :ref:`scClusterCells` with the cell-type
 information from `Persad et.
 al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide in `on figshare <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__ 
 
-.. code:: r
+.. collapse:: Clustering validation with metadata (click for R code)
 
-    library(dplyr)
-    library(magrittr)
-    library(ggplot2)
-    library(patchwork)
+   .. code:: r
 
-    umap <- read.delim(“sincei_output/rna/scClusterCells_UMAP.tsv”) meta <-
-    read.csv(“metadata_cd34_rna.csv”, row.names = 1)
-    umap$celltype <- meta[gsub("rep1_|rep2_", "", umap`\ Cell_ID),
-    “celltype”]
+      library(dplyr)
+      library(magrittr)
+      library(ggplot2)
+      library(patchwork)
 
-    # keep only cells with published labels
+      umap <- read.delim(“sincei_output/rna/scClusterCells_UMAP.tsv”) meta <-
+      read.csv(“metadata_cd34_rna.csv”, row.names = 1)
+      umap$celltype <- meta[gsub("rep1_|rep2_", "", umap`\ Cell_ID),
+      “celltype”]
 
-    umap %<>% filter(!is.na(celltype)) # remove clusters with low number of
-    cells cl = umap %>% group_by(cluster) %>%
-    summarise(Cell_ID = dplyr::n()) %>%
-    filter(Cell_ID < 50) %>% .$cluster umap %<>%
-    filter(!(cluster %in% cl))
+      # keep only cells with published labels
 
-    # make plots
-    df_center <- group_by(umap, cluster) %>%
-    summarise(UMAP1 = mean(UMAP1),  UMAP2 = mean(UMAP2))
-    df_center2 <- group_by(umap, celltype) %>%
-    summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
+      umap %<>% filter(!is.na(celltype)) # remove clusters with low number of
+      cells cl = umap %>% group_by(cluster) %>%
+      summarise(Cell_ID = dplyr::n()) %>%
+      filter(Cell_ID < 50) %>% .$cluster umap %<>%
+      filter(!(cluster %in% cl))
 
-    # colors for metadata (8 celltypes)
+      # make plots
+      df_center <- group_by(umap, cluster) %>%
+      summarise(UMAP1 = mean(UMAP1),  UMAP2 = mean(UMAP2))
+      df_center2 <- group_by(umap, celltype) %>%
+      summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
 
-    col_pallete <- RColorBrewer::brewer.pal(8, “Paired”)
-    names(col_pallete) <- unique(umap$celltype) # grey is for NA
+      # colors for metadata (8 celltypes)
 
-    # colors for sincei UMAP (10 clusters)
+      col_pallete <- RColorBrewer::brewer.pal(8, “Paired”)
+      names(col_pallete) <- unique(umap$celltype) # grey is for NA
 
-    colors_cluster <- RColorBrewer::brewer.pal(10, “Paired”)
-    names(colors_cluster) <- sort(unique(umap$cluster))
+      # colors for sincei UMAP (10 clusters)
 
-    p1 <- umap %>% ggplot(., aes(UMAP1, UMAP2, color=factor(cluster),
-    label=cluster)) + geom_point() +
-    geom_label(data = df_center, aes(UMAP1, UMAP2)) +
-    scale_color_manual(values = colors_cluster) +
-    theme_void(base_size = 12) + theme(legend.position = “none”) +
+      colors_cluster <- RColorBrewer::brewer.pal(10, “Paired”)
+      names(colors_cluster) <- sort(unique(umap$cluster))
 
-    p2 <- umap %>% filter(!is.na(celltype)) %>% ggplot(., aes(UMAP1, UMAP2,
-    color=factor(celltype), label=celltype)) + geom_point() +
-    geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
-    scale_color_manual(values = col_pallete) + labs(color=“Cluster”) +
-    theme_void(base_size = 12) + theme(legend.position = “none”) +
-    ggtitle(“Published Cell Types”)
+      p1 <- umap %>% ggplot(., aes(UMAP1, UMAP2, color=factor(cluster),
+      label=cluster)) + geom_point() +
+      geom_label(data = df_center, aes(UMAP1, UMAP2)) +
+      scale_color_manual(values = colors_cluster) +
+      theme_void(base_size = 12) + theme(legend.position = “none”) +
 
-    pl <- p1 + p2
-    ggsave(plot=pl, “sincei_output/rna/UMAP_compared_withOrig.png”,
-    dpi=300, width = 11, height = 6)
+      p2 <- umap %>% filter(!is.na(celltype)) %>% ggplot(., aes(UMAP1, UMAP2,
+      color=factor(celltype), label=celltype)) + geom_point() +
+      geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
+      scale_color_manual(values = col_pallete) + labs(color=“Cluster”) +
+      theme_void(base_size = 12) + theme(legend.position = “none”) +
+      ggtitle(“Published Cell Types”)
+
+      pl <- p1 + p2
+      ggsave(plot=pl, “sincei_output/rna/UMAP_compared_withOrig.png”,
+      dpi=300, width = 11, height = 6)
 
 
 .. image:: ./../images/UMAP_compared_withOrig_10xRNA.png
@@ -290,19 +301,18 @@ CPM-normalized bigwigs at 100bp resolution.
 
 .. code:: bash
 
-   scBulkCoverage -p 20 \
+   scBulkCoverage -p 8 \
       --cellTag CB \
-      --region chr1 \
       --normalizeUsing CPM \
       --binSize 100 \
       --minMappingQuality 10 \
       --samFlagExclude 2048 \
-      -b cellranger_output_rep1/outs/gex_possorted_bam.bam \
-      cellranger_output_rep2/outs/gex_possorted_bam.bam \
+      -b cellranger_output_rep1_gex_possorted_bam.bam \
+      cellranger_output_rep2_gex_possorted_bam.bam \
       --labels rep1_rna_rep1 rep2_rna_rep2 \
       -i sincei_output/rna/scClusterCells_UMAP.tsv \
       -o sincei_output/rna/sincei_cluster
-   # creates 6 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 9
+   # creates 11 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 10
 
 We can now inspect these bigwigs on IGV. Looking at the region around one of the markers described
 in the original manuscript, **TAL1**, we can see that the CLPs (lymphoid) and pDCs lack its

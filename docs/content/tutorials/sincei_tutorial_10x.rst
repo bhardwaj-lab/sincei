@@ -77,14 +77,17 @@ Below is the structure of the output directory from the workflow:
 We will use the ``gex_possorted_bam.bam`` for gene-expression data and ``atac_possorted_bam.bam``
 for chromatin accessibility analysis using sincei. These files can also be produced as part of the
 ``cellranger count`` workflow for scRNA-seq or scATAC-seq data alone. For convenience, we provide a
-subset of this data (only a small chunk of chromosome 2) `here
-<https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
+subset of this data
+`here <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
 
 .. code:: bash
 
-   mkdir 10x_multiome
-   wget -O 10x_multiome/10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/55726430
-   tar -xvzf 10x_multiome/10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files and 2 metadata files.
+   mkdir 10x_multiome_testdata
+   cd 10x_multiome_testdata
+   wget -O 10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/60078353
+   tar -xvzf 10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files, 2 metadata files and 1 bed file.
+
+   rm 10x_multiome_testdata.tar.gz & cd ../ #cleanup
 
 (optional) pre-filtering of barcodes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -97,15 +100,22 @@ can be done using the :ref:`scFilterBarcodes` tool.
 
 .. code:: bash
 
-    barcodes=737K-arc-v1.txt # cellranger-arc barcodes in this case
+    barcodes=10x_barcodes_tutorial.txt
     for rep in rep1 rep2
     do
+        # scATAC-seq
         bamfile=cellranger_output_${rep}/outs/atac_possorted_bam.bam
+        scFilterBarcodes -p 12 -b ${bamfile} \
+        -o sincei_output/atac/atac_barcodes_${rep}.txt \
+        --minCount 100 --minMappingQuality 10 --cellTag CB \
+        --rankPlot sincei_output/atac/barcode_rankplot_atac_${rep}.png
 
-        scFilterBarcodes -p 20 -b ${bamfile} -w ${barcodes} \
-            -o sincei_output/atac_barcodes_${rep}.tsv \
+        # scRNA-seq
+        bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
+        scFilterBarcodes -p 8 -b ${bamfile} \
+            -o sincei_output/rna/rna_barcodes_${rep}.txt \
             --minCount 100 --minMappingQuality 10 --cellTag CB \
-            --rankPlot sincei_output/barcode_rankplot_${rep}.png
+            --rankPlot sincei_output/rna/barcode_rankplot_rna_${rep}.png
     done
 
 The above example uses a whitelist of possible ATAC barcodes from the ``cellranger-arc`` workflow.
@@ -131,8 +141,29 @@ of the data we just processed
 Follow :doc:`this tutorial <sincei_tutorial_10xRNA>` to learn how to analyze the scRNA-seq samples
 of the data we just processed.
 
+..
+    4. Combined analysis of scATAC-seq and scRNA-seq data
+    -----------------------------------------------------
+
+    After analyzing the scATAC-seq and scRNA-seq data separately, we can combine the two data modalities
+    for a joint analysis. :ref:`scCombineCounts` can be used to combine the ``AnnData`` objects produced
+    in the two tutorials above into a ``MuData`` object that contains both modalities.
+
+    .. code:: bash
+
+        scCombineCounts \
+        -i sincei_output/atac/scCounts_atac_peaks_clustered.h5ad \
+        sincei_output/rna/scCounts_rna_genes_clustered.h5ad \
+        -o sincei_output/scCounts_10x_multiome_clustered.mudata \
+        --method multi-modal \
+        --labels atac rna
+
+    This object can then be used with our :doc:`modules/multimodalClustering` python module to perform
+    joint clustering of the two data types. Follow :doc:`this tutorial <clustering_tutorial>` to learn
+    how to perform joint clustering of multimodal data using sincei.
+
 Notes
-------------
+-----
 
 Currently, sincei doesn't provide a method for **doublet estimation and removal**, which is an
 important step in the analysis of droplet-based data. Instead, we use simpler filters of min and max
