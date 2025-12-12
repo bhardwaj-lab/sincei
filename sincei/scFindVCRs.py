@@ -10,7 +10,7 @@ import anndata as ad
 import ruptures as rpt
 
 from sincei import ParserCommon
-from sincei import VCRfinder
+from sincei.VCRfinder import VCRfinder
 
 
 def parseArguments():
@@ -20,20 +20,20 @@ def parseArguments():
         parents=[get_args(), other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="""
-``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
-.h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
-segmentations for different sensitivities. This method is decsribed in [Sancho-Gómez et al. TBP].
+        ``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
+        .h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
+        segmentations for different sensitivities. This method is decsribed in [Sancho-Gómez et al. TBP].
 
-First, a bin-to-bin correlation matrix is computed for each chromosome.
+        First, a bin-to-bin correlation matrix is computed for each chromosome.
 
-Then, the correlation matrix is turned into a score map by convolving a number of square
-Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using. Each kernel produces a 1-D score for
-each bin, which are stacked into a matrix where each row corresponds to a kernel scale and each column to a bin.
+        Then, the correlation matrix is turned into a score map by convolving a number of square
+        Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using. Each kernel produces a 1-D score for
+        each bin, which are stacked into a matrix where each row corresponds to a kernel scale and each column to a bin.
 
-Finally, the PELT change-point detection algorithm is applied to the score map to identify
-regions with distinct correlation patterns. This step depends on a penalty parameter that
-controls the number of detected regions.
-""",
+        Finally, the PELT change-point detection algorithm is applied to the score map to identify
+        regions with distinct correlation patterns. This step depends on a penalty parameter that
+        controls the number of detected regions.
+        """,
         usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -p 5 10 20 -o VCRs_",
         add_help=False,
     )
@@ -66,9 +66,9 @@ def get_args():
         "-mr",
         type=int,
         help="""
-The maximum region size to be considered, in base pairs. Larger regions may increase compute time.
-Defaults to 100 times the bin size.
-""",
+        The maximum region size to be considered, in base pairs. Larger regions may increase compute time.
+        Defaults to 100 times the bin size.
+        """,
         default=None,
     )
 
@@ -77,8 +77,8 @@ Defaults to 100 times the bin size.
         "-nk",
         type=int,
         help="""
-The number of kernels to use for the score map. More kernels generally lead to a better segmentation,
-but increase the computational cost.""",
+        The number of kernels to use for the score map. More kernels generally lead to a better segmentation,
+        but increase the computational cost.""",
         default=20,
     )
 
@@ -88,9 +88,9 @@ but increase the computational cost.""",
         nargs="+",
         type=float,
         help="""
-Penalty value for change-point detection. Higher values result in fewer segments. Multiple values
-can be provided. Each penalty value will produce a separate BED file.
-""",
+        Penalty value for change-point detection. Higher values result in fewer segments. Multiple values
+        can be provided (separated by space). Each penalty value will produce a separate BED file.
+        """,
         default=[5, 10, 20],
     )
 
@@ -106,10 +106,10 @@ can be provided. Each penalty value will produce a separate BED file.
         "--region",
         "-r",
         help="""
-Region of the genome to limit the operation to - this is useful when testing parameters to
-reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or
-``--region chr10:456700:891000``.
-""",
+        Region of the genome to limit the operation to - this is useful when testing parameters to
+        reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or
+        ``--region chr10:456700:891000``.
+        """,
         metavar="CHR:START:END",
         required=False,
         type=ParserCommon.genomicRegion,
