@@ -14,10 +14,11 @@ from sincei.VCRfinder import VCRfinder
 
 
 def parseArguments():
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile"], requiredOpts=["h5adfile"])
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
-        parents=[get_args(), other_args],
+        parents=[io_args, get_args(), other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="""
         ``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
@@ -34,7 +35,7 @@ def parseArguments():
         regions with distinct correlation patterns. This step depends on a penalty parameter that
         controls the number of detected regions.
         """,
-        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -p 5 10 20 -o VCRs_",
+        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -p 5 10 20 -o detected_VCRs.bed",
         add_help=False,
     )
 
@@ -44,14 +45,7 @@ def parseArguments():
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
 
-    general = parser.add_argument_group("VCR Options")
-    general.add_argument(
-        "--inFile",
-        "-i",
-        type=str,
-        help="Input .h5ad file containing single-cell genomic signal in bins.",
-        required=True,
-    )
+    general = parser.add_argument_group("VCR detection options")
 
     general.add_argument(
         "--binSize",
@@ -62,7 +56,7 @@ def get_args():
     )
 
     general.add_argument(
-        "--maxRegion",
+        "--maxRegionSize",
         "-mr",
         type=int,
         help="""
@@ -89,9 +83,10 @@ def get_args():
         type=float,
         help="""
         Penalty value for change-point detection. Higher values result in fewer segments. Multiple values
-        can be provided (separated by space). Each penalty value will produce a separate BED file.
+        can be provided (separated by space). Each penalty value will produce a separate set of regions within
+        which can be seperated from the output BED file by filtering on the "score" column.
         """,
-        default=[5, 10, 20],
+        default=[0.5, 1, 2],
     )
 
     general.add_argument(
@@ -125,15 +120,15 @@ def get_args():
 def main(args=None):
     args = parseArguments().parse_args(args)
 
-    if args.maxRegion is None:
-        args.maxRegion = args.binSize * 100
+    if args.maxRegionSize is None:
+        args.maxRegionSize = args.binSize * 100
 
-    adata = ad.read_h5ad(args.inFile)
+    adata = ad.read_h5ad(args.input)
 
     pen_bed_df = VCRfinder(
         adata=adata,
         binsize=args.binSize,
-        max_region=args.maxRegion,
+        max_region=args.maxRegionSize,
         n_kernels=args.nKernels,
         penalties=args.penalties,
         region=args.region,

@@ -163,8 +163,14 @@ def VCRfinder(
     adata.var[["start", "end"]] = adata.var[["start", "end"]].apply(pd.to_numeric)
 
     if region is not None:
-        chrom, start, end = region.split(":")
-        start, end = map(int, (start, end))
+        region = region.split(":")
+        if len(region)==3:
+            chrom, start, end = region[0], int(region[1]), int(region[2])
+        else:
+            chrom = region[0]
+            start = np.min(adata.var.loc[adata.var.chrom==chrom, "start"])
+            end = np.max(adata.var.loc[adata.var.chrom==chrom, "end"])
+
         adata = adata[:, (adata.var["chrom"] == chrom) & (adata.var["start"] >= start) & (adata.var["end"] <= end)]
 
     chroms = adata.var["chrom"].unique()
