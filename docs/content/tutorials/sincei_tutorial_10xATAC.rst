@@ -3,14 +3,6 @@ Analysis of 10x genomics scATAC-seq data using sincei
 
 The data used here is produced in our :doc:`10x genomics multiome tutorial <sincei_tutorial_10x>`.
 
-We will need a blacklist file to filter out reads aligned to known problematic regions of the human
-genome. This file and blacklists for other genome assemblies can be downloaded from the `Boyle lab
-ENCODE blacklist repository <https://github.com/Boyle-Lab/Blacklist>`__.
-
-.. code:: bash
-
-   wget -O hg38-blacklist.v2.bed.gz https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
-
 We will use the BAM files, barcodes and peaks.bed file obtained from the **cellranger-arc**
 workflow. Alternatively, the BAM file (tagged with cell barcodes) and peaks.bed can be obtained from
 a custom mapping/peak calling workflow, and the list of filtered cell barcodes can be obtained using
@@ -23,6 +15,14 @@ Define common bash variables:
    cd 10x_multiome_testdata
    # create dir
    mkdir sincei_output/atac
+
+Additionally, we will need a blacklist file to filter out reads aligned to known problematic regions
+of the human genome. This file and blacklists for other genome assemblies can be downloaded from the
+`Boyle lab ENCODE blacklist repository <https://github.com/Boyle-Lab/Blacklist>`__.
+
+.. code:: bash
+
+   wget -O hg38-blacklist.v2.bed.gz https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
 
 2. Quality control - I (read-level)
 -----------------------------------
@@ -38,21 +38,13 @@ criteria, such as:
   low-complexity regions (filtered using `--GCcontentFilter`)
 - high level of secondary/supplementary alignments (filtered using `--samFlagExclude/Include`)
 
-We can obtain a blacklist file for human hg38 genome from the `ENCODE project
-<https://github.com/Boyle-Lab/Blacklist/tree/master/lists>`__.
-
-.. code:: bash
-
-   wget -O hg38_blacklist.v2.bed.gz https://raw.githubusercontent.com/Boyle-Lab/Blacklist/master/lists/hg38-blacklist.v2.bed.gz
-   gunzip hg38_blacklist.v2.bed.gz
-
 .. code:: bash
 
    for rep in rep1 rep2
    do
       bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
-      barcodes=sincei_output/atac/atac_barcodes_${rep}.txt # from sincei or cellranger output
-      blacklist=hg38_blacklist.v2.bed
+      barcodes=sincei_output/atac/atac_barcodes_filtered_${rep}.txt # from sincei or cellranger output
+      blacklist=hg38-blacklist.v2.bed
 
       scFilterStats -p 8 \
          --region chr1 \
@@ -64,7 +56,7 @@ We can obtain a blacklist file for human hg38 genome from the `ENCODE project
          --blackListFileName ${blacklist}  \
          --barcodes ${barcodes} \
          --cellTag CB \
-         --label sincei_output/atac/atac_barcodes_${rep}.txt \
+         --label atac_${rep} \
          -o sincei_output/atac/scFilterStats_output_${rep}.tsv \
          -b ${bamfile}
    done
@@ -87,15 +79,14 @@ Since we get a seperate peaks file from each replicate, we can run sincei on the
 detected on each sample.
 
 If needed, we can use the same parameters as in :ref:`scFilterStats` to count only high quality reads
-from our whitelist of barcodes. We avoid counting reads in blacklisted regions of the human genome
-(--blackListFileName).
+from our whitelist of barcodes. We avoid counting reads in blacklisted regions of the human genome.
 
 .. code:: bash
 
    for rep in rep1 rep2
    do
       bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
-      barcodes=sincei_output/atac/atac_barcodes_${rep}.txt # from sincei or cellranger output
+      barcodes=sincei_output/atac/atac_barcodes_filtered_${rep}.txt # from sincei or cellranger output
       peaks_bed=atacPeaks_replicateMerged.bed
 
       scCountReads features -p 8 \
@@ -231,7 +222,61 @@ We can color our UMAP output from :ref:`scClusterCells` with the cell-type infor
 al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide `here
 <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
 
-.. collapse:: Clustering validation with metadata (click for R code)
+.. collapse:: Clustering validation (click for Python code)
+
+   .. code:: python
+
+      import scanpy as sc
+      import pandas as pd
+      import matplotlib.pyplot as plt
+
+      atac_metadata = pd.read_csv('metadata_cd34_atac.csv', header=0, index_col=0)
+
+      atac_adata = sc.read_h5ad('sincei_output/atac/scCounts_atac_peaks_clustered.h5ad')
+      atac_adata.obs_names = atac_adata.obs_names.str.replace('rep1_|rep2_', '', regex=True)
+
+      atac_adata.obs = atac_adata.obs.merge(atac_metadata['celltype'], left_index=True, right_index=True, how='left')
+
+      # make plots
+      colors = plt.colormaps['Paired'].colors
+      colors_dict = {
+         # leiden clusters
+         '0': colors[1],
+         '1': colors[5],
+         '2': colors[0],
+         '3': colors[2],
+         '4': colors[4],
+         '5': colors[3],
+         '6': colors[6],
+         # published cell types
+         'CLP': colors[4],
+         'Ery': colors[6],
+         'HMP': colors[5],
+         'HSC': colors[1],
+         'MEP': colors[2],
+         'Mono': colors[0],
+         'cDC': colors[3],
+         'pDC': colors[7],
+         }
+
+      sc.pl.umap(
+         atac_adata,
+         color=['leiden', 'celltype'],
+         palette=colors_dict,
+         title=['sincei Clusters (LSA + Leiden)', 'Published Cell Types'],
+         legend_fontsize=14,
+         legend_loc='on data',
+         frameon=False,
+         size=60,
+         )
+
+      for ax in plt.gcf().axes:
+         ax.title.set_size(fontsize=16)
+
+      plt.savefig('sincei_output/atac/UMAP_compared_withOrig.png', dpi=300, bbox_inches='tight')
+
+
+.. collapse:: Clustering validation (click for R code)
 
    .. code:: r
 
@@ -242,7 +287,7 @@ al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we pro
 
       umap <- read.delim("sincei_output/atac/scClusterCells_UMAP.tsv")
       meta <- read.csv("metadata_cd34_atac.csv", row.names = 1)
-      umap$celltype <- meta[gsub("rep1_", "", umap$Cell_ID), "celltype"]
+      umap$celltype <- meta[gsub("rep1_|rep2_", "", umap$Cell_ID), "celltype"]
 
       # keep only cells with published labels
       umap %<>% filter(!is.na(celltype))
@@ -251,29 +296,28 @@ al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we pro
       df_center <- group_by(umap, cluster) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
       df_center2 <- group_by(umap, celltype) %>% summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
 
-      # colors for metadata (12 celltypes)
-      col_pallete <- c("#808080", RColorBrewer::brewer.pal(8, "Paired"))
-      names(col_pallete) <- unique(umap$celltype) # grey is for NA
+      # colors for metadata (8 celltypes)
+      col_pallette <- RColorBrewer::brewer.pal(8, "Paired")
+      names(col_pallette) <- unique(umap$celltype) # grey is for NA
 
-      # colors for sincei UMAP (9 clusters)
-      colors_cluster <- c("#315e66", "#808080", "#315e66", RColorBrewer::brewer.pal(12, "Paired"))
+      # colors for sincei UMAP (5 clusters)
+      colors_cluster <- RColorBrewer::brewer.pal(5, "Paired")
       names(colors_cluster) <- unique(umap$cluster)
 
+      p1 <- umap %>% ggplot(., aes(UMAP1, UMAP2, color=factor(cluster),
+      label=cluster)) + geom_point() +
+      geom_label(data = df_center, aes(UMAP1, UMAP2), fill = "white") +
+      scale_color_manual(values = colors_cluster) +
+      theme_void(base_size = 12) + theme(legend.position = "none") +
+      ggtitle("sincei Clusters (LSA + Leiden)")
 
-      p1 <- umap %>%
-      ggplot(., aes(UMAP1, UMAP2, color=factor(cluster), label=cluster)) +
-      geom_point() + geom_label(data = df_center, aes(UMAP1, UMAP2)) +
-      scale_color_manual(values = colors_cluster) + theme_minimal(base_size = 12) +
-      theme(legend.position = "none") + #labs(x="UMAP1", y="UMAP2") +
-      ggtitle("sincei clusters (LSA + Leiden)")
-
-      p2 <- umap %>% filter(!is.na(celltype)) %>%
-      ggplot(., aes(UMAP1, UMAP2, color=factor(celltype), label=celltype)) +
-         geom_point() + geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
-         scale_color_manual(values = col_pallete) +
-         labs(color="Cluster") + theme_minimal(base_size = 12) +
-         theme(legend.position = "none") +
+      p2 <- umap %>% filter(!is.na(celltype)) %>% ggplot(., aes(UMAP1, UMAP2,
+      color=factor(celltype), label=celltype)) + geom_point() +
+      geom_label(data = df_center2, aes(UMAP1, UMAP2), fill = "white") +
+      scale_color_manual(values = col_pallette) + labs(color="Cluster") +
+      theme_void(base_size = 12) + theme(legend.position = "none") +
       ggtitle("Published Cell Types")
+
 
       pl <- p1 + p2
       pl
@@ -285,7 +329,7 @@ al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we pro
     :width: 1600 px
     :scale: 50 %
 
-The figure above shows that we can easily replicate the expected cell-type results from the scATAC
+The figure above shows that we can somewhat replicate the expected cell-type results from the scATAC
 data using **sincei**. This was done using only 1/23th of original data (chromosome 1) and basic
 pre-processing steps, therefore the results should only improve with full data, better cell/region
 filtering and optimizing the analysis parameters.

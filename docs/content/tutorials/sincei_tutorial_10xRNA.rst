@@ -16,6 +16,14 @@ Define common bash variables:
    # create dir
    mkdir sincei_output/rna
 
+Additionally, we will need a blacklist file to filter out reads aligned to known problematic regions
+of the human genome. This file and blacklists for other genome assemblies can be downloaded from the
+`Boyle lab ENCODE blacklist repository <https://github.com/Boyle-Lab/Blacklist>`__.
+
+.. code:: bash
+
+   wget -O hg38-blacklist.v2.bed.gz https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
+
 2. Quality control - I (read-level)
 -----------------------------------
 
@@ -30,21 +38,13 @@ criteria, such as:
   low-complexity regions (filtered using `--GCcontentFilter`)
 - high level of secondary/supplementary alignments (filtered using `--samFlagExclude/Include`)
 
-We can obtain a blacklist file for human hg38 genome from the `ENCODE project
-<https://github.com/Boyle-Lab/Blacklist/tree/master/lists>`__.
-
-.. code:: bash
-
-   wget -O hg38_blacklist.v2.bed.gz https://raw.githubusercontent.com/Boyle-Lab/Blacklist/master/lists/hg38-blacklist.v2.bed.gz
-   gunzip hg38_blacklist.v2.bed.gz
-
 .. code:: bash
 
    for rep in rep1 rep2
    do
       bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
-      barcodes=sincei_output/rna/rna_barcodes_${rep}.txt # from sincei or cellranger output
-      blacklist=hg38_blacklist.v2.bed
+      barcodes=sincei_output/rna/rna_barcodes_filtered_${rep}.txt # from sincei or cellranger output
+      blacklist=hg38-blacklist.v2.bed
 
       scFilterStats -p 8 \
          --GCcontentFilter '0.2,0.8' \
@@ -86,7 +86,7 @@ reads from our whitelist of barcodes.
    for rep in rep1 rep2
    do
       bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
-      barcodes=sincei_output/rna/rna_barcodes_${rep}.txt # from sincei or cellranger output
+      barcodes=sincei_output/rna/rna_barcodes_filtered_${rep}.txt # from sincei or cellranger output
       genes_gtf=hg38.gtf
 
       scCountReads features -p 8 \
@@ -94,6 +94,7 @@ reads from our whitelist of barcodes.
          --minMappingQuality 10 \
          --samFlagExclude 256 \
          --samFlagExclude 2048  \
+         --blackListFileName ${blacklist} \
          --barcodes ${barcodes} \
          --cellTag CB \
          -o sincei_output/rna/scCounts_rna_genes_${rep} \
@@ -201,7 +202,7 @@ principal components (the default), followed by a graph-based (Leiden) clusterin
    scClusterCells -i sincei_output/rna/scCounts_rna_genes_filtered.merged.h5ad \
       -m glmPCA \
       -gf poisson \
-      --clusterResolution 1 \
+      --clusterResolution 0.8 \
       -op sincei_output/rna/scClusterCells_UMAP.png \
       -o sincei_output/rna/scCounts_rna_genes_clustered.h5ad
 
@@ -218,7 +219,64 @@ We can color our UMAP output from :ref:`scClusterCells` with the cell-type
 information from `Persad et.
 al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide in `on figshare <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__ 
 
-.. collapse:: Clustering validation with metadata (click for R code)
+.. collapse:: Clustering validation (click for Python code)
+
+   .. code:: python
+      
+      import scanpy as sc
+      import pandas as pd
+      import matplotlib.pyplot as plt
+
+      # load metadata and anndata
+      rna_metadata = pd.read_csv('metadata_cd34_rna.csv', header=0, index_col=0)
+
+      rna_adata = sc.read_h5ad('sincei_output/rna/scCounts_rna_genes_clustered.h5ad')
+      rna_adata.obs_names = rna_adata.obs_names.str.replace('rep1_|rep2_', '', regex=True)
+
+      rna_adata.obs = rna_adata.obs.merge(rna_metadata['celltype'], left_index=True, right_index=True, how='left')
+
+      # make plots
+      colors = plt.colormaps['Paired'].colors
+      colors_dict = {
+         # leiden clusters
+         '0': colors[1],
+         '1': colors[0],
+         '2': colors[5],
+         '3': colors[3],
+         '4': colors[2],
+         '5': colors[6],
+         '6': colors[4],
+         '7': colors[7],
+         '8': colors[8],
+         # published cell types
+         'CLP': colors[4],
+         'Ery': colors[6],
+         'HMP': colors[5],
+         'HSC': colors[1],
+         'MEP': colors[2],
+         'Mono': colors[0],
+         'cDC': colors[3],
+         'pDC': colors[7],
+         }
+
+      sc.pl.umap(
+         rna_adata,
+         color=['leiden', 'celltype'],
+         palette=colors_dict,
+         title=['sincei Clusters (glmPCA + Leiden)', 'Published Cell Types'],
+         legend_loc='on data',
+         legend_fontsize=14,
+         frameon=False,
+         size=60,
+         )
+
+      for ax in plt.gcf().axes:
+         ax.title.set_size(fontsize=16)
+
+      plt.savefig("sincei_output/rna/UMAP_compared_withOrig.png", dpi=300, bbox_inches="tight")
+
+
+.. collapse:: Clustering validation (click for R code)
 
    .. code:: r
 
@@ -227,18 +285,13 @@ al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we pro
       library(ggplot2)
       library(patchwork)
 
-      umap <- read.delim(“sincei_output/rna/scClusterCells_UMAP.tsv”) meta <-
-      read.csv(“metadata_cd34_rna.csv”, row.names = 1)
-      umap$celltype <- meta[gsub("rep1_|rep2_", "", umap`\ Cell_ID),
-      “celltype”]
+      umap <- read.delim("sincei_output/rna/scClusterCells_UMAP.tsv")
+      meta <- read.csv("metadata_cd34_rna.csv", row.names = 1)
+      umap$celltype <- meta[gsub("rep1_|rep2_", "", umap$Cell_ID), "celltype"]
+
 
       # keep only cells with published labels
-
-      umap %<>% filter(!is.na(celltype)) # remove clusters with low number of
-      cells cl = umap %>% group_by(cluster) %>%
-      summarise(Cell_ID = dplyr::n()) %>%
-      filter(Cell_ID < 50) %>% .$cluster umap %<>%
-      filter(!(cluster %in% cl))
+      umap %<>% filter(!is.na(celltype))
 
       # make plots
       df_center <- group_by(umap, cluster) %>%
@@ -247,30 +300,30 @@ al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we pro
       summarise(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
 
       # colors for metadata (8 celltypes)
+      col_pallette <- RColorBrewer::brewer.pal(8, "Paired")
+      names(col_pallette) <- unique(umap$celltype) # grey is for NA
 
-      col_pallete <- RColorBrewer::brewer.pal(8, “Paired”)
-      names(col_pallete) <- unique(umap$celltype) # grey is for NA
+      # colors for sincei UMAP (9 clusters)
+      colors_cluster <- RColorBrewer::brewer.pal(9, "Paired")
+      names(colors_cluster) <- unique(umap$cluster)
 
-      # colors for sincei UMAP (10 clusters)
-
-      colors_cluster <- RColorBrewer::brewer.pal(10, “Paired”)
-      names(colors_cluster) <- sort(unique(umap$cluster))
-
-      p1 <- umap %>% ggplot(., aes(UMAP1, UMAP2, color=factor(cluster),
-      label=cluster)) + geom_point() +
-      geom_label(data = df_center, aes(UMAP1, UMAP2)) +
+      p1 <- umap %>% ggplot(., aes(UMAP1, UMAP2, color=factor(cluster), label=cluster)) +
+      geom_point() +
+      geom_label(data = df_center, aes(UMAP1, UMAP2), fill = "white") +
       scale_color_manual(values = colors_cluster) +
-      theme_void(base_size = 12) + theme(legend.position = “none”) +
+      theme_void(base_size = 12) + theme(legend.position = "none") +
+      ggtitle("sincei Clusters (glmPCA + Leiden)")
 
       p2 <- umap %>% filter(!is.na(celltype)) %>% ggplot(., aes(UMAP1, UMAP2,
-      color=factor(celltype), label=celltype)) + geom_point() +
-      geom_label(data = df_center2, aes(UMAP1, UMAP2)) +
-      scale_color_manual(values = col_pallete) + labs(color=“Cluster”) +
-      theme_void(base_size = 12) + theme(legend.position = “none”) +
-      ggtitle(“Published Cell Types”)
+      color=factor(celltype), label=celltype)) +
+      geom_point() +
+      geom_label(data = df_center2, aes(UMAP1, UMAP2), fill = "white") +
+      scale_color_manual(values = col_pallette) + labs(color="Cluster") +
+      theme_void(base_size = 12) + theme(legend.position = "none") +
+      ggtitle("Published Cell Types")
 
       pl <- p1 + p2
-      ggsave(plot=pl, “sincei_output/rna/UMAP_compared_withOrig.png”,
+      ggsave(plot=pl, "sincei_output/rna/UMAP_compared_withOrig.png",
       dpi=300, width = 11, height = 6)
 
 

@@ -781,7 +781,6 @@ class CountReadsPerBin(object):
         >>> c.get_coverage_of_region(pysam.AlignmentFile(test.bamFile2), '3R', [(148, 150), (150, 152), (152, 154)])
         array([1., 2., 2.])
 
-
         """
         if not fragmentFromRead_func:
             fragmentFromRead_func = self.get_fragment_from_read

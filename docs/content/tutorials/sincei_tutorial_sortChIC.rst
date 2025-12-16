@@ -38,8 +38,6 @@ The test data here contains:
     genome=sortchic_testdata/mm10_chr1.2bit
     bamfiles=sortchic_testdata/\*.bam
 
-
-
 2. Quality control - I (read-level)
 -------------------------------------
 
@@ -72,7 +70,8 @@ residues, leaving a TA overhang after end-repair.
         --genome2bit ${genome} \
         --barcodes ${barcodes} \
         -bl ${blacklist}  \
-        --smartLabels -o sincei_output/scFilterStats_output.txt \
+        --smartLabels \
+        -o sincei_output/scFilterStats_output.tsv \
         -b ${bamfiles}
 
 ``scFilterStats`` summarizes these outputs as a table, which can then be visualized using the
@@ -184,7 +183,6 @@ UMAP (dimensionality reduction to 2 dimensions) plot of the output (``--outFileU
 option also creates a tsv file with the UMAP coordinates and assigned cluster for each cell in our
 data.
 
-
 .. code:: bash
 
     scClusterCells -i sincei_output/scCounts_50kb_bins_filtered.h5ad \
@@ -203,7 +201,38 @@ that our clustering separates celltypes in a biologically meaningful way.
 We can color our UMAP output from :ref:`scClusterCells` with the cell-type information based on
 FACS-sorting from sortChIC.
 
-.. collapse:: Clustering validation with metadata (click for R code)
+..collapse:: Clustering validation (click for Python code)
+
+    .. code-block:: python
+
+        import scanpy as sc
+        import pandas as pd
+        import matplotlib.pyplot as plt
+
+        metadata = pd.read_csv('metadata.tsv', sep='\t', header=0, index_col=0)
+
+        adata = sc.read_h5ad('sincei_output/scCounts_50kb_bins_clustered.h5ad')
+
+        adata.obs = adata.obs.merge(metadata['ctype'], left_index=True, right_index=True, how='left')
+
+        # make plots
+        sc.pl.umap(
+            adata,
+            color=['leiden', 'celltype'],
+            palette='Paired',
+            title=['sincei Clusters (LSA + Leiden)', 'Published Cell Types'],
+            legend_fontsize=14,
+            legend_loc='on data',
+            frameon=False,
+            size=60,
+            )
+
+        for ax in plt.gcf().axes:
+            ax.title.set_size(fontsize=16)
+
+        plt.savefig('sincei_output/UMAP_compared_withOrig.png', dpi=300, bbox_inches='tight')
+
+.. collapse:: Clustering validation (click for R code)
 
     .. code-block:: r
 

@@ -100,34 +100,51 @@ can be done using the :ref:`scFilterBarcodes` tool.
 
 .. code:: bash
 
+    mkdir -p sincei_output/atac sincei_output/rna
+    mkdir -p sincei_output/atac sincei_output/atac
+
     barcodes=10x_barcodes_tutorial.txt
     for rep in rep1 rep2
     do
         # scATAC-seq
-        bamfile=cellranger_output_${rep}/outs/atac_possorted_bam.bam
-        scFilterBarcodes -p 12 -b ${bamfile} \
-        -o sincei_output/atac/atac_barcodes_${rep}.txt \
+        bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
+        scFilterBarcodes -p 8 -b ${bamfile} \
+        -o sincei_output/atac/atac_barcodes_${rep}.tsv \
         --minCount 100 --minMappingQuality 10 --cellTag CB \
         --rankPlot sincei_output/atac/barcode_rankplot_atac_${rep}.png
+
+        # filter passing ATAC barcodes
+        awk '$4 == "True" { print $2 }' sincei_output/atac/atac_barcodes_${rep}.tsv \
+            > sincei_output/atac/atac_barcodes_${rep}_filtered.txt
 
         # scRNA-seq
         bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
         scFilterBarcodes -p 8 -b ${bamfile} \
-            -o sincei_output/rna/rna_barcodes_${rep}.txt \
+            -o sincei_output/rna/rna_barcodes_${rep}.tsv \
             --minCount 100 --minMappingQuality 10 --cellTag CB \
             --rankPlot sincei_output/rna/barcode_rankplot_rna_${rep}.png
+
+        # filter passing RNA barcodes
+        awk '$4 == "True" { print $2 }' sincei_output/rna/rna_barcodes_${rep}.tsv \
+            > sincei_output/rna/rna_barcodes_${rep}_filtered.txt
+
     done
 
-The above example uses a whitelist of possible ATAC barcodes from the ``cellranger-arc`` workflow.
+The above example uses a subset of the whitelist of possible barcodes from the ``cellranger-arc`` workflow.
 `See here <https://kb.10xgenomics.com/hc/en-us/articles/360049105612-Barcode-translation-in-Cell-Ranger-ARC>`__
-for more details. Providing a whitelist is optional in general, but recommended for 10x genomics data.
+for more details. Providing a whitelist is optional in general, but recommended for 10x genomics data
+and other droplet protocols in general.
 
-The output file contains a list of filtered barcodes that contain counts in atleast ``-mc`` regions
-of the genome. Unlike other tools with similar options, sincei splits the data in 100kb bins and
-reports whether or not a barcode has signal in those bins. This way, barcodes with high counts, but
-present in only one genomic bin can also be filtered out. In most cases, the output is same as the
-usual approach of filtering by total counts. ``-rp`` produces the familiar ``knee-plot`` of barcode
-counts.
+The output file is a .tsv file with log10 barcode counts on each barcode and whether it contains
+counts in at least ``--minCount`` regions of the genome. Unlike other tools with similar options,
+sincei splits the data in 100kb bins and reports whether or not a barcode has signal in those bins.
+This way, barcodes with high counts, but present in only one genomic bin can also be filtered out.
+In most cases, the output is same as the usual approach of filtering by total counts. The
+``--rankPlot`` argument produces the familiar ``knee-plot`` of barcode counts.
+
+We need a single-column file with the barcodes for later steps in the analysis. We can filter the
+barcodes that pass the filtering criteria using simple command-line tools like ``awk`` as shown
+above.
 
 2. scATAC-seq analysis
 ----------------------

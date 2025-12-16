@@ -12,36 +12,17 @@
 import os
 import re
 import sys
-
-# Ensure the repository root is on sys.path so `import sincei` works
-# When building from docs/, the parent directory is the repo root
-sys.path.insert(0, os.path.abspath(".."))
-import sincei
-
-VPATH = "../sincei/_version.py"
-
-
-def get_version(path=VPATH):
-    try:
-        f = open(path)
-    except EnvironmentError:
-        return None
-    for line in f.readlines():
-        mo = re.match('__version__ = "([^//"]+)"', line)
-        if mo:
-            ver = mo.group(1)
-            return ver
-    return None
+from importlib import metadata
 
 
 # -- Project information -----------------------------------------------------
 
 project = "sincei"
 copyright = "2025, Vivek Bhardwaj"
-author = "Vivek Bhardwaj & Fernando Sancho Gómez"
+author = metadata.metadata(project).get("Author")
 
 # The full version, including alpha/beta/rc tags
-release = get_version()
+release = metadata.version(project)
 
 
 # -- General configuration ---------------------------------------------------
