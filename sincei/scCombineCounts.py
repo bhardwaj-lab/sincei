@@ -78,11 +78,11 @@ def get_args():
         choices=["multi-sample", "multi-modal"],
         default="multi-sample",
         help="How to merge the counts from the provided samples. "
-        "``multi-sample``: assumes that each sample is the independent, "
+        "``multi-sample``: assumes that each sample is independent, "
         "but were counted in the same manner (i.e. on same features), therefore "
         "it looks for feature overlaps, but not for barcode overlaps. "
         "``multi-modal``: assumes that the counts were generated in 2 different ways, "
-        "but from the same set of cells (for example, using a multi-omic technology), "
+        "but from the same set of cells (for example, using a multi-omic assay), "
         "therefore it looks for the overlap of cell barcodes, but not for the overlaps "
         "of features (Default: %(default)s)",
     )
@@ -135,9 +135,9 @@ def main(args=None):
         adata_dict = dict(zip(args.labels, adata_list))
         mdata = md.MuData(adata_dict)
 
-        sys.stdout.write("Combined modalities: {} \n".format(len(mdata.mod)))
-        sys.stdout.write("Combined cells: {} \n".format(mdata.shape[0]))
-        sys.stdout.write("Combined features: {} \n".format(mdata.shape[1]))
+        sys.stdout.write(f"Combined modalities: {len(mdata.mod)} \n")
+        sys.stdout.write(f"Combined cells: {mdata.shape[0]} \n")
+        sys.stdout.write(f"Combined features: {mdata.shape[1]} \n")
         mdata.write_h5mu(args.outFile)
 
     else:
