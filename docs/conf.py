@@ -92,15 +92,13 @@ html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/bhardwaj-lab/sincei",
     "use_repository_button": True,
+    "show_toc_level": 3,
     "pygments_light_style": "tango",
     "pygments_dark_style": "monokai",
 }
 
 html_logo = "./content/images/sincei-logo-transparent.png"
 html_show_sphinx = False
-
-# Show subcommands and subcommand options in the sidebar TOC
-html_theme_options = {"show_toc_level": 3}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
