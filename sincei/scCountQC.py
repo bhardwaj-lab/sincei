@@ -157,7 +157,7 @@ def get_args():
         "-cb",
         default=None,
         type=argparse.FileType("r"),
-        help="A list of barcodes to be excluded for the clustering. The barcodes "
+        help="A list of barcodes to be included for the clustering. The barcodes "
         "(along with sample labels) must be present in the input object.",
     )
 

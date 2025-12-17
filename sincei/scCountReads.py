@@ -44,7 +44,13 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
         conflict_handler="resolve",
     )
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(
+        title="commands",
+        dest="command",
+        description="subcommands",
+        help=argparse.SUPPRESS,
+        metavar="",
+    )
 
     read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand"])
     filter_args = ParserCommon.filterOptions()

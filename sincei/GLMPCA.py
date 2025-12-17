@@ -161,7 +161,6 @@ class GLMPCA:
         -------
         bool
             Returns True if the fitting procedure was been successful.
-
         """
         if isinstance(X, ad.AnnData):
             X_fit = torch.Tensor(X.X.transpose().toarray() if hasattr(X.X, "toarray") else X.X.transpose())
@@ -216,7 +215,6 @@ class GLMPCA:
         -------
         torch.Tensor
             Projected saturated parameters.
-
         """
         saturated_parameters = self.exponential_family.invert_g(X)
 
@@ -249,7 +247,6 @@ class GLMPCA:
         -------
         torch.Tensor
             Projected saturated parameters.
-
         """
         if self.learning_rate_ < LEARNING_RATE_LIMIT:
             raise ValueError("LEARNING RATE IS TOO SMALL : DID NOT CONVERGE")
@@ -340,7 +337,6 @@ class GLMPCA:
 
         lr_scheduler: torch.optim.scheduler
             Scheduler instance.
-
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

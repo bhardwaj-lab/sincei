@@ -103,5 +103,5 @@ Contents:
 
    content/list_of_tools
    content/tutorials
-   content/modules
+   content/modules/modules
    content/news

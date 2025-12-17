@@ -30,7 +30,6 @@ class ExponentialFamily:
     ----------
     family_name : str
         Name of the family.
-
     """
 
     def __init__(self, family_params=None, **kwargs):

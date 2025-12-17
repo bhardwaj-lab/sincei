@@ -12,17 +12,36 @@
 import os
 import re
 import sys
-from importlib import metadata
+
+# Ensure the repository root is on sys.path so `import sincei` works
+# When building from docs/, the parent directory is the repo root
+sys.path.insert(0, os.path.abspath(".."))
+import sincei
+
+VPATH = "../sincei/_version.py"
+
+
+def get_version(path=VPATH):
+    try:
+        f = open(path)
+    except EnvironmentError:
+        return None
+    for line in f.readlines():
+        mo = re.match('__version__ = "([^//"]+)"', line)
+        if mo:
+            ver = mo.group(1)
+            return ver
+    return None
 
 
 # -- Project information -----------------------------------------------------
 
 project = "sincei"
 copyright = "2025, Vivek Bhardwaj"
-author = metadata.metadata(project).get("Author")
+author = "Vivek Bhardwaj"
 
 # The full version, including alpha/beta/rc tags
-release = metadata.version(project)
+release = get_version()
 
 
 # -- General configuration ---------------------------------------------------
@@ -99,11 +118,7 @@ html_theme_options = {
 html_logo = "./content/images/sincei-logo-transparent.png"
 html_show_sphinx = False
 
-# Show subcommands and subcommand options in the sidebar TOC
-html_theme_options = {"show_toc_level": 3}
-
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["content/_static"]
-html_css_files = ["custom.css"]
+# html_static_path = ['_static']
