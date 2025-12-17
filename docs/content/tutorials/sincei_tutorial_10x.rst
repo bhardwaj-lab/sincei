@@ -78,13 +78,13 @@ We will use the ``gex_possorted_bam.bam`` for gene-expression data and ``atac_po
 for chromatin accessibility analysis using sincei. These files can also be produced as part of the
 ``cellranger count`` workflow for scRNA-seq or scATAC-seq data alone. For convenience, we provide a
 subset of this data
-`here <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
+`here <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470/4>`__.
 
 .. code:: bash
 
    mkdir 10x_multiome_testdata
    cd 10x_multiome_testdata
-   wget -O 10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/60078353
+   wget -O 10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/60325697
    tar -xvzf 10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files, 2 metadata files and 1 bed file.
 
    rm 10x_multiome_testdata.tar.gz & cd ../ #cleanup
@@ -158,23 +158,25 @@ of the data we just processed
 Follow :doc:`this tutorial <sincei_tutorial_10xRNA>` to learn how to analyze the scRNA-seq samples
 of the data we just processed.
 
+4. Combined analysis of scATAC-seq and scRNA-seq data
+-----------------------------------------------------
+
+After analyzing the scATAC-seq and scRNA-seq data separately, we can combine the two data modalities
+for a joint analysis. :ref:`scCombineCounts` can be used to combine the ``AnnData`` objects produced
+in the two tutorials above into a ``MuData`` object that contains both modalities.
+
+.. code:: bash
+
+    scCombineCounts \
+    -i sincei_output/atac/scCounts_atac_peaks_clustered.h5ad \
+    sincei_output/rna/scCounts_rna_genes_clustered.h5ad \
+    -o sincei_output/scCounts_10x_multiome_clustered.h5mu \
+    --method multi-modal \
+    --labels atac rna
+
+This object can be used for further processing with other software like
+`muon <https://muon.scverse.org/>`__.
 ..
-    4. Combined analysis of scATAC-seq and scRNA-seq data
-    -----------------------------------------------------
-
-    After analyzing the scATAC-seq and scRNA-seq data separately, we can combine the two data modalities
-    for a joint analysis. :ref:`scCombineCounts` can be used to combine the ``AnnData`` objects produced
-    in the two tutorials above into a ``MuData`` object that contains both modalities.
-
-    .. code:: bash
-
-        scCombineCounts \
-        -i sincei_output/atac/scCounts_atac_peaks_clustered.h5ad \
-        sincei_output/rna/scCounts_rna_genes_clustered.h5ad \
-        -o sincei_output/scCounts_10x_multiome_clustered.mudata \
-        --method multi-modal \
-        --labels atac rna
-
     This object can then be used with our :doc:`modules/multimodalClustering` python module to perform
     joint clustering of the two data types. Follow :doc:`this tutorial <clustering_tutorial>` to learn
     how to perform joint clustering of multimodal data using sincei.

@@ -8,10 +8,13 @@ mark in single-cells from adult mouse bone marrow. We will also use a metadata f
 cell labels defined using celltype-specific surface markers identified by FACS. This will provide
 independent confirmation that our clustering captures known cell-types.
 
+For convenience, we provide a subset of the original data on
+`figshare <https://figshare.com/articles/dataset/sortChIC_testdata_package/23544774>`__.
+
 1. Download the example dataset
 -------------------------------
 
-The test data here contains:
+The test data contains:
 
 - **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from
   **chromosome 1** (mm10/GRCm38)

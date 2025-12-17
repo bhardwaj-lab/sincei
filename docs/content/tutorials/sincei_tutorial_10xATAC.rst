@@ -219,8 +219,8 @@ Below, we load this data in R and compare it to the cell metadata provided with 
 that our clustering separates celltypes in a biologically meaningful way.
 
 We can color our UMAP output from :ref:`scClusterCells` with the cell-type information from `Persad et.
-al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide `here
-<https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
+al. (2023) <https://www.nature.com/articles/s41587-023-01716-9>`__, that we provide on
+`figshare <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470/4>`__.
 
 .. collapse:: Clustering validation (click for Python code)
 
@@ -365,8 +365,8 @@ CPM-normalized bigwigs at 1kb resolution.
    # creates 5 files with names "sincei_cluster_<X>.bw" where X is 0, 1... 4
 
 We can now inspect our bigwigs on `IGV <https://software.broadinstitute.org/software/igv/>`__. We
-can clearly see some regions with cell-type specific signal, such as the markers described in the
-original manucscript: TAL1 (erythroid), MPO (myeloid) and IRF (dendritic) marker genes.
+can clearly see some regions with cell-type specific signal, such as the marker TAL1 (erythroid)
+described in the original manuscript.
 
 .. image:: ./../images/igv_snapshot_10xATAC.png
    :height: 500px
