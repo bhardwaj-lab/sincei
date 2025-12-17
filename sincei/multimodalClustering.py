@@ -43,7 +43,8 @@ def multiModal_clustering(
     Performs multi-graph clustering on matched keys (barcodes) of a mudata object and stores the clustering results
     in mdata.obs["cluster_multi"]. It also stores the UMAP coordinates for each of the specified modalities in
     mdata[mod].obsm["X_umap"], where mod is the modality.
-    Note: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
+
+    `Note`: If method is "PCA" or "logPCA", the data matrix of the modality will be normalized, and log1p-transformed
     in the case of logPCA.
 
     Parameters
@@ -82,9 +83,9 @@ def multiModal_clustering(
     for mod in modalities:
         if mod not in mdata.mod.keys():
             raise ValueError(f"Modality {mod} not found in MuData object.")
-    # check if method is provided, otherwise use "PCA" for all
-    if method == "PCA":
-        method = ["PCA"] * len(modalities)
+    # check if method is a string, then convert to list
+    if isinstance(method, str):
+        method = [method] * len(modalities)
     # check if modalities and method lists have the same length
     if len(modalities) != len(method):
         raise ValueError(f"Modalities and method lists must have the same length.")
@@ -94,6 +95,12 @@ def multiModal_clustering(
     # check if modal_weights and modalities lists have the same length
     if len(modal_weights) != len(modalities):
         raise ValueError(f"Modalities and modal_weights lists must have the same length.")
+    # check if nPrinComps are provided, otherwise use default
+    if np.array(nPrinComps).ndim == 0:
+        nPrinComps = [nPrinComps] * len(modalities)
+    # check if nPrinComps and modalities lists have the same length
+    if len(nPrinComps) != len(modalities):
+        raise ValueError(f"Modalities and nPrinComps lists must have the same length.")
 
     # Find common barcodes in provided modalities
     if column_key is None:
@@ -104,25 +111,25 @@ def multiModal_clustering(
 
     adatas = []
     graphs = []
-    for mod, met in zip(modalities, method):
+    for i, (mod, met) in enumerate(zip(modalities, method)):
         adata = mdata.mod[mod][barcodes]
 
         if met == "PCA":
             # if no method is provided, use PCA
             sc.pp.normalize_total(adata, target_sum=1e4)
-            sc.pp.pca(adata, nPrinComps)
+            sc.pp.pca(adata, nPrinComps[i])
 
         elif met == "logPCA":
             ## log1p+PCA using scanpy
             sc.pp.normalize_total(adata, target_sum=1e4)
             sc.pp.log1p(adata)
-            sc.pp.pca(adata, nPrinComps)
+            sc.pp.pca(adata, nPrinComps[i])
 
         elif met == "LSA":
             ## LSA using gensim
             model_object = TOPICMODEL(
                 adata,
-                n_topics=nPrinComps,
+                n_topics=nPrinComps[i],
                 binarize=binarize,
                 smart_code="lfu",
             )
@@ -133,7 +140,7 @@ def multiModal_clustering(
             ## LDA using gensim
             model_object = TOPICMODEL(
                 adata,
-                n_topics=nPrinComps,
+                n_topics=nPrinComps[i],
                 binarize=binarize,
                 n_passes=2,
                 n_workers=numberOfProcessors("max"),
@@ -147,7 +154,7 @@ def multiModal_clustering(
 
             ## glmPCA using mctorch
             model_object = GLMPCA(
-                n_pc=nPrinComps,
+                n_pc=nPrinComps[i],
                 family=glmPCAfamily,
             )
             model_object.fit(adata)
@@ -157,27 +164,30 @@ def multiModal_clustering(
             adata.obsm["X_pca"] = np.asarray(cell_pcs)
 
         sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=nK)
-        sc.tl.leiden(adata, resolution=clusterResolution)
+        sc.tl.leiden(adata, resolution=clusterResolution[i])
         sc.tl.paga(adata)
         sc.pl.paga(adata, plot=False, threshold=0.1)
         sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
         # get graph
-        graph = get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True)
-
+        graphs.append(get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True))
         adatas.append(adata)
-        graphs.append(graph)
 
     # leiden multi-layer clustering
     optimiser = la.Optimiser()
     parts = []
-    for graph in graphs:
-        part = la.ModularityVertexPartition(graph)
-        parts.append(part)
+    parts = [
+        la.RBConfigurationVertexPartition(
+            graph,
+            resolution_parameter=clusterResolution[i],
+        )
+        for i, graph in enumerate(graphs)
+    ]
 
     optimiser.optimise_partition_multiplex(parts, layer_weights=modal_weights, n_iterations=-1)
     print("Detected clusters: ", set(parts[0].membership))
-    mdata.obs["cluster_multi"] = parts[0].membership
+    groups = np.array(parts[0].membership)
+    mdata.obs["cluster_multi"] = pd.Categorical(values=groups.astype("U"))
 
     for mod, adata in zip(modalities, adatas):
         mdata.mod[mod] = adata
@@ -222,7 +232,7 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
     for mod in modalities:
         adata = mdata.mod[mod][barcodes]
         try:
-            um = adata.obs[:, f"UMAP1_{mod}", f"UMAP2_{mod}"]
+            um = adata.obsm["X_umap"]
         except KeyError:
             raise KeyError(f"UMAP coordinates for modality {mod} not found. Please run UMAP first.")
 

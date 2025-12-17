@@ -74,7 +74,7 @@ The following metrics are estimated according to the --binSize and --distanceBet
 The sum of these may be more than the total number of reads. Note that alignments are sampled from
 bins of size --binSize spaced --distanceBetweenBins apart.
 """,
-        usage="scFilterStats -b sample1.bam sample2.bam -bc barcodes.txt -o stats.tsv",
+        usage="scFilterStats -b sample1.bam sample2.bam -bc barcodes.txt -bl blacklist.bed -o stats.tsv",
         add_help=False,
     )
 
