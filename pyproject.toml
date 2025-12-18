@@ -12,6 +12,7 @@ dynamic = ["version"]
 license = {file = "LICENCE.txt"}
 authors = [
     {name = "Vivek Bhardwaj"},
+    {name = "Fernando Sancho Gómez"},
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},

@@ -2,16 +2,19 @@ Analysis of sc-sortChIC data using sincei
 =========================================
 
 Below, we demonstrate how to use sincei to explore data from the protocol single-cell sortChIC,
-presented in `Zeller, Yueng et.al. <https://www.nature.com/articles/s41588-022-01260-3>`__. This
-dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me1** histone
+presented in `Zeller, Yueng et. al. (2023) <https://www.nature.com/articles/s41588-022-01260-3>`__. This
+dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me3** histone
 mark in single-cells from adult mouse bone marrow. We will also use a metadata file that contain the
 cell labels defined using celltype-specific surface markers identified by FACS. This will provide
 independent confirmation that our clustering captures known cell-types.
 
+For convenience, we provide a subset of the original data on
+`figshare <https://figshare.com/articles/dataset/sortChIC_testdata_package/23544774>`__.
+
 1. Download the example dataset
 -------------------------------
 
-The test data here contains:
+The test data contains:
 
 - **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from
   **chromosome 1** (mm10/GRCm38)
@@ -37,8 +40,6 @@ The test data here contains:
     barcodes=sortchic_testdata/sortChIC_barcodes.txt
     genome=sortchic_testdata/mm10_chr1.2bit
     bamfiles=sortchic_testdata/\*.bam
-
-
 
 2. Quality control - I (read-level)
 -------------------------------------
@@ -72,7 +73,8 @@ residues, leaving a TA overhang after end-repair.
         --genome2bit ${genome} \
         --barcodes ${barcodes} \
         -bl ${blacklist}  \
-        --smartLabels -o sincei_output/scFilterStats_output.txt \
+        --smartLabels \
+        -o sincei_output/scFilterStats_output.tsv \
         -b ${bamfiles}
 
 ``scFilterStats`` summarizes these outputs as a table, which can then be visualized using the
@@ -152,7 +154,7 @@ appropriate metrics to filter out the unwanted cells/regions.
     # list the metrics we can use to filter cells/regions
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad --describe
 
-    # export the single-cell level matrices
+    # export the single-cell level metrics
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
     -om sincei_output/countqc_50kb_bins
 
@@ -179,17 +181,15 @@ many cells (using ``--filterCellArgs``).
 The tool :ref:`scClusterCells` provides a range of options to reduce the dimensionality of our count
 data, while preserving biological signal. This can be specified with ``--method`` option. Below, we
 will use a topic modeling method called Latent Semantic Analysis (LSA) to reduce the dimensionality
-of our data to 30 topics (the default). The tool then performs Leiden clustering, and presents a
+of our data to 30 topics. The tool then performs Leiden clustering, and presents a
 UMAP (dimensionality reduction to 2 dimensions) plot of the output (``--outFileUMAP`` option). This
 option also creates a tsv file with the UMAP coordinates and assigned cluster for each cell in our
 data.
 
-
 .. code:: bash
 
     scClusterCells -i sincei_output/scCounts_50kb_bins_filtered.h5ad \
-        --method LSA \
-        --clusterResolution 0.7 \
+        --method LSA -n 30 --clusterResolution 0.7 \
         --outFileUMAP sincei_output/scClusterCells_UMAP.png \
         -o sincei_output/scCounts_50kb_bins_clustered.h5ad
     # Coherence Score:  -1.5
@@ -204,7 +204,38 @@ that our clustering separates celltypes in a biologically meaningful way.
 We can color our UMAP output from :ref:`scClusterCells` with the cell-type information based on
 FACS-sorting from sortChIC.
 
-.. collapse:: Clustering validation with metadata (click for R code)
+..collapse:: Clustering validation (click for Python code)
+
+    .. code-block:: python
+
+        import scanpy as sc
+        import pandas as pd
+        import matplotlib.pyplot as plt
+
+        metadata = pd.read_csv('metadata.tsv', sep='\t', header=0, index_col=0)
+
+        adata = sc.read_h5ad('sincei_output/scCounts_50kb_bins_clustered.h5ad')
+
+        adata.obs = adata.obs.merge(metadata['ctype'], left_index=True, right_index=True, how='left')
+
+        # make plots
+        sc.pl.umap(
+            adata,
+            color=['leiden', 'celltype'],
+            palette='Paired',
+            title=['sincei Clusters (LSA + Leiden)', 'Published Cell Types'],
+            legend_fontsize=14,
+            legend_loc='on data',
+            frameon=False,
+            size=60,
+            )
+
+        for ax in plt.gcf().axes:
+            ax.title.set_size(fontsize=16)
+
+        plt.savefig('sincei_output/UMAP_compared_withOrig.png', dpi=300, bbox_inches='tight')
+
+.. collapse:: Clustering validation (click for R code)
 
     .. code-block:: r
 

@@ -77,14 +77,17 @@ Below is the structure of the output directory from the workflow:
 We will use the ``gex_possorted_bam.bam`` for gene-expression data and ``atac_possorted_bam.bam``
 for chromatin accessibility analysis using sincei. These files can also be produced as part of the
 ``cellranger count`` workflow for scRNA-seq or scATAC-seq data alone. For convenience, we provide a
-subset of this data (only a small chunk of chromosome 2) `here
-<https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470>`__.
+subset of this data
+`here <https://figshare.com/articles/dataset/10x_multiome_test_data_package/29424470/4>`__.
 
 .. code:: bash
 
-   mkdir 10x_multiome
-   wget -O 10x_multiome/10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/55726430
-   tar -xvzf 10x_multiome/10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files and 2 metadata files.
+   mkdir 10x_multiome_testdata
+   cd 10x_multiome_testdata
+   wget -O 10x_multiome_testdata.tar.gz https://figshare.com/ndownloader/files/60325697
+   tar -xvzf 10x_multiome_testdata.tar.gz ## releases 4 (indexed) bam files, 2 metadata files and 1 bed file.
+
+   rm 10x_multiome_testdata.tar.gz & cd ../ #cleanup
 
 (optional) pre-filtering of barcodes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -97,27 +100,51 @@ can be done using the :ref:`scFilterBarcodes` tool.
 
 .. code:: bash
 
-    barcodes=737K-arc-v1.txt # cellranger-arc barcodes in this case
+    mkdir -p sincei_output/atac sincei_output/rna
+    mkdir -p sincei_output/atac sincei_output/atac
+
+    barcodes=10x_barcodes_tutorial.txt
     for rep in rep1 rep2
     do
-        bamfile=cellranger_output_${rep}/outs/atac_possorted_bam.bam
+        # scATAC-seq
+        bamfile=cellranger_output_${rep}_atac_possorted_bam.bam
+        scFilterBarcodes -p 8 -b ${bamfile} \
+        -o sincei_output/atac/atac_barcodes_${rep}.tsv \
+        --minCount 100 --minMappingQuality 10 --cellTag CB \
+        --rankPlot sincei_output/atac/barcode_rankplot_atac_${rep}.png
 
-        scFilterBarcodes -p 20 -b ${bamfile} -w ${barcodes} \
-            -o sincei_output/atac_barcodes_${rep}.tsv \
+        # filter passing ATAC barcodes
+        awk '$4 == "True" { print $2 }' sincei_output/atac/atac_barcodes_${rep}.tsv \
+            > sincei_output/atac/atac_barcodes_${rep}_filtered.txt
+
+        # scRNA-seq
+        bamfile=cellranger_output_${rep}_gex_possorted_bam.bam
+        scFilterBarcodes -p 8 -b ${bamfile} \
+            -o sincei_output/rna/rna_barcodes_${rep}.tsv \
             --minCount 100 --minMappingQuality 10 --cellTag CB \
-            --rankPlot sincei_output/barcode_rankplot_${rep}.png
+            --rankPlot sincei_output/rna/barcode_rankplot_rna_${rep}.png
+
+        # filter passing RNA barcodes
+        awk '$4 == "True" { print $2 }' sincei_output/rna/rna_barcodes_${rep}.tsv \
+            > sincei_output/rna/rna_barcodes_${rep}_filtered.txt
+
     done
 
-The above example uses a whitelist of possible ATAC barcodes from the ``cellranger-arc`` workflow.
+The above example uses a subset of the whitelist of possible barcodes from the ``cellranger-arc`` workflow.
 `See here <https://kb.10xgenomics.com/hc/en-us/articles/360049105612-Barcode-translation-in-Cell-Ranger-ARC>`__
-for more details. Providing a whitelist is optional in general, but recommended for 10x genomics data.
+for more details. Providing a whitelist is optional in general, but recommended for 10x genomics data
+and other droplet protocols in general.
 
-The output file contains a list of filtered barcodes that contain counts in atleast ``-mc`` regions
-of the genome. Unlike other tools with similar options, sincei splits the data in 100kb bins and
-reports whether or not a barcode has signal in those bins. This way, barcodes with high counts, but
-present in only one genomic bin can also be filtered out. In most cases, the output is same as the
-usual approach of filtering by total counts. ``-rp`` produces the familiar ``knee-plot`` of barcode
-counts.
+The output file is a .tsv file with log10 barcode counts on each barcode and whether it contains
+counts in at least ``--minCount`` regions of the genome. Unlike other tools with similar options,
+sincei splits the data in 100kb bins and reports whether or not a barcode has signal in those bins.
+This way, barcodes with high counts, but present in only one genomic bin can also be filtered out.
+In most cases, the output is same as the usual approach of filtering by total counts. The
+``--rankPlot`` argument produces the familiar ``knee-plot`` of barcode counts.
+
+We need a single-column file with the barcodes for later steps in the analysis. We can filter the
+barcodes that pass the filtering criteria using simple command-line tools like ``awk`` as shown
+above.
 
 2. scATAC-seq analysis
 ----------------------
@@ -131,8 +158,31 @@ of the data we just processed
 Follow :doc:`this tutorial <sincei_tutorial_10xRNA>` to learn how to analyze the scRNA-seq samples
 of the data we just processed.
 
+4. Combined analysis of scATAC-seq and scRNA-seq data
+-----------------------------------------------------
+
+After analyzing the scATAC-seq and scRNA-seq data separately, we can combine the two data modalities
+for a joint analysis. :ref:`scCombineCounts` can be used to combine the ``AnnData`` objects produced
+in the two tutorials above into a ``MuData`` object that contains both modalities.
+
+.. code:: bash
+
+    scCombineCounts \
+    -i sincei_output/atac/scCounts_atac_peaks_clustered.h5ad \
+    sincei_output/rna/scCounts_rna_genes_clustered.h5ad \
+    -o sincei_output/scCounts_10x_multiome_clustered.h5mu \
+    --method multi-modal \
+    --labels atac rna
+
+This object can be used for further processing with other software like
+`muon <https://muon.scverse.org/>`__.
+..
+    This object can then be used with our :doc:`modules/multimodalClustering` python module to perform
+    joint clustering of the two data types. Follow :doc:`this tutorial <clustering_tutorial>` to learn
+    how to perform joint clustering of multimodal data using sincei.
+
 Notes
-------------
+-----
 
 Currently, sincei doesn't provide a method for **doublet estimation and removal**, which is an
 important step in the analysis of droplet-based data. Instead, we use simpler filters of min and max
