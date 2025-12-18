@@ -179,6 +179,22 @@ def VCRfinder(
     for chrom in chroms:
         adata_chrom = adata[:, adata.var["chrom"] == chrom]
         start = adata_chrom.var["start"].min()
+        # Sort the bins
+        adata_chrom = adata_chrom[:, adata_chrom.var.sort_values(by=["start", "end"], axis=0).index]
+
+        # rows where end - start != binsize
+        mask = (adata_chrom.var["end"] - adata_chrom.var["start"]) != binsize
+
+        # if the last row binsize is >= 1/2 of binsize, update its 'end' value
+        last_idx = adata_chrom.var.index[-1]
+
+        if mask.loc[last_idx]:
+            if adata_chrom.var.loc[last_idx, "end"] - adata_chrom.var.loc[last_idx, "start"] >= (binsize/2):
+                adata_chrom.var.loc[last_idx, "end"] = adata_chrom.var.loc[last_idx, "start"] + binsize
+            else:
+                # eject last row
+                sys.stderr.write(f"row {last_idx} removed due to difference in binsize")
+                adata_chrom = adata_chrom[:, :adata_chrom.var.index[-2]]
 
         assert all(
             (adata_chrom.var["end"] - adata_chrom.var["start"] == binsize)
@@ -191,8 +207,6 @@ def VCRfinder(
 
         # Calculate the number of diagonals needed
         k = max(round(4.0 * np.max(sigmas)), adata_chrom.shape[1])
-        # Sort the bins
-        adata_chrom = adata_chrom[:, adata_chrom.var.sort_values(by=["start", "end"], axis=0).index]
         # Get bin-bin correlations
         ctime = time.time()
         corr = sparse_band_corr(adata_chrom.X, k=k)
