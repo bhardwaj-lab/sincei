@@ -90,6 +90,7 @@ tool                                 description
 :ref:`scCombineCounts`         Concatenate/merge the counts from different samples/batches or different modalities.
 :ref:`scClusterCells`          Perform dimensionality reduction and clustering on the output of scCountReads.
 :ref:`scBulkCoverage`          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
+:ref:`scFindVCRs`             Call variable chromatin regions (VCRs) from binned chromatin data.
       scFindMarkers            [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
       scFeaturePlot            [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.
 ========================== ============================================================================================================

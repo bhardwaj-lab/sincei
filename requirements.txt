@@ -9,3 +9,4 @@ gensim
 leidenalg
 networkx
 python-igraph
+ruptures
