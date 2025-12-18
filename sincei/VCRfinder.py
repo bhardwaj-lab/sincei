@@ -246,7 +246,7 @@ def VCRfinder(
             prevs = [0, *bkps[:-1]]
             bkp_df = pd.DataFrame(
                 {
-                    "chrom": "chr1",
+                    "chrom": chrom,
                     "start": [int(start + prev * 2000) for prev in prevs],
                     "end": [int(start + bkp * 2000) for bkp in bkps],
                     "name": ["pen-{}_brkpoint-{}".format(pen, bkp) for bkp in bkps],
