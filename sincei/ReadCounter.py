@@ -5,7 +5,6 @@ import sys
 import multiprocessing
 import numpy as np
 
-# import scipy as sc
 # deepTools packages
 import deeptools.utilities
 from deeptools import bamHandler
@@ -44,11 +43,13 @@ def estimateSizeFactors(m):
 
     Parameters
     ----------
-    m : a numpy ndarray
+    m : np.ndarray
+        Dataset with cells in rows and features in columns.
 
     Returns
     -------
-    sf : list of size factors
+    list [np.float]
+        List of size factors.
 
     Examples
     --------
@@ -86,13 +87,14 @@ def countReadsInRegions_wrapper(args):
 class CountReadsPerBin(object):
     r"""Collects coverage over multiple bam files using multiprocessing
 
-    This function collects read counts (coverage) from several bam files and returns
-    an numpy array with the results. This class uses multiprocessing to compute the coverage.
+    This class uses multiprocessing to compute the read counts (coverage) from several
+    bam files and returns a numpy array with the resulting count matrix in `feature x cell`
+    format and another numpy array containing the names of the features.
 
     Parameters
     ----------
     bamFilesList : list
-        List containing the names of indexed bam files. E.g. ['file1.bam', 'file2.bam']
+        List containing the paths of indexed bam files. E.g. ['file1.bam', 'file2.bam']
 
     binLength : int
         Length of the window/bin. This value is overruled by ``bedFile`` if present.
@@ -101,43 +103,41 @@ class CountReadsPerBin(object):
     numberOfSamples : int
         Total number of samples. The genome is divided into ``numberOfSamples``, each
         with a window/bin length equal to ``binLength``. This value is overruled
-        by ``stepSize`` in case such value is present and by ``bedFile`` in which
-        case the number of samples and bins are defined in the bed file
+        by ``stepSize`` and by ``bedFile`` in which case the number of samples
+        are the regions in the bed file.
 
     numberOfProcessors : int
-        Number of processors to use. Default is 4
+        Number of processors to use. Default: 4
 
     verbose : bool
         Output messages. Default: False
 
     region : str
-        Region to limit the computation in the form chrom:start:end.
+        Region to limit the computation in the form chrom:start:end. Default: None
 
-    bedFile : list of file_handles.
-        Each file handle corresponds to a bed file containing the regions for which to compute the coverage. This option
-        overrules ``binLength``, ``numberOfSamples`` and ``stepSize``.
+    bedFile : list
+        List of file paths corresponding to bed files containing the regions for which to compute
+        the coverage. This option overrules ``binLength``, ``numberOfSamples`` and ``stepSize``.
 
     blackListFileName : str
         A string containing a BED file with blacklist regions.
 
     extendReads : bool, int
-
         Whether coverage should be computed for the extended read length (i.e. the region covered
         by the two mates or the regions expected to be covered by single-reads).
         If the value is 'int', then then this is interpreted as the fragment length to extend reads
         that are not paired. For Illumina reads, usual values are around 300.
         This value can be determined using the peak caller MACS2 or can be
-        approximated by the fragment lengths computed when preparing the library for sequencing. If the value
-        is of the variable is true and not value is given, the fragment size is sampled from the library but
-        only if the library is paired-end. Default: False
-
+        approximated by the fragment lengths computed when preparing the library for sequencing.
+        If the value is of the variable is true and not value is given, the fragment size is sampled
+        from the library but only if the library is paired-end. Default: False
 
     minMappingQuality : int
         Reads of a mapping quality less than the give value are not considered. Default: None
 
     duplicateFilter : str
-        Type of duplicate filter to use (same start, end position, umi and barcodes. If paired-end, same start-end for mates) are
-        to be excluded. Default: None
+        Type of duplicate filter to use (same start, end position, umi and barcodes. If paired-end,
+        same start-end for mates) are to be excluded. Default: None
 
     chrToSkip: list
         List with names of chromosomes that do not want to be included in the coverage computation.
@@ -147,8 +147,8 @@ class CountReadsPerBin(object):
         the positions for which the coverage is computed are defined as follows:
         ``range(start, end, stepSize)``. Thus, a stepSize of 1, will compute
         the coverage at each base pair. If the stepSize is equal to the
-        binLength then the coverage is computed for consecutive bins. If seepSize is
-        smaller than the binLength, then teh bins will overlap.
+        binLength then the coverage is computed for consecutive bins. If stepSize is
+        smaller than the binLength, then bins will overlap.
 
     center_read : bool
         Determines if reads should be centered with respect to the fragment length.
@@ -165,10 +165,10 @@ class CountReadsPerBin(object):
         translates into exclude all reads that map to the reverse strand.
 
     zerosToNans : bool
-        If true, zero values encountered are transformed to Nans. Default false.
+        If true, zero values encountered are transformed to Nans. Default: False
 
     skipZeroOverZero : bool
-        If true, skip bins where all input BAM files have no coverage (only applicable to bamCompare).
+        If true, skip bins where all input BAM files have no coverage.
 
     minFragmentLength : int
         If greater than 0, fragments below this size are excluded.
@@ -186,43 +186,34 @@ class CountReadsPerBin(object):
         Only alignments with given min and max GC content are counted.
 
     genome2bit : str
-        2 bit file for the genome (if motifFilter is specified)
+        2 bit file for the genome (required if motifFilter is specified).
 
     out_file_for_raw_data : str
-        File name to save the raw counts computed
+        File name to save the raw counts computed.
 
     statsList : list
-        For each BAM file in bamFilesList, the associated per-chromosome statistics returned by openBam
+        For each BAM file in bamFilesList, the associated per-chromosome statistics returned by openBam.
 
     mappedList : list
         For each BAM file in bamFilesList, the number of mapped reads in the file.
 
     bed_and_bin : boolean
-        If true AND a bedFile is given, compute coverage of each bin of the given size in each region of bedFile
+        If true AND a bedFile is given, compute coverage of each bin of the given size in each region of bedFile.
 
     sumCoveragePerBin : boolean
-        If true return cumulative coverage per bin, instead of total read counts (for plotFingerPrint)
+        If true return cumulative coverage per bin, instead of total read counts (for plotFingerPrint).
 
     genomeChunkSize : int
         If not None, the length of the genome used for multiprocessing.
 
-    Returns
-    -------
-    numpy array
-
-        Each row correspond to each bin/bed region and each column correspond to each of
-        the bamFiles.
-
-
     Examples
     --------
-
     The test data contains reads for 200 bp.
 
     >>> test = Tester()
 
     The transpose function is used to get a nicer looking output.
-    The first line corresponds to the number of reads per bin in bam file 1
+    The first line corresponds to the number of reads per bin in bam file 1.
 
     >>> c = CountReadsPerBin([test.bamFile1, test.bamFile2], 50, 4)
     >>> np.transpose(c.run())
@@ -419,6 +410,16 @@ class CountReadsPerBin(object):
         return chunkSize
 
     def run(self, allArgs=None):
+        """
+        Run the read counting according to the parameters specified when CountReadsPerBin
+        is initialized.
+
+        Returns
+        -------
+        tuple [np.ndarray, np.ndarray]
+            A tuple containing a numpy array with the resulting count matrix in `feature x cell`
+            format and another numpy array containing the names of the features.
+        """
         bamFilesHandles = []
         for x in self.bamFilesList:
             try:
@@ -527,7 +528,8 @@ class CountReadsPerBin(object):
                 )
 
     def count_reads_in_region(self, chrom, start, end, bed_regions_list=None):
-        """Counts the reads in each bam file at each 'stepSize' position
+        """
+        Counts the reads in each bam file at each 'stepSize' position
         within the interval (start, end) for a window or bin of size binLength.
 
         The stepSize controls the distance between bins. For example,
@@ -541,13 +543,13 @@ class CountReadsPerBin(object):
         Parameters
         ----------
         chrom : str
-            Chrom name
+            Chrom name.
         start : int
-            start coordinate
+            start coordinate.
         end : int
-            end coordinate
+            end coordinate.
         barcodes: list
-            List of barcodes to count (currently set for tag 'BC' in the BAM)
+            List of barcodes to count (currently set for BAM tag 'BC').
         bed_regions_list: list
             List of list of tuples of the form (start, end)
             corresponding to bed regions to be processed.
@@ -556,10 +558,8 @@ class CountReadsPerBin(object):
 
         Returns
         -------
-        numpy array
-            The result is a numpy array that as rows each bin
-            and as columns each bam file.
-
+        np.ndarray
+            The result is a numpy array that as rows each bin and as columns each bam file.
 
         Examples
         --------
@@ -732,6 +732,27 @@ class CountReadsPerBin(object):
         Returns a numpy array that corresponds to the number of reads
         that overlap with each tile.
 
+        Parameters
+        ----------
+        bamHandle : pysam.AlignmentFile
+            An open pysam.AlignmentFile object representing the BAM file to read from.
+        chrom : str
+            The name of the chromosome to analyze.
+        regions : list of tuples
+            A list of tuples specifying the regions to analyze. Each tuple should contain start and end positions.
+        fragmentFromRead_func : function, optional
+            A function to extract fragment information from a read. If not provided, the default method
+            ``get_fragment_from_read`` is used.
+
+        Returns
+        -------
+        np.ndarray
+            Array of coverage values for each tile.
+
+        Examples
+        --------
+        Initialize some useful values
+
         >>> test = Tester()
         >>> import pysam
         >>> c = CountReadsPerBin([], stepSize=1, extendReads=300)
@@ -759,7 +780,6 @@ class CountReadsPerBin(object):
         >>> c.extendReads=False
         >>> c.get_coverage_of_region(pysam.AlignmentFile(test.bamFile2), '3R', [(148, 150), (150, 152), (152, 154)])
         array([1., 2., 2.])
-
 
         """
         if not fragmentFromRead_func:
@@ -1011,6 +1031,18 @@ class CountReadsPerBin(object):
         return coverages
 
     def getReadLength(self, read):
+        """
+        Returns the length of the read.
+
+        Parameters
+        ----------
+        read : pysam read object
+
+        Returns
+        -------
+        int
+            Length of the read.
+        """
         return len(read)
 
     @staticmethod
@@ -1020,7 +1052,6 @@ class CountReadsPerBin(object):
         the same chromosome and are not to far away. The sam flag for proper pair can not
         always be trusted. Note that if the fragment size is > maxPairedFragmentLength (~2kb
         usually) that False will be returned.
-        :return: bool
 
         >>> import pysam
         >>> import os
@@ -1085,12 +1116,7 @@ class CountReadsPerBin(object):
         When reads are extended the cigar information is
         skipped.
 
-        Parameters
-        ----------
-        read: pysam object.
-
         The following values are defined (for forward reads)::
-
 
                  |--          -- read.tlen --              --|
                  |-- read.alen --|
@@ -1119,13 +1145,13 @@ class CountReadsPerBin(object):
         ----------
         read : pysam read object
 
-
         Returns
         -------
         list of tuples
             [(fragment start, fragment end)]
 
-
+        Examples
+        --------
         >>> test = Tester()
         >>> c = CountReadsPerBin([], 1, 1, 200, extendReads=True)
         >>> c.defaultFragmentLength=100
@@ -1204,17 +1230,35 @@ class CountReadsPerBin(object):
 
 
              ---------------|==================|------------------
-                        tileStart
+                        tileIndex
                    |--------------------------------------|
                    |    <--      smoothRange     -->      |
                    |
-             tileStart - (smoothRange-tileSize)/2
+             tileIndex - (smoothRange-tileSize)/2
 
         Test for a smooth range that spans 3 tiles.
 
+        Parameters
+        ----------
+        tileIndex : int
+            Start index.
+
+        tileSize : int
+            Length of the tile.
+
+        smoothRange : int
+            Range over which to smooth.
+
+        maxPosition : int
+            Maximum index allowed.
+
+        Returns
+        -------
+        tuple
+            (startIndex, endIndex)
+
         Examples
         --------
-
         >>> c = CountReadsPerBin([], 1, 1, 1, 0)
         >>> c.getSmoothRange(5, 1, 3, 10)
         (4, 7)
@@ -1253,7 +1297,7 @@ class CountReadsPerBin(object):
 
 
 def remove_row_of_zeros(matrix):
-    r"remove rows containing all zeros or all nans"
+    r"Remove all-zeros or all-nan rows from matrix."
     _mat = np.nan_to_num(matrix)
     to_keep = _mat.sum(1) != 0
     return matrix[to_keep, :]
@@ -1264,8 +1308,13 @@ def estimateSizeFactors(m):
     Compute size factors in the same way as DESeq2.
     The inverse of that is returned, as it's then compatible with bamCoverage.
 
-    m : a numpy ndarray
+    Parameters
+    ----------
+    m : np.ndarray
+        Dataset with cells in rows and features in columns.
 
+    Examples
+    --------
     >>> m = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 0], [10, 5, 100]])
     >>> sf = estimateSizeFactors(m)
     >>> assert(np.all(np.abs(sf - [1.305, 0.9932, 0.783]) < 1e-4))

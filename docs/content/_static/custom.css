@@ -1,0 +1,5 @@
+/* Make subcommand headers larger and bold */
+h3 {
+    font-size: 1.75em !important;
+    font-weight: bold !important;
+}

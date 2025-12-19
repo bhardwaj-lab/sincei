@@ -52,26 +52,29 @@ def parseArguments():
         parents=[io_args, bam_args, filter_args, read_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-This tool estimates the number of reads that would be filtered given a set of settings and prints this to the terminal.
-Further, it tracks the number of singleton reads. The following metrics will always be tracked regardless of what you specify (the order output also matches this):
+``scFilterStats`` estimates the number of reads that would be filtered given a set of criteria
+and prints it to the terminal. Furthermore, it tracks the number of singleton reads.
+The following metrics will always be tracked regardless of what you specify (the order output also matches this):
 
- * Total reads (including unmapped)
- * Mapped reads
- * Reads in blacklisted regions (--blackListFileName)
+* Total reads (including unmapped)
+* Mapped reads
+* Reads in blacklisted regions (--blackListFileName)
 
-The following metrics are estimated according to the --binSize and --distanceBetweenBins parameters
- * Estimated mapped reads filtered (the total number of mapped reads filtered for any reason)
- * Alignments with a below threshold MAPQ (--minMappingQuality)
- * Alignments with at least one missing flag (--samFlagInclude)
- * Alignments with undesirable flags (--samFlagExclude)
- * Duplicates determined by sincei (--duplicateFilter)
- * Duplicates marked externally (e.g., by picard)
- * Singletons (paired-end reads with only one mate aligning)
- * Wrong strand (due to --filterRNAstrand)
+The following metrics are estimated according to the --binSize and --distanceBetweenBins parameters:
 
-The sum of these may be more than the total number of reads. Note that alignments are sampled from bins of size --binSize spaced --distanceBetweenBins apart.
+* Estimated mapped reads filtered (the total number of mapped reads filtered for any reason)
+* Alignments with a below threshold MAPQ (--minMappingQuality)
+* Alignments with at least one missing flag (--samFlagInclude)
+* Alignments with undesirable flags (--samFlagExclude)
+* Duplicates determined by sincei (--duplicateFilter)
+* Duplicates marked externally (e.g., by picard)
+* Singletons (paired-end reads with only one mate aligning)
+* Wrong strand (due to --filterRNAstrand)
+
+The sum of these may be more than the total number of reads. Note that alignments are sampled from
+bins of size --binSize spaced --distanceBetweenBins apart.
 """,
-        usage="Example usage: scFilterStats.py -b sample1.bam sample2.bam -bc barcodes.txt > log.txt",
+        usage="scFilterStats -b sample1.bam sample2.bam -bc barcodes.txt -bl blacklist.bed -o stats.tsv",
         add_help=False,
     )
 
@@ -334,6 +337,6 @@ def main(args=None):
     if args.outFile is not None:
         final_df.to_csv(args.outFile, sep="\t")
     else:
-        print(final_df)
+        print(final_df.to_string())
 
     return 0

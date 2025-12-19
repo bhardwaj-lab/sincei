@@ -26,33 +26,25 @@ def parseArguments(args=None):
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-            ``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided BAM file(s).
-            The analysis can be performed for the entire genome by running the program in 'bins' mode.
-            If you want to count the read coverage for specific regions only, use the ``features`` mode instead.
-            The standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames (cell barcodes).
+``scCountReads`` computes the read coverages per cell barcode for genomic regions in the provided
+BAM file(s). The analysis can be performed for the entire genome by running the program in ``bins`` mode. If
+you want to count the read coverage for specific regions only, use the ``features`` mode instead. The
+standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames
+(cell barcodes).
 
-            A detailed sub-commands help is available by typing:
+Detailed help for each sub-command is available by typing::
 
-              scCountReads bins -h
-
-              scCountReads features -h
-
-          """,
-        epilog="example usages:\n"
-        "scCountReads bins --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results \n\n"
-        "scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt \n"
-        "-o results"
-        " \n\n",
+    scCountReads bins -h
+    scCountReads features -h
+""",
+        usage="""
+scCountReads bins -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results
+scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results
+""",
         conflict_handler="resolve",
     )
 
-    subparsers = parser.add_subparsers(
-        title="commands",
-        dest="command",
-        description="subcommands",
-        help="subcommands",
-        metavar="",
-    )
+    subparsers = parser.add_subparsers()
 
     read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand"])
     filter_args = ParserCommon.filterOptions()
@@ -77,7 +69,7 @@ def parseArguments(args=None):
         ],
         help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage="%(prog)s -bs 100000 --bamfiles file1.bam file2.bam -o results \n",
+        usage="%(prog)s -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
     )
 
     # BED file arguments
@@ -101,7 +93,7 @@ def parseArguments(args=None):
         ],
         help="The user provides a BED/GTF file containing all regions "
         "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
-        usage="%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results\n",
+        usage="%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
         add_help=False,
     )
 

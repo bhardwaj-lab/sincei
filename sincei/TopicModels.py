@@ -27,10 +27,6 @@ class TOPICMODEL:
         Number of passes for the LDA model. Default is 1.
     n_workers : int, optional
         Number of workers for the LDA model. Default is 1.
-
-    Returns
-    -------
-    An object of class TOPICMODEL.
     """
 
     def __init__(
@@ -60,7 +56,7 @@ class TOPICMODEL:
 
     def runLSA(self):
         r"""
-        Computes LSA for a given matrix and returns the updated object
+        Computes LSA for a given matrix and updates the ``TOPICMODEL`` object.
         """
 
         # LSA
@@ -80,7 +76,7 @@ class TOPICMODEL:
 
     def runLDA(self):
         r"""
-        Computes LDA model for a given matrix and returns the updated object
+        Computes LDA model for a given matrix and updates the ``TOPICMODEL`` object.
         """
 
         self.lda_model = models.LdaMulticore(
@@ -93,7 +89,7 @@ class TOPICMODEL:
 
     def get_cell_topic(self, pop_sparse_cells=False):
         r"""
-        Get cell-topic matrix from the updated object
+        Get cell-topic matrix from the ``TOPICMODEL`` object.
 
         Returns
         -------
@@ -126,6 +122,10 @@ class TOPICMODEL:
                         print(f"Index [{i}, {li[i][j]}] = {val}")
                         cell_topic[i, li[i][j]] = val
                 cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
+
+        else:
+            li_val = np.stack(li_val)
+            cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
 
         cell_topic.index = cells
 

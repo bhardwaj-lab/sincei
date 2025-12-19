@@ -12,6 +12,7 @@ dynamic = ["version"]
 license = {file = "LICENCE.txt"}
 authors = [
     {name = "Vivek Bhardwaj"},
+    {name = "Fernando Sancho Gómez"},
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
@@ -62,14 +63,15 @@ dev = [
     "twine>=4.0.2"
 ]
 doc = [
-    "sphinx>=4",
+    "sphinx>=8",
     "sphinx-book-theme>=0.3.3",
     "myst-nb",
     "sphinxcontrib-bibtex>=1.0.0",
     "sphinx-autodoc-typehints",
     "readthedocs-sphinx-ext",
     "sphinx-argparse",
-    "sphinx_toolbox"
+    "sphinx_toolbox",
+    "IPython",
     # For notebooks
  #   "ipykernel",
  #   "ipython",
@@ -105,7 +107,7 @@ skip_glob = ["docs/*"]
 
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ['py310']
 include = '\.pyi?$'
 exclude = '''
 (

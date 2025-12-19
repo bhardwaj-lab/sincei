@@ -29,17 +29,15 @@ def parseArguments():
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), bam_args, filter_args, read_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description="This tool takes alignments of reads or fragments "
-        "as input (BAM files), along with cell grouping information, such as "
-        "barcode -> batch, or barcode -> cluster, as tsv file, and generates a "
-        "coverage track (bigWig or bedGraph) per group as output. "
-        "The coverage is calculated as the number of reads per bin, "
-        "where bins are short consecutive counting windows of a defined "
-        "size. It is possible to extended/change the length of the reads "
-        "to better reflect the actual fragment length. *scBulkCoverage* "
-        "offers normalization per cluster using different methods \n",
-        usage="An example usage is:"
-        "$ scBulkCoverage -b file1.bam file2.bam --labels file1 file2 -g scClusterCells_output.tsv -o coverage.bw",
+        description="""
+``scBulkCoverage`` takes alignments of reads or fragments as input (BAM files), along with cell
+grouping information, such as barcode -> batch, or barcode -> cluster, as tsv file, and generates a  coverage
+track (bigWig or bedGraph) per group as output. The coverage is calculated as the number of reads per bin,
+where bins are short consecutive counting windows of a defined  size. It is possible to extended/change the
+length of the reads to better reflect the actual fragment length. ``scBulkCoverage`` offers normalization per
+cluster using different methods.
+""",
+        usage="scBulkCoverage -b file1.bam file2.bam --labels file1 file2 -g scClusterCells_output.tsv -o coverage.bw",
         add_help=False,
     )
 

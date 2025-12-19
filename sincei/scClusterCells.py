@@ -18,8 +18,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 matplotlib.use("Agg")
-matplotlib.rcParams["pdf.fonttype"] = 42
-matplotlib.rcParams["svg.fonttype"] = "none"
+# matplotlib.rcParams["pdf.fonttype"] = 42
+# matplotlib.rcParams["svg.fonttype"] = "none"
 
 # single-cell stuff
 import anndata as ad
@@ -41,11 +41,12 @@ def parseArguments():
         parents=[io_args, get_args(), plot_args, other_args],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
         description="""
-        This tool clusters the cells based on the input count matrix (output of scCountReads) and performs dimensionality reduction,
-        community detection and 2D projection (UMAP) of the cells. The result is an updated h5ad object, and (optionally) a plot file
-        and a tsv file with UMAP coordinates and corresponding cluster id for each barcode.
-        """,
-        usage="Example usage: scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op <umap_prefix>.png  > log.txt",
+``scClusterCells`` clusters cells based on the input count matrix (output of scCountReads) and
+performs dimensionality reduction, community detection and 2D projection (UMAP) of the cells. The
+result is an updated h5ad object, and (optionally) a plot file and a tsv file with UMAP coordinates
+and corresponding cluster id for each barcode.
+""",
+        usage="scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op umap.png",
         add_help=False,
     )
 
@@ -62,7 +63,7 @@ def get_args():
         type=str,
         required=False,
         help="The output plot file (for UMAP). If you specify this option, another file with the same "
-        "prefix (and .txt extention) is also created with the raw UMAP coordinates.",
+        "prefix (and .tsv extention) is also created with the raw UMAP coordinates.",
     )
 
     general.add_argument(
@@ -103,7 +104,7 @@ def get_args():
         "-n",
         default=20,
         type=int,
-        help="Number of principle components to reduce the dimensionality to. "
+        help="Number of principal components to reduce the dimensionality to. "
         "Use higher number for samples with more expected heterogenity. (Default: %(default)s)",
     )
 

@@ -34,7 +34,7 @@ conda create -n sincei -c bioconda -c conda-forge sincei
 Alternatively, a development version can be installed via GitHub.
 
 ```
-conda create -n sincei python=3.8
+conda create -n sincei python=3.10
 conda activate sincei
 pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
 ```
