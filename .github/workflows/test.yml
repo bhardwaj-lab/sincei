@@ -49,10 +49,10 @@ jobs:
       run: |
         pip install pytest
         pip install pytest-cov
-        pytest --cov=./
+        pytest --cov=./ --junitxml=junit.xml -o junit_family=legacy
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         env_vars: OS,PYTHON
