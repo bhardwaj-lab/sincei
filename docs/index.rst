@@ -61,7 +61,7 @@ Create a new conda environment and install sincei in it using pip from GitHub:
 
 .. code-block:: bash
 
-    conda create -n sincei python=3.10
+    conda create -n sincei python=3.12
     conda activate sincei
     (sincei): pip install git+https://github.com/bhardwaj-lab/sincei.git@master#egg=sincei
 
@@ -84,14 +84,13 @@ tool                                 description
 ========================== ============================================================================================================
 :ref:`scFilterBarcodes`        Identify and filter cell barcodes from BAM file (for droplet-based single-cell seq).
 :ref:`scFilterStats`           Produce per-cell statistics after filtering reads by user-defined criteria.
-:ref:`scJSD`                   Compare the cumulative read coverages of cells on regions using the Jensen-Shannon distance.
+:ref:`scFindVCRs`              Call variable chromatin regions (VCRs) from binned chromatin data.
+:ref:`scScoreFeatures`         Calculate gene activity scores from chromatin features/bins.
 :ref:`scCountReads`            Counts reads for each barcode on genomic bins or user-defined features.
 :ref:`scCountQC`               Perform quality control and filter the output of scCountReads.
 :ref:`scCombineCounts`         Concatenate/merge the counts from different samples/batches or different modalities.
 :ref:`scClusterCells`          Perform dimensionality reduction and clustering on the output of scCountReads.
 :ref:`scBulkCoverage`          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
-      scFindMarkers            [WIP] Find marker genes per group, given the output of scCountReads and a user-defined group.
-      scFeaturePlot            [WIP] Plot the counts for a given feature on a UMAP or on a (IGV-style) genomic-track.
 ========================== ============================================================================================================
 
 

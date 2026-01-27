@@ -204,7 +204,7 @@ that our clustering separates celltypes in a biologically meaningful way.
 We can color our UMAP output from :ref:`scClusterCells` with the cell-type information based on
 FACS-sorting from sortChIC.
 
-..collapse:: Clustering validation (click for Python code)
+.. collapse:: Clustering validation (click for Python code)
 
     .. code-block:: python
 

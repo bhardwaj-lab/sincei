@@ -44,14 +44,14 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
         conflict_handler="resolve",
     )
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(title="Counting mode")
 
     read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand"])
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
 
     # bins mode options
-    subparsers.add_parser(
+    bins_subparser = subparsers.add_parser(
         "bins",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[
@@ -69,11 +69,11 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
         ],
         help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage="%(prog)s -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
+        usage="scCountReads bins -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
     )
 
     # BED file arguments
-    subparsers.add_parser(
+    features_subparser = subparsers.add_parser(
         "features",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[
@@ -91,11 +91,26 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
             get_args(),
             other_args,
         ],
-        help="The user provides a BED/GTF file containing all regions "
-        "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
-        usage="%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
+        help="The user provides a BED/GTF file containing all regions that "
+        "should be counted. A common use would be to count scRNA-seq reads on Genes.",
+        usage="scCountReads features --BED selection.bed [genes.gtf] --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    # If no arguments are provided to bins mode, show help and exit
+    if sys.argv[1] == "bins" and len(sys.argv) == 2:
+        bins_subparser.print_help()
+        sys.exit(0)
+
+    # If no arguments are provided to features mode, show help and exit
+    if sys.argv[1] == "features" and len(sys.argv) == 2:
+        features_subparser.print_help()
+        sys.exit(0)
 
     return parser
 

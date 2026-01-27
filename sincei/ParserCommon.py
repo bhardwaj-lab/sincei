@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 from deeptools.utilities import smartLabels
-from sincei._version import __version__
+import importlib.metadata
 
 
 def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None):
@@ -22,7 +22,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
         group.add_argument(
             "--input",
             "-i",
-            metavar="H5AD",
+            metavar=("H5AD1", "H5AD2"),
             help="List of .h5ad files separated by spaces.",
             nargs="+",
             required=True,
@@ -37,20 +37,20 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             required=True,
         )
 
-    elif "bamfiles" in opts:
+    if "bamfiles" in opts:
         group.add_argument(
             "--bamfiles",
             "-b",
-            metavar="FILE1 FILE2",
-            help="List of indexed bam files separated by spaces.",
+            metavar=("BAM1", "BAM2"),
+            help="List of indexed BAM files separated by spaces.",
             nargs="+",
             required=True,
         )
-    elif "bamfile" in opts:
+    if "bamfile" in opts:
         group.add_argument(
             "--bamfile",
             "-b",
-            metavar="FILE",
+            metavar="BAM",
             help="Indexed BAM file.",
             required=True,
         )
@@ -64,11 +64,11 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             default=None,
             required=True if "whitelist" in requiredOpts else False,
         )
-    elif "barcodes" in opts:
+    if "barcodes" in opts:
         group.add_argument(
             "--barcodes",
             "-bc",
-            help="A single-column file containing barcodes (whitelist) to be used for the analysis.",
+            help="A single-column file containing the cell barcode whitelist, one barcode per line.",
             metavar="TXT",
             required=True if "barcodes" in requiredOpts else False,
         )
@@ -81,7 +81,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "format: `sample::barcode, UMAP1, UMAP2, group` (like the output from scClusterCells) "
             "or 3-column tsv file with format: `sample, barcode, group`. "
             "Coverages will be computed per group.",
-            metavar="TXT file",
+            metavar="TSV",
             required=True,
         )
 
@@ -89,11 +89,11 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
         group.add_argument(
             "--BED",
             help=show_or_hide(
-                "Limits the coverage analysis to the regions specified in these files.",
+                "BED/GTF files to limit the coverage analysis to the regions in them.",
                 "BED",
                 suppress_args,
             ),
-            metavar="FILE1.bed FILE2.bed",
+            metavar=("BED", "GTF"),
             nargs="+",
             required=True if "BED" in requiredOpts else False,
         )
@@ -103,21 +103,33 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
         group.add_argument(
             "--outFilePrefix",
             "-o",
-            help="Output file name prefix.",
+            help="Prefix for output file names.",
             metavar="FILEPREFIX",
             type=str,
             required=True if "outFilePrefix" in requiredOpts else False,
         )
 
-    elif "outFile" in opts:
+    if "outFile" in opts:
         group.add_argument(
             "--outFile",
             "-o",
             type=str,
             help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` "
             "and `scJSD`, the output file is a .tsv file. For other tools, the output file is "
-            "an updated .h5ad object with the result of the requested operation.",
+            "an updated .h5ad file with the result of the requested operation.",
             required=True if "outFile" in requiredOpts else False,
+        )
+
+    if "outFileFormat" in opts:
+        group.add_argument(
+            "--outFileFormat",
+            type=str,
+            default="h5ad",
+            choices=["h5ad", "mtx"],
+            help="Output file format. By default, write an anndata object of name "
+            "<prefix>.h5ad, which can be opened with scanpy, or used with downstream tools. "
+            '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
+            "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
         )
 
     return parser
@@ -131,7 +143,7 @@ def otherOptions(args=None):
         "--help",
         "-h",
         action="help",
-        help="show this help message and exit",
+        help="Show this message and exit",
     )
 
     group.add_argument(
@@ -142,9 +154,11 @@ def otherOptions(args=None):
     )
 
     group.add_argument(
+        "-V",
         "--version",
         action="version",
-        version="%(prog)s {}".format(__version__),
+        version="%(prog)s {}".format(importlib.metadata.version("sincei")),
+        help="Print the program version and exit.",
     )
 
     return parser
@@ -195,7 +209,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         "--cellTag",
         "-ct",
         metavar="STR",
-        help="Name of the BAM tag from which to extract barcodes.",
+        help="Name of the BAM tag from which to extract barcodes. (Default: %(default)s)",
         type=str,
         default="BC",
     )
@@ -221,17 +235,17 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         "-p",
         help='Number of processors to use. Type "max/2" to '
         'use half the maximum number of processors or "max" '
-        "to use all available processors. (Default: %(default)s)",
+        'to use all available processors. (Default: "max")',
         metavar="INT",
-        type=numberOfProcessors,
-        default=1,
+        type=int,
+        default=numberOfProcessors("max"),
         required=False,
     )
 
     group.add_argument(
         "--labels",
         "-l",
-        metavar="sample1 sample2",
+        metavar=("sample1", "sample2"),
         help=show_or_hide(
             "User defined labels instead of default labels from "
             "file names. Multiple labels have to be separated by a space, e.g. "
@@ -258,9 +272,8 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         "--region",
         "-r",
         help=show_or_hide(
-            "Region of the genome to limit the operation "
-            "to - this is useful when testing parameters to "
-            "reduce the computing time. The format is "
+            "Region of the genome to limit the operation to - this is useful when "
+            "testing parameters to reduce the computing time. The format is "
             "chr:start:end, for example ``--region chr10`` or ``--region chr10:456700:891000``.",
             "region",
             suppress_args,
@@ -271,6 +284,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
     )
 
     group.add_argument(
+        "--blacklist",
         "--blackListFileName",
         "-bl",
         help=show_or_hide(
@@ -279,11 +293,27 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
             "Consequently, for BAM files, if a read partially overlaps a blacklisted region or a "
             "fragment spans over it, then the read/fragment might still be considered. Please note "
             "that you should adjust the effective genome size, if relevant.",
-            "blackListFileName",
+            "blacklist",
             suppress_args,
         ),
-        metavar="BED file",
+        metavar="BED",
         nargs="+",
+        required=False,
+    )
+
+    group.add_argument(
+        "--chrToSkip",
+        help=show_or_hide(
+            "List of chromosome names to skip from the analysis. "
+            "Regions on these chromosomes will be excluded. "
+            "Useful for skipping mitochondrial, X chromosome, or unplaced contigs. "
+            "Multiple chromosomes can be specified, e.g. ``--chrToSkip chrM chrX``.",
+            "chrToSkip",
+            suppress_args,
+        ),
+        metavar="CHR",
+        nargs="+",
+        default=None,
         required=False,
     )
 
@@ -304,8 +334,8 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         "--distanceBetweenBins",
         metavar="INT",
         help=show_or_hide(
-            "The gap distance between bins during counting. "
-            "Larger numbers can be used to sample the genome for input files with high coverage "
+            "The gap length, in bases, between bins for calculating coverage. "
+            "Larger values can be used to sample the genome for input files with high coverage "
             "while smaller values are useful for lower coverage data. Note that if you specify a value that "
             "results in too few (<1000) reads sampled, the value will be decreased. (Default: %(default)s)",
             "distanceBetweenBins",
@@ -327,9 +357,10 @@ def filterOptions(args=None, suppress_args=None):
         "--duplicateFilter",
         help=show_or_hide(
             "How to filter for duplicates? Different combinations (using start/end/umi) are possible. "
-            "Read start position and read barcode are always considered. Default (None) would consider all reads. "
-            "Note that in case of paired end data, both reads in the fragment are considered (and kept). So if you wish "
-            "to keep only read1, combine this option with `--samFlagInclude`. ",
+            "Read start position and read barcode are always considered. Default (None) considers "
+            "all reads as passing the filter. "
+            "Note that in case of paired end data, both reads in the fragment are considered (and kept). "
+            "So if you wish to keep only read1, combine this option with `--samFlagInclude`. ",
             "duplicateFilter",
             suppress_args,
         ),
@@ -361,7 +392,7 @@ def filterOptions(args=None, suppress_args=None):
         "-g",
         metavar="STR",
         help=show_or_hide(
-            "If ``--motifFilter`` is provided, please also provide the genome sequence (in 2bit format).",
+            "If ``--motifFilter`` is provided, please also provide the genome sequence in 2bit format.",
             "genome2bit",
             suppress_args,
         ),
@@ -424,11 +455,10 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--samFlagInclude",
         help=show_or_hide(
-            "Include reads based on the SAM flag. For example, "
-            "to get only reads that are the first mate, use a flag of 64. "
-            "This is useful to count properly paired reads only once, "
-            "as otherwise the second mate will be also considered for the "
-            "coverage. (Default: %(default)s)",
+            "Include reads based on SAM flag. For example, to get only reads that are the first "
+            "mate, use a flag of 64. This is useful to count properly paired reads only once, as "
+            "otherwise the second mate will be also considered for the coverage. This argument can "
+            "be used more than once in a command. (Default: %(default)s)",
             "samFlagInclude",
             suppress_args,
         ),
@@ -441,10 +471,10 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--samFlagExclude",
         help=show_or_hide(
-            "Exclude reads based on the SAM flag. For example, "
-            "to get only reads that map to the forward strand, use "
-            "``--samFlagExclude 16``, where 16 is the SAM flag for reads "
-            "that map to the reverse strand. (Default: %(default)s)",
+            "Exclude reads based on the SAM flag. For example, to get only reads that map to the "
+            "forward strand, use ``--samFlagExclude 16``, where 16 is the SAM flag for reads that "
+            "map to the reverse strand. This argument can be used more than once in a command. "
+            "(Default: %(default)s)",
             "samFlagExclude",
             suppress_args,
         ),
@@ -457,10 +487,9 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--minFragmentLength",
         help=show_or_hide(
-            "The minimum fragment length needed for read/pair "
-            "inclusion. This option is primarily useful "
-            "in ATACseq experiments, for filtering mono- or "
-            "di-nucleosome fragments. (Default: %(default)s)",
+            "The minimum fragment length needed for read/pair inclusion. This option is for "
+            "useful in ATACseq experiments, for filtering mono- or di-nucleosome fragments. "
+            "(Default: %(default)s)",
             "minFragmentLength",
             suppress_args,
         ),
@@ -473,7 +502,7 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--maxFragmentLength",
         help=show_or_hide(
-            "The maximum fragment length needed for read/pair " "inclusion. (Default: %(default)s)",
+            "The maximum fragment length accepted for read/pair inclusion. (Default: %(default)s)",
             "maxFragmentLength",
             suppress_args,
         ),
@@ -486,12 +515,11 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--filterRNAstrand",
         help=show_or_hide(
-            "Selects RNA-seq reads (single-end or paired-end) originating from genes "
-            "on the given strand. This option assumes a standard dUTP-based library "
-            "preparation (that is, ``--filterRNAstrand=forward`` keeps minus-strand reads, "
-            "which originally came from genes on the forward strand using a dUTP-based "
-            "method). Consider using ``--samExcludeFlag`` instead for filtering by strand in "
-            "other contexts.",
+            "Selects RNA-seq reads (single-end or paired-end) originating from genes on the given "
+            "strand. This option assumes a standard dUTP-based library preparation (that is, "
+            "``--filterRNAstrand=forward`` keeps minus-strand reads, which originally came from "
+            "genes on the forward strand using a dUTP-based method). Consider using "
+            "``--samExcludeFlag`` instead for filtering by strand in other contexts.",
             "filterRNAstrand",
             suppress_args,
         ),
@@ -503,23 +531,17 @@ def readOptions(args=None, suppress_args=None):
         "--extendReads",
         "-e",
         help=show_or_hide(
-            "This parameter allows the extension of reads to "
-            "fragment size. If set, each read is "
+            "This parameter allows the extension of reads to fragment size. If set, each read is "
             "extended, without exception.\n\n"
-            "*NOTE*: This feature is generally NOT recommended for "
-            "spliced-read data, such as RNA-seq, as it would "
-            "extend reads over skipped regions.\n\n"
-            "*Single-end*: Requires a user specified value for the "
-            "final fragment length. Reads that already exceed this "
-            "fragment length will not be extended.\n\n"
-            "*Paired-end*: Reads with mates are always extended to "
-            "match the fragment size defined by the two read mates. "
-            "Unmated reads, mate reads that map too far apart "
-            "(>4x fragment length) or even map to different "
-            "chromosomes are treated like single-end reads. The input "
-            "of a fragment length value is optional. If "
-            "no value is specified, it is estimated from the "
-            "data (mean of the fragment size of all mate reads).",
+            "*NOTE*: This feature is generally NOT recommended for spliced-read data, such as "
+            "RNA-seq, as it would extend reads over skipped regions.\n\n"
+            "*Single-end*: Requires a user specified value for the final fragment length. Reads "
+            "that already exceed this fragment length will not be extended.\n\n"
+            "*Paired-end*: Reads with mates are always extended to match the fragment size defined "
+            "by the two read mates. Unmated reads, mate reads that map too far apart (>4x fragment "
+            "length) or even map to different chromosomes are treated like single-end reads. The "
+            "input of a fragment length value is optional. If no value is specified, it is "
+            "estimated from the data (mean of the fragment size of all mate reads).",
             "extendReads",
             suppress_args,
         ),
@@ -533,12 +555,10 @@ def readOptions(args=None, suppress_args=None):
     group.add_argument(
         "--centerReads",
         help=show_or_hide(
-            "By adding this option, reads are centered with "
-            "respect to the fragment length. For paired-end data, "
-            "the read is centered at the fragment length defined "
-            "by the two ends of the fragment. For single-end data, the "
-            "given fragment length is used. This option is "
-            "useful to get a sharper signal around enriched regions.",
+            "By adding this option, reads are centered with respect to the fragment length. For "
+            "paired-end data, the read is centered at the fragment length defined by the two ends "
+            "of the fragment. For single-end data, the given fragment length is used. This option "
+            "is useful to get sharper signal around enriched regions.",
             "centerReads",
             suppress_args,
         ),
@@ -594,28 +614,28 @@ def genomicRegion(string):
 
 
 def numberOfProcessors(string):
-    import multiprocessing
+    try:
+        # Use os.sched_getaffinity if available (Linux)
+        availProc = len(os.sched_getaffinity(0))
+    except AttributeError:
+        # Fallback to os.cpu_count()
+        availProc = os.cpu_count()
 
-    availProc = multiprocessing.cpu_count()
-
-    if string == "max/2":  # default case
-        # by default half of the available processors are used
+    if string == "max/2":
         numberOfProcessors = int(availProc * 0.5)
-    elif string == "max":
-        # use all available processors
+    elif string == "max":  # default case
+        # by default, use all available processors
         numberOfProcessors = availProc
     else:
         try:
             numberOfProcessors = int(string)
         except ValueError:
-            raise argparse.ArgumentTypeError("{} is not a valid number of processors".format(string))
+            raise argparse.ArgumentTypeError(f"{string} is not a valid number of processors")
 
         except Exception as e:
             raise argparse.ArgumentTypeError(
-                "the given value {} is not valid. "
-                "Error message: {}\nThe number of "
-                "available processors in your "
-                "computer is {}.".format(string, e, availProc)
+                f"The given value {string} is not valid. Error message: {e}\n"
+                f"The number of available processors in your computer is {availProc}."
             )
 
         if numberOfProcessors > availProc:
