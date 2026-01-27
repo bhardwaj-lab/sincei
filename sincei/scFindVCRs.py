@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
 import argparse
 
-import numpy as np
 import pandas as pd
 import anndata as ad
-import ruptures as rpt
 
 from sincei import ParserCommon
 from sincei.VCRfinder import VCRfinder
@@ -35,7 +32,7 @@ def parseArguments():
         regions with distinct correlation patterns. This step depends on a penalty parameter that
         controls the number of detected regions.
         """,
-        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -p 5 10 20 -o detected_VCRs.bed",
+        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 5 10 20 -o detected_VCRs.bed",
         add_help=False,
     )
 
@@ -45,9 +42,9 @@ def parseArguments():
 def get_args():
     parser = argparse.ArgumentParser(add_help=False)
 
-    general = parser.add_argument_group("VCR detection options")
+    vcr_options = parser.add_argument_group("VCR detection options")
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--binSize",
         "-bs",
         type=int,
@@ -55,7 +52,7 @@ def get_args():
         required=True,
     )
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--maxRegionSize",
         "-mr",
         type=int,
@@ -66,7 +63,7 @@ def get_args():
         default=None,
     )
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--nKernels",
         "-nk",
         type=int,
@@ -76,9 +73,9 @@ def get_args():
         default=20,
     )
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--penalties",
-        "-p",
+        "-pen",
         nargs="+",
         type=float,
         help="""
@@ -86,10 +83,10 @@ def get_args():
         can be provided (separated by space). Each penalty value will produce a separate set of regions within
         which can be seperated from the output BED file by filtering on the "score" column.
         """,
-        default=[0.5, 1, 2],
+        default=[0.1, 0.5, 1],
     )
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--outFile",
         "-o",
         type=str,
@@ -101,7 +98,7 @@ def get_args():
         required=True,
     )
 
-    general.add_argument(
+    vcr_options.add_argument(
         "--region",
         "-r",
         help="""
@@ -112,6 +109,18 @@ def get_args():
         metavar="CHR:START:END",
         required=False,
         type=ParserCommon.genomicRegion,
+    )
+
+    vcr_options.add_argument(
+        "--numberOfProcessors",
+        "-p",
+        help='Number of processors to use. Type "max/2" to '
+        'use half the maximum number of processors or "max" '
+        'to use all available processors. (Default: "max")',
+        metavar="INT",
+        type=int,
+        default=ParserCommon.numberOfProcessors("max"),
+        required=False,
     )
 
     return parser
@@ -132,9 +141,12 @@ def main(args=None):
         n_kernels=args.nKernels,
         penalties=args.penalties,
         region=args.region,
+        verbose=args.verbose,
+        n_threads=args.numberOfProcessors,
     )
 
     pen_bed_df.to_csv(args.outFile, sep="\t", header=False, index=False)
+
 
 #    for pen in args.penalties:
 #        out_bed_df = pen_bed_df[pen_bed_df["penalty"] == pen][["chrom", "start", "end"]]

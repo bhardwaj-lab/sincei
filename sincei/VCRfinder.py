@@ -1,77 +1,105 @@
 import sys
 import time
-import argparse
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
 import anndata as ad
 import ruptures as rpt
+from ruptures.exceptions import BadSegmentationParameters
+from scipy import sparse
 from tqdm import tqdm
+
+# logs
+import warnings
+import logging
+
+logger = logging.getLogger()
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 ### Helper functions ###
-def sparse_band_corr(X, k):
+def sparse_band_corr(X, k, chrom=None, verbose=True):
     """
     Compute only the first k diagonals of the correlation matrix of X,
-    stored in sparse format.
+    stored in banded format. Works directly on sparse matrices.
 
     Parameters
     ----------
-    X : scipy.sparse matrix, np.ndarray
+    X : scipy.sparse matrix or np.ndarray
         Input data matrix of shape (n_samples, n_features).
     k : int
-        Number of diagonals to compute.
+        Number of diagonals to compute (bandwidth).
+    chrom : str or None, optional
+        Chromosome name for progress bar description.
+    verbose : bool, optional
+        Whether to display progress bars.
 
     Returns
     -------
-    band_corr : 2D numpy array
-        The banded correlation matrix of shape (n_features, n_features).
+    band_corr : np.ndarray, shape (2*k+1, n_features)
+        Banded correlation matrix.
     """
     n, p = X.shape
+    band_corr = np.zeros((2 * k + 1, p))
 
-    band_corr = np.zeros((p, p), dtype=np.float32)
+    # Main diagonal is always 1
+    band_corr[k, :] = 1.0
 
-    for block in tqdm(range(0, p // k)):
-        start = block * k
-        end = min(start + k, p)
+    if sparse.issparse(X):
+        # Work directly with sparse matrix (convert to CSC for efficient column access)
+        X_csc = X.tocsc() if not sparse.isspmatrix_csc(X) else X
 
-        if hasattr(X, "toarray"):
-            X_block = X[:, start:end].toarray()
-            off_block = X[:, end : 2 * end - start].toarray()
-        elif isinstance(X, np.ndarray):
-            X_block = X[:, start:end]
-            off_block = X[:, end : 2 * end - start]
-        else:
-            raise ValueError("Input X must be a scipy.sparse matrix or a numpy ndarray.")
+        # Compute column means and norms without densifying
+        col_means = np.asarray(X_csc.mean(axis=0)).ravel()
 
-        Xc = X_block - X_block.mean(axis=0)
-        Yc = off_block - off_block.mean(axis=0)
+        # Compute column norms: ||x - mean||
+        # = sqrt(sum(x^2) - 2*mean*sum(x) + n*mean^2)
+        # = sqrt(sum(x^2) - n*mean^2)
+        col_sq_sums = np.asarray(X_csc.multiply(X_csc).sum(axis=0)).ravel()
+        col_norms = np.sqrt(col_sq_sums - n * col_means**2)
+        col_norms[col_norms == 0] = np.inf
 
-        X_std = np.sqrt((Xc**2).sum(axis=0))
-        Y_std = np.sqrt((Yc**2).sum(axis=0))
-        X_std[X_std == 0] = np.inf
-        Y_std[Y_std == 0] = np.inf
+        # Compute correlations for each diagonal offset
+        for d in tqdm(range(1, k + 1), desc=f"{chrom}: Computing banded covariance", disable=not verbose):
+            n_pairs = p - d
+            corr_vals = np.zeros(n_pairs)
 
-        block_corr = np.dot(Xc.T, Xc) / np.outer(X_std, X_std)
-        off_block_corr = np.dot(Xc.T, Yc) / np.outer(X_std, Y_std)
+            # Batch compute raw dot products: left_cols.T @ right_cols
+            left_cols = X_csc[:, :n_pairs]
+            right_cols = X_csc[:, d : d + n_pairs]
 
-        triu_ind = np.triu_indices(n=off_block_corr.shape[0], k=1, m=off_block_corr.shape[1])
-        off_block_corr[triu_ind] = 0
+            # Compute element-wise products and sum per column pair
+            # For sparse matrices, this is efficient with multiply + sum
+            raw_dots = np.asarray(left_cols.multiply(right_cols).sum(axis=0)).ravel()
 
-        band_corr[start:end, start:end] = block_corr
-        band_corr[start:end, end : 2 * end - start] = off_block_corr
-        band_corr[end : 2 * end - start, start:end] = off_block_corr.T
+            # Centered dot products
+            centered_dots = raw_dots - n * col_means[:n_pairs] * col_means[d : d + n_pairs]
 
-    # Last block
-    start = p - k
-    end = p
-    X_block = X[:, start:end].toarray()
+            # Normalize to get correlations
+            corr_vals = centered_dots / (col_norms[:n_pairs] * col_norms[d : d + n_pairs])
 
-    Xc = X_block - X_block.mean(axis=0)
-    X_std = np.sqrt((Xc**2).sum(axis=0))
-    X_std[X_std == 0] = np.inf
-    block_corr = np.dot(Xc.T, Xc) / np.outer(X_std, X_std)
-    band_corr[start:end, start:end] = block_corr
+            # Store in upper and lower bands (symmetric)
+            band_corr[k - d, d:] = corr_vals
+            band_corr[k + d, :n_pairs] = corr_vals
+    else:
+        # Dense path: use efficient einsum
+        # Center and normalize columns
+        Xc = X - X.mean(axis=0, keepdims=True)
+        norms = np.linalg.norm(Xc, axis=0)
+        norms[norms == 0] = np.inf
+        Xn = Xc / norms
+
+        # Off-diagonals
+        for d in tqdm(range(1, k + 1), desc=f"{chrom}: Computing banded covariance", disable=not verbose):
+            corr_vals = np.einsum(
+                "ij,ij->j",
+                Xn[:, : p - d],
+                Xn[:, d:],
+                optimize=True,
+            )
+            band_corr[k - d, d:] = corr_vals
+            band_corr[k + d, : p - d] = corr_vals
 
     return band_corr
 
@@ -99,6 +127,7 @@ def distance_kernel(sigma, truncate=4.0, radius=None):
 
     width = 1 + 2 * radius
     kernel = np.zeros((width, width))
+
     for offset in range(1, width):
         kernel += offset * (np.eye(width, k=offset) + np.eye(width, k=-offset))
 
@@ -119,6 +148,7 @@ def VCRfinder(
     penalties=[1],
     region=None,
     verbose=False,
+    n_threads=None,
 ):
     """
     Detects variable chromatin regions (VCRs) from a anndata object containing genomic signal data
@@ -162,14 +192,20 @@ def VCRfinder(
     """
     adata.var[["start", "end"]] = adata.var[["start", "end"]].apply(pd.to_numeric)
 
+    if n_threads is None or n_threads < 1:
+        n_threads = 1
+
     if region is not None:
         region = region.split(":")
-        if len(region)==3:
+        if len(region) == 3:
             chrom, start, end = region[0], int(region[1]), int(region[2])
+        elif len(region) == 2:
+            chrom, start = region[0], int(region[1])
+            end = np.max(adata.var.loc[adata.var.chrom == chrom, "end"])
         else:
             chrom = region[0]
-            start = np.min(adata.var.loc[adata.var.chrom==chrom, "start"])
-            end = np.max(adata.var.loc[adata.var.chrom==chrom, "end"])
+            start = np.min(adata.var.loc[adata.var.chrom == chrom, "start"])
+            end = np.max(adata.var.loc[adata.var.chrom == chrom, "end"])
 
         adata = adata[:, (adata.var["chrom"] == chrom) & (adata.var["start"] >= start) & (adata.var["end"] <= end)]
 
@@ -177,7 +213,24 @@ def VCRfinder(
     pen_bed_df = pd.DataFrame(columns=["chrom", "start", "end", "name", "score", "strand"])
 
     for chrom in chroms:
+        sys.stdout.write(f"Processing chromosome {chrom}...\n")
         adata_chrom = adata[:, adata.var["chrom"] == chrom]
+
+        if adata_chrom.shape[1] == 1:
+            sys.stderr.write(f"Skipping chromosome {chrom} with only one bin.\n")
+            bkp_df = pd.DataFrame(
+                {
+                    "chrom": [chrom] * len(penalties),
+                    "start": [int(adata_chrom.var["start"].values[0])] * len(penalties),
+                    "end": [int(adata_chrom.var["end"].values[0])] * len(penalties),
+                    "name": [f"pen-{pen}_brkpoint-1" for pen in penalties],
+                    "score": penalties,
+                    "strand": ["*"] * len(penalties),
+                }
+            )
+            pen_bed_df = pd.concat([pen_bed_df, bkp_df], ignore_index=True)
+            continue
+
         start = adata_chrom.var["start"].min()
         # Sort the bins
         adata_chrom = adata_chrom[:, adata_chrom.var.sort_values(by=["start", "end"], axis=0).index]
@@ -189,57 +242,94 @@ def VCRfinder(
         last_idx = adata_chrom.var.index[-1]
 
         if mask.loc[last_idx]:
-            if adata_chrom.var.loc[last_idx, "end"] - adata_chrom.var.loc[last_idx, "start"] >= (binsize/2):
+            if adata_chrom.var.loc[last_idx, "end"] - adata_chrom.var.loc[last_idx, "start"] >= (binsize / 2):
                 adata_chrom.var.loc[last_idx, "end"] = adata_chrom.var.loc[last_idx, "start"] + binsize
             else:
                 # eject last row
-                sys.stderr.write(f"row {last_idx} removed due to difference in binsize")
-                adata_chrom = adata_chrom[:, :adata_chrom.var.index[-2]]
+                sys.stderr.write(f"Feature {last_idx} removed due to difference in binsize\n")
+                adata_chrom = adata_chrom[:, : adata_chrom.var.index[-2]]
 
         assert all(
             (adata_chrom.var["end"] - adata_chrom.var["start"] == binsize)
             | (adata_chrom.var["end"] - adata_chrom.var["start"] == (binsize - 1))
         ), f"Variable bin sizes detected in chromosome {chrom}"
 
+        reg_to_consider = min(max_region, max(int(adata_chrom.shape[1] * binsize / n_kernels), binsize))
+
         # Calculate sigmas
-        k_factor = (max_region / binsize) ** (1 / n_kernels)
+        k_factor = (reg_to_consider / binsize) ** (1 / n_kernels)
         sigmas = 0.25 * k_factor ** np.arange(1, n_kernels + 1)
 
-        # Calculate the number of diagonals needed
-        k = max(round(4.0 * np.max(sigmas)), adata_chrom.shape[1])
+        # Calculate the number of diagonals needed (capped at number of bins)
+        k = min(round(4.0 * np.max(sigmas)), adata_chrom.shape[1])
+
         # Get bin-bin correlations
         ctime = time.time()
-        corr = sparse_band_corr(adata_chrom.X, k=k)
+        corr = sparse_band_corr(adata_chrom.X, k=k, chrom=chrom, verbose=verbose)
+        p = adata_chrom.shape[1]  # number of bins
         ctime = time.time() - ctime
         if verbose:
             sys.stdout.write(
-                f"Chromosome {chrom}: Band correlation with {k} diagonals calculated in {ctime:.2f} seconds"
+                f"Chromosome {chrom}: Band correlation with {k} diagonals calculated in {ctime:.2f} seconds\n"
             )
 
-        scores = np.zeros((len(sigmas), corr.shape[0]))
+        scores = np.zeros((p, len(sigmas)))
 
-        for i, sigma in enumerate(tqdm(sigmas)):
-            kernel = distance_kernel(sigma=sigma)
+        def _score_sigma(args):
+            i, sigma = args
+            radius = min(k, int(4.0 * sigma))
+            kernel = distance_kernel(sigma=sigma, radius=radius)
             k_width = kernel.shape[0]
             k_radius = k_width // 2
 
-            # Apply kernel to diagonal
-            pad_state = np.pad(corr, k_radius, mode="constant", constant_values=0.0)
+            score_row = np.zeros(p)
 
-            for pos in range(corr.shape[0]):
-                scores[i, pos] = np.sum(pad_state[pos : pos + k_width, pos : pos + k_width] * kernel)
+            # Decompose 2D kernel convolution into 1D convolutions per diagonal
+            # score[pos] = sum over (di, dj) of kernel[di+r, dj+r] * corr[pos+di, pos+dj]
+            # Group by d = dj - di (the diagonal offset in corr)
+            for d in range(-min(k_radius, k), min(k_radius, k) + 1):
+                # Extract diagonal d from kernel: elements where col - row = d
+                kernel_diag = np.diag(kernel, k=d)  # shape: (k_width - |d|,)
 
-        # Change-point detection
-        if verbose:
-            sys.stdout.write(f"Chromosome {chrom}: Applying changepoint detection..")
-        cpd = rpt.KernelCPD(kernel="rbf")
+                # Get correlation values for diagonal offset d from banded storage
+                # band_corr[k - d, :] contains corr[i, i+d] for d >= 0
+                # band_corr[k - d, :] contains corr[i-d, i] for d < 0
+                corr_diag = corr[k - d, :]  # shape: (p,)
 
-        for pen in penalties:
+                # Convolve: this computes sum of kernel_diag[j] * corr_diag[pos + j - offset]
+                # We need to account for the offset in the kernel diagonal
+                conv = np.convolve(corr_diag, kernel_diag[::-1], mode="same")
+                score_row += conv
+
+            return i, score_row
+
+        if n_threads > 1:
+            with ThreadPoolExecutor(max_workers=n_threads) as executor:
+                for i, score_row in tqdm(
+                    executor.map(_score_sigma, list(enumerate(sigmas))),
+                    total=len(sigmas),
+                    desc=f"{chrom}: Calculating score matrix",
+                    disable=not verbose,
+                ):
+                    scores[:, i] = score_row
+        else:
+            for i, sigma in tqdm(
+                list(enumerate(sigmas)), desc=f"{chrom}: Calculating score matrix", disable=not verbose
+            ):
+                _, score_row = _score_sigma((i, sigma))
+                scores[:, i] = score_row
+
+        # Use Pelt with L2 cost - O(n) memory
+        # scores has shape (p, n_kernels) - each position is a feature vector
+        algo = rpt.KernelCPD(kernel="linear", min_size=1, jump=1).fit(scores)
+
+        def _predict_penalty(pen):
+            """Predict breakpoints for a single penalty value."""
             try:
-                bkps = cpd.fit_predict(corr, n_bkps=None, pen=pen)
+                bkps = algo.predict(pen=pen)
             except BadSegmentationParameters:
-                sys.stderr.write(f" - No breakpoints detected for penalty {pen} in chrom {chrom}.")
-                continue
+                sys.stderr.write(f" - No breakpoints detected for penalty {pen} in chrom {chrom}.\n")
+                return None
 
             sys.stdout.write(f"Detected {len(bkps)} VCRs in chromosome {chrom} with penalty {pen}\n")
 
@@ -249,13 +339,29 @@ def VCRfinder(
                     "chrom": chrom,
                     "start": [int(start + prev * 2000) for prev in prevs],
                     "end": [int(start + bkp * 2000) for bkp in bkps],
-                    "name": ["pen-{}_brkpoint-{}".format(pen, bkp) for bkp in bkps],
+                    "name": [f"pen-{pen}_brkpoint-{bkp}" for bkp in bkps],
                     "score": pen,
-                    "strand": "*"
-
+                    "strand": "*",
                 }
             )
+            return bkp_df
 
-            pen_bed_df = pd.concat([pen_bed_df, bkp_df], ignore_index=True)
+        if n_threads > 1:
+            with ThreadPoolExecutor(max_workers=n_threads) as executor:
+                for bkp_df in tqdm(
+                    executor.map(_predict_penalty, penalties),
+                    total=len(penalties),
+                    desc=f"{chrom}: Change-point detection",
+                    disable=not verbose,
+                ):
+                    if bkp_df is not None:
+                        pen_bed_df = pd.concat([pen_bed_df, bkp_df], ignore_index=True)
+        else:
+            for pen in tqdm(penalties, desc=f"{chrom}: Change-point detection", disable=not verbose):
+                bkp_df = _predict_penalty(pen)
+                if bkp_df is not None:
+                    pen_bed_df = pd.concat([pen_bed_df, bkp_df], ignore_index=True)
+
+        sys.stdout.write("\n")
 
     return pen_bed_df
