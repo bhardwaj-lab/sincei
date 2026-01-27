@@ -14,7 +14,6 @@ import re
 import sys
 from importlib import metadata
 
-
 # -- Project information -----------------------------------------------------
 
 project = "sincei"
