@@ -298,6 +298,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         ),
         metavar="BED",
         nargs="+",
+        dest='blackListFileName',
         required=False,
     )
 
