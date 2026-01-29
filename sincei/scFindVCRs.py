@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import sys
 
 import pandas as pd
 import anndata as ad
@@ -10,7 +11,7 @@ from sincei import ParserCommon
 from sincei.VCRfinder import VCRfinder
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile"], requiredOpts=["h5adfile"])
     other_args = ParserCommon.otherOptions()
 
@@ -25,8 +26,9 @@ def parseArguments():
         First, a bin-to-bin correlation matrix is computed for each chromosome.
 
         Then, the correlation matrix is turned into a score map by convolving a number of square
-        Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using. Each kernel produces a 1-D score for
-        each bin, which are stacked into a matrix where each row corresponds to a kernel scale and each column to a bin.
+        Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using. Each kernel
+        produces a 1-D score for each bin, which are stacked into a matrix where each row corresponds to
+        a kernel scale and each column to a bin.
 
         Finally, the PELT change-point detection algorithm is applied to the score map to identify
         regions with distinct correlation patterns. This step depends on a penalty parameter that
@@ -35,6 +37,11 @@ def parseArguments():
         usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 5 10 20 -o detected_VCRs.bed",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -83,7 +90,7 @@ def get_args():
         can be provided (separated by space). Each penalty value will produce a separate set of regions within
         which can be seperated from the output BED file by filtering on the "score" column.
         """,
-        default=[0.1, 0.5, 1],
+        default=[0.05, 0.1, 0.5],
     )
 
     vcr_options.add_argument(

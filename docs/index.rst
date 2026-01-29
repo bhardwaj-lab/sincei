@@ -84,10 +84,10 @@ tool                                 description
 ========================== ============================================================================================================
 :ref:`scFilterBarcodes`        Identify and filter cell barcodes from BAM file (for droplet-based single-cell seq).
 :ref:`scFilterStats`           Produce per-cell statistics after filtering reads by user-defined criteria.
-:ref:`scFindVCRs`              Call variable chromatin regions (VCRs) from binned chromatin data.
-:ref:`scScoreFeatures`         Calculate gene activity scores from chromatin features/bins.
 :ref:`scCountReads`            Counts reads for each barcode on genomic bins or user-defined features.
 :ref:`scCountQC`               Perform quality control and filter the output of scCountReads.
+:ref:`scFindVCRs`              Call variable chromatin regions (VCRs) from binned chromatin data.
+:ref:`scScoreFeatures`         Calculate gene activity scores from chromatin features/bins.
 :ref:`scCombineCounts`         Concatenate/merge the counts from different samples/batches or different modalities.
 :ref:`scClusterCells`          Perform dimensionality reduction and clustering on the output of scCountReads.
 :ref:`scBulkCoverage`          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).

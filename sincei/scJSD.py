@@ -86,6 +86,11 @@ homogeneously distributed.
         add_help=False,
     )
 
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     return parser
 
 

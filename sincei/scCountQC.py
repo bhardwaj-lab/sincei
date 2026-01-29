@@ -94,7 +94,7 @@ def make_plots(adata, fname=None):
 """
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
@@ -109,6 +109,11 @@ object (if filtering is requested) or the filtering metrics (--outMetrics) and p
         usage="scCountQC -i cellCounts.h5ad -o qc_metrics.tsv",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 

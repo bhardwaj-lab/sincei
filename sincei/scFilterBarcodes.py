@@ -3,7 +3,6 @@
 
 import argparse
 import sys
-import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
@@ -30,7 +29,7 @@ from sincei.Utilities import *
 from sincei import ParserCommon
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["bamfile", "whitelist", "outFile"], requiredOpts=["bamfile"])
     bam_args = ParserCommon.bamOptions(
         suppress_args=["labels", "smartLabels", "distanceBetweenBins", "region"],
@@ -45,9 +44,14 @@ def parseArguments():
 ``scFilterBarcodes`` identifies barcodes present in a BAM files and produces a list. You can
 optionally filter these barcodes by matching them to a whitelist or based on total counts.
 """,
-        usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt" "",
+        usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
