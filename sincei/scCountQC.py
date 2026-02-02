@@ -24,11 +24,14 @@ def filter_adata(
     filter_region_dict=None,
     filter_cell_dict=None,
     bad_chrom=None,
+    bad_regions=None,
     bad_cells=None,
 ):
     # 1. regions
     if bad_chrom:
         adata = adata[:, ~adata.var.chrom.isin(bad_chrom)]
+    if bad_regions:
+        adata = adata[:, ~adata.var.index.isin(bad_regions)]
     if filter_region_dict:
         for key in filter_region_dict.keys():
             adata = adata[
@@ -47,51 +50,6 @@ def filter_adata(
             ]
 
     return adata
-
-
-"""
-def make_plots(adata, fname=None):
-    # plotting
-    import matplotlib
-    import matplotlib.pyplot as plt
-    matplotlib.use('Agg')
-    matplotlib.rcParams['pdf.fonttype'] = 42
-    matplotlib.rcParams['svg.fonttype'] = 'none'
-    import seaborn as sns# seaborn colormaps conflicts with deeptools colormaps
-
-    ## filtering of regions
-    plt.figure()
-    pl1=sns.violinplot(data=adata.var, x='total_counts', y='chrom')
-    plt.figure()
-    pl2=sns.distplot(np.log10(adata.var['total_counts']+1))
-    plt.figure()
-    pl3=sns.distplot(adata.var['mean_counts'])
-    plt.figure()
-    pl4=sns.distplot(adata.var['fraction_cells_with_signal'])
-    ## cells
-    plt.figure()
-    pl5=sns.scatterplot(data=adata.obs, x='total_counts', y='pct_counts_in_top_100_genes')
-    pl5.set(xscale="log")
-    plt.figure()
-    pl6=sns.distplot(adata.obs['fraction_regions_with_signal'])
-    plt.figure()
-    pl7=sns.scatterplot(data=adata.obs, x='total_counts', y='fraction_regions_with_signal')
-
-    plist=[pl1, pl2, pl3, pl4, pl5, pl6, pl7]
-    if fname:
-        with PdfPages(fname) as pp:
-            for plot in plist:
-                pp.savefig(plot.figure)
-    return plist
-
-    general.add_argument('--outPlot', '-op',
-                         type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
-    if args.outPlot:
-        make_plots(adata, fname=args.outPlot)
-        if cellfilter or regionfilter or badcells or badchrom:
-            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
-"""
 
 
 def parseArguments(args=None):
@@ -158,6 +116,15 @@ def get_args():
     )
 
     general.add_argument(
+        "--region_blacklist",
+        "-rb",
+        help="A BED or GTF file containing regions that should be excluded from all analyses. "
+        "Regions in the anndata object that overlap with blacklisted regions will be removed.",
+        metavar="BED",
+        nargs="+",
+    )
+
+    general.add_argument(
         "--cell_blacklist",
         "-cb",
         default=None,
@@ -170,8 +137,9 @@ def get_args():
         "--chrom_blacklist",
         "-chb",
         default=None,
-        type=str,
-        help="A comma separated list of chromosomes to exclude. eg. chrM, chrUn",
+        help="A space separated list of chromosomes to exclude. eg. chrM chrUn",
+        metavar=("CHR1", "CHR2"),
+        nargs="+",
     )
 
     return parser
@@ -249,17 +217,39 @@ def main(args=None):
         badcells = None
 
     if args.chrom_blacklist:
-        badchrom = args.chrom_blacklist.strip().split(",")
+        badchrom = args.chrom_blacklist
     else:
         badchrom = None
 
-    if cellfilter or regionfilter or badcells or badchrom:
+    if args.region_blacklist:
+        from deeptoolsintervals import GTF
+
+        blacklist_tree = GTF(args.region_blacklist)
+        # Find regions that overlap with the blacklist
+        badregions = []
+        for region_id, row in adata.var.iterrows():
+            chrom = str(row["chrom"])
+            start = int(row["start"])
+            end = int(row["end"])
+            # findOverlaps returns overlapping intervals; if any exist, region is blacklisted
+            overlaps = blacklist_tree.findOverlaps(chrom, start, end)
+            if overlaps is not None and len(overlaps) > 0:
+                badregions.append(region_id)
+        if badregions and args.verbose:
+            sys.stdout.write(f"Found {len(badregions)} regions overlapping with blacklist\n")
+        else:
+            badregions = None
+    else:
+        badregions = None
+
+    if cellfilter or regionfilter or badcells or badchrom or badregions:
         sys.stdout.write("Applying filters \n")
         adata_filt = filter_adata(
             adata,
             filter_region_dict=regionfilter,
             filter_cell_dict=cellfilter,
             bad_chrom=badchrom,
+            bad_regions=badregions,
             bad_cells=badcells,
         )
         sys.stdout.write("Cells post-filtering: {} \n".format(adata_filt.shape[0]))
