@@ -35,15 +35,15 @@ def filter_adata(
     if filter_region_dict:
         for key in filter_region_dict.keys():
             if key not in adata.var.columns:
-                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key) )
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key))
                 continue
-            if len(filter_region_dict[key])==1:
+            if len(filter_region_dict[key]) == 1:
                 # only one value present, assume second value = max
                 filter_region_dict[key] = [filter_region_dict[key][0], max(adata.var[key])]
             adata = adata[
-                        :,
-                        (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
-                    ]
+                :,
+                (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
+            ]
 
     # 2. Cells
     if bad_cells:
@@ -51,9 +51,9 @@ def filter_adata(
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
             if key not in adata.obs.columns:
-                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key) )
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key))
                 continue
-            if len(filter_cell_dict[key])==1:
+            if len(filter_cell_dict[key]) == 1:
                 # only one value present, assume second value = max
                 filter_cell_dict[key] = [filter_cell_dict[key][0], max(adata.var[key])]
             adata = adata[
