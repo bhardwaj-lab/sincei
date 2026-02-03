@@ -34,16 +34,28 @@ def filter_adata(
         adata = adata[:, ~adata.var.index.isin(bad_regions)]
     if filter_region_dict:
         for key in filter_region_dict.keys():
+            if key not in adata.var.columns:
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key) )
+                continue
+            if len(filter_region_dict[key])==1:
+                # only one value present, assume second value = max
+                filter_region_dict[key] = [filter_region_dict[key][0], max(adata.var[key])]
             adata = adata[
-                :,
-                (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
-            ]
+                        :,
+                        (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
+                    ]
 
     # 2. Cells
     if bad_cells:
         adata = adata[~adata.obs.index.isin(bad_cells)]
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
+            if key not in adata.obs.columns:
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key) )
+                continue
+            if len(filter_cell_dict[key])==1:
+                # only one value present, assume second value = max
+                filter_cell_dict[key] = [filter_cell_dict[key][0], max(adata.var[key])]
             adata = adata[
                 (adata.obs[key] >= filter_cell_dict[key][0]) & (adata.obs[key] <= filter_cell_dict[key][1]),
                 :,
@@ -54,17 +66,16 @@ def filter_adata(
 
 def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"])
-    plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
-        parents=[io_args, get_args(), plot_args, other_args],
+        parents=[io_args, get_args(), other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scCountQC`` calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads) and
 (optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an updated .h5ad
-object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
+object (if filtering is requested) or the filtering metrics (--outMetrics).
 """,
-        usage="scCountQC -i cellCounts.h5ad -o qc_metrics.tsv",
+        usage="scCountQC -i cellCounts.h5ad -o cellCounts.filtered.h5ad -om qc_metrics.tsv",
         add_help=False,
     )
 
@@ -237,8 +248,6 @@ def main(args=None):
                 badregions.append(region_id)
         if badregions and args.verbose:
             sys.stdout.write(f"Found {len(badregions)} regions overlapping with blacklist\n")
-        else:
-            badregions = None
     else:
         badregions = None
 
