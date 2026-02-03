@@ -20,7 +20,7 @@ from sincei import WriteBedGraph
 debug = 0
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["bamfiles", "groupInfo", "outFilePrefix"])
     bam_args = ParserCommon.bamOptions(default_opts={"binSize": 100})
     read_args = ParserCommon.readOptions()
@@ -40,6 +40,11 @@ cluster using different methods.
         usage="scBulkCoverage -b file1.bam file2.bam --labels file1 file2 -g scClusterCells_output.tsv -o coverage.bw",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 

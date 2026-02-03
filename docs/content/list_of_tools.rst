@@ -13,6 +13,7 @@ Command Line tools
     tools/scCombineCounts
     tools/scClusterCells
     tools/scBulkCoverage
+    tools/scFindVCRs
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.
 
@@ -27,6 +28,7 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scCountQC`
 * :doc:`tools/scCombineCounts`
 * :doc:`tools/scClusterCells`
+* :doc:`tools/scFindVCRs`
 
 The table below summarizes input and output of each tool:
 
@@ -43,6 +45,10 @@ The table below summarizes input and output of each tool:
 |:ref:`scCountReads`                   | preprocessing    | BAM/SAM files         | h5ad object with cellxregion counts         | Counts reads for each barcode on genomic bins or user-defined features.                                     |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scCountQC`                      | QC               | h5ad object           | QC metrics / filtered h5ad file             | Perform quality control and filter the output of scCountReads.                                              |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scFindVCRs`                     | analysis         | h5ad object           | BED file                                    | Call variable chromatin regions (VCRs) from binned chromatin data.                                          |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scScoreFeatures`                | analysis         | h5ad object + BED/GTF | h5ad object with gene activity scores       | Calculate gene activity scores from chromatin features/bins or aggregate bins into VCRs.                    |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scCombineCounts`                | preprocessing    | h5ad objects          | merged h5ad object                          | Concatenate/merge the counts from different samples/batches or modalities                                   |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+

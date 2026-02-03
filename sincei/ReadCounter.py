@@ -379,7 +379,7 @@ class CountReadsPerBin(object):
             else:
                 # compute the step size, based on the number of samples
                 # and the length of the region studied
-                (chrom, start, end) = mapReduce.getUserRegion(chromSizes, self.region)[:3]
+                chrom, start, end = mapReduce.getUserRegion(chromSizes, self.region)[:3]
                 self.stepSize = max(int(float(end - start) / self.numberOfSamples), 1)
 
         # number of samples is better if large

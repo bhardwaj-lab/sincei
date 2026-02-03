@@ -32,7 +32,7 @@ from sincei.TopicModels import TOPICMODEL
 from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # GLMPCA
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
@@ -49,6 +49,11 @@ and corresponding cluster id for each barcode.
         usage="scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op umap.png",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 

@@ -9,4 +9,5 @@ dependencies:
  - mudata
  - scanpy
  - python-igraph
+ - ruptures
  - pip

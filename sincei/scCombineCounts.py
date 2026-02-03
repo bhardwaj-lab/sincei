@@ -20,7 +20,7 @@ from sincei import ParserCommon
 from sincei.ParserCommon import smartLabel
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfiles"])
     other_args = ParserCommon.otherOptions()
 
@@ -40,6 +40,11 @@ scCombineCounts -i modality1.h5ad modality2.h5ad -o combined.h5mu -m multi-modal
 """,
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
