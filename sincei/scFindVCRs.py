@@ -17,7 +17,7 @@ def parseArguments(args=None):
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         ``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
         .h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
@@ -125,7 +125,7 @@ def get_args():
         'use half the maximum number of processors or "max" '
         'to use all available processors. (Default: "max")',
         metavar="INT",
-        type=int,
+        type=ParserCommon.numberOfProcessors,
         default=ParserCommon.numberOfProcessors("max"),
         required=False,
     )

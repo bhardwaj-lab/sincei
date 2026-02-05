@@ -237,7 +237,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         'use half the maximum number of processors or "max" '
         'to use all available processors. (Default: "max")',
         metavar="INT",
-        type=int,
+        type=numberOfProcessors,
         default=numberOfProcessors("max"),
         required=False,
     )
