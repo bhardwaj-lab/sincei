@@ -54,6 +54,7 @@ scFindVCRs = "sincei.scFindVCRs:main"
 scFilterBarcodes = "sincei.scFilterBarcodes:main"
 scFilterStats = "sincei.scFilterStats:main"
 scJSD = "sincei.scJSD:main"
+scScoreFeatures = "sincei.scScoreFeatures:main"
 sincei = "sincei.sincei:main"
 
 
