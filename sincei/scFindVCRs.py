@@ -34,7 +34,7 @@ def parseArguments(args=None):
         regions with distinct correlation patterns. This step depends on a penalty parameter that
         controls the number of detected regions.
         """,
-        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 5 10 20 -o detected_VCRs.bed",
+        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 0.05 0.1 0.5 -o detected_VCRs.bed",
         add_help=False,
     )
 

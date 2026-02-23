@@ -10,11 +10,8 @@ from ruptures.exceptions import BadSegmentationParameters
 from scipy import sparse
 from tqdm import tqdm
 
-# logs
 import warnings
-import logging
 
-logger = logging.getLogger()
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
@@ -148,7 +145,7 @@ def VCRfinder(
     penalties=[1],
     region=None,
     verbose=False,
-    n_threads=None,
+    n_threads=1,
 ):
     """
     Detects variable chromatin regions (VCRs) from a anndata object containing genomic signal data
@@ -183,7 +180,9 @@ def VCRfinder(
     region : str, optional
         Genomic region to limit the analysis to (e.g., 'chr1:100000:200000'). Default is None.
     verbose : bool, optional
-        Print additional messages.
+        Print progress messages and warnings. Default is False.
+    n_threads : int, optional
+        Number of threads to use for parallel processing, by default 1.
 
     Returns
     -------
@@ -191,9 +190,6 @@ def VCRfinder(
         Output DataFrame with detected variable chromatin regions at each penalty.
     """
     adata.var[["start", "end"]] = adata.var[["start", "end"]].apply(pd.to_numeric)
-
-    if n_threads is None or n_threads < 1:
-        n_threads = 1
 
     if region is not None:
         region = region.split(":")
@@ -339,7 +335,7 @@ def VCRfinder(
                     "chrom": chrom,
                     "start": [int(start + prev * 2000) for prev in prevs],
                     "end": [int(start + bkp * 2000) for bkp in bkps],
-                    "name": [f"pen-{pen}_brkpoint-{bkp}" for bkp in bkps],
+                    "name": [f"VCR_{bkp}_pen{pen}" for bkp in bkps],
                     "score": pen,
                     "strand": "*",
                 }
