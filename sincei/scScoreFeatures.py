@@ -8,119 +8,56 @@ import warnings
 
 from sincei import ParserCommon
 
-logger = logging.getLogger()
-
 
 def get_args():
     """Get scScoreFeatures-specific arguments."""
     parser = argparse.ArgumentParser(add_help=False, conflict_handler="resolve")
 
-    scoring_opts = parser.add_argument_group("Scoring Options")
+    scoring_opts = parser.add_argument_group("Common Options")
+    aggregate_opts = parser.add_argument_group("Aggregate Mode Options")
+    activities_opts = parser.add_argument_group("Activities Mode Options")
 
     scoring_opts.add_argument(
         "--mode",
         "-m",
-        help="When in 'activities' mode, calculates weighted gene activity scores using exponential "
-        "decay from gene body/TSS. \n"
-        "'VCR' mode calculates simple sum of counts within gene body. "
-        "Only used with --GTF. Required when using --GTF.",
-        choices=["activities", "VCR"],
+        help="When in ``activities`` mode, calculates weighted gene activity scores using exponential "
+        "decay per cell for each gene body/TSS or region. \n"
+        "``aggregate`` mode calculates the simple sum of counts per cell for each gene body or region.",
+        choices=["aggregate", "activities"],
         default=None,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--VCR",
-        "-VCR",
-        help="Path to the BED file containing the variable chromatin regions (VCRs) to use for count aggregation.",
-        metavar="VCRs.BED",
-        type=str,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--penalty",
-        "-pen",
-        help="Penalty value in the VCR BED file (5th column) to determine which VCRs to use for aggregation. "
-        "Only used with --VCR. Default: %(default)s.",
-        metavar="FLOAT",
-        type=float,
-        default=0.05,
-        required=False,
+        required=True,
     )
 
     scoring_opts.add_argument(
         "--GTF",
         "-GTF",
-        help="Path to the GTF file containing gene annotations for which to compute gene activity scores.",
-        metavar="GTF",
+        "--BED",
+        "-BED",
+        help="Path to the BED/GTF file containing the regions to use for aggregation/feature scoring.",
+        dest="GTF",
+        metavar="FILE",
         type=str,
+        required=True,
+    )
+
+    scoring_opts.add_argument(
+        "--overlapPolicy",
+        "-op",
+        help="Policy for handling adata features that only partially overlap regions in the BED/GTF provided.\n"
+        " Options are:\n"
+        "    - ``partial``: count reads in anndata feature proportionally to the overlap fraction, \n"
+        "       read as counts_considered = feature_counts * overlap_length / region_length.\n"
+        "    - ``all``: count all reads in the partially overlapping anndata feature.\n"
+        "    - ``none``: exclude reads from partially overlapping anndata features, in other words, only\n"
+        "      count reads in anndata features fully contained within BED/GTF regions.\n"
+        "Default is %(default)s.",
+        choices=["partial", "all", "none"],
+        type=str,
+        default="partial",
         required=False,
     )
 
     scoring_opts.add_argument(
-        "--decay",
-        "-d",
-        help="Decay parameter for calculating distance weights. Higher values lead to faster decay "
-        " with distance. Weights are calculated as `exp(-decay * distance_in_kb)`. "
-        "Only used with --GTF in activities mode. Default: %(default)s.",
-        metavar="FLOAT",
-        type=float,
-        default=0.75,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--maxRegion",
-        "-mr",
-        help="Maximum region size (bp) around the gene (upstream and downstream) to consider for "
-        "gene activity calculation. Only used with --GTF. Default: %(default)s.",
-        metavar="INT",
-        type=int,
-        default=200000,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--geneBody",
-        help="Whether the gene body is weighted as 1 (like TSS). If True, decay starts beyond gene body. "
-        "If False, decay starts from TSS. Only used with --GTF. Default: %(default)s.",
-        action="store_true",
-        default=True,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--geneSizeFactor",
-        help="Apply gene length normalization factor. Only used with --GTF. Default: %(default)s.",
-        action="store_true",
-        default=True,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--excludeInRange",
-        help="Exclude regions of other genes from contributing to gene activity scores. "
-        "'TSS': exclude TSS ± extendTSS regions. 'genes': exclude gene bodies extended upstream by extendTSS. "
-        "None: no exclusion. Only used with --GTF. Default: %(default)s.",
-        choices=["TSS", "genes"],
-        default=None,
-        required=False,
-    )
-
-    scoring_opts.add_argument(
-        "--extendTSS",
-        help="Number of base pairs to extend around TSS for exclusion regions when using --excludeInRange. "
-        "Only used with --GTF. Default: %(default)d.",
-        metavar="INT",
-        type=int,
-        default=20,
-        required=False,
-    )
-
-    common_opts = parser.add_argument_group("Common Options")
-
-    common_opts.add_argument(
         "--chrToSkip",
         help="List of chromosome names to skip from the analysis. "
         "Regions on these chromosomes will be excluded. "
@@ -132,7 +69,7 @@ def get_args():
         required=False,
     )
 
-    common_opts.add_argument(
+    scoring_opts.add_argument(
         "--numberOfProcessors",
         "-p",
         help='Number of processors to use. Type "max/2" to '
@@ -141,6 +78,77 @@ def get_args():
         metavar="INT",
         type=ParserCommon.numberOfProcessors,
         default=ParserCommon.numberOfProcessors("max"),
+        required=False,
+    )
+
+    aggregate_opts.add_argument(
+        "--penalty",
+        "-pen",
+        help="Penalty value to determine which VCRs to use for aggregation for a VCR BED file with "
+        "multiple penalties (5th column). Default: %(default)s.",
+        metavar="FLOAT",
+        type=float,
+        default=None,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--decay",
+        "-d",
+        help="Decay parameter for calculating distance weights. Higher values lead to faster decay "
+        " with distance. Weights are calculated as ``exp(-decay * distance_in_kb)``. "
+        "Only used with --GTF in activities mode. Default: %(default)s.",
+        metavar="FLOAT",
+        type=float,
+        default=0.75,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--maxRegion",
+        "-mr",
+        help="Maximum region size (bp) around the gene (upstream and downstream) to consider for "
+        "gene activity calculation. Default: %(default)s.",
+        metavar="INT",
+        type=int,
+        default=200000,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--geneBody",
+        help="Whether the gene body is weighted as 1 (like TSS). If True, decay starts beyond gene body. "
+        "If False, decay starts from TSS. Default: %(default)s.",
+        action="store_true",
+        default=True,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--geneSizeFactor",
+        help="Apply gene length normalization factor. Default: %(default)s.",
+        action="store_true",
+        default=True,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--excludeInRange",
+        help="Exclude regions of other genes from contributing to gene activity scores. "
+        "'TSS': exclude TSS ± extendTSS regions. 'genes': exclude gene bodies extended upstream by extendTSS. "
+        "None: no exclusion. Default: %(default)s.",
+        choices=["TSS", "genes"],
+        default=None,
+        required=False,
+    )
+
+    activities_opts.add_argument(
+        "--extendTSS",
+        help="Number of base pairs to extend around TSS for exclusion regions when using --excludeInRange. "
+        "Default: %(default)d.",
+        metavar="INT",
+        type=int,
+        default=20,
         required=False,
     )
 
@@ -160,16 +168,15 @@ def parse_arguments(args=None):
 aggregates binned chromatin data into Variable Chromatin Regions (use --VCR with output from scFindVCRs).
 
 Examples:
+    # Aggregate chromatin bins into VCRs
+    scScoreFeatures -m aggregate -i chrom_bins.h5ad --VCR VCRs.bed --penalty 0.05 -o chrom_VCRs.h5ad
     
     # Score gene activities from chromatin features
-    scScoreFeatures -i chrom_features.h5ad --GTF genome.gtf -o gene_activities.h5ad
-    
-    # Aggregate chromatin bins into VCRs
-    scScoreFeatures -i chrom_bins.h5ad --VCR VCRs.bed --penalty 0.05 -o chrom_VCRs.h5ad
+    scScoreFeatures -m activities -i chrom_features.h5ad --GTF genome.gtf -o gene_activities.h5ad
 """,
         usage="""
+scScoreFeatures -m aggregate -i INPUT.h5ad --GTF VCRs.bed -o OUTPUT.h5ad [options]
 scScoreFeatures -m activities -i INPUT.h5ad --GTF genome.gtf -o OUTPUT.h5ad [options]
-scScoreFeatures -m VCR -i INPUT.h5ad --VCR VCRs.bed -o OUTPUT.h5ad [options]
 """,
         add_help=False,
     )
@@ -181,19 +188,9 @@ scScoreFeatures -m VCR -i INPUT.h5ad --VCR VCRs.bed -o OUTPUT.h5ad [options]
 
     args = parser.parse_args(args)
 
-    # Validate that either --GTF or --VCR is provided (but not both)
-    if args.GTF and args.VCR:
-        parser.error("Cannot specify both --GTF and --VCR.")
-    if not args.GTF and not args.VCR:
-        parser.error("Must specify either --GTF or --VCR.")
-
     # Validate mode is specified
     if args.mode is None:
-        parser.error("You must specify --mode. Choose either 'activities' or 'VCR'.")
-
-    # Warn --penalty is only used with --VCR
-    if args.penalty != 0.05 and not args.VCR and args.verbose:
-        sys.stderr.write("Ignoring --penalty. It can only be used with --VCR (aggregation mode).\n")
+        parser.error("You must specify --mode. Choose either 'activities' or 'aggregate'.")
 
     return args
 
@@ -204,7 +201,6 @@ def main(args=None):
     args = parse_arguments(args)
 
     if not args.verbose:
-        logger.setLevel(logging.CRITICAL)
         warnings.filterwarnings("ignore")
 
     # Import here to avoid circular imports
@@ -214,38 +210,22 @@ def main(args=None):
     # Load input AnnData
     adata = ad.read_h5ad(args.input)
 
-    # Determine mode based on which arguments are present
-    if args.VCR:
-        # VCR aggregation mode - use VCR BED file
-        adata_out = feature_scorer(
-            adata=adata,
-            gtf=args.VCR,
-            mode="VCR",
-            penalty=args.penalty,
-            decay=args.decay,
-            max_region=args.maxRegion,
-            gene_body=args.geneBody,
-            gene_size_factor=args.geneSizeFactor,
-            exclude_in_range=args.excludeInRange,
-            extend_TSS=args.extendTSS,
-            chrs_to_skip=args.chrToSkip,
-            n_threads=args.numberOfProcessors,
-        )
-    elif args.GTF:
-        # Gene scoring mode - use GTF with user-specified mode and parameters
-        adata_out = feature_scorer(
-            adata=adata,
-            gtf=args.GTF,
-            mode=args.mode,
-            decay=args.decay,
-            max_region=args.maxRegion,
-            gene_body=args.geneBody,
-            gene_size_factor=args.geneSizeFactor,
-            exclude_in_range=args.excludeInRange,
-            extend_TSS=args.extendTSS,
-            chrs_to_skip=args.chrToSkip,
-            n_threads=args.numberOfProcessors,
-        )
+    adata_out = feature_scorer(
+        adata=adata,
+        gtf=args.GTF,
+        mode=args.mode,
+        overlap_policy=args.overlapPolicy,
+        penalty=args.penalty,
+        decay=args.decay,
+        max_region=args.maxRegion,
+        gene_body=args.geneBody,
+        gene_size_factor=args.geneSizeFactor,
+        exclude_in_range=args.excludeInRange,
+        extend_TSS=args.extendTSS,
+        chrs_to_skip=args.chrToSkip,
+        n_threads=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
 
     # Save output
     adata_out.write_h5ad(args.outFile)

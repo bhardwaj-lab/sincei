@@ -1,13 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
-
+import sys
 import numpy as np
 import pandas as pd
-import anndata as ad
 from scipy import sparse
+import anndata as ad
+from deeptoolsintervals import GTF
 from tqdm import tqdm
-import logging
-
-logger = logging.getLogger()
 
 
 def get_indices_overlapping(
@@ -287,9 +285,9 @@ def _parse_gtf_genes(gtf_path):
     For BED files, score corresponds to the 5th column (e.g. penalty value).
     For GTF files, score is typically the file name and can be ignored.
     """
-    from deeptoolsintervals import GTF
-
-    gtf = GTF(gtf_path, keepExons=False)
+    gtf = GTF(
+        gtf_path, exonID="exon", transcriptID="transcript", transcript_id_designator="transcript_id", keepExons=False
+    )
 
     genes = []
     for chrom in gtf.chroms:
@@ -323,6 +321,7 @@ def _compute_gene_activity_single(
     gene_body,
     gene_size_factor,
     avg_gene_length,
+    overlap_policy="partial",
     exclude_in_range=None,
     extend_TSS=2000,
     genes_arrays=None,
@@ -352,6 +351,20 @@ def _compute_gene_activity_single(
     feature_starts = adata.var["start"].values[overlap_indices]
     feature_ends = adata.var["end"].values[overlap_indices]
 
+    if overlap_policy not in ["partial", "all", "none"]:
+        sys.stderr.write(f"WARNING: Invalid overlap_policy '{overlap_policy}'. Defaulting to 'partial'.")
+        overlap_policy = "partial"
+
+    # Apply overlap policy: filter features based on how they overlap the search region
+    if overlap_policy == "none":
+        # Only keep features fully contained within the region
+        fully_contained = (feature_starts >= region_start) & (feature_ends <= region_end)
+        if not np.any(fully_contained):
+            return None
+        overlap_indices = overlap_indices[fully_contained]
+        feature_starts = feature_starts[fully_contained]
+        feature_ends = feature_ends[fully_contained]
+
     # Calculate decay weights (average weight across each feature body)
     weights = get_decay_weights(
         gene_start,
@@ -362,6 +375,14 @@ def _compute_gene_activity_single(
         decay=decay,
         gene_body=gene_body,
     )
+
+    # Apply overlap policy: scale weights for partially overlapping features
+    if overlap_policy == "partial":
+        clip_start = np.maximum(feature_starts, region_start)
+        clip_end = np.minimum(feature_ends, region_end)
+        feat_lengths = np.maximum(feature_ends - feature_starts, 1.0)
+        overlap_fractions = (clip_end - clip_start) / feat_lengths
+        weights = weights * overlap_fractions
 
     # Apply exclusion weight reduction if requested
     if exclude_in_range in ("TSS", "genes") and genes_arrays is not None:
@@ -379,7 +400,6 @@ def _compute_gene_activity_single(
             other_starts = genes_arrays["start"][other_genes_mask]
             other_ends = genes_arrays["end"][other_genes_mask]
             other_strands = genes_arrays["strand"][other_genes_mask]
-            n_other = len(other_starts)
 
             # Compute TSS for all other genes at once
             other_tss = np.where(other_strands == "+", other_starts, other_ends)
@@ -465,7 +485,8 @@ def feature_scorer(
     adata,
     gtf,
     mode,
-    penalty=0.05,
+    overlap_policy="partial",
+    penalty=None,
     decay=0.75,
     max_region=200000,
     gene_body=True,
@@ -473,6 +494,7 @@ def feature_scorer(
     exclude_in_range=None,
     extend_TSS=2000,
     chrs_to_skip=None,
+    verbose=False,
     n_threads=1,
 ):
     """
@@ -487,19 +509,29 @@ def feature_scorer(
     adata : AnnData
         The input AnnData object containing the data.
     gtf : str
-        Path to the GTF file with gene annotations.
+        Path to the BED/GTF file with region annotations.
     mode : str
-        Scoring mode. Options are 'VCR' or 'activities'.
-        VCR calculates the total counts of the genomic features in the input BED/GTF file from the
+        Scoring mode. Options are 'aggregate' or 'activities'.
+        ``aggregate`` calculates the total counts of the genomic features in the input BED/GTF file from the
         input anndata.
-        Activities mode calculates the weighted sum of counts based on distance to TSS of the genes
+        ``activities`` mode calculates the weighted sum of counts based on distance to TSS of the genes
         in the input GTF file. The weights are calculated using an exponential decay function.
+    overlap_policy: str, optional
+        Policy for handling adata features that only partially overlap regions in the BED/GTF provided.
+        Options are:
+            - ``partial``: count reads in anndata feature proportionally to the overlap fraction.
+              counts_considered = feature_counts * overlap_length / region_length.
+            - ``all``: count all reads in the partially overlapping anndata feature.
+            - ``none``: exclude reads from partially overlapping anndata features, in other words, only
+              count reads in anndata features fully contained within BED/GTF regions.
+        Default is 'partial'.
     penalty : float, optional
-        Penalty parameter to choose from VCR BED file, by default 0.05. Only used with --VCR.
+        Optional parameter to select VCRs of a particular penalty value from a BED file with VCRs
+        calculated using multiple penalties.
     decay : float, optional
         Decay parameter for calculating the decay weights, by default 0.75. Higher values lead to
-        faster decay. Weights are calculated as `exp(-decay * distance_in_kb)`. This parameter is
-        ignored in 'VCR' mode.
+        faster decay. Weights are calculated as ``exp(-decay * distance_in_kb)``. This parameter is
+        ignored in ``aggregate`` mode.
     max_region : int, optional
         Maximum region size around the gene (upstream and downstream) to consider, by default
         200000 bp.
@@ -522,6 +554,8 @@ def feature_scorer(
         Used when exclude_in_range is "TSS" or "genes".
     chrs_to_skip : list, optional
         List of chromosomes to skip, by default None.
+    verbose : bool, optional
+        Print progress messages and warnings. Default is False.
     n_threads : int, optional
         Number of threads to use for parallel processing, by default 1.
 
@@ -531,18 +565,18 @@ def feature_scorer(
         AnnData object with cells as obs and genes as var, containing gene activity scores.
     """
     # Parse BED/GTF file to get gene annotations
-    logger.info("Parsing BED/GTF file...")
+    sys.stdout.write("Parsing BED/GTF file...\n")
     genes_df = _parse_gtf_genes(gtf)
 
     if genes_df.empty:
         raise ValueError("No genes/features found in the input file.")
 
-    # Filter by penalty value in VCR mode
-    if mode == "VCR" and penalty is not None and "score" in genes_df.columns:
-        genes_df = genes_df[genes_df["score"] == penalty]
+    # Filter VCR BED by penalty value
+    if penalty is not None and "name" in genes_df.columns:
+        genes_df = genes_df[genes_df["name"].str.contains(f"_pen{penalty}", na=False)]
         if genes_df.empty:
             raise ValueError(
-                f"No regions found with penalty value {penalty} in the VCR BED file. "
+                f"No VCRs found with penalty value {penalty} in the VCR BED file. "
                 f"Check the 5th column of the BED file for available penalty values."
             )
 
@@ -568,18 +602,18 @@ def feature_scorer(
 
     # Validate exclude_in_range parameter
     if exclude_in_range is not None and exclude_in_range not in ("TSS", "genes"):
-        logger.warning(f"Invalid exclude_in_range value '{exclude_in_range}'. Defaulting to None.")
+        sys.stderr.write(f"WARNING: Invalid exclude_in_range value '{exclude_in_range}'. Defaulting to None.\n")
         exclude_in_range = None
 
-    logger.info(f"Processing {len(genes_df)} features across {len(common_chroms)} chromosomes")
+    sys.stdout.write(f"Processing {len(genes_df)} features across {len(common_chroms)} chromosomes\n")
 
     # Calculate average gene length for size factor normalization
     avg_gene_length = (genes_df["end"] - genes_df["start"]).mean()
 
     n_cells = adata.n_obs
 
-    if mode == "VCR":
-        # VCR mode: simple sum of counts within VCR
+    if mode == "aggregate":
+        # aggregate mode: simple sum of counts within VCR
         effective_decay = 0.0
         effective_max_region = 0
         gene_body = True
@@ -589,7 +623,7 @@ def feature_scorer(
         effective_decay = decay
         effective_max_region = max_region
     else:
-        raise ValueError(f"Unknown mode: {mode}. Must be 'VCR' or 'activities'")
+        raise ValueError(f"Unknown mode: {mode}. Must be 'aggregate' or 'activities'")
 
     # Pre-convert genes_df to numpy arrays for faster access (opt 4)
     genes_arrays = None
@@ -620,6 +654,7 @@ def feature_scorer(
             gene_body,
             gene_size_factor,
             avg_gene_length,
+            overlap_policy=overlap_policy,
             exclude_in_range=exclude_in_range,
             extend_TSS=extend_TSS,
             genes_arrays=genes_arrays,
@@ -633,7 +668,7 @@ def feature_scorer(
     gene_names = []
     gene_col_idx = 0
 
-    logger.info("Computing features...")
+    sys.stdout.write("Computing features...\n")
 
     if n_threads > 1:
         with ThreadPoolExecutor(max_workers=n_threads) as executor:
@@ -642,10 +677,11 @@ def feature_scorer(
                     executor.map(process_gene, gene_rows),
                     total=len(gene_rows),
                     desc="Processing genes",
+                    disable=not verbose,
                 )
             )
     else:
-        results = [process_gene(g) for g in tqdm(gene_rows, desc="Processing genes")]
+        results = [process_gene(g) for g in tqdm(gene_rows, desc="Processing genes", disable=not verbose)]
 
     # Collect results into COO components
     for result in results:
@@ -678,7 +714,7 @@ def feature_scorer(
         )
     else:
         activity_matrix = sparse.csr_matrix((n_cells, 0), dtype=np.float32)
-        logger.warning("No gene activities computed - check chromosome naming consistency")
+        sys.stderr.write("WARNING: No gene activities computed - check chromosome naming consistency\n")
 
     # Create output AnnData
     var_df = pd.DataFrame({"gene_name": gene_names}, index=gene_names)
@@ -693,6 +729,6 @@ def feature_scorer(
         var=var_df,
     )
 
-    logger.info(f"Created AnnData with {adata_out.n_obs} cells and {adata_out.n_vars} genes")
+    sys.stdout.write(f"Created AnnData with {adata_out.n_obs} cells and {adata_out.n_vars} genes\n")
 
     return adata_out
