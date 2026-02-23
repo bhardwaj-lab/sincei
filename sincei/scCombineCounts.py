@@ -26,7 +26,7 @@ def parseArguments(args=None):
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scCombineCounts`` combines multiple count matrices (output of scCountReads) into one, either
 assuming they are different samples (``multi-sample``) or different measurements on the same set of cells

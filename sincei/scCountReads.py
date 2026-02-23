@@ -32,7 +32,7 @@ you want to count the read coverage for specific regions only, use the ``feature
 standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames
 (cell barcodes).
 
-Detailed help for each sub-command is available by typing::
+Detailed help for each sub-command is available by typing:
 
     scCountReads bins -h
     scCountReads features -h
@@ -53,7 +53,7 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
     # bins mode options
     bins_subparser = subparsers.add_parser(
         "bins",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             ParserCommon.inputOutputOptions(
                 opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],
@@ -75,7 +75,7 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
     # BED file arguments
     features_subparser = subparsers.add_parser(
         "features",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             ParserCommon.inputOutputOptions(
                 opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],

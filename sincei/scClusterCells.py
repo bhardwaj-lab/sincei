@@ -39,7 +39,7 @@ def parseArguments(args=None):
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), plot_args, other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scClusterCells`` clusters cells based on the input count matrix (output of scCountReads) and
 performs dimensionality reduction, community detection and 2D projection (UMAP) of the cells. The
