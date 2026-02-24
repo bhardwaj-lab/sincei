@@ -339,6 +339,7 @@ def _compute_gene_activity_single(
     gene_name = gene_row["gene_name"]
 
     # Define region to search (gene body + max_region upstream/downstream)
+    max_region = max_region * 1000 # convert to base pairs
     region_start = max(0, gene_start - max_region)
     region_end = gene_end + max_region
 

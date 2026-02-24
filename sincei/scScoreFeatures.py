@@ -20,20 +20,17 @@ def get_args():
     scoring_opts.add_argument(
         "--mode",
         "-m",
-        help="When in ``activities`` mode, calculates weighted gene activity scores using exponential "
-        "decay per cell for each gene body/TSS or region. \n"
-        "``aggregate`` mode calculates the simple sum of counts per cell for each gene body or region.",
+        help="The ``activities`` mode calculates weighted gene activity scores per cell using exponential "
+        "decay of signal around each input feature (such as gene-body, TSS, or region). \n"
+        "``aggregate`` mode calculates a simple sum of counts per cell for each input feature.",
         choices=["aggregate", "activities"],
         default=None,
         required=True,
     )
 
     scoring_opts.add_argument(
-        "--GTF",
-        "-GTF",
-        "--BED",
-        "-BED",
-        help="Path to the BED/GTF file containing the regions to use for aggregation/feature scoring.",
+        "--features",
+        help="Path to the .BED or .GTF formatted file containing the features to use for aggregation/scoring.",
         dest="GTF",
         metavar="FILE",
         type=str,
@@ -43,13 +40,13 @@ def get_args():
     scoring_opts.add_argument(
         "--overlapPolicy",
         "-op",
-        help="Policy for handling adata features that only partially overlap regions in the BED/GTF provided.\n"
+        help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in --features.\n"
         " Options are:\n"
-        "    - ``partial``: count reads in anndata feature proportionally to the overlap fraction, \n"
+        "    - ``partial``: count reads in anndata regions proportionally to the overlap fraction, \n"
         "       read as counts_considered = feature_counts * overlap_length / region_length.\n"
-        "    - ``all``: count all reads in the partially overlapping anndata feature.\n"
-        "    - ``none``: exclude reads from partially overlapping anndata features, in other words, only\n"
-        "      count reads in anndata features fully contained within BED/GTF regions.\n"
+        "    - ``all``: count all reads in the partially overlapping anndata regions.\n"
+        "    - ``none``: exclude reads from partially overlapping anndata regions, in other words, only\n"
+        "      count reads in anndata regions fully contained within BED/GTF regions.\n"
         "Default is %(default)s.",
         choices=["partial", "all", "none"],
         type=str,
@@ -84,8 +81,8 @@ def get_args():
     aggregate_opts.add_argument(
         "--penalty",
         "-pen",
-        help="Penalty value to determine which VCRs to use for aggregation for a VCR BED file with "
-        "multiple penalties (5th column). Default: %(default)s.",
+        help="Penalty value to determine which VCRs to use for aggregation. Used only when the input is "
+        "a BED file created with `scFindVCRs` with a range of penalties (stored in the 5th column). Default: %(default)s.",
         metavar="FLOAT",
         type=float,
         default=None,
@@ -96,8 +93,8 @@ def get_args():
         "--decay",
         "-d",
         help="Decay parameter for calculating distance weights. Higher values lead to faster decay "
-        " with distance. Weights are calculated as ``exp(-decay * distance_in_kb)``. "
-        "Only used with --GTF in activities mode. Default: %(default)s.",
+        "with distance. Weights are calculated as ``exp(-decay * distance_in_kb)``. "
+        "Only used with `--mode activities` . Default: %(default)s.",
         metavar="FLOAT",
         type=float,
         default=0.75,
@@ -107,36 +104,39 @@ def get_args():
     activities_opts.add_argument(
         "--maxRegion",
         "-mr",
-        help="Maximum region size (bp) around the gene (upstream and downstream) to consider for "
-        "gene activity calculation. Default: %(default)s.",
+        help="Maximum region size (in kb) upstream and downstream of the genes to consider for "
+        "activity calculation. Default: %(default)s.",
         metavar="INT",
         type=int,
-        default=200000,
+        default=200,
         required=False,
     )
 
     activities_opts.add_argument(
         "--geneBody",
-        help="Whether the gene body is weighted as 1 (like TSS). If True, decay starts beyond gene body. "
-        "If False, decay starts from TSS. Default: %(default)s.",
+        help="Flag to indicate whether the entire gene body is weighted as 1 (like TSS). If provided, decay starts beyond gene body. "
+        "By default, the weight decay starts from TSS. Default: %(default)s.",
         action="store_true",
-        default=True,
         required=False,
     )
 
     activities_opts.add_argument(
-        "--geneSizeFactor",
-        help="Apply gene length normalization factor. Default: %(default)s.",
+        "--normalizeGeneLengths",
+        help="Flag to indicate whether to apply length normalization to the input genes. "
+        "If provided. Each gene is normalized w.r.t the average gene length in the input GTF/BED file "
+        "Default: %(default)s.",
         action="store_true",
-        default=True,
         required=False,
     )
 
     activities_opts.add_argument(
         "--excludeInRange",
-        help="Exclude regions of other genes from contributing to gene activity scores. "
-        "'TSS': exclude TSS ± extendTSS regions. 'genes': exclude gene bodies extended upstream by extendTSS. "
-        "None: no exclusion. Default: %(default)s.",
+        help="Exclude regions that overlap other features from contributing to activity score of the input genes. "
+        "This could help avoid spurious correlations between the target genes and the neighboring genes (in perticular for promoter-enriched ) "
+        "signals, such as H3K4me3. Options are: "
+        "'TSS': exclude TSS ± extendTSS regions. "
+        "'genes': exclude gene bodies extended upstream by extendTSS. "
+        "Default: %(default)s.",
         choices=["TSS", "genes"],
         default=None,
         required=False,
@@ -170,7 +170,7 @@ aggregates binned chromatin data into Variable Chromatin Regions (use --VCR with
 Examples:
     # Aggregate chromatin bins into VCRs
     scScoreFeatures -m aggregate -i chrom_bins.h5ad --VCR VCRs.bed --penalty 0.05 -o chrom_VCRs.h5ad
-    
+
     # Score gene activities from chromatin features
     scScoreFeatures -m activities -i chrom_features.h5ad --GTF genome.gtf -o gene_activities.h5ad
 """,
@@ -219,7 +219,7 @@ def main(args=None):
         decay=args.decay,
         max_region=args.maxRegion,
         gene_body=args.geneBody,
-        gene_size_factor=args.geneSizeFactor,
+        gene_size_factor=args.normalizeGeneLengths,
         exclude_in_range=args.excludeInRange,
         extend_TSS=args.extendTSS,
         chrs_to_skip=args.chrToSkip,
