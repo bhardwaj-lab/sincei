@@ -41,11 +41,11 @@ def get_args():
         "--overlapPolicy",
         "-op",
         help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in --features.\n"
-        " Options are:\n"
-        "    - ``partial``: count reads in anndata regions proportionally to the overlap fraction, \n"
-        "       read as counts_considered = feature_counts * overlap_length / region_length.\n"
+        " Options are: \n "
+        "    - ``partial``: count reads in anndata regions proportionally to the overlap fraction, \n "
+        "       read as counts_considered = feature_counts * overlap_length / region_length. \n "
         "    - ``all``: count all reads in the partially overlapping anndata regions.\n"
-        "    - ``none``: exclude reads from partially overlapping anndata regions, in other words, only\n"
+        "    - ``none``: exclude reads from partially overlapping anndata regions, in other words, only \n "
         "      count reads in anndata regions fully contained within BED/GTF regions.\n"
         "Default is %(default)s.",
         choices=["partial", "all", "none"],
@@ -132,8 +132,8 @@ def get_args():
     activities_opts.add_argument(
         "--excludeInRange",
         help="Exclude regions that overlap other features from contributing to activity score of the input genes. "
-        "This could help avoid spurious correlations between the target genes and the neighboring genes (in perticular for promoter-enriched ) "
-        "signals, such as H3K4me3. Options are: "
+        "This could help avoid spurious correlations between the target genes and the neighboring genes "
+        "(in particular for promoter-enriched signals, such as H3K4me3). Options are: "
         "'TSS': exclude TSS ± extendTSS regions. "
         "'genes': exclude gene bodies extended upstream by extendTSS. "
         "Default: %(default)s.",
@@ -166,17 +166,13 @@ def parse_arguments(args=None):
         description="""
 ``scScoreFeatures`` computes gene activity scores from chromatin data (use --GTF) or
 aggregates binned chromatin data into Variable Chromatin Regions (use --VCR with output from scFindVCRs).
-
-Examples:
-    # Aggregate chromatin bins into VCRs
-    scScoreFeatures -m aggregate -i chrom_bins.h5ad --VCR VCRs.bed --penalty 0.05 -o chrom_VCRs.h5ad
-
-    # Score gene activities from chromatin features
-    scScoreFeatures -m activities -i chrom_features.h5ad --GTF genome.gtf -o gene_activities.h5ad
 """,
         usage="""
-scScoreFeatures -m aggregate -i INPUT.h5ad --GTF VCRs.bed -o OUTPUT.h5ad [options]
-scScoreFeatures -m activities -i INPUT.h5ad --GTF genome.gtf -o OUTPUT.h5ad [options]
+# Aggregate chromatin bins into VCRs
+scScoreFeatures -m aggregate -i INPUT_binned.h5ad --features VCRs.bed --penalty 0.05 -o OUTPUT_aggregate.h5ad [options]
+
+# Score gene activities from chromatin features
+scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPUT_activities.h5ad [options]
 """,
         add_help=False,
     )
