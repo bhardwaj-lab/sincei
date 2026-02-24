@@ -205,12 +205,12 @@ def main(args=None):
 
     # Import here to avoid circular imports
     import anndata as ad
-    from sincei.feature_scorer import feature_scorer
+    from sincei.FeatureScorer import FeatureScorer
 
     # Load input AnnData
     adata = ad.read_h5ad(args.input)
 
-    adata_out = feature_scorer(
+    adata_out = FeatureScorer(
         adata=adata,
         gtf=args.GTF,
         mode=args.mode,

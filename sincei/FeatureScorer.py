@@ -482,7 +482,7 @@ def _compute_gene_activity_single(
     return (gene_name, activity)
 
 
-def feature_scorer(
+def FeatureScorer(
     adata,
     gtf,
     mode,
