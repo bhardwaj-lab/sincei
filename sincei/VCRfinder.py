@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
-import anndata as ad
 import ruptures as rpt
 from ruptures.exceptions import BadSegmentationParameters
 from scipy import sparse
@@ -335,7 +334,7 @@ def VCRfinder(
                     "chrom": chrom,
                     "start": [int(start + prev * 2000) for prev in prevs],
                     "end": [int(start + bkp * 2000) for bkp in bkps],
-                    "name": [f"VCR_{bkp}_pen{pen}" for bkp in bkps],
+                    "name": [f"{chrom}_VCR_{bkp}_pen{pen}" for bkp in bkps],
                     "score": pen,
                     "strand": "*",
                 }

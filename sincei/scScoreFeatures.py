@@ -3,7 +3,6 @@
 
 import sys
 import argparse
-import logging
 import warnings
 
 from sincei import ParserCommon
@@ -30,7 +29,7 @@ def get_args():
 
     scoring_opts.add_argument(
         "--features",
-        help="Path to the .BED or .GTF formatted file containing the features to use for aggregation/scoring.",
+        help="Path to the BED or GTF file containing the features to use for aggregation/scoring.",
         dest="GTF",
         metavar="FILE",
         type=str,
@@ -47,7 +46,7 @@ def get_args():
         "    - ``all``: count all reads in the partially overlapping anndata regions.\n"
         "    - ``none``: exclude reads from partially overlapping anndata regions, in other words, only \n "
         "      count reads in anndata regions fully contained within BED/GTF regions.\n"
-        "Default is %(default)s.",
+        "Default: %(default)s.",
         choices=["partial", "all", "none"],
         type=str,
         default="partial",
@@ -55,14 +54,10 @@ def get_args():
     )
 
     scoring_opts.add_argument(
-        "--chrToSkip",
-        help="List of chromosome names to skip from the analysis. "
-        "Regions on these chromosomes will be excluded. "
-        "Useful for skipping mitochondrial, X chromosome, or unplaced contigs. "
-        "Multiple chromosomes can be specified, e.g. ``--chrToSkip chrM chrX``.",
-        metavar="CHR",
-        nargs="+",
-        default=None,
+        "--centerScores",
+        "-cs",
+        help="If flag is set, center and scale the scores to unit variance and zero mean. Default: %(default)s.",
+        action="store_true",
         required=False,
     )
 
@@ -71,7 +66,7 @@ def get_args():
         "-p",
         help='Number of processors to use. Type "max/2" to '
         'use half the maximum number of processors or "max" '
-        'to use all available processors. Default: "max"',
+        'to use all available processors. Default: "max".',
         metavar="INT",
         type=ParserCommon.numberOfProcessors,
         default=ParserCommon.numberOfProcessors("max"),
@@ -82,7 +77,7 @@ def get_args():
         "--penalty",
         "-pen",
         help="Penalty value to determine which VCRs to use for aggregation. Used only when the input is "
-        "a BED file created with `scFindVCRs` with a range of penalties (stored in the 5th column). Default: %(default)s.",
+        "a BED file created with ``scFindVCRs`` with a range of penalties (stored in the 5th column). Default: %(default)s.",
         metavar="FLOAT",
         type=float,
         default=None,
@@ -93,8 +88,8 @@ def get_args():
         "--decay",
         "-d",
         help="Decay parameter for calculating distance weights. Higher values lead to faster decay "
-        "with distance. Weights are calculated as ``exp(-decay * distance_in_kb)``. "
-        "Only used with `--mode activities` . Default: %(default)s.",
+        "with distance. Weights are calculated as ``exp(-decay * distance_in_kb / 10)``. "
+        "Only used with ``--mode activities``. Default: %(default)s.",
         metavar="FLOAT",
         type=float,
         default=0.75,
@@ -108,13 +103,13 @@ def get_args():
         "activity calculation. Default: %(default)s.",
         metavar="INT",
         type=int,
-        default=200,
+        default=100,
         required=False,
     )
 
     activities_opts.add_argument(
         "--geneBody",
-        help="Flag to indicate whether the entire gene body is weighted as 1 (like TSS). If provided, decay starts beyond gene body. "
+        help="Flag to indicate whether the entire gene body is weighted as 1 (like the TSS). If provided, decay starts beyond gene body. "
         "By default, the weight decay starts from TSS. Default: %(default)s.",
         action="store_true",
         required=False,
@@ -123,7 +118,7 @@ def get_args():
     activities_opts.add_argument(
         "--normalizeGeneLengths",
         help="Flag to indicate whether to apply length normalization to the input genes. "
-        "If provided. Each gene is normalized w.r.t the average gene length in the input GTF/BED file "
+        "If provided, gene scores are normalized w.r.t. gene length in the input GTF/BED file. "
         "Default: %(default)s.",
         action="store_true",
         required=False,
@@ -134,21 +129,11 @@ def get_args():
         help="Exclude regions that overlap other features from contributing to activity score of the input genes. "
         "This could help avoid spurious correlations between the target genes and the neighboring genes "
         "(in particular for promoter-enriched signals, such as H3K4me3). Options are: "
-        "'TSS': exclude TSS ± extendTSS regions. "
-        "'genes': exclude gene bodies extended upstream by extendTSS. "
+        "'TSS': exclude features overlapping the TSS of other genes. "
+        "'genes': exclude features overlapping the bodies of other genes. "
         "Default: %(default)s.",
         choices=["TSS", "genes"],
         default=None,
-        required=False,
-    )
-
-    activities_opts.add_argument(
-        "--extendTSS",
-        help="Number of base pairs to extend around TSS for exclusion regions when using --excludeInRange. "
-        "Default: %(default)d.",
-        metavar="INT",
-        type=int,
-        default=20,
         required=False,
     )
 
@@ -164,15 +149,12 @@ def parse_arguments(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[io_args, get_args(), other_args],
         description="""
-``scScoreFeatures`` computes gene activity scores from chromatin data (use --GTF) or
-aggregates binned chromatin data into Variable Chromatin Regions (use --VCR with output from scFindVCRs).
+``scScoreFeatures`` computes gene activity scores from chromatin data (use --GTF) or aggregates
+binned chromatin data into Variable Chromatin Regions (use --VCR with output from scFindVCRs).
 """,
         usage="""
-# Aggregate chromatin bins into VCRs
-scScoreFeatures -m aggregate -i INPUT_binned.h5ad --features VCRs.bed --penalty 0.05 -o OUTPUT_aggregate.h5ad [options]
-
-# Score gene activities from chromatin features
-scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPUT_activities.h5ad [options]
+scScoreFeatures -m aggregate -i INPUT_binned.h5ad --features VCRs.bed  -o OUTPUT_aggregate.h5ad
+scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPUT_activities.h5ad
 """,
         add_help=False,
     )
@@ -211,14 +193,13 @@ def main(args=None):
         gtf=args.GTF,
         mode=args.mode,
         overlap_policy=args.overlapPolicy,
+        center_scores=args.centerScores,
         penalty=args.penalty,
         decay=args.decay,
         max_region=args.maxRegion,
         gene_body=args.geneBody,
         gene_size_factor=args.normalizeGeneLengths,
         exclude_in_range=args.excludeInRange,
-        extend_TSS=args.extendTSS,
-        chrs_to_skip=args.chrToSkip,
         n_threads=args.numberOfProcessors,
         verbose=args.verbose,
     )
