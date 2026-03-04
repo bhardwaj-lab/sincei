@@ -22,7 +22,7 @@ def _parse_gtf_genes(gtf_path):
 
     genes = []
     for chrom in gtf.chroms:
-        # Get all genes on chromosome (avoid overflow for int32)
+        # Get all features on chromosome (avoid overflow for int32)
         for i, gene in enumerate(gtf.findOverlaps(chrom, 0, 2**31 - 1)):
             # gene is a tuple: (start, end, name, source/strand, exons, score)
             gene_start = gene[0]
@@ -516,12 +516,12 @@ def FeatureScorer(
                 tqdm(
                     executor.map(process_gene, gene_rows),
                     total=len(gene_rows),
-                    desc="Processing genes",
+                    desc="Processing features",
                     disable=not verbose,
                 )
             )
     else:
-        results = [process_gene(g) for g in tqdm(gene_rows, desc="Processing genes", disable=not verbose)]
+        results = [process_gene(g) for g in tqdm(gene_rows, desc="Processing features", disable=not verbose)]
 
     # Collect results into COO components
     for result in results:
@@ -568,19 +568,19 @@ def FeatureScorer(
         obs=adata.obs.copy(),
         var=var_df,
     )
+    if mode == "activities":
+        if center_scores:
+            from scanpy.pp import scale
 
-    if center_scores:
-        from scanpy.pp import scale
+            sys.stderr.write(
+                "WARNING: Centering the scores destroys the sparsity of the output matrix and can lead "
+                "to increased memory usage. Use with caution for large datasets.\n"
+            )
+            scale(adata_out, zero_center=True)
+        else:
+            from sklearn.preprocessing import normalize
 
-        sys.stderr.write(
-            "WARNING: Centering the scores destroys the sparsity of the output matrix and can lead "
-            "to increased memory usage. Use with caution for large datasets.\n"
-        )
-        scale(adata_out, zero_center=True)
-    else:
-        from sklearn.preprocessing import normalize
-
-        normalize(adata_out.X, norm="l1", copy=False)
+            normalize(adata_out.X, norm="l1", copy=False)
 
     sys.stdout.write(f"Created AnnData with {adata_out.n_obs} cells and {adata_out.n_vars} features.\n")
 
