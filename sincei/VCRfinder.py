@@ -265,7 +265,7 @@ def VCRfinder(
         ctime = time.time() - ctime
         if verbose:
             sys.stdout.write(
-                f"Chromosome {chrom}: Band correlation with {k} diagonals calculated in {ctime:.2f} seconds\n"
+                f"Chromosome {chrom}: Banded correlation with {k} diagonals calculated in {ctime:.2f} seconds\n"
             )
 
         scores = np.zeros((p, len(sigmas)))

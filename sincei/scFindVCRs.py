@@ -153,8 +153,3 @@ def main(args=None):
     )
 
     pen_bed_df.to_csv(args.outFile, sep="\t", header=False, index=False)
-
-
-#    for pen in args.penalties:
-#        out_bed_df = pen_bed_df[pen_bed_df["penalty"] == pen][["chrom", "start", "end"]]
-#        out_bed_df.to_csv(f"{args.outFile}_pen{pen}.bed", sep="\t", header=False, index=False)
