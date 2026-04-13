@@ -15,7 +15,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "--input",
             "-i",
             metavar="H5AD",
-            help="Input file in .h5ad format.",
+            help="sincei-generated input file in .h5ad format.",
             required=True,
         )
     elif "h5adfiles" in opts:
@@ -23,7 +23,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "--input",
             "-i",
             metavar=("H5AD1", "H5AD2"),
-            help="List of .h5ad files separated by spaces.",
+            help="List of sincei-generated input .h5ad files separated by spaces.",
             nargs="+",
             required=True,
         )
@@ -33,7 +33,7 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "--input",
             "-i",
             metavar="H5MU",
-            help="Input file in .h5mu format.",
+            help="sincei-generated input file in .h5mu format.",
             required=True,
         )
 
@@ -237,7 +237,7 @@ def bamOptions(args=None, suppress_args=None, default_opts=None):
         'use half the maximum number of processors or "max" '
         'to use all available processors. (Default: "max")',
         metavar="INT",
-        type=int,
+        type=numberOfProcessors,
         default=numberOfProcessors("max"),
         required=False,
     )

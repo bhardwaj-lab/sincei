@@ -17,7 +17,7 @@ def parseArguments(args=None):
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
         ``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
         .h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
@@ -34,7 +34,7 @@ def parseArguments(args=None):
         regions with distinct correlation patterns. This step depends on a penalty parameter that
         controls the number of detected regions.
         """,
-        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 5 10 20 -o detected_VCRs.bed",
+        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 0.05 0.1 0.5 -o detected_VCRs.bed",
         add_help=False,
     )
 
@@ -125,7 +125,7 @@ def get_args():
         'use half the maximum number of processors or "max" '
         'to use all available processors. (Default: "max")',
         metavar="INT",
-        type=int,
+        type=ParserCommon.numberOfProcessors,
         default=ParserCommon.numberOfProcessors("max"),
         required=False,
     )
@@ -153,8 +153,3 @@ def main(args=None):
     )
 
     pen_bed_df.to_csv(args.outFile, sep="\t", header=False, index=False)
-
-
-#    for pen in args.penalties:
-#        out_bed_df = pen_bed_df[pen_bed_df["penalty"] == pen][["chrom", "start", "end"]]
-#        out_bed_df.to_csv(f"{args.outFile}_pen{pen}.bed", sep="\t", header=False, index=False)

@@ -294,8 +294,10 @@ def main(args=None):
         checkBAMtag(x, bam, args.cellTag)
         if args.groupTag:
             checkBAMtag(x, bam, args.groupTag)
-            sys.stderr.write("--groupTag is not implemented for scFilterStats yet! \
-            Please split your BAM file by {} and re-run scFilterStats. \n".format(args.groupTag))
+            sys.stderr.write(
+                f"--groupTag is not implemented for scFilterStats yet!\n"
+                f"Please split your BAM file by {args.groupTag} and re-run scFilterStats.\n"
+            )
             exit(1)
         x.close()
 

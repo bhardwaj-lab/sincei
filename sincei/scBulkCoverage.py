@@ -28,7 +28,7 @@ def parseArguments(args=None):
     other_args = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), bam_args, filter_args, read_args, other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scBulkCoverage`` takes alignments of reads or fragments as input (BAM files), along with cell
 grouping information, such as barcode -> batch, or barcode -> cluster, as tsv file, and generates a  coverage
@@ -37,7 +37,7 @@ where bins are short consecutive counting windows of a defined  size. It is poss
 length of the reads to better reflect the actual fragment length. ``scBulkCoverage`` offers normalization per
 cluster using different methods.
 """,
-        usage="scBulkCoverage -b file1.bam file2.bam --labels file1 file2 -g scClusterCells_output.tsv -o coverage.bw",
+        usage="scBulkCoverage -b file1.bam file2.bam --labels file1 file2 -g scClusterCells_output.tsv -o coverage",
         add_help=False,
     )
 

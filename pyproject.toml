@@ -5,7 +5,7 @@ requires = ["hatchling"]
 
 [project]
 name = "sincei"
-description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data "
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
 readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
@@ -54,6 +54,7 @@ scFindVCRs = "sincei.scFindVCRs:main"
 scFilterBarcodes = "sincei.scFilterBarcodes:main"
 scFilterStats = "sincei.scFilterStats:main"
 scJSD = "sincei.scJSD:main"
+scScoreFeatures = "sincei.scScoreFeatures:main"
 sincei = "sincei.sincei:main"
 
 
