@@ -488,6 +488,11 @@ def FeatureScorer(
     # Prepare gene rows for processing
     gene_rows = [row for _, row in genes_df.iterrows()]
 
+    # Ensure adata.X is in CSC format for efficient column slicing if it's sparse
+    # CSR is much slower
+    if hasattr(adata.X, "tocsc"):
+        adata.X = adata.X.tocsc()
+
     def process_gene(gene_row):
         return _compute_gene_activity_single(
             adata,
