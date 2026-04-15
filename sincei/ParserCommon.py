@@ -120,18 +120,6 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             required=True if "outFile" in requiredOpts else False,
         )
 
-    if "outFileFormat" in opts:
-        group.add_argument(
-            "--outFileFormat",
-            type=str,
-            default="h5ad",
-            choices=["h5ad", "mtx"],
-            help="Output file format. By default, write an anndata object of name "
-            "<prefix>.h5ad, which can be opened with scanpy, or used with downstream tools. "
-            '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
-            "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
-        )
-
     return parser
 
 
