@@ -14,6 +14,8 @@ Command Line tools
     tools/scClusterCells
     tools/scBulkCoverage
     tools/scFindVCRs
+    tools/scScoreFeatures
+    
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.
 
@@ -29,6 +31,7 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scCombineCounts`
 * :doc:`tools/scClusterCells`
 * :doc:`tools/scFindVCRs`
+* :doc:`tools/scScoreFeatures`
 
 The table below summarizes input and output of each tool:
 
