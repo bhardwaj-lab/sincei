@@ -140,7 +140,7 @@ def get_args():
     return parser
 
 
-def parse_arguments(args=None):
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["input", "outFile"])
     other_args = ParserCommon.otherOptions()
 
@@ -164,19 +164,13 @@ scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPU
         parser.print_help()
         sys.exit(0)
 
-    args = parser.parse_args(args)
-
-    # Validate mode is specified
-    if args.mode is None:
-        parser.error("You must specify --mode. Choose either 'activities' or 'aggregate'.")
-
-    return args
+    return parser
 
 
 def main(args=None):
     """Main entry point for scScoreFeatures."""
 
-    args = parse_arguments(args)
+    args = parseArguments().parse_args(args)
 
     if not args.verbose:
         warnings.filterwarnings("ignore")

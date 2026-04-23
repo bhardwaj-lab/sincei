@@ -19,20 +19,20 @@ def parseArguments(args=None):
         parents=[io_args, get_args(), other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-        ``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
-        .h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
-        segmentations for different sensitivities. This method is decsribed in [Sancho-Gómez et al. TBP].
+``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
+.h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
+segmentations for different sensitivities.
 
-        First, a bin-to-bin correlation matrix is computed for each chromosome.
+First, a bin-to-bin correlation matrix is computed for each chromosome.
 
-        Then, the correlation matrix is turned into a score map by convolving a number of square
-        Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using. Each kernel
-        produces a 1-D score for each bin, which are stacked into a matrix where each row corresponds to
-        a kernel scale and each column to a bin.
+Then, the correlation matrix is turned into a score map by convolving a number of square
+Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using a maximum
+region size to consider. Each kernel produces a 1-D score for each bin, which are stacked
+into a matrix where each row corresponds to a kernel scale and each column to a bin.
 
-        Finally, the PELT change-point detection algorithm is applied to the score map to identify
-        regions with distinct correlation patterns. This step depends on a penalty parameter that
-        controls the number of detected regions.
+Finally, the PELT change-point detection algorithm is applied to the score map to identify
+regions with distinct correlation patterns. This step depends on a penalty parameter that
+controls the number of detected regions.
         """,
         usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 0.05 0.1 0.5 -o detected_VCRs.bed",
         add_help=False,

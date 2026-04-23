@@ -375,11 +375,13 @@ def FeatureScorer(
     overlap_policy: str, optional
         Policy for handling adata features that only partially overlap regions in the BED/GTF provided.
         Options are:
-            - ``partial``: count reads in anndata feature proportionally to the overlap fraction.
-              counts_considered = feature_counts * overlap_length / region_length.
-            - ``all``: count all reads in the partially overlapping anndata feature.
-            - ``none``: exclude reads from partially overlapping anndata features, in other words, only
-              count reads in anndata features fully contained within BED/GTF regions.
+
+        - ``partial``: count reads in anndata feature proportionally to the overlap fraction.
+          counts_considered = feature_counts * overlap_length / region_length.
+        - ``all``: count all reads in the partially overlapping anndata feature.
+        - ``none``: exclude reads from partially overlapping anndata features, in other words, only
+          count reads in anndata features fully contained within BED/GTF regions.
+
         Default is 'partial'.
     center_scores : bool, optional
         Whether to scale the scores to unit variance and center them around zero, by default False.
@@ -397,15 +399,17 @@ def FeatureScorer(
         by default 100 Kb.
     gene_body : bool, optional
         Whether the weight of the gene body is considered as 1 like the TSS, by default True.
-        If True, the weights the decay starts beyond the gene body.
+        If True, the decay starts beyond the gene body.
     gene_size_factor : bool, optional
         Whether to divide scores by gene length to account for gene length bias, by default True.
     exclude_in_range : str, optional
         Whether to exclude regions of other genes from contributing to this gene's activity score.
         Options are:
+
         - None: No exclusion (default)
         - "TSS": Exclude features overlapping the TSS of other genes
         - "genes": Exclude features overlapping the bodies of other genes
+
         Invalid values default to None.
     center_scores : bool, optional
         Whether to scale the scores to unit variance and center them around zero, by default False.
