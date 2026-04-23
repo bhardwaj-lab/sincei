@@ -140,7 +140,7 @@ def get_args():
     return parser
 
 
-def parse_arguments(args=None):
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["input", "outFile"])
     other_args = ParserCommon.otherOptions()
 
@@ -176,7 +176,7 @@ scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPU
 def main(args=None):
     """Main entry point for scScoreFeatures."""
 
-    args = parse_arguments(args)
+    args = parseArguments(args)
 
     if not args.verbose:
         warnings.filterwarnings("ignore")
