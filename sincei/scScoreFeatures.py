@@ -164,19 +164,13 @@ scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPU
         parser.print_help()
         sys.exit(0)
 
-    args = parser.parse_args(args)
-
-    # Validate mode is specified
-    if args.mode is None:
-        parser.error("You must specify --mode. Choose either 'activities' or 'aggregate'.")
-
-    return args
+    return parser
 
 
 def main(args=None):
     """Main entry point for scScoreFeatures."""
 
-    args = parseArguments(args)
+    args = parseArguments().parse_args(args)
 
     if not args.verbose:
         warnings.filterwarnings("ignore")
