@@ -1,0 +1,96 @@
+[package]
+authors = ["Fernando Sanchó-Gómez <f.sanchogomez@uu.nl>"]
+name = "sincei"
+version = "0.7.0-dev"
+edition = "2024"
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
+license-file = "LICENSE.txt"
+readme = "README.md"
+repository = "https://github.com/bhardwaj-lab/sincei"
+homepage = "https://github.com/bhardwaj-lab/sincei"
+documentation = "https://sincei.readthedocs.io/"
+keywords = [
+    "bioinformatics",
+    "single-cell",
+    "genomics",
+    "epigenomics",
+    ]
+categories = [
+    "command-line-utilities",
+    "science",
+    "bioinformatics",
+    "scientific/engineering",
+    ]
+
+[lib]
+name = "sincei"
+crate-type = ["cdylib"]
+
+[dependencies]
+# PyO3 for Python interoperability
+pyo3 = { version = "0.27.0", features = ["extension-module", "anyhow"] }
+
+# Python's logging system from Rust
+pyo3-log = { version = "0.13.3" }
+
+# PySeries and PyDataFrame for PyO3
+pyo3-polars = { version = "0.26.0" }
+
+# Dataframes
+polars = { version = "0.53.0", features = ["ndarray", "dtype-categorical"] }
+
+# Numpy interface
+numpy = { version = "0.27.0" }
+
+# Numeric traits
+num = { version = "0.4.3"}
+
+# Sparse and dense linear algebra
+nalgebra-sparse = { version = "0.11" }
+nalgebra = { version = "0.34.2" }
+
+# N-dimensional arrays
+ndarray = { version = "0.17.2" }
+
+# Error handling with context and chaining
+anyhow = { version = "1.0.102" }
+
+# Parallel iterator adapters for easy multi-threaded processing
+rayon = { version = "1.11.0" }
+
+# CSV/TSV writing for output
+csv = { version = "1.4.0" }
+
+# BAM/SAM parsing
+noodles = { version = "0.110", features = ["bam", "sam"] }
+
+# 2bit genome file reading (for motif checking with reference genome)
+twobit = { version = "0.2.2" }
+
+# SIMD hamming distance
+triple_accel = {version = "0.4.0" }
+
+# Iter tools
+itertools = { version = "0.14.0" }
+
+# BED utils
+bed-utils ={ version = "0.11.0" }
+
+# BigWig and BigBed parsing and writing
+bigtools = { version = "0.5.6" }
+
+# AnnData
+# PyO3 dependency conflict. Temporary fix by using the git versions. TODO: fix for release.
+#anndata = "0.6.2"
+anndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
+#pyanndata = "0.6"
+pyanndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
+
+# Safe output file naming
+sanitize-filename = { version = "0.6.0" }
+
+# Progress bars for CLI
+indicatif = { version = "0.18.4" }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { version = "0.6.1", features = ["disable_initial_exec_tls"] }

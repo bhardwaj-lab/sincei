@@ -1,0 +1,134 @@
+[build-system]
+requires = ["maturin>=1.10,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "sincei"
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
+readme = "README.md"
+requires-python = ">=3.10, <3.15"
+dynamic = ["version"]
+license = {file = "LICENSE.txt"}
+authors = [
+    {name = "Vivek Bhardwaj"},
+    {name = "Fernando Sancho Gómez"},
+]
+maintainers = [
+    {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
+    {name = "Fernando Sancho Gómez", email = "f.sanchogomez@uu.nl"},
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "License :: OSI Approved :: MIT License",
+]
+
+dependencies = [
+    "anndata",
+    "mudata",
+    "scanpy",
+    "umap-learn",
+    "polars",
+    "igraph",
+    # for debug logging (referenced from the issue template)
+    "session-info",
+    "torch",
+    "mctorch-lib",
+    # "gensim", # broken in python 3.14
+    "ruptures",
+    "tqdm",
+    ]
+
+[project.urls]
+Documentation = "https://sincei.readthedocs.io/"
+Source = "https://github.com/bhardwaj-lab/sincei"
+Home-page = "https://github.com/bhardwaj-lab/sincei"
+Issues = "https://github.com/bhardwaj-lab/sincei/issues"
+
+[project.scripts]
+sincei = "sincei.cli_typer.main:app"
+scFilterBarcodes = "sincei.cli_typer.scFilterBarcodes:app"
+scFilterStats = "sincei.cli_typer.scFilterStats:app"
+scJSD = "sincei.cli_typer.scJSD:app"
+scCountReads = "sincei.cli_typer.scCountReads:app"
+scCountQC = "sincei.cli_typer.scCountQC:app"
+scFindVCRs = "sincei.cli_typer.scFindVCRs:app"
+scScoreFeatures = "sincei.cli_typer.scScoreFeatures:app"
+scCombineSamples = "sincei.cli_typer.scCombineSamples:app"
+scCombineMods = "sincei.cli_typer.scCombineMods:app"
+scReduceDims = "sincei.cli_typer.scReduceDims:app"
+scClusterCells = "sincei.cli_typer.scClusterCells:app"
+scPlotRegion = "sincei.cli_typer.scPlotRegion:app"
+scBulkCoverage = "sincei.cli_typer.scBulkCoverage:app"
+scExportSignal = "sincei.cli_typer.scExportSignal:app"
+
+[project.optional-dependencies]
+dev = [
+    # CLI for bumping the version number
+    "bump2version",
+    "pre-commit",
+    "twine>=6.2.0"
+]
+doc = [
+    "sphinx>=9.1.0",
+    "sphinx-book-theme>=1.1.4",
+    "myst-nb",
+    "sphinxcontrib-bibtex>=2.6.5",
+    "sphinx-autodoc-typehints",
+    "readthedocs-sphinx-ext",
+    "sphinx-argparse",
+    "sphinx_toolbox",
+    "IPython",
+    # For notebooks
+ #   "ipykernel",
+ #   "ipython",
+ #   "sphinx-copybutton",
+]
+test = [
+    "pytest"
+]
+
+# Maturin-specific configuration
+[tool.maturin]
+python-source = "."
+module-name = "sincei._sincei"
+strip = true
+bindings = "pyo3"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["sincei/test"]
+xfail_strict = true
+addopts = [
+    "--import-mode=importlib",  # allow using test files with same name
+]
+
+[tool.isort]
+include_trailing_comma = true
+multi_line_output = 3
+profile = "black"
+skip_glob = ["docs/*"]
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+  )/
+)
+'''
