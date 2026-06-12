@@ -2,51 +2,59 @@ from __future__ import annotations
 
 import typer
 
-from .shared import log_parameters, version_option
+from ._common_args import (
+    BAM_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    log_parameters,
+    override,
+    preprocess_args,
+)
 
-DESCRIPTION = """
-Merge AnnData files from different modalities into a MuData object.
-"""
+DESCRIPTION = (
+    "Merge AnnData files from different modalities into a MuData object.\n\n"
+    "``scCombineMods`` combines multiple count matrices (output of scCountReads) of different data "
+    "modalities (e.g. gene expression, chromatin accessibility, histone modifications) into one. "
+    "The result is a .h5mu (MuData) file containing each of the data modalities provided.\n"
+    "*NOTE*: this does not perform any 'batch effect correction' or 'integration' of data from different "
+    "technologies."
+)
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
 
-@version_option("scCombineMods")
 @app.callback(invoke_without_command=True)
 def main(
-    input: list[str] = typer.Option(
-        ..., "-i", "--input", metavar=".h5ad", help="List of sincei-generated input .h5ad files separated by spaces."
-    ),
-    labels: list[str] = typer.Option(
-        ...,
-        "-l",
-        "--labels",
-        metavar="sample",
-        help="User defined labels instead of default labels from file names. Multiple labels have to be separated by a space, e.g. ``--labels sample1 sample2 sample3``.",
-    ),
-    outFile: str = typer.Option(
-        ...,
-        "-o",
-        "--outFile",
-        help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` and `scJSD`, the output file is a .tsv file. For other tools, the output file is an updated .h5ad or .h5mu file with the result of the requested operation.",
-    ),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    # Input / Output options
+    input: list[str] = INPUT_OUTPUT_OPTS["h5ad_files"],
+    labels: list[str] = override(BAM_OPTS["labels"], default=...),
+    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    # Other options
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
-    log_parameters(input=input, labels=labels, outFile=outFile, numberOfProcessors=numberOfProcessors, verbose=verbose)
+    log_parameters(
+        input=input,
+        labels=labels,
+        out_file=out_file,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
+    )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()

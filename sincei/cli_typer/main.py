@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import typer
 
-from .common_args import preprocess_args, version_option, version_string
+from ._common_args import OTHER_OPTS, preprocess_args, version_string
 
-# Import subcommand apps to register them with the main app
+# Import subcommand apps to register them with the main app.
 from .scBulkCoverage import app as scBulkCoverage_app
 from .scClusterCells import app as scClusterCells_app
 from .scCombineMods import app as scCombineMods_app
@@ -32,12 +32,13 @@ Every tool name begins with the prefix `sc` followed by <tool_name>, such as:
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
-# Register subcommand apps
-# Order of subcommands in help message is determined by the order of registration
+# Register subcommand apps.
+# The order of subcommands in the help message follows the order of registration.
 app.add_typer(scFilterBarcodes_app, name="scFilterBarcodes")
 app.add_typer(scFilterStats_app, name="scFilterStats")
 app.add_typer(scJSD_app, name="scJSD")
@@ -54,20 +55,22 @@ app.add_typer(scBulkCoverage_app, name="scBulkCoverage")
 app.add_typer(scExportSignal_app, name="scExportSignal")
 
 
-@version_option("sincei")
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> int:
+def main(
+    ctx: typer.Context,
+    version: bool = OTHER_OPTS["version"],
+    help: bool = OTHER_OPTS["help"],
+) -> int:
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
     preprocess_args()
     app()
 
 
 if __name__ == "__main__":
-    preprocess_args()
-    app()
+    cli()

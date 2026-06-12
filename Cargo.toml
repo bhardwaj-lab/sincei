@@ -28,69 +28,84 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # PyO3 for Python interoperability
-pyo3 = { version = "0.27.0", features = ["extension-module", "anyhow"] }
+pyo3 = { version = "0.27", features = ["extension-module", "anyhow"] }
 
 # Python's logging system from Rust
-pyo3-log = { version = "0.13.3" }
+pyo3-log = { version = "0.13" }
 
 # PySeries and PyDataFrame for PyO3
-pyo3-polars = { version = "0.26.0" }
+pyo3-polars = { version = "0.26" }
 
 # Dataframes
-polars = { version = "0.53.0", features = ["ndarray", "dtype-categorical"] }
+polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
 
 # Numpy interface
-numpy = { version = "0.27.0" }
+numpy = { version = "0.27" }
 
 # Numeric traits
-num = { version = "0.4.3"}
+num = { version = "0.4"}
 
 # Sparse and dense linear algebra
 nalgebra-sparse = { version = "0.11" }
-nalgebra = { version = "0.34.2" }
+nalgebra = { version = "0.34" }
 
 # N-dimensional arrays
-ndarray = { version = "0.17.2" }
+ndarray = { version = "0.17" }
+
+# Statistics
+statrs = { version = "0.18" }
 
 # Error handling with context and chaining
-anyhow = { version = "1.0.102" }
+anyhow = { version = "1.0" }
 
 # Parallel iterator adapters for easy multi-threaded processing
 rayon = { version = "1.11.0" }
+tokio = { version = "1", features = ["rt"] }
 
 # CSV/TSV writing for output
 csv = { version = "1.4.0" }
 
 # BAM/SAM parsing
-noodles = { version = "0.110", features = ["bam", "sam"] }
+noodles = { version = "0.111", features = ["bam", "sam", "bgzf", "bed", "gff", "gtf", "core"] }
 
 # 2bit genome file reading (for motif checking with reference genome)
-twobit = { version = "0.2.2" }
+twobit = { version = "0.2" }
 
 # SIMD hamming distance
-triple_accel = {version = "0.4.0" }
+triple_accel = {version = "0.4" }
 
 # Iter tools
-itertools = { version = "0.14.0" }
-
-# BED utils
-bed-utils ={ version = "0.11.0" }
+itertools = { version = "0.14" }
 
 # BigWig and BigBed parsing and writing
-bigtools = { version = "0.5.6" }
+bigtools = { version = "0.5" }
 
 # AnnData
 # PyO3 dependency conflict. Temporary fix by using the git versions. TODO: fix for release.
 #anndata = "0.6.2"
 anndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
+anndata-hdf5 = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
 #pyanndata = "0.6"
 pyanndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
 
 # Safe output file naming
-sanitize-filename = { version = "0.6.0" }
+sanitize-filename = { version = "0.6" }
 
 # Progress bars for CLI
-indicatif = { version = "0.18.4" }
+indicatif = { version = "0.18" }
 
+# str-to-num and num-to-str parsing
+lexical = { version = "7" }
+
+# Fast non-cryptographic hasher
+ahash = { version = "0.8" }
+
+# Byte strings
+bstr = { version = "1.12" }
+
+# Regex
+regex = { version = "1.11" }
+
+# jemalloc for faster memory allocation on non-MSVC platforms (e.g. Linux, macOS)
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = { version = "0.6.1", features = ["disable_initial_exec_tls"] }
+tikv-jemallocator = { version = "0.6", features = ["disable_initial_exec_tls"] }

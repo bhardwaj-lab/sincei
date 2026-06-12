@@ -2,159 +2,103 @@ from __future__ import annotations
 
 import typer
 
-from .shared import log_parameters, normalize_processors, version_option
+from ._common_args import (
+    BAM_OPTS,
+    FILTER_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    READ_OPTS,
+    DuplicateFilter,
+    log_parameters,
+    preprocess_args,
+)
 
-DESCRIPTION = """
-Compared read coverages on sampled regions using the Jensen-Shannon distance.
-"""
+DESCRIPTION = (
+    "Compare read coverages on sampled regions using the Jensen-Shannon distance.\n\n"
+    "``scJSD`` samples regions in the genome from BAM files and compares the cumulative read coverages"
+    "for each cell on those regions to a synthetic cell with poisson distributed reads using the Jensen-Shannon"
+    "distance. Cells with high enrichment of signals show a higher JSD compared to cells whose signal is"
+    "homogeneously distributed."
+)
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
 
-@version_option("scJSD")
 @app.callback(invoke_without_command=True)
 def main(
-    bamfiles: list[str] = typer.Option(
-        ..., "-b", "--bamfiles", metavar=".bam", help="List of indexed BAM files separated by spaces."
-    ),
-    barcodes: str = typer.Option(
-        ...,
-        "-bc",
-        "--barcodes",
-        metavar=".txt",
-        help="A single-column file containing the cell barcode whitelist, one barcode per line.",
-    ),
-    outFile: str = typer.Option(
-        ...,
-        "-o",
-        "--outFile",
-        help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` and `scJSD`, the output file is a .tsv file. For other tools, the output file is an updated .h5ad or .h5mu file with the result of the requested operation.",
-    ),
-    cellTag: str = typer.Option(
-        "BC", "-ct", "--cellTag", help="Name of the BAM tag from which to extract barcodes. (Default: %(default)s)"
-    ),
-    groupTag: str = typer.Option(
-        None,
-        "-gt",
-        "--groupTag",
-        help="In case of a groupped BAM file, such as the one containing Read Group (``RG``) or Sample (``SM``) tag,it is possible to process group the reads using the provided ``--groupTag`` argument. NOTE: In case of such input, please ensure that the ``--labels`` argument indicates the expected group labels contained in the BAM files. The ``--groupTag`` along with the ``--cellTag`` is then used to identify unique samples (cells) from the input.",
-    ),
-    labels: list[str] = typer.Option(
-        None,
-        "-l",
-        "--labels",
-        metavar="sample",
-        help="User defined labels instead of default labels from file names. Multiple labels have to be separated by a space, e.g. ``--labels sample1 sample2 sample3``.",
-    ),
-    smartLabels: bool = typer.Option(
-        False,
-        "--smartLabels",
-        help="Instead of manually specifying labels for the input BAM files, use the file name after removing the path and extension.",
-    ),
-    blackListFileName: list[str] = typer.Option(
-        None,
-        "-bl",
-        "--blacklist",
-        "--blackListFileName",
-        help="A BED or GTF file containing regions that should be excluded from all analyses. Currently this works by rejecting genomic chunks that happen to overlap an entry. Consequently, for BAM files, if a read partially overlaps a blacklisted region or a fragment spans over it, then the read/fragment might still be considered. Please note that you should adjust the effective genome size, if relevant.",
-    ),
-    chrToSkip: list[str] = typer.Option(
-        None,
-        "--chrToSkip",
-        help="List of chromosome names to skip from the analysis. Regions on these chromosomes will be excluded. Useful for skipping mitochondrial, X chromosome, or unplaced contigs. Multiple chromosomes can be specified, e.g. ``--chrToSkip chrM chrX``.",
-    ),
-    binSize: int = typer.Option(10000, "-bs", "--binSize", help="Size of the bins, in bases, to calculate coverage."),
-    duplicateFilter: str = typer.Option(
-        None,
-        "--duplicateFilter",
-        help="How to filter for duplicates? Different combinations (using start/end/umi) are possible. Read start position and read barcode are always considered. Default (None) considers all reads as passing the filter. Note that in case of paired end data, both reads in the fragment are considered (and kept). So if you wish to keep only read1, combine this option with `--samFlagInclude`. ",
-    ),
-    minMappingQuality: int = typer.Option(
-        None,
-        "--minMappingQuality",
-        metavar="INT",
-        help="If set, only reads that have a mapping quality score of at least this are considered.",
-    ),
-    samFlagInclude: int = typer.Option(
-        None,
-        "--samFlagInclude",
-        metavar="INT",
-        help="Include reads based on SAM flag. For example, to get only reads that are the first mate, use a flag of 64. This is useful to count properly paired reads only once, as otherwise the second mate will be also considered for the coverage. This argument can be used more than once in a command. (Default: %(default)s)",
-    ),
-    samFlagExclude: int = typer.Option(
-        None,
-        "--samFlagExclude",
-        metavar="INT",
-        help="Exclude reads based on the SAM flag. For example, to get only reads that map to the forward strand, use ``--samFlagExclude 16``, where 16 is the SAM flag for reads that map to the reverse strand. This argument can be used more than once in a command. (Default: %(default)s)",
-    ),
-    minFragmentLength: int = typer.Option(
-        0,
-        "--minFragmentLength",
-        metavar="INT",
-        help="The minimum fragment length needed for read/pair inclusion. This option is for useful in ATACseq experiments, for filtering mono- or di-nucleosome fragments. (Default: %(default)s)",
-    ),
-    maxFragmentLength: int = typer.Option(
-        0,
-        "--maxFragmentLength",
-        metavar="INT",
-        help="The maximum fragment length accepted for read/pair inclusion. (Default: %(default)s)",
-    ),
-    minAlignedFraction: float = typer.Option(
-        None,
-        "--minAlignedFraction",
-        help="Minimum fraction of the reads which should be aligned to be counted. This includes mismatches tolerated by the aligners, but excludes InDels/Clippings. (Default: %(default)s)",
-    ),
-    numberOfSamples: int = typer.Option(
+    bam_files: list[str] = INPUT_OUTPUT_OPTS["bam_files"],
+    barcodes: str = INPUT_OUTPUT_OPTS["barcodes"],
+    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    cell_tag: str = BAM_OPTS["cell_tag"],
+    group_tag: str = BAM_OPTS["group_tag"],
+    labels: list[str] = BAM_OPTS["labels"],
+    smart_labels: bool = BAM_OPTS["smart_labels"],
+    blacklist: list[str] = BAM_OPTS["blacklist"],
+    chr_to_skip: list[str] = BAM_OPTS["chr_to_skip"],
+    bin_size: int = BAM_OPTS["bin_size"],
+    duplicate_filter: DuplicateFilter | None = FILTER_OPTS["duplicate_filter"],
+    min_mapping_quality: int | None = READ_OPTS["min_mapping_quality"],
+    sam_flag_include: int | None = READ_OPTS["sam_flag_include"],
+    sam_flag_exclude: int | None = READ_OPTS["sam_flag_exclude"],
+    min_fragment_length: int = READ_OPTS["min_fragment_length"],
+    max_fragment_length: int = READ_OPTS["max_fragment_length"],
+    min_aligned_fraction: float | None = FILTER_OPTS["min_aligned_fraction"],
+    number_of_samples: int = typer.Option(
         100000,
         "-n",
-        "--numberOfSamples",
-        help="The number of bins that are sampled from the genome, for which the overlapping number of reads is computed. (Default: %(default)s)",
+        "--number-of-samples",
+        rich_help_panel="Sampling options",
+        help="The number of bins that are sampled from the genome, for which the overlapping number of reads is "
+        "computed.",
     ),
-    skipZeros: bool = typer.Option(
+    skip_zeros: bool = typer.Option(
         False,
-        "--skipZeros",
-        help="If set, then regions with zero overlapping reads for *all* given BAM files are ignored. This will result in a reduced number of read counts than that specified in --numberOfSamples",
+        "--skip-zeros",
+        rich_help_panel="Sampling options",
+        help="If set, regions with zero overlapping reads for *all* given BAM files are ignored. This results in a "
+        "reduced number of read counts compared to --number-of-samples.",
     ),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        callback=normalize_processors,
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
     log_parameters(
-        bamfiles=bamfiles,
+        bam_files=bam_files,
         barcodes=barcodes,
-        outFile=outFile,
-        cellTag=cellTag,
-        groupTag=groupTag,
+        out_file=out_file,
+        cell_tag=cell_tag,
+        group_tag=group_tag,
         labels=labels,
-        smartLabels=smartLabels,
-        blackListFileName=blackListFileName,
-        chrToSkip=chrToSkip,
-        binSize=binSize,
-        duplicateFilter=duplicateFilter,
-        minMappingQuality=minMappingQuality,
-        samFlagInclude=samFlagInclude,
-        samFlagExclude=samFlagExclude,
-        minFragmentLength=minFragmentLength,
-        maxFragmentLength=maxFragmentLength,
-        minAlignedFraction=minAlignedFraction,
-        numberOfSamples=numberOfSamples,
-        skipZeros=skipZeros,
-        numberOfProcessors=numberOfProcessors,
+        smart_labels=smart_labels,
+        blacklist=blacklist,
+        chr_to_skip=chr_to_skip,
+        bin_size=bin_size,
+        duplicate_filter=duplicate_filter,
+        min_mapping_quality=min_mapping_quality,
+        sam_flag_include=sam_flag_include,
+        sam_flag_exclude=sam_flag_exclude,
+        min_fragment_length=min_fragment_length,
+        max_fragment_length=max_fragment_length,
+        min_aligned_fraction=min_aligned_fraction,
+        number_of_samples=number_of_samples,
+        skip_zeros=skip_zeros,
+        number_of_processors=number_of_processors,
         verbose=verbose,
     )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()

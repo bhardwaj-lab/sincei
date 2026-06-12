@@ -2,81 +2,102 @@ from __future__ import annotations
 
 import typer
 
-from .shared import log_parameters, normalize_processors, normalize_region, version_option
+from ._common_args import INPUT_OUTPUT_OPTS, OTHER_OPTS, log_parameters, override, preprocess_args
 
-DESCRIPTION = """
-Call variable chromatin regions (VCRs) from binned chromatin data.
-"""
+DESCRIPTION = (
+    "Call variable chromatin regions (VCRs) from binned chromatin data.\n\n"
+    "``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a"
+    ".h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome"
+    "segmentations for different sensitivities.\n"
+    "First, a bin-to-bin correlation matrix is computed for each chromosome.\n"
+    "Then, the correlation matrix is turned into a score map by convolving a number of square"
+    "Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using a maximum"
+    "region size to consider. Each kernel produces a 1-D score for each bin, which are stacked"
+    "into a matrix where each row corresponds to a kernel scale and each column to a bin.\n"
+    "Finally, the PELT change-point detection algorithm is applied to the score map to identify"
+    "regions with distinct correlation patterns. This step depends on a penalty parameter that"
+    "controls the number of detected regions."
+)
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
 
-@version_option("scFindVCRs")
 @app.callback(invoke_without_command=True)
 def main(
-    input: str = typer.Option(
-        ..., "-i", "--input", metavar=".h5ad", help="sincei-generated input file in .h5ad format."
+    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
+    region: str | None = INPUT_OUTPUT_OPTS["region"],
+    bin_size: int = typer.Option(
+        ...,
+        "-bs",
+        "--binsize",
+        metavar="INT",
+        rich_help_panel="VCR options",
+        help="The size of the bins in the input AnnData object.",
     ),
-    region: str = typer.Option(None, "-r", "--region", callback=normalize_region),
-    binSize: int = typer.Option(
-        ..., "-bs", "--binSize", metavar="INT", help="The size of the bins in the input Anndata object."
-    ),
-    maxRegionSize: int = typer.Option(
+    max_region_size: int = typer.Option(
         None,
         "-mr",
-        "--maxRegionSize",
+        "--max-region-size",
         metavar="INT",
-        help="The maximum region size to be considered, in base pairs. Larger regions may increase compute time. Defaults to 100 times the bin size.",
+        rich_help_panel="VCR options",
+        help="The maximum region size to be considered, in base pairs. Larger regions may increase compute time. "
+        "Defaults to 100 times the bin size.",
     ),
-    nKernels: int = typer.Option(
+    n_kernels: int = typer.Option(
         20,
         "-nk",
-        "--nKernels",
+        "--n-kernels",
         metavar="INT",
-        help="The number of kernels to use for the score map. More kernels generally lead to a better segmentation, but increase the computational cost.",
+        rich_help_panel="VCR options",
+        help="The number of kernels to use for the score map. More kernels generally lead to a better segmentation, "
+        "but increase the computational cost.",
     ),
     penalties: list[float] = typer.Option(
         [0.05, 0.1, 0.5],
         "-pen",
         "--penalties",
-        metavar="INT",
-        help='Penalty value for change-point detection. Higher values result in fewer segments. Multiple values can be provided (separated by space). Each penalty value will produce a separate set of regions within which can be seperated from the output BED file by filtering on the "score" column.',
+        metavar="FLOAT",
+        rich_help_panel="VCR options",
+        help="Penalty value(s) for change-point detection. Higher values result in fewer segments. Multiple values "
+        "can be provided (separated by space); each produces a separate set of regions, distinguishable in the output "
+        'BED file by filtering on the "score" column.',
     ),
-    outFile: str = typer.Option(
-        ...,
-        "-o",
-        "--outFile",
+    out_file: str = override(
+        INPUT_OUTPUT_OPTS["out_file"],
         metavar=".bed",
-        help='Name of the output file (BED format) with genome segmentation result. The penalty threshold that defines each segment is saved in the "score" column of the BED file, and the BED file can be filtered based on this column to obtain non-overlapping segments.',
+        help="Name of the output file (BED format) with the genome segmentation result. The penalty threshold that "
+        'defines each segment is saved in the "score" column of the BED file, which can be filtered to obtain '
+        "non-overlapping segments.",
     ),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        callback=normalize_processors,
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
     log_parameters(
         input=input,
         region=region,
-        binSize=binSize,
-        maxRegionSize=maxRegionSize,
-        nKernels=nKernels,
+        bin_size=bin_size,
+        max_region_size=max_region_size,
+        n_kernels=n_kernels,
         penalties=penalties,
-        outFile=outFile,
-        numberOfProcessors=numberOfProcessors,
+        out_file=out_file,
+        number_of_processors=number_of_processors,
         verbose=verbose,
     )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()

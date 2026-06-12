@@ -33,6 +33,7 @@ dependencies = [
     "umap-learn",
     "polars",
     "igraph",
+    "typer",
     # for debug logging (referenced from the issue template)
     "session-info",
     "torch",
@@ -49,21 +50,21 @@ Home-page = "https://github.com/bhardwaj-lab/sincei"
 Issues = "https://github.com/bhardwaj-lab/sincei/issues"
 
 [project.scripts]
-sincei = "sincei.cli_typer.main:app"
-scFilterBarcodes = "sincei.cli_typer.scFilterBarcodes:app"
-scFilterStats = "sincei.cli_typer.scFilterStats:app"
-scJSD = "sincei.cli_typer.scJSD:app"
-scCountReads = "sincei.cli_typer.scCountReads:app"
-scCountQC = "sincei.cli_typer.scCountQC:app"
-scFindVCRs = "sincei.cli_typer.scFindVCRs:app"
-scScoreFeatures = "sincei.cli_typer.scScoreFeatures:app"
-scCombineSamples = "sincei.cli_typer.scCombineSamples:app"
-scCombineMods = "sincei.cli_typer.scCombineMods:app"
-scReduceDims = "sincei.cli_typer.scReduceDims:app"
-scClusterCells = "sincei.cli_typer.scClusterCells:app"
-scPlotRegion = "sincei.cli_typer.scPlotRegion:app"
-scBulkCoverage = "sincei.cli_typer.scBulkCoverage:app"
-scExportSignal = "sincei.cli_typer.scExportSignal:app"
+sincei = "sincei.cli_typer.main:cli"
+scFilterBarcodes = "sincei.cli_typer.scFilterBarcodes:cli"
+scFilterStats = "sincei.cli_typer.scFilterStats:cli"
+scJSD = "sincei.cli_typer.scJSD:cli"
+scCountReads = "sincei.cli_typer.scCountReads:cli"
+scCountQC = "sincei.cli_typer.scCountQC:cli"
+scFindVCRs = "sincei.cli_typer.scFindVCRs:cli"
+scScoreFeatures = "sincei.cli_typer.scScoreFeatures:cli"
+scCombineSamples = "sincei.cli_typer.scCombineSamples:cli"
+scCombineMods = "sincei.cli_typer.scCombineMods:cli"
+scReduceDims = "sincei.cli_typer.scReduceDims:cli"
+scClusterCells = "sincei.cli_typer.scClusterCells:cli"
+scPlotRegion = "sincei.cli_typer.scPlotRegion:cli"
+scBulkCoverage = "sincei.cli_typer.scBulkCoverage:cli"
+scExportSignal = "sincei.cli_typer.scExportSignal:cli"
 
 [project.optional-dependencies]
 dev = [

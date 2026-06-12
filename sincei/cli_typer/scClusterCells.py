@@ -2,74 +2,95 @@ from __future__ import annotations
 
 import typer
 
-from .shared import log_parameters, version_option
+from ._common_args import (
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    PLOT_OPTS,
+    DimRed,
+    PlotFileFormat,
+    log_parameters,
+    preprocess_args,
+)
 
-DESCRIPTION = """
-Cluster cells from a cell-by-feature matrix using the Leiden algorithm.
-"""
+DESCRIPTION = (
+    "Cluster cells from a cell-by-feature matrix using the Leiden algorithm.\n\n"
+    "``scClusterCells`` clusters cells based on the dimensionality reduction in the input h5ad file."
+    "The result is an updated h5ad object, and (optionally) a plot and a .tsv file with UMAP coordinates"
+    "and corresponding cluster id for each cell."
+)
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
+_CLUSTERING = "Clustering options"
 
-@version_option("scClusterCells")
+
 @app.callback(invoke_without_command=True)
 def main(
-    input: str = typer.Option(
-        ..., "-i", "--input", metavar=".h5ad", help="sincei-generated input file in .h5ad format."
-    ),
-    outFile: str = typer.Option(..., "-o", "--outFile", help="The file to write results to."),
-    outFileUMAP: str = typer.Option(
+    # Input / Output options
+    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
+    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    # Clustering options
+    out_file_umap: str = typer.Option(
         None,
-        "-op",
-        "--outFileUMAP",
-        help="The output plot file (for UMAP). If you specify this option, a 4-column .tsv file with the same prefix is also created with the cell IDs, raw UMAP coordinates (UMAP1 and UMAP2) and Leiden cluster number.",
+        "-ou",
+        "--outfile-umap",
+        rich_help_panel=_CLUSTERING,
+        help="The output plot file (for UMAP). If specified, a 4-column .tsv file with the same prefix is also "
+        "created with the cell IDs, raw UMAP coordinates (UMAP1 and UMAP2) and Leiden cluster number.",
     ),
-    clusterResolution: float = typer.Option(
+    cluster_resolution: float = typer.Option(
         1.0,
         "-cr",
-        "--clusterResolution",
-        help="Resolution parameter for Leiden clustering. Values lower than 1.0 would result in less clusters, while higher values lead to splitting of clusters. In most cases, the optimum value would be between 0.8 and 1.2. (Default: %(default)s)",
+        "--cluster-resolution",
+        rich_help_panel=_CLUSTERING,
+        help="Resolution parameter for Leiden clustering. Values lower than 1.0 result in fewer clusters, while "
+        "higher values lead to splitting of clusters. In most cases the optimum is between 0.8 and 1.2.",
     ),
-    dimRed: str = typer.Option(
+    dim_red: DimRed | None = typer.Option(
         None,
-        "--dimRed",
-        help="Dimensionality reduction modality to perform Leiden clustering on. If not given, the program searches in the ``.obsm`` field of the input h5ad for the output of ``scReduceDims`` in order of preference: LSA, LDA, logPCA, glmPCA.",
+        "--dim-red",
+        metavar="METHOD",
+        rich_help_panel=_CLUSTERING,
+        help="Dimensionality reduction modality to perform Leiden clustering on. If not given, the program searches "
+        "the ``.obsm`` field of the input h5ad for the output of ``scReduceDims`` in order of preference: LSA, LDA, "
+        "logPCA, glmPCA.\n\nOne of: [bold yellow]LSA[/bold yellow], [bold yellow]LDA[/bold yellow], "
+        "[bold yellow]logPCA[/bold yellow], [bold yellow]glmPCA[/bold yellow].",
     ),
-    plotWidth: float = typer.Option(10.0, "--plotWidth", help="Output plot width (in cm). (Default: %(default)s)"),
-    plotHeight: float = typer.Option(10.0, "--plotHeight", help="Output plot height (in cm). (Default: %(default)s)"),
-    plotFileFormat: str = typer.Option(
-        "png",
-        "--plotFileFormat",
-        help="Image format type. If given, this option will be used to save the plot file. (Default: %(default)s)",
-    ),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    # Plot options
+    plot_width: float = PLOT_OPTS["plot_width"],
+    plot_height: float = PLOT_OPTS["plot_height"],
+    plot_file_format: PlotFileFormat = PLOT_OPTS["plot_file_format"],
+    # Other options
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
     log_parameters(
         input=input,
-        outFile=outFile,
-        outFileUMAP=outFileUMAP,
-        clusterResolution=clusterResolution,
-        dimRed=dimRed,
-        plotWidth=plotWidth,
-        plotHeight=plotHeight,
-        plotFileFormat=plotFileFormat,
-        numberOfProcessors=numberOfProcessors,
+        out_file=out_file,
+        out_file_umap=out_file_umap,
+        cluster_resolution=cluster_resolution,
+        dim_red=dim_red,
+        plot_width=plot_width,
+        plot_height=plot_height,
+        plot_file_format=plot_file_format,
+        number_of_processors=number_of_processors,
         verbose=verbose,
     )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()

@@ -11,7 +11,7 @@ from . import ParserCommon
 
 DESCRIPTION = """
 ``scClusterCells`` clusters cells based on the dimensionality reduction in the input h5ad file.
-The result is an updated h5ad object, and (optionally) a plot file and a tsv file with UMAP coordinates
+The result is an updated h5ad object, and (optionally) a plot and a .tsv file with UMAP coordinates
 and corresponding cluster id for each cell.
 """
 

@@ -1,61 +1,65 @@
 from __future__ import annotations
 
-from typing import Annotated
-
 import typer
 
-from .shared import log_parameters, normalize_processors, normalize_region, version_option
+from ._common_args import (
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    ExportFormat,
+    log_parameters,
+    preprocess_args,
+)
 
-DESCRIPTION = """
-scExportSignal exports signal from a .h5ad object in a few output formats.
-"""
+DESCRIPTION = "Export .h5ad objects to other formats."
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
 
-@version_option("scExportSignal")
 @app.callback(invoke_without_command=True)
 def main(
-    input: Annotated[
-        str, typer.Option("-i", "--input", metavar=".h5ad", help="sincei-generated input file in .h5ad format.")
-    ],
-    outFile: Annotated[str, typer.Option("-o", "--outFile", help="The file to write results to.")],
-    outFileFormat: Annotated[
-        str,
-        typer.Option(
-            "--outFileFormat",
-            help="Output file format for `scExportSignal`. "
-            '"bm" refers to the BedGraphMatrix format, useful for single-cell data visualization with pyGenomeTracks. It stores data in dense format, so we recommend choosing a region to export instead of the whole dataset. '
-            '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt'
-            '"loom" refers to the loom file format, an hddf5-based legacy format for single-cell genomics data.',
-        ),
-    ],
-    region: str = typer.Option(None, "-r", "--region", callback=normalize_region),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        callback=normalize_processors,
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
+    # Input / Output options
+    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
+    out_file: str = INPUT_OUTPUT_OPTS["out_prefix"],
+    out_file_format: ExportFormat = typer.Option(
+        ...,
+        "--outfile-format",
+        metavar="FORMAT",
+        rich_help_panel="Export options",
+        help="Output file format.\n\n"
+        "[bold yellow]bm[/bold yellow]: BedGraphMatrix format, useful for single-cell visualization with pyGenomeTracks; "
+        "stores data densely, so prefer exporting a region rather than the whole dataset.\n\n"
+        "[bold yellow]mtx[/bold yellow]: MatrixMarket sparse format (<prefix>.counts.mtx plus <prefix>.rownames.txt and "
+        "<prefix>.colnames.txt).\n\n"
+        "[bold yellow]loom[/bold yellow]: loom hdf5-based legacy format for single-cell genomics data.",
     ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    region: str | None = INPUT_OUTPUT_OPTS["region"],
+    # Other options
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
     log_parameters(
         input=input,
-        outFile=outFile,
+        out_file=out_file,
+        out_file_format=out_file_format,
         region=region,
-        outFileFormat=outFileFormat,
-        numberOfProcessors=numberOfProcessors,
+        number_of_processors=number_of_processors,
         verbose=verbose,
     )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()

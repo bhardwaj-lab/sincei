@@ -1,0 +1,160 @@
+"""Parsers and shared plumbing for the typer CLI and the Rust (`_sincei`) backend.
+
+The CLI exposes user-friendly option shapes (choice enums, ``"low,high"``
+strings, barcode/whitelist files) whereas the Rust functions take plain
+scalars and lists.  This module centralizes those conversions and input
+checks, plus the small amount of app plumbing shared by every command
+(``preprocess_args`` and ``log_parameters``).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._common_args import DuplicateFilter
+
+logger = logging.getLogger(__name__)
+
+# CLI duplicate-filter choice (enum ``.value``) -> Rust `dup_method` string.
+# Keyed by the string value rather than the enum member so this module needs no
+# runtime import of ``_common_args`` (which would create an import cycle).
+_DUP_METHOD_MAP: dict[str, str] = {
+    "start_bc": "barcode_start",
+    "start_umi": "barcode_umi_start",
+    "start_end_bc": "barcode_start_end",
+    "start_end_bc_umi": "barcode_umi_start_end",
+}
+
+
+def dup_method(value: DuplicateFilter | None) -> str | None:
+    """Map the CLI duplicate-filter choice to the backend's method string."""
+    return _DUP_METHOD_MAP[value.value] if value is not None else None
+
+
+def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None:
+    """Parse ``["A,TA", ...]`` into ``[("A", "TA"), ...]`` (read, reference)."""
+    if not motifs:
+        return None
+    parsed: list[tuple[str, str]] = []
+    for entry in motifs:
+        parts = entry.split(",")
+        if len(parts) != 2:
+            raise ValueError(f"--motif-filter expects 'read_motif,ref_motif' (got {entry!r})")
+        parsed.append((parts[0].strip(), parts[1].strip()))
+    return parsed
+
+
+def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
+    """Parse ``"<low>,<high>"`` into ``(min_gc, max_gc)``; ``(None, None)`` if unset."""
+    if not value:
+        return None, None
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise ValueError(f"--gc-content-filter expects '<low>,<high>' (got {value!r})")
+    return float(parts[0]), float(parts[1])
+
+
+def optional_length(value: int | None) -> int | None:
+    """CLI fragment-length options use 0 to mean "no limit"; map that to ``None``."""
+    return value if value and value > 0 else None
+
+
+def first_blacklist(blacklist: list[str] | None) -> str | None:
+    """The backend accepts a single blacklist file; use the first one provided."""
+    if not blacklist:
+        return None
+    if len(blacklist) > 1:
+        logger.warning("Multiple blacklist files provided; only the first (%s) is used.", blacklist[0])
+    return blacklist[0]
+
+
+def read_barcodes(path: str) -> list[str]:
+    """Read a single-column barcode/whitelist file into a list of barcodes."""
+    with open(path) as handle:
+        return [line.strip() for line in handle if line.strip()]
+
+
+def file_stem(path: str) -> str:
+    """Basename without its extension (the backend's default sample label)."""
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def resolve_labels(
+    bam_files: list[str],
+    labels: list[str] | None,
+    use_smart_labels: bool,
+) -> list[str]:
+    """Resolve the per-BAM sample labels used to match the group-info file.
+
+    Priority: explicit ``--labels`` (must match the BAM count), then
+    ``--smart-labels`` / default, both of which use the file stem.
+    """
+    if labels:
+        if len(labels) != len(bam_files):
+            raise ValueError(
+                f"--labels count ({len(labels)}) does not match the number of BAM files ({len(bam_files)})."
+            )
+        return list(labels)
+    return [file_stem(b) for b in bam_files]
+
+
+def warn_unsupported(**options: object) -> None:
+    """Emit a warning for any CLI option that the backend does not yet honor."""
+    for name, value in options.items():
+        if value:
+            logger.warning("Option %r is not supported by this command and will be ignored.", name)
+
+
+# ---------------------------------------------------------------------------
+# App plumbing shared by every command
+# ---------------------------------------------------------------------------
+def log_parameters(**parameters: object) -> None:
+    """Log each ``name: value`` parameter at INFO level (used under ``--verbose``)."""
+    for name, value in parameters.items():
+        logging.info("%s: %s", name, value)
+
+
+def preprocess_args() -> None:
+    """Expand whitespace-separated multi-value options into repeated options.
+
+    Typer does not support whitespace-separated multi-value options, so we
+    preprocess ``sys.argv`` so that::
+
+        app some_command --filters f1 f2 f3 --environments e1 e2
+
+    becomes::
+
+        app some_command --filters f1 --filters f2 --filters f3 --environments e1 --environments e2
+
+    //!\\ DOWNSIDE: options must always come after positional arguments. //!\\
+    //!\\ DOWNSIDE: options must either take one value or repeated values. //!\\
+    This is fine for sincei since the commands only use options.
+    """
+
+    # Collect the leading command path (everything up to the first option).
+    final_cmd: list[str] = []
+    for arg in sys.argv:
+        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+            break
+        final_cmd.append(arg)
+
+    # Expand each option so every value gets its own flag.
+    for idx, arg in enumerate(sys.argv):
+        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+            opt_values: list[str] = []
+            for value in sys.argv[idx + 1 :]:
+                if any(value.startswith(prefix) for prefix in ("-", "--")):
+                    break
+                opt_values.append(value)
+
+            if len(opt_values) >= 1:
+                for opt_value in opt_values:
+                    final_cmd.extend([arg, opt_value])
+            else:
+                final_cmd.append(arg)
+
+    sys.argv = final_cmd

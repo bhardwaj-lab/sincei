@@ -1,0 +1,303 @@
+use std::path::Path;
+
+use ahash::{AHashMap, AHashSet};
+use anyhow::{Context, Result};
+use rayon::prelude::*;
+
+use super::bam_io::read_bam_header;
+use super::count_utils::{BamWorker, build_csr, derive_record_opts, effective_interval, write_counts_anndata};
+use super::profiling::{log_phase, profile_enabled};
+use super::filters::{DupMethod, DuplicateFilter, QcFilter};
+use super::params::{CountingParams, parse_region};
+use super::parse_annotation::parse_bed_file;
+use super::region_index::{BinIndex, RegionIndex, build_bin_index};
+use super::sc_record::{parse_tag, ScRecord};
+
+/// Count reads from one or more BAM files into a cell × genomic-bin matrix,
+/// then write the result as an AnnData HDF5 file.
+///
+/// `bam_paths` is a list of `(path, sample_name)` pairs.  Bin geometry is
+/// derived from the first BAM's header.  Parallelism is over sub-chromosome
+/// chunks of `chunk_size` bp; each chunk is an independent BAI query.  Reads
+/// are assigned to chunks by `alignment_start` to avoid double-counting — a
+/// read's effective interval can still overlap bins in adjacent chunks.
+pub fn count_bam_bins(
+    bam_paths: &[(&Path, &str)],
+    bin_size: usize,
+    step_size: usize,
+    barcodes: &[String],
+    bc_tag: &str,
+    umi_tag: Option<&str>,
+    count_tag: Option<&str>,
+    min_mapq: Option<u8>,
+    params: &CountingParams,
+    qc_filter: Option<&QcFilter>,
+    dup_method: Option<DupMethod>,
+    genome_path: Option<&Path>,
+    motifs: Option<&[(String, String)]>,
+    output_path: &Path,
+    compression: &str,
+    compression_level: u8,
+    num_threads: usize,
+    chunk_size: usize,
+) -> Result<()> {
+    anyhow::ensure!(bin_size > 0, "bin_size must be greater than zero");
+    anyhow::ensure!(step_size > 0, "step_size must be greater than zero");
+    anyhow::ensure!(!bam_paths.is_empty(), "at least one BAM file is required");
+    anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
+
+    let prof = profile_enabled();
+    let t_setup = std::time::Instant::now();
+
+    let has_motif = genome_path.is_some() && motifs.is_some();
+    let record_opts = derive_record_opts(qc_filter, has_motif);
+    let bc_tag_parsed = parse_tag(bc_tag)?;
+    let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
+    let count_tag_parsed = count_tag.map(parse_tag).transpose()?;
+    let region_filter = params.region.as_deref().map(parse_region).transpose()?;
+
+    let n_barcodes = barcodes.len();
+    // Keyed by raw bytes so the per-read barcode lookup never allocates.
+    let barcode_index: AHashMap<&[u8], usize> = barcodes
+        .iter()
+        .enumerate()
+        .map(|(i, bc)| (bc.as_bytes(), i))
+        .collect();
+    let n_cells = bam_paths.len() * n_barcodes;
+
+    // Chromosomes to skip, as a byte-slice set so membership tests over the
+    // header don't allocate a `String` per reference sequence.
+    let skip_set: AHashSet<&[u8]> = params.chr_to_skip.iter().map(|s| s.as_bytes()).collect();
+
+    // Bin geometry from first BAM's header.
+    let chrom_sizes: Vec<(String, usize)> = {
+        let (first_path, _) = bam_paths[0];
+        let hdr = read_bam_header(first_path)?;
+        hdr.reference_sequences()
+            .iter()
+            .filter(|(name, _)| {
+                let bytes: &[u8] = name.as_ref();
+                !skip_set.contains(bytes)
+            })
+            .map(|(name, seq)| (name.to_string(), seq.length().get()))
+            .collect()
+    };
+
+    let (bin_index, var_meta) = build_bin_index(&chrom_sizes, bin_size, step_size);
+    let n_features = var_meta.len();
+
+    let blacklist = params
+        .blacklist_path
+        .as_deref()
+        .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
+        .transpose()?;
+    let blacklisted_bins = blacklisted_bin_indices(&bin_index, blacklist.as_ref());
+
+    // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
+    // Use chrom_sizes (from first BAM) as the master chromosome set.
+    // Sort by descending chunk size for the LPT heuristic.
+    let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
+        .iter()
+        .enumerate()
+        .flat_map(|(bam_idx, &(bam_path, _))| {
+            chrom_sizes.iter().flat_map(move |(chrom, chrom_len)| {
+                (0..*chrom_len).step_by(chunk_size).map(move |start| {
+                    (bam_idx, bam_path, chrom.clone(), start, (start + chunk_size).min(*chrom_len))
+                })
+            })
+        })
+        .collect();
+    work.sort_unstable_by(|a, b| (b.4 - b.3).cmp(&(a.4 - a.3)));
+
+    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(n_threads)
+        .build()
+        .context("failed to build thread pool")?;
+
+    // Motif-filter ingredients, passed to each worker so it can build its own
+    // filter once per thread (rather than once per chunk).
+    let motif_ingredients = match (genome_path, motifs) {
+        (Some(g), Some(m)) => Some((g, m)),
+        _ => None,
+    };
+
+    log_phase(prof, "setup", t_setup);
+    let t_count = std::time::Instant::now();
+
+    // Count each chunk into its own map, then combine them with a parallel
+    // tree reduction.  The previous design collected all per-chunk maps and
+    // merged them on a single thread, which was ~15% of wall-clock time.
+    let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
+        work.par_iter()
+            .map_init(
+                BamWorker::new,
+                |worker, &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)| -> Result<AHashMap<(usize, usize), u32>> {
+                    worker.prepare(bam_path, motif_ingredients)?;
+                    let (reader, header, motif) = worker.parts();
+
+                    // Each work item covers a single chromosome, so its bin
+                    // geometry is looked up once here rather than per read.
+                    let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
+                    else {
+                        return Ok(AHashMap::new());
+                    };
+
+                    // Hoisted region filter: if a region was requested on a
+                    // different chromosome, the whole chunk is skipped.
+                    let region_bounds = match &region_filter {
+                        Some((region_chrom, region_start, region_end)) => {
+                            if region_chrom.as_str() != chrom.as_str() {
+                                return Ok(AHashMap::new());
+                            }
+                            Some((*region_start, *region_end))
+                        }
+                        None => None,
+                    };
+
+                    let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
+                    let region: noodles::core::Region = region_str
+                        .parse()
+                        .with_context(|| format!("failed to parse region: {}", region_str))?;
+                    let query = match reader.query(header, &region) {
+                        Ok(q) => q,
+                        Err(_) => return Ok(AHashMap::new()),
+                    };
+
+                    let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+                    let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    let cell_offset = bam_idx * n_barcodes;
+
+                    for result in query.records() {
+                        let record = result.context("failed to read BAM record")?;
+
+                        let Some(sc_rec) = ScRecord::from_bam_record(
+                            &record,
+                            header,
+                            &bc_tag_parsed,
+                            umi_tag_parsed.as_ref(),
+                            count_tag_parsed.as_ref(),
+                            min_mapq,
+                            params.sam_flag_include,
+                            params.sam_flag_exclude,
+                            &record_opts,
+                        )? else { continue };
+
+                        // Ownership: a read belongs to the chunk containing its
+                        // alignment_start.  Skip reads owned by a previous chunk.
+                        if sc_rec.alignment_start < chunk_start {
+                            continue;
+                        }
+
+                        if let Some((region_start, region_end)) = region_bounds {
+                            if sc_rec.alignment_end <= region_start
+                                || sc_rec.alignment_start >= region_end
+                            {
+                                continue;
+                            }
+                        }
+
+                        let Some(barcode) = sc_rec.barcode else { continue };
+                        let Some(&local_bc_idx) = barcode_index.get(barcode) else { continue };
+
+                        if let Some(qc) = qc_filter {
+                            if !qc.passes(&sc_rec) { continue; }
+                        }
+                        if let Some(ref mut dup) = dup_filter {
+                            if !dup.passes(&sc_rec) { continue; }
+                        }
+                        if let Some(mf) = motif.as_mut() {
+                            if !mf.passes(&sc_rec, chrom)? { continue; }
+                        }
+
+                        let (eff_start, eff_end) = effective_interval(&sc_rec, params);
+                        let cell_idx = cell_offset + local_bc_idx;
+
+                        // eff_start/eff_end may extend past the chunk boundary and
+                        // still land in bins anywhere on the chromosome.
+                        if eff_end > 0 && n_bins > 0 {
+                            let last_bin = ((eff_end - 1) / step_size).min(n_bins - 1);
+                            let first_bin = if eff_start + 1 > bin_size {
+                                (eff_start - bin_size + step_size) / step_size
+                            } else {
+                                0
+                            };
+                            for bin in first_bin..=last_bin {
+                                let feature_idx = chrom_offset + bin;
+                                if blacklisted_bins.is_empty() || !blacklisted_bins.contains(&feature_idx) {
+                                    *local_acc.entry((cell_idx, feature_idx)).or_insert(0) +=
+                                        sc_rec.count;
+                                }
+                            }
+                        }
+                    }
+
+                    Ok(local_acc)
+                },
+            )
+            .reduce(
+                || Ok(AHashMap::new()),
+                |a, b| {
+                    let mut a = a?;
+                    for (key, val) in b? {
+                        *a.entry(key).or_insert(0) += val;
+                    }
+                    Ok(a)
+                },
+            )
+    })?;
+
+    log_phase(prof, "count + merge", t_count);
+    let t_csr = std::time::Instant::now();
+
+    let matrix = build_csr(&global_acc, n_cells, n_features)?;
+
+    log_phase(prof, "build_csr", t_csr);
+    let t_write = std::time::Instant::now();
+
+    write_counts_anndata(
+        output_path,
+        matrix,
+        bam_paths,
+        barcodes,
+        &var_meta,
+        compression,
+        compression_level,
+    )?;
+
+    log_phase(prof, "write_anndata", t_write);
+
+    Ok(())
+}
+
+fn blacklisted_bin_indices(
+    bin_index: &BinIndex,
+    blacklist: Option<&RegionIndex>,
+) -> AHashSet<usize> {
+    let Some(bl) = blacklist else {
+        return AHashSet::new();
+    };
+
+    let bin_size = bin_index.bin_size;
+    let step_size = bin_index.step_size;
+    let mut set = AHashSet::new();
+
+    for (chrom, bl_chrom_idx) in bl {
+        let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom) else {
+            continue;
+        };
+        for bl_iv in bl_chrom_idx.iter() {
+            if bl_iv.end == 0 { continue; }
+            let last_bl_bin = ((bl_iv.end - 1) / step_size).min(n_bins - 1);
+            let first_bl_bin = if bl_iv.start + 1 > bin_size {
+                (bl_iv.start - bin_size + step_size) / step_size
+            } else {
+                0
+            };
+            for bin in first_bl_bin..=last_bl_bin {
+                set.insert(chrom_offset + bin);
+            }
+        }
+    }
+    set
+}

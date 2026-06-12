@@ -1,70 +1,100 @@
 from __future__ import annotations
 
-from typing import Annotated
-
 import typer
 
-from .shared import log_parameters, normalize_processors, normalize_region, version_option
+from ._common_args import INPUT_OUTPUT_OPTS, OTHER_OPTS, log_parameters, override, preprocess_args
 
-DESCRIPTION = """
-Plot pseudo-bulk and per cell coverage for a genomic region.
-"""
+DESCRIPTION = "Plot pseudo-bulk and per cell coverage for a genomic region."
 
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode="rich",
     help=DESCRIPTION,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
 )
 
 
-@version_option("scPlotRegion")
 @app.callback(invoke_without_command=True)
 def main(
-    input: Annotated[
-        str, typer.Option("-i", "--input", metavar=".h5ad", help="sincei-generated input file in .h5ad format.")
-    ],
-    outFile: Annotated[str, typer.Option("-o", "--outFile", help="The file to write results to.")],
-    region: Annotated[
-        str,
-        typer.Option(
-            "-r",
-            "--region",
-            callback=normalize_region,
-            help="Region of the genome to limit the operation to - this is useful when testing parameters to reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or ``--region chr10:456700:891000``.",
-        ),
-    ],
-    mode: Annotated[str, typer.Option("-m", "--mode", help="Aggregation mode for the top subplot")],
+    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
+    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    region: str = override(INPUT_OUTPUT_OPTS["region"], default=...),
+    mode: str = typer.Option(
+        ...,
+        "-m",
+        "--mode",
+        rich_help_panel="Display options",
+        help="Aggregation mode for the top subplot.",
+    ),
     summarize: bool = typer.Option(
-        False, "--summarize", help="Sum contiguous columns to reduce matrix width for heatmap plotting (default: False)"
+        False,
+        "--summarize",
+        rich_help_panel="Display options",
+        help="Sum contiguous columns to reduce matrix width for heatmap plotting.",
     ),
     signal_min: float = typer.Option(
-        None, "--signal-min", help="Minimum value for pseudobulk track plot (default: data min)"
+        None,
+        "--signal-min",
+        rich_help_panel="Color / Scale options",
+        help="Minimum value for pseudobulk track plot (default: data min).",
     ),
     signal_max: float = typer.Option(
-        None, "--signal-max", help="Maximum value for pseudobulk track plot (default: data max)"
+        None,
+        "--signal-max",
+        rich_help_panel="Color / Scale options",
+        help="Maximum value for pseudobulk track plot (default: data max).",
     ),
-    map_min: float = typer.Option(None, "--map-min", help="Minimum value for cell heatmap (default: data min)"),
-    map_max: float = typer.Option(None, "--map-max", help="Maximum value for cell heatmap (default: data max)"),
-    color: str = typer.Option("red", "--color", help="Color for top line plot (default: red)"),
-    colormap: str = typer.Option("Reds", "--colormap", help="Colormap for heatmap (default: Redss)"),
-    figsize: tuple[float, float] = typer.Option(
-        (14, 8), "--figsize", help="Figure size in inches (width height, default: 14 8)"
+    map_min: float = typer.Option(
+        None,
+        "--map-min",
+        rich_help_panel="Color / Scale options",
+        help="Minimum value for cell heatmap (default: data min).",
     ),
-    dpi: int = typer.Option(300, "--dpi", help="DPI for output PNG (default: 300)"),
-    numberOfProcessors: str = typer.Option(
-        "max",
-        "-p",
-        "--numberOfProcessors",
-        callback=normalize_processors,
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" to use all available processors. (Default: "max")',
+    map_max: float = typer.Option(
+        None,
+        "--map-max",
+        rich_help_panel="Color / Scale options",
+        help="Maximum value for cell heatmap (default: data max).",
     ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Set to see processing messages."),
+    color: str = typer.Option(
+        "red",
+        "--color",
+        rich_help_panel="Color / Scale options",
+        help="Color for the top line plot.",
+    ),
+    colormap: str = typer.Option(
+        "Reds",
+        "--colormap",
+        rich_help_panel="Color / Scale options",
+        help="Colormap for the heatmap.",
+    ),
+    fig_width: float = typer.Option(
+        14.0,
+        "--fig-width",
+        rich_help_panel="Figure options",
+        help="Figure width in inches.",
+    ),
+    fig_height: float = typer.Option(
+        8.0,
+        "--fig-height",
+        rich_help_panel="Figure options",
+        help="Figure height in inches.",
+    ),
+    dpi: int = typer.Option(
+        300,
+        "--dpi",
+        rich_help_panel="Figure options",
+        help="DPI for the output PNG.",
+    ),
+    number_of_processors: str = OTHER_OPTS["number_of_processors"],
+    verbose: bool = OTHER_OPTS["verbose"],
+    help: bool = OTHER_OPTS["help"],
 ) -> int:
     log_parameters(
         input=input,
-        outFile=outFile,
+        out_file=out_file,
         region=region,
         mode=mode,
         summarize=summarize,
@@ -74,13 +104,19 @@ def main(
         map_max=map_max,
         color=color,
         colormap=colormap,
-        figsize=figsize,
+        fig_width=fig_width,
+        fig_height=fig_height,
         dpi=dpi,
-        numberOfProcessors=numberOfProcessors,
+        number_of_processors=number_of_processors,
         verbose=verbose,
     )
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    preprocess_args()
     app()
+
+
+if __name__ == "__main__":
+    cli()
