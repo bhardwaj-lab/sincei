@@ -1,13 +1,8 @@
 #!/usr/bin/env python
-"""Profile / benchmark the scCountReads backend (`_sincei.count_bins`).
+"""Benchmark the scCountReads backend (`_sincei.count_bins`).
 
-Runs the Rust counting backend on a BAM file and reports a per-phase
-breakdown (setup / parallel counting / merge / CSR build / AnnData write)
-plus total wall-clock time.
-
-The per-phase numbers come from the library's opt-in instrumentation: this
-script sets ``SINCEI_PROFILE=1`` and the backend prints
-``[profile] <phase> <seconds>`` lines to stderr.
+Runs the Rust counting backend on a BAM file and reports total wall-clock
+time.
 
 Build the backend in release mode first, otherwise the numbers are
 meaningless:
@@ -49,9 +44,6 @@ def main() -> int:
     parser.add_argument("--cell-tag", default="BC")
     parser.add_argument("--repeats", type=int, default=1)
     args = parser.parse_args()
-
-    # Enable the backend's per-phase timing (prints to stderr).
-    os.environ["SINCEI_PROFILE"] = "1"
 
     from sincei import _sincei as internal
 

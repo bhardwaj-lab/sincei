@@ -2,11 +2,15 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-use anyhow::{Context, Result};
 use ahash::{AHashMap, AHashSet};
+use anyhow::{Context, Result};
 use noodles::{bed, gff, gtf};
 
 use super::region_index::{ChromIndex, Interval, RegionIndex, VarMeta};
+
+/// Per-chromosome unsorted interval lists plus the ordered per-feature metadata,
+/// as produced by the raw (pre-index) parsers below.
+type RawIntervals = (AHashMap<String, Vec<Interval>>, Vec<VarMeta>);
 
 /// Parse a BED file and build a per-chromosome interval index.
 ///
@@ -30,9 +34,9 @@ pub fn parse_bed_file(path: &Path) -> Result<(RegionIndex, Vec<VarMeta>)> {
 /// Returned separately from index construction so callers that merge several
 /// files can build each [`ChromIndex`] exactly once instead of building and
 /// then immediately rebuilding it.
-fn parse_bed_raw(path: &Path) -> Result<(AHashMap<String, Vec<Interval>>, Vec<VarMeta>)> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open BED file: {}", path.display()))?;
+fn parse_bed_raw(path: &Path) -> Result<RawIntervals> {
+    let file =
+        File::open(path).with_context(|| format!("failed to open BED file: {}", path.display()))?;
 
     let mut reader = bed::io::Reader::<3, _>::new(BufReader::new(file));
     let mut record = bed::Record::<3>::default();
@@ -56,7 +60,11 @@ fn parse_bed_raw(path: &Path) -> Result<(AHashMap<String, Vec<Interval>>, Vec<Va
             .get()
             - 1;
 
-        let end = match record.feature_end().transpose().context("invalid BED end coordinate")? {
+        let end = match record
+            .feature_end()
+            .transpose()
+            .context("invalid BED end coordinate")?
+        {
             Some(p) => p.get(),
             None => continue,
         };
@@ -71,15 +79,26 @@ fn parse_bed_raw(path: &Path) -> Result<(AHashMap<String, Vec<Interval>>, Vec<Va
             .get(0)
             .and_then(|n| {
                 let s = n.to_string();
-                if s.is_empty() || s == "." { None } else { Some(s) }
+                if s.is_empty() || s == "." {
+                    None
+                } else {
+                    Some(s)
+                }
             })
             .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
 
-        var.push(VarMeta { chrom: chrom.clone(), start, end, name: name.clone() });
-        intervals_by_chrom
-            .entry(chrom)
-            .or_default()
-            .push(Interval { start, end, val: region_idx, name });
+        var.push(VarMeta {
+            chrom: chrom.clone(),
+            start,
+            end,
+            name: name.clone(),
+        });
+        intervals_by_chrom.entry(chrom).or_default().push(Interval {
+            start,
+            end,
+            val: region_idx,
+            name,
+        });
         region_idx += 1;
     }
 
@@ -102,7 +121,7 @@ fn build_annotation_index_raw<I>(
     iter: I,
     feature_type: Option<&str>,
     name_attr: &str,
-) -> Result<(AHashMap<String, Vec<Interval>>, Vec<VarMeta>)>
+) -> Result<RawIntervals>
 where
     I: Iterator<Item = io::Result<gff::feature::RecordBuf>>,
 {
@@ -113,10 +132,10 @@ where
     for result in iter {
         let record = result.context("failed to read annotation record")?;
 
-        if let Some(ft) = feature_type {
-            if record.ty() != ft.as_bytes() {
-                continue;
-            }
+        if let Some(ft) = feature_type
+            && record.ty() != ft.as_bytes()
+        {
+            continue;
         }
 
         let chrom = record.reference_sequence_name().to_string();
@@ -141,11 +160,18 @@ where
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
 
-        var.push(VarMeta { chrom: chrom.clone(), start, end, name: name.clone() });
-        intervals_by_chrom
-            .entry(chrom)
-            .or_default()
-            .push(Interval { start, end, val: region_idx, name });
+        var.push(VarMeta {
+            chrom: chrom.clone(),
+            start,
+            end,
+            name: name.clone(),
+        });
+        intervals_by_chrom.entry(chrom).or_default().push(Interval {
+            start,
+            end,
+            val: region_idx,
+            name,
+        });
         region_idx += 1;
     }
 
@@ -169,13 +195,9 @@ pub fn parse_gtf_file(
 }
 
 /// Parse a GTF file into per-chromosome **unsorted** interval lists plus var metadata.
-fn parse_gtf_raw(
-    path: &Path,
-    feature_type: Option<&str>,
-    name_attr: &str,
-) -> Result<(AHashMap<String, Vec<Interval>>, Vec<VarMeta>)> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open GTF file: {}", path.display()))?;
+fn parse_gtf_raw(path: &Path, feature_type: Option<&str>, name_attr: &str) -> Result<RawIntervals> {
+    let file =
+        File::open(path).with_context(|| format!("failed to open GTF file: {}", path.display()))?;
     let mut reader = gtf::io::Reader::new(BufReader::new(file));
     build_annotation_index_raw(reader.record_bufs(), feature_type, name_attr)
 }
@@ -196,13 +218,9 @@ pub fn parse_gff_file(
 }
 
 /// Parse a GFF3 file into per-chromosome **unsorted** interval lists plus var metadata.
-fn parse_gff_raw(
-    path: &Path,
-    feature_type: Option<&str>,
-    name_attr: &str,
-) -> Result<(AHashMap<String, Vec<Interval>>, Vec<VarMeta>)> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open GFF file: {}", path.display()))?;
+fn parse_gff_raw(path: &Path, feature_type: Option<&str>, name_attr: &str) -> Result<RawIntervals> {
+    let file =
+        File::open(path).with_context(|| format!("failed to open GFF file: {}", path.display()))?;
     let mut reader = gff::io::Reader::new(BufReader::new(file));
     build_annotation_index_raw(reader.record_bufs(), feature_type, name_attr)
 }
@@ -212,11 +230,14 @@ fn parse_gff_raw(
 ///
 /// Format is detected from each file's extension:
 ///
-/// | Extension(s)                | Parser | Default `feature_type`      | Default `name_attr` |
-/// |-----------------------------|--------|-----------------------------|---------------------|
-/// | `.gtf`, `.gtf.gz`           | GTF    | `"transcript"`              | `"transcript_id"`   |
-/// | `.gff`, `.gff3`, `.gff3.gz` | GFF3   | auto (`"transcript"`/`"mRNA"`) | `"ID"`           |
-/// | anything else               | BED    | —                           | —                   |
+/// | Extension(s)                | Parser | Default `feature_type`             | Default `name_attr`   |
+/// |-----------------------------|--------|------------------------------------|-----------------------|
+/// | `.gtf`, `.gtf.gz`           | GTF    | `"transcript"` / `"exon"`*         | `"transcript_id"` / `"gene_id"`* |
+/// | `.gff`, `.gff3`, `.gff3.gz` | GFF3   | auto (`"transcript"`/`"mRNA"`)* / `"exon"`* | `"ID"` / `"Parent"`* |
+/// | anything else               | BED    | —                                  | —                     |
+///
+/// \* When `metagene = true` the exon type and gene-grouping attribute are used
+/// instead of the transcript-level defaults.
 ///
 /// Feature names are concatenated in file order.  Each file's `val` indices are
 /// shifted by the cumulative feature count so every feature in the combined
@@ -225,30 +246,76 @@ fn parse_gff_raw(
 /// `feature_type` and `name_attr` only affect GTF / GFF3 files; BED files
 /// always use the 4th column (or `"chrom:start-end"`) as the feature name.
 /// `None` selects the per-format default shown above.
+///
+/// When `metagene = true`, exon intervals are grouped by their gene-id
+/// attribute so that every exon belonging to the same gene shares one `val`
+/// (= gene index).  This lets the counting loop count a read for a gene
+/// regardless of how many of its exons the read overlaps.
 pub fn parse_annotation_files<P: AsRef<Path>>(
     paths: impl IntoIterator<Item = P>,
     feature_type: Option<&str>,
     name_attr: Option<&str>,
+    metagene: bool,
 ) -> Result<(RegionIndex, Vec<VarMeta>)> {
     let mut all_var: Vec<VarMeta> = Vec::new();
     let mut intervals_by_chrom: AHashMap<String, Vec<Interval>> = AHashMap::new();
 
     for path in paths {
         let path = path.as_ref();
-        let offset = all_var.len();
 
         let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let stem = filename.strip_suffix(".gz").unwrap_or(filename);
-        // Use the *raw* parsers so each chromosome's intervals are sorted only
-        // once, by the final `ChromIndex::build` below, rather than once per
-        // file and then again here.
+        let is_gtf = stem.ends_with(".gtf");
+        let is_gff = stem.ends_with(".gff") || stem.ends_with(".gff3");
+
+        // Metagene mode groups exon records by gene-id attribute so all exons
+        // of the same gene share one val (= gene index in `all_var`).
+        // The offset shift below still applies so multi-file merges work.
+        if metagene && (is_gtf || is_gff) {
+            let exon_type = feature_type.unwrap_or("exon");
+            let gene_attr = if is_gtf {
+                name_attr.unwrap_or("gene_id")
+            } else {
+                name_attr.unwrap_or("Parent")
+            };
+            let offset = all_var.len();
+            let (file_ivs, var) = if is_gtf {
+                let file = File::open(path)
+                    .with_context(|| format!("failed to open GTF file: {}", path.display()))?;
+                let mut reader = gtf::io::Reader::new(BufReader::new(file));
+                build_metagene_index_raw(reader.record_bufs(), exon_type, gene_attr)
+            } else {
+                let file = File::open(path)
+                    .with_context(|| format!("failed to open GFF file: {}", path.display()))?;
+                let mut reader = gff::io::Reader::new(BufReader::new(file));
+                build_metagene_index_raw(reader.record_bufs(), exon_type, gene_attr)
+            }
+            .with_context(|| format!("failed to parse annotation file: {}", path.display()))?;
+
+            all_var.extend(var);
+            for (chrom, ivs) in file_ivs {
+                let bucket = intervals_by_chrom.entry(chrom).or_default();
+                for mut iv in ivs {
+                    iv.val += offset;
+                    bucket.push(iv);
+                }
+            }
+            continue;
+        }
+
+        let offset = all_var.len();
+
         // Per-format defaults.  GTF: region type "transcript", name attribute
         // "transcript_id".  GFF3: name attribute "ID"; the region type is
         // auto-detected (GENCODE-style uses "transcript", Ensembl/RefSeq use
         // "mRNA") when the caller didn't specify one.
-        let (file_intervals, var) = if stem.ends_with(".gtf") {
-            parse_gtf_raw(path, Some(feature_type.unwrap_or("transcript")), name_attr.unwrap_or("transcript_id"))
-        } else if stem.ends_with(".gff") || stem.ends_with(".gff3") {
+        let (file_intervals, var) = if is_gtf {
+            parse_gtf_raw(
+                path,
+                Some(feature_type.unwrap_or("transcript")),
+                name_attr.unwrap_or("transcript_id"),
+            )
+        } else if is_gff {
             let transcript_type = match feature_type {
                 Some(ft) => ft,
                 None => detect_gff_transcript_type(path)?,
@@ -273,6 +340,77 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
     }
 
     Ok((build_region_index(intervals_by_chrom), all_var))
+}
+
+/// Group exon-type records by a gene-id attribute so all exons of the same
+/// gene share one region index (`val`).
+///
+/// This is the metagene parsing path.  The resulting intervals have
+/// `val` = gene index (into the returned `VarMeta` vec) rather than a
+/// per-exon index, so `build_counting_index` (blacklist subtraction) and the
+/// counting inner loop naturally treat all exons of one gene as one region.
+fn build_metagene_index_raw<I>(iter: I, exon_type: &str, gene_id_attr: &str) -> Result<RawIntervals>
+where
+    I: Iterator<Item = io::Result<gff::feature::RecordBuf>>,
+{
+    let mut intervals_by_chrom: AHashMap<String, Vec<Interval>> = AHashMap::new();
+    let mut var: Vec<VarMeta> = Vec::new();
+    let mut gene_to_idx: AHashMap<String, usize> = AHashMap::new();
+
+    for result in iter {
+        let record = result.context("failed to read annotation record")?;
+
+        if record.ty() != exon_type.as_bytes() {
+            continue;
+        }
+
+        let chrom = record.reference_sequence_name().to_string();
+        let start = record.start().get() - 1;
+        let end = record.end().get();
+
+        if end <= start {
+            continue;
+        }
+
+        let gene_name = record
+            .attributes()
+            .get(gene_id_attr.as_bytes())
+            .and_then(|v| {
+                v.as_string()
+                    .or_else(|| v.as_array().and_then(|a| a.first()).map(|s| s.as_ref()))
+            })
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
+
+        let gene_idx = match gene_to_idx.get(&gene_name).copied() {
+            Some(idx) => {
+                // Extend the gene's genomic span to cover this exon.
+                var[idx].start = var[idx].start.min(start);
+                var[idx].end = var[idx].end.max(end);
+                idx
+            }
+            None => {
+                let idx = var.len();
+                gene_to_idx.insert(gene_name.clone(), idx);
+                var.push(VarMeta {
+                    chrom: chrom.clone(),
+                    start,
+                    end,
+                    name: gene_name.clone(),
+                });
+                idx
+            }
+        };
+
+        intervals_by_chrom.entry(chrom).or_default().push(Interval {
+            start,
+            end,
+            val: gene_idx,
+            name: gene_name,
+        });
+    }
+
+    Ok((intervals_by_chrom, var))
 }
 
 /// Pick the region (transcript) feature type for a GFF3 file when the caller
@@ -303,10 +441,10 @@ fn scan_feature_types(path: &Path) -> Result<AHashSet<String>> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if let Some(col3) = line.split('\t').nth(2) {
-            if !types.contains(col3) {
-                types.insert(col3.to_string());
-            }
+        if let Some(col3) = line.split('\t').nth(2)
+            && !types.contains(col3)
+        {
+            types.insert(col3.to_string());
         }
     }
     Ok(types)
@@ -335,7 +473,12 @@ pub fn build_counting_index(
                 .flat_map(|iv| {
                     valid_sub_intervals(iv.start, iv.end, chrom, blacklist)
                         .into_iter()
-                        .map(move |(s, e)| Interval { start: s, end: e, val: iv.val, name: iv.name.clone() })
+                        .map(move |(s, e)| Interval {
+                            start: s,
+                            end: e,
+                            val: iv.val,
+                            name: iv.name.clone(),
+                        })
                 })
                 .collect();
             (chrom.clone(), ChromIndex::build(new_intervals))

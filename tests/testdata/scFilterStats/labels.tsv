@@ -1,0 +1,15 @@
+sample	barcode	total	filtered	blacklisted	low_mapq	missing_flags	excluded_flags	internal_dupes	external_dupes	singletons	wrong_strand	wrong_motif	wrong_gc	low_aligned_fraction
+mysample	ACGGTAAT	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	AGATATTG	0												
+mysample	ATATAACT	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	ATGTCGTG	0												
+mysample	ATTCTCGA	0												
+mysample	CGTGGTAA	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	GCGAGCAT	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	GCGCTGAC	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	GGACACCG	0												
+mysample	GGAGTCAT	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	GTCAAGCA	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	GTGCCGCG	0												
+mysample	TAGACTTG	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+mysample	TCTTCTGT	0												

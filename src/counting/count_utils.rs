@@ -10,73 +10,15 @@ use anyhow::{Context, Result};
 use nalgebra_sparse::CsrMatrix;
 use noodles::bam;
 use noodles::bgzf;
-use noodles::sam::Header;
 use polars::prelude::*;
 
-use super::filters::{MotifFilter, QcFilter};
+use super::filters::QcFilter;
 use super::params::CountingParams;
 use super::region_index::VarMeta;
 use super::sc_record::{ScRecord, ScRecordOptions};
 
 /// Concrete type of a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
-
-/// Per-worker (per-thread) reusable state for the chunk-parallel counters.
-///
-/// Rayon's `map_init` hands one `BamWorker` to each thread, which then
-/// processes many chunks.  This amortizes two costs that were previously paid
-/// **per chunk**:
-///   * opening the BAM file and parsing its header, and
-///   * opening the 2bit genome for the motif filter.
-///
-/// The reader is keyed by path so a thread that alternates between input BAMs
-/// only reopens when the path actually changes.
-pub(crate) struct BamWorker<'a> {
-    path: Option<&'a Path>,
-    reader: Option<BamReader>,
-    header: Option<Header>,
-    motif: Option<MotifFilter>,
-}
-
-impl<'a> BamWorker<'a> {
-    pub(crate) fn new() -> Self {
-        Self { path: None, reader: None, header: None, motif: None }
-    }
-
-    /// Ensure the reader is open for `path` (reopening only on a path change)
-    /// and, when `motif_ingredients` is supplied, that the motif filter has
-    /// been constructed once for this worker.
-    pub(crate) fn prepare(
-        &mut self,
-        path: &'a Path,
-        motif_ingredients: Option<(&Path, &[(String, String)])>,
-    ) -> Result<()> {
-        if self.path != Some(path) {
-            let (reader, header) = super::bam_io::open_indexed_bam(path)?;
-            self.reader = Some(reader);
-            self.header = Some(header);
-            self.path = Some(path);
-        }
-        if self.motif.is_none() {
-            if let Some((genome, motifs)) = motif_ingredients {
-                self.motif = Some(MotifFilter::new(genome, motifs.to_vec())?);
-            }
-        }
-        Ok(())
-    }
-
-    /// Borrow the reader, header, and optional motif filter as disjoint parts
-    /// so all three can be used simultaneously inside the per-chunk loop.
-    ///
-    /// Call [`BamWorker::prepare`] first.
-    pub(crate) fn parts(&mut self) -> (&mut BamReader, &Header, &mut Option<MotifFilter>) {
-        (
-            self.reader.as_mut().expect("prepare() must be called before parts()"),
-            self.header.as_ref().expect("prepare() must be called before parts()"),
-            &mut self.motif,
-        )
-    }
-}
 
 pub(crate) fn effective_interval(rec: &ScRecord<'_>, params: &CountingParams) -> (usize, usize) {
     let (start, end) = match params.extend_reads {
@@ -94,7 +36,10 @@ pub(crate) fn effective_interval(rec: &ScRecord<'_>, params: &CountingParams) ->
                     (rec.alignment_start, rec.alignment_start + tlen_abs)
                 }
             } else if rec.is_reverse {
-                (rec.alignment_end.saturating_sub(frag_len), rec.alignment_end)
+                (
+                    rec.alignment_end.saturating_sub(frag_len),
+                    rec.alignment_end,
+                )
             } else {
                 (rec.alignment_start, rec.alignment_start + frag_len)
             }
@@ -113,8 +58,8 @@ pub(crate) fn effective_interval(rec: &ScRecord<'_>, params: &CountingParams) ->
 
 pub(crate) fn derive_record_opts(qc: Option<&QcFilter>, has_motif: bool) -> ScRecordOptions {
     ScRecordOptions {
-        compute_gc: qc.map_or(false, |f| f.needs_gc()),
-        compute_aligned_fraction: qc.map_or(false, |f| f.needs_aligned_fraction()),
+        compute_gc: qc.is_some_and(|f| f.needs_gc()),
+        compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
         store_sequence: has_motif,
     }
 }
@@ -172,7 +117,10 @@ pub(crate) fn write_counts_anndata(
         "gzip" => Some(Compression::Gzip(compression_level)),
         other => anyhow::bail!("unknown compression {:?}; expected 'none' or 'gzip'", other),
     };
-    set_default_write_config(WriteConfig { compression, block_size: None });
+    set_default_write_config(WriteConfig {
+        compression,
+        block_size: None,
+    });
 
     // obs: one row per (sample, barcode), in the same order as the matrix rows.
     let n_cells = bam_paths.len() * barcodes.len();
@@ -186,10 +134,13 @@ pub(crate) fn write_counts_anndata(
             barcode_col.push(bc.clone());
         }
     }
-    let obs = DataFrame::new(n_cells, vec![
-        Column::new("sample".into(), sample_col),
-        Column::new("barcode".into(), barcode_col),
-    ])?;
+    let obs = DataFrame::new(
+        n_cells,
+        vec![
+            Column::new("sample".into(), sample_col),
+            Column::new("barcode".into(), barcode_col),
+        ],
+    )?;
 
     // var: chrom / start / end / name, in feature-index order.
     let var_index: Vec<String> = var.iter().map(|v| v.name.clone()).collect();
@@ -197,12 +148,15 @@ pub(crate) fn write_counts_anndata(
     let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();
     let end_col: Vec<i64> = var.iter().map(|v| v.end as i64).collect();
     let name_col: Vec<String> = var.iter().map(|v| v.name.clone()).collect();
-    let var_df = DataFrame::new(var.len(), vec![
-        Column::new("chrom".into(), chrom_col),
-        Column::new("start".into(), start_col),
-        Column::new("end".into(), end_col),
-        Column::new("name".into(), name_col),
-    ])?;
+    let var_df = DataFrame::new(
+        var.len(),
+        vec![
+            Column::new("chrom".into(), chrom_col),
+            Column::new("start".into(), start_col),
+            Column::new("end".into(), end_col),
+            Column::new("name".into(), name_col),
+        ],
+    )?;
 
     let adata = AnnData::<H5>::new(output_path)
         .with_context(|| format!("failed to create AnnData file: {}", output_path.display()))?;

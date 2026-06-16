@@ -4,12 +4,17 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::bam_io::read_bam_header;
-use super::count_utils::{BamWorker, build_csr, derive_record_opts, effective_interval, write_counts_anndata};
-use super::filters::{DupMethod, DuplicateFilter, QcFilter};
+use super::bam_io::{BamWorker, read_bam_header};
+use super::count_utils::{build_csr, derive_record_opts, effective_interval, write_counts_anndata};
+use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter};
 use super::params::{CountingParams, parse_region};
 use super::parse_annotation::{build_counting_index, parse_annotation_files, parse_bed_file};
-use super::sc_record::{parse_tag, ScRecord};
+
+// Maximum number of distinct regions a single read can overlap and still be
+// assigned correctly.  In practice reads are short and features rarely pile up
+// this densely, so 16 is a safe ceiling.
+const MAX_REGION_HITS: usize = 16;
+use super::sc_record::{ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × feature matrix, then
 /// write the result as an AnnData HDF5 file.
@@ -26,8 +31,8 @@ pub fn count_bam_features(
     bc_tag: &str,
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
-    min_mapq: Option<u8>,
     params: &CountingParams,
+    record_filter: Option<&RawRecordFilter>,
     qc_filter: Option<&QcFilter>,
     dup_method: Option<DupMethod>,
     genome_path: Option<&Path>,
@@ -61,6 +66,7 @@ pub fn count_bam_features(
         [annotation_path],
         params.feature_type.as_deref(),
         params.name_attr.as_deref(),
+        params.metagene,
     )?;
     let n_features = var_meta.len();
     feature_index.retain(|chrom, _| !params.chr_to_skip.contains(chrom));
@@ -83,9 +89,13 @@ pub fn count_bam_features(
         let hdr = read_bam_header(bam_path)?;
         for (name, seq) in hdr.reference_sequences().iter() {
             let name_bytes: &[u8] = name.as_ref();
-            if skip_set.contains(name_bytes) { continue; }
+            if skip_set.contains(name_bytes) {
+                continue;
+            }
             let chrom = name.to_string();
-            if !counting_index.contains_key(&chrom) { continue; }
+            if !counting_index.contains_key(&chrom) {
+                continue;
+            }
             let chrom_len = seq.length().get();
             let mut start = 0;
             while start < chrom_len {
@@ -95,9 +105,13 @@ pub fn count_bam_features(
             }
         }
     }
-    work.sort_unstable_by(|a, b| (b.4 - b.3).cmp(&(a.4 - a.3)));
+    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
-    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
         .build()
@@ -116,13 +130,14 @@ pub fn count_bam_features(
         work.par_iter()
             .map_init(
                 BamWorker::new,
-                |worker, &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)| -> Result<AHashMap<(usize, usize), u32>> {
-                    worker.prepare(bam_path, motif_ingredients)?;
-                    let (reader, header, motif) = worker.parts();
+                |worker,
+                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 -> Result<AHashMap<(usize, usize), u32>> {
+                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
-                    // Each work item covers a single chromosome, so its feature
+                    // Each work chunk covers a single chromosome, so its feature
                     // index is looked up once here rather than per read.
-                    let Some(lapper) = counting_index.get(chrom.as_str()) else {
+                    let Some(chrom_index) = counting_index.get(chrom.as_str()) else {
                         return Ok(AHashMap::new());
                     };
 
@@ -147,12 +162,21 @@ pub fn count_bam_features(
                         Err(_) => return Ok(AHashMap::new()),
                     };
 
-                    let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+                    let mut dup_filter: Option<DuplicateFilter> =
+                        dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
                     let cell_offset = bam_idx * n_barcodes;
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
+
+                        if let Some(rf) = record_filter {
+                            let flags = u16::from(record.flags());
+                            let mapq = record.mapping_quality().map(|q| q.get());
+                            if !rf.passes(flags, mapq) {
+                                continue;
+                            }
+                        }
 
                         let Some(sc_rec) = ScRecord::from_bam_record(
                             &record,
@@ -160,47 +184,78 @@ pub fn count_bam_features(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             count_tag_parsed.as_ref(),
-                            min_mapq,
-                            params.sam_flag_include,
-                            params.sam_flag_exclude,
                             &record_opts,
-                        )? else { continue };
+                        )?
+                        else {
+                            continue;
+                        };
 
                         // Ownership: a read belongs to the chunk containing its
                         // alignment_start.  Reads that started before this chunk are
-                        // handled by the previous work item.
+                        // handled by the previous work chunk.
                         if sc_rec.alignment_start < chunk_start {
                             continue;
                         }
 
-                        if let Some((region_start, region_end)) = region_bounds {
-                            if sc_rec.alignment_end <= region_start
-                                || sc_rec.alignment_start >= region_end
-                            {
-                                continue;
-                            }
+                        if let Some((region_start, region_end)) = region_bounds
+                            && (sc_rec.alignment_end <= region_start
+                                || sc_rec.alignment_start >= region_end)
+                        {
+                            continue;
                         }
 
-                        let Some(barcode) = sc_rec.barcode else { continue };
-                        let Some(&local_bc_idx) = barcode_index.get(barcode) else { continue };
+                        let Some(barcode) = sc_rec.barcode else {
+                            continue;
+                        };
+                        let Some(&local_bc_idx) = barcode_index.get(barcode) else {
+                            continue;
+                        };
 
-                        if let Some(qc) = qc_filter {
-                            if !qc.passes(&sc_rec) { continue; }
+                        if let Some(qc) = qc_filter
+                            && !qc.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(ref mut dup) = dup_filter {
-                            if !dup.passes(&sc_rec) { continue; }
+                        if let Some(ref mut dup) = dup_filter
+                            && !dup.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(mf) = motif.as_mut() {
-                            if !mf.passes(&sc_rec, chrom)? { continue; }
+                        if let Some(mf) = motif.as_mut()
+                            && !mf.passes(&sc_rec, chrom)?
+                        {
+                            continue;
                         }
 
                         let (eff_start, eff_end) = effective_interval(&sc_rec, params);
                         let cell_idx = cell_offset + local_bc_idx;
 
-                        // eff_start/eff_end may extend past the chunk boundary and
-                        // still overlap features anywhere on the chromosome.
-                        for interval in lapper.find(eff_start, eff_end) {
-                            *local_acc.entry((cell_idx, interval.val)).or_insert(0) += sc_rec.count;
+                        // Largest-overlap-wins: each read contributes to exactly
+                        // one region.  Sub-intervals of the same region (from
+                        // blacklist splitting or metagene exons) accumulate their
+                        // overlaps before the comparison, so a read spanning two
+                        // exons of gene A still counts once for gene A.
+                        let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
+                        let mut n_hits = 0usize;
+                        for sub in chrom_index.find(eff_start, eff_end) {
+                            let overlap = eff_end.min(sub.end) - eff_start.max(sub.start);
+                            let mut merged = false;
+                            for entry in hits[..n_hits].iter_mut() {
+                                if entry.0 == sub.val {
+                                    entry.1 += overlap;
+                                    merged = true;
+                                    break;
+                                }
+                            }
+                            if !merged && n_hits < MAX_REGION_HITS {
+                                hits[n_hits] = (sub.val, overlap);
+                                n_hits += 1;
+                            }
+                        }
+                        if let Some(&(best_val, _)) =
+                            hits[..n_hits].iter().max_by_key(|&&(_, ov)| ov)
+                        {
+                            *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
                         }
                     }
 
@@ -232,4 +287,3 @@ pub fn count_bam_features(
 
     Ok(())
 }
-

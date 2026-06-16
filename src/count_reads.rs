@@ -4,7 +4,7 @@ use anyhow::Result;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use crate::counting::filters::{DupMethod, QcFilter};
+use crate::counting::filters::{DupMethod, QcFilter, RawRecordFilter};
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
 
@@ -46,6 +46,27 @@ fn build_qc_filter(
     })
 }
 
+fn build_record_filter(
+    min_mapq: Option<u8>,
+    sam_flag_include: Option<u16>,
+    sam_flag_exclude: Option<u16>,
+    filter_rna_strand: Option<String>,
+) -> Option<RawRecordFilter> {
+    if min_mapq.is_none()
+        && sam_flag_include.is_none()
+        && sam_flag_exclude.is_none()
+        && filter_rna_strand.is_none()
+    {
+        return None;
+    }
+    Some(RawRecordFilter {
+        min_mapq,
+        sam_flag_include,
+        sam_flag_exclude,
+        filter_rna_strand,
+    })
+}
+
 /// Count reads into a cell × genomic-bin matrix and write the result as an
 /// AnnData HDF5 file.
 ///
@@ -77,6 +98,7 @@ fn build_qc_filter(
     min_aligned_fraction = None,
     min_fragment_length = None,
     max_fragment_length = None,
+    filter_rna_strand = None,
     compression = "none",
     compression_level = 4,
     num_threads = 0,
@@ -107,14 +129,13 @@ pub fn count_bins(
     min_aligned_fraction: Option<f32>,
     min_fragment_length: Option<usize>,
     max_fragment_length: Option<usize>,
+    filter_rna_strand: Option<String>,
     compression: &str,
     compression_level: u8,
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<()> {
     let params = CountingParams {
-        sam_flag_include,
-        sam_flag_exclude,
         chr_to_skip,
         region,
         blacklist_path,
@@ -123,6 +144,7 @@ pub fn count_bins(
         feature_type: None,
         exon_type: None,
         name_attr: None,
+        metagene: false,
     };
 
     let qc = build_qc_filter(
@@ -131,6 +153,13 @@ pub fn count_bins(
         min_gc,
         max_gc,
         min_aligned_fraction,
+    );
+
+    let record_filter = build_record_filter(
+        min_mapq,
+        sam_flag_include,
+        sam_flag_exclude,
+        filter_rna_strand,
     );
 
     let dup = dup_method
@@ -164,8 +193,8 @@ pub fn count_bins(
         bc_tag,
         umi_tag.as_deref(),
         count_tag.as_deref(),
-        min_mapq,
         &params,
+        record_filter.as_ref(),
         qc.as_ref(),
         dup,
         genome_2bit.as_deref(),
@@ -204,7 +233,9 @@ pub fn count_bins(
     feature_type = None,
     exon_type = None,
     name_attr = None,
+    metagene = false,
     dup_method = None,
+    filter_rna_strand = None,
     genome_2bit = None,
     motif_filter = None,
     min_gc = None,
@@ -236,7 +267,9 @@ pub fn count_features(
     feature_type: Option<String>,
     exon_type: Option<String>,
     name_attr: Option<String>,
+    metagene: bool,
     dup_method: Option<String>,
+    filter_rna_strand: Option<String>,
     genome_2bit: Option<PathBuf>,
     motif_filter: Option<Vec<(String, String)>>,
     min_gc: Option<f32>,
@@ -250,8 +283,6 @@ pub fn count_features(
     chunk_size: usize,
 ) -> PyResult<()> {
     let params = CountingParams {
-        sam_flag_include,
-        sam_flag_exclude,
         chr_to_skip,
         region,
         blacklist_path,
@@ -260,6 +291,7 @@ pub fn count_features(
         feature_type,
         exon_type,
         name_attr,
+        metagene,
     };
 
     let qc = build_qc_filter(
@@ -268,6 +300,13 @@ pub fn count_features(
         min_gc,
         max_gc,
         min_aligned_fraction,
+    );
+
+    let record_filter = build_record_filter(
+        min_mapq,
+        sam_flag_include,
+        sam_flag_exclude,
+        filter_rna_strand,
     );
 
     let dup = dup_method
@@ -299,8 +338,8 @@ pub fn count_features(
         bc_tag,
         umi_tag.as_deref(),
         count_tag.as_deref(),
-        min_mapq,
         &params,
+        record_filter.as_ref(),
         qc.as_ref(),
         dup,
         genome_2bit.as_deref(),

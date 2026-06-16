@@ -11,9 +11,9 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use crate::counting::bam_io::read_bam_header;
-use crate::counting::count_utils::{BamWorker, derive_record_opts, effective_interval};
-use crate::counting::filters::{DupMethod, DuplicateFilter, QcFilter};
+use crate::counting::bam_io::{BamWorker, read_bam_header};
+use crate::counting::count_utils::{derive_record_opts, effective_interval};
+use crate::counting::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter};
 use crate::counting::params::CountingParams;
 use crate::counting::parse_annotation::parse_bed_file;
 use crate::counting::region_index::build_bin_index;
@@ -47,13 +47,6 @@ pub enum ReadMode {
     Offset(i32, Option<i32>),
 }
 
-/// Which RNA strand to keep (for strand-specific RNA-seq libraries).
-#[derive(Clone, Copy, Debug)]
-pub enum RnaStrand {
-    Forward,
-    Reverse,
-}
-
 // Read-mode helpers
 
 /// Returns the 2–3 central bp of a paired-end fragment (MNase / CUT&RUN mode).
@@ -66,7 +59,7 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
     // Python: fragment_start = read.pos + read.tlen / 2 - 1
     // Integer tlen/2 matches Python 3 float division here because both round down.
     let frag_start = rec.alignment_start + tlen / 2 - 1;
-    let frag_end = frag_start + if tlen % 2 == 0 { 2 } else { 3 };
+    let frag_end = frag_start + if tlen.is_multiple_of(2) { 2 } else { 3 };
     Some((frag_start, frag_end))
 }
 
@@ -78,13 +71,13 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
 /// traversal), which is correct for unspliced data.
 fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, usize)> {
     let len = rec.read_length as i32;
-    if len == 0 { return None; }
+    if len == 0 {
+        return None;
+    }
 
     // Convert 1-based possibly-negative offset to 0-based index into the
     // conceptual stretch (list of read positions from 5′ to 3′).
-    let to_idx = |o: i32| -> i32 {
-        if o > 0 { o - 1 } else { len + o }
-    };
+    let to_idx = |o: i32| -> i32 { if o > 0 { o - 1 } else { len + o } };
 
     let idx_s = to_idx(start);
     let idx_e = match end {
@@ -107,30 +100,6 @@ fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, 
     } else {
         (rec.alignment_start + idx_s, rec.alignment_start + idx_e)
     })
-}
-
-/// Returns `true` if the read passes the RNA-strand filter.
-///
-/// For paired-end reads this follows the dUTP convention (deepTools):
-/// "forward" = R2 maps forward OR R1 mate maps forward.
-/// For single-end reads the mapping strand is inverted relative to the RNA
-/// strand (dUTP), so "forward" = read maps to reverse strand.
-fn passes_rna_strand_filter(rec: &ScRecord, strand: RnaStrand) -> bool {
-    if rec.is_paired {
-        match strand {
-            RnaStrand::Forward => {
-                (!rec.is_read1 && !rec.is_reverse) || (rec.is_read1 && !rec.mate_is_reverse)
-            }
-            RnaStrand::Reverse => {
-                (!rec.is_read1 && rec.is_reverse) || (rec.is_read1 && rec.mate_is_reverse)
-            }
-        }
-    } else {
-        match strand {
-            RnaStrand::Forward => rec.is_reverse,
-            RnaStrand::Reverse => !rec.is_reverse,
-        }
-    }
 }
 
 fn get_effective_interval(
@@ -156,10 +125,7 @@ struct ParsedGroups {
     cells: Vec<(usize, String, usize)>,
 }
 
-fn parse_group_info(
-    path: &Path,
-    bam_labels: &[&str],
-) -> Result<ParsedGroups> {
+fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
     let file = File::open(path)
         .with_context(|| format!("failed to open group info file: {}", path.display()))?;
     let reader = BufReader::new(file);
@@ -180,15 +146,28 @@ fn parse_group_info(
     lines.next();
 
     for (line_no, line) in lines.enumerate() {
-        let line = line.with_context(|| format!("failed to read group info line {}", line_no + 2))?;
+        let line =
+            line.with_context(|| format!("failed to read group info line {}", line_no + 2))?;
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
         let mut fields = line.split('\t');
-        let sample = fields.next().context("missing sample column")?.trim().to_string();
-        let barcode = fields.next().context("missing barcode column")?.trim().to_string();
-        let group = fields.next().context("missing group column")?.trim().to_string();
+        let sample = fields
+            .next()
+            .context("missing sample column")?
+            .trim()
+            .to_string();
+        let barcode = fields
+            .next()
+            .context("missing barcode column")?
+            .trim()
+            .to_string();
+        let group = fields
+            .next()
+            .context("missing group column")?
+            .trim()
+            .to_string();
 
         let Some(&bam_idx) = label_to_bam.get(sample.as_str()) else {
             continue; // sample not in BAM list — skip
@@ -209,7 +188,11 @@ fn parse_group_info(
         n_cells_per_group[g] += 1;
     }
 
-    Ok(ParsedGroups { groups, n_cells_per_group, cells })
+    Ok(ParsedGroups {
+        groups,
+        n_cells_per_group,
+        cells,
+    })
 }
 
 // Core function
@@ -235,9 +218,6 @@ pub fn run_bulk_coverage(
     step_size: usize,
     bc_tag: &str,
     umi_tag: Option<&str>,
-    min_mapq: Option<u8>,
-    sam_flag_include: Option<u16>,
-    sam_flag_exclude: Option<u16>,
     chr_to_skip: &[String],
     ignore_for_normalization: &[String],
     blacklist_path: Option<&Path>,
@@ -246,12 +226,12 @@ pub fn run_bulk_coverage(
     dup_method: Option<DupMethod>,
     genome_path: Option<&Path>,
     motifs: Option<&[(String, String)]>,
+    record_filter: Option<&RawRecordFilter>,
     qc_filter: Option<&QcFilter>,
     normalize_using: NormalizeMethod,
     scale_factor: f64,
     out_format: OutputFormat,
     read_mode: ReadMode,
-    filter_rna_strand: Option<RnaStrand>,
     num_threads: usize,
     chunk_size: usize,
 ) -> Result<Vec<PathBuf>> {
@@ -288,8 +268,6 @@ pub fn run_bulk_coverage(
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
 
     let params = CountingParams {
-        sam_flag_include,
-        sam_flag_exclude,
         chr_to_skip: chr_to_skip.to_vec(),
         region: None,
         blacklist_path: blacklist_path.map(|p| p.to_path_buf()),
@@ -298,6 +276,7 @@ pub fn run_bulk_coverage(
         feature_type: None,
         exon_type: None,
         name_attr: None,
+        metagene: false,
     };
 
     // Chromosomes to skip, as a byte-slice set to avoid per-contig allocation.
@@ -332,14 +311,24 @@ pub fn run_bulk_coverage(
         .flat_map(|(bam_idx, &(bam_path, _))| {
             chrom_sizes.iter().flat_map(move |(chrom, chrom_len)| {
                 (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                    (bam_idx, bam_path, chrom.clone(), start, (start + chunk_size).min(*chrom_len))
+                    (
+                        bam_idx,
+                        bam_path,
+                        chrom.clone(),
+                        start,
+                        (start + chunk_size).min(*chrom_len),
+                    )
                 })
             })
         })
         .collect();
-    work.sort_unstable_by(|a, b| (b.4 - b.3).cmp(&(a.4 - a.3)));
+    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
-    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
         .build()
@@ -356,11 +345,12 @@ pub fn run_bulk_coverage(
         work.par_iter()
             .map_init(
                 BamWorker::new,
-                |worker, &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)| -> Result<AHashMap<(usize, usize), u32>> {
-                    worker.prepare(bam_path, motif_ingredients)?;
-                    let (reader, header, motif) = worker.parts();
+                |worker,
+                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 -> Result<AHashMap<(usize, usize), u32>> {
+                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
-                    // Each work item covers a single chromosome, so its bin
+                    // Each work chunk covers a single chromosome, so its bin
                     // geometry and blacklist segments are resolved once here
                     // rather than per read.
                     let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
@@ -382,11 +372,20 @@ pub fn run_bulk_coverage(
                         Err(_) => return Ok(AHashMap::new()),
                     };
 
-                    let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+                    let mut dup_filter: Option<DuplicateFilter> =
+                        dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
+
+                        if let Some(rf) = record_filter {
+                            let flags = u16::from(record.flags());
+                            let mapq = record.mapping_quality().map(|q| q.get());
+                            if !rf.passes(flags, mapq) {
+                                continue;
+                            }
+                        }
 
                         let Some(sc_rec) = ScRecord::from_bam_record(
                             &record,
@@ -394,39 +393,53 @@ pub fn run_bulk_coverage(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             None,
-                            min_mapq,
-                            params.sam_flag_include,
-                            params.sam_flag_exclude,
                             &record_opts,
-                        )? else { continue };
+                        )?
+                        else {
+                            continue;
+                        };
 
                         if sc_rec.alignment_start < chunk_start {
                             continue;
                         }
 
-                        let Some(barcode) = sc_rec.barcode else { continue };
-                        let Some(&cell_idx) = cell_index.get(&(bam_idx, barcode)) else { continue };
+                        let Some(barcode) = sc_rec.barcode else {
+                            continue;
+                        };
+                        let Some(&cell_idx) = cell_index.get(&(bam_idx, barcode)) else {
+                            continue;
+                        };
 
-                        if let Some(qc) = qc_filter {
-                            if !qc.passes(&sc_rec) { continue; }
+                        if let Some(qc) = qc_filter
+                            && !qc.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(ref mut dup) = dup_filter {
-                            if !dup.passes(&sc_rec) { continue; }
+                        if let Some(ref mut dup) = dup_filter
+                            && !dup.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(mf) = motif.as_mut() {
-                            if !mf.passes(&sc_rec, chrom)? { continue; }
-                        }
-                        if let Some(strand) = filter_rna_strand {
-                            if !passes_rna_strand_filter(&sc_rec, strand) { continue; }
-                        }
-
-                        if let Some(idx) = chunk_blacklist {
-                            if idx.find(sc_rec.alignment_start, sc_rec.alignment_end).next().is_some() {
-                                continue;
-                            }
+                        if let Some(mf) = motif.as_mut()
+                            && !mf.passes(&sc_rec, chrom)?
+                        {
+                            continue;
                         }
 
-                        let Some((eff_start, eff_end)) = get_effective_interval(&sc_rec, &params, read_mode) else { continue };
+                        if let Some(idx) = chunk_blacklist
+                            && idx
+                                .find(sc_rec.alignment_start, sc_rec.alignment_end)
+                                .next()
+                                .is_some()
+                        {
+                            continue;
+                        }
+
+                        let Some((eff_start, eff_end)) =
+                            get_effective_interval(&sc_rec, &params, read_mode)
+                        else {
+                            continue;
+                        };
 
                         if eff_end > 0 && n_bins > 0 {
                             let last_bin = ((eff_end - 1) / step_size).min(n_bins - 1);
@@ -436,7 +449,8 @@ pub fn run_bulk_coverage(
                                 0
                             };
                             for bin in first_bin..=last_bin {
-                                *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) += sc_rec.count;
+                                *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
+                                    sc_rec.count;
                             }
                         }
                     }
@@ -489,7 +503,7 @@ pub fn run_bulk_coverage(
         // Exclude ignored chroms from normalization denominator.
         let is_ignored = bin_to_chrom
             .get(&bin_idx)
-            .map_or(false, |c| ignore_set.contains(c));
+            .is_some_and(|c| ignore_set.contains(c));
         if !is_ignored {
             group_total[group_idx] += count as f64;
         }
@@ -505,11 +519,16 @@ pub fn run_bulk_coverage(
     let mut output_files: Vec<PathBuf> = Vec::with_capacity(n_groups);
 
     // Sanitize group name for use as a file component.
-    let safe_name = |s: &str| sanitize_filename::sanitize(s);
+    let safe_name = |s: &str| sanitize_group_name(s);
 
     for group_idx in 0..n_groups {
         let group_name = &parsed.groups[group_idx];
-        let output_path = PathBuf::from(format!("{}.{}.{}", output_prefix, safe_name(group_name), ext));
+        let output_path = PathBuf::from(format!(
+            "{}.{}.{}",
+            output_prefix,
+            safe_name(group_name),
+            ext
+        ));
 
         let total_reads = group_total[group_idx];
         let n_cells_in_group = parsed.n_cells_per_group[group_idx] as f64;
@@ -518,7 +537,9 @@ pub fn run_bulk_coverage(
         let mut values: Vec<(String, Value)> = Vec::new();
 
         for (chrom_name, chrom_len) in &chrom_sizes {
-            let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else { continue };
+            let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else {
+                continue;
+            };
 
             for local_bin in 0..n_chrom_bins {
                 let bin_idx = offset + local_bin;
@@ -531,7 +552,11 @@ pub fn run_bulk_coverage(
                 let normalized = match normalize_using {
                     NormalizeMethod::None => raw_sum * scale_factor,
                     NormalizeMethod::Cpm => {
-                        if total_reads > 0.0 { raw_sum / total_reads * 1e6 * scale_factor } else { 0.0 }
+                        if total_reads > 0.0 {
+                            raw_sum / total_reads * 1e6 * scale_factor
+                        } else {
+                            0.0
+                        }
                     }
                     NormalizeMethod::Rpkm => {
                         if total_reads > 0.0 {
@@ -556,7 +581,14 @@ pub fn run_bulk_coverage(
 
                 let start = (local_bin * step_size) as u32;
                 let end = ((local_bin * step_size + bin_size).min(*chrom_len)) as u32;
-                values.push((chrom_name.clone(), Value { start, end, value: normalized as f32 }));
+                values.push((
+                    chrom_name.clone(),
+                    Value {
+                        start,
+                        end,
+                        value: normalized as f32,
+                    },
+                ));
             }
         }
 
@@ -576,6 +608,24 @@ pub fn run_bulk_coverage(
 }
 
 // Output helpers
+
+/// Make a cell-group label safe to use as a single path component.
+///
+/// Removes the characters that are illegal in filenames on common platforms
+/// (path separators and Windows-reserved punctuation) plus control characters,
+/// then trims trailing spaces and dots (also illegal on Windows).  This covers
+/// the subset of `sanitize_filename::sanitize` behavior we rely on for group
+/// labels; Windows-reserved device names (e.g. `CON`) are not special-cased, as
+/// they don't occur in practice for cell-group labels.
+fn sanitize_group_name(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .filter(|c| {
+            !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()
+        })
+        .collect();
+    cleaned.trim_end_matches([' ', '.']).to_string()
+}
 
 fn write_bigwig(
     path: &Path,
@@ -734,9 +784,11 @@ pub fn bulk_coverage(
     let format = match out_format {
         "bigwig" | "bw" => OutputFormat::BigWig,
         "bedgraph" | "bg" => OutputFormat::BedGraph,
-        _ => return Err(PyRuntimeError::new_err(
-            "out_format must be 'bigwig' or 'bedgraph'"
-        )),
+        _ => {
+            return Err(PyRuntimeError::new_err(
+                "out_format must be 'bigwig' or 'bedgraph'",
+            ));
+        }
     };
 
     let dup = dup_method
@@ -757,14 +809,23 @@ pub fn bulk_coverage(
         max_fragment_length
     };
 
+    if let Some(strand) = filter_rna_strand.as_deref()
+        && strand != "forward"
+        && strand != "reverse"
+    {
+        return Err(PyRuntimeError::new_err(format!(
+            "filter_rna_strand must be 'forward' or 'reverse', got {:?}",
+            strand
+        )));
+    }
+
     let qc = {
-        use crate::counting::filters::QcFilter;
         let needs = min_fragment_length.is_some()
             || max_fragment_length.is_some()
             || min_gc.is_some()
             || max_gc.is_some()
             || min_aligned_fraction.is_some();
-        needs.then(|| QcFilter {
+        needs.then_some(QcFilter {
             min_fragment_length,
             max_fragment_length,
             min_gc,
@@ -773,21 +834,40 @@ pub fn bulk_coverage(
         })
     };
 
+    let record_filter = {
+        let needs = min_mapq.is_some()
+            || sam_flag_include.is_some()
+            || sam_flag_exclude.is_some()
+            || filter_rna_strand.is_some();
+        needs.then_some(RawRecordFilter {
+            min_mapq,
+            sam_flag_include,
+            sam_flag_exclude,
+            filter_rna_strand,
+        })
+    };
+
     // Validate and parse offset.
     let parsed_offset: Option<(i32, Option<i32>)> = match offset.as_deref() {
         None => None,
         Some([s]) => {
             if *s == 0 {
-                return Err(PyRuntimeError::new_err("offset value 0 is not allowed (offsets are 1-based)"));
+                return Err(PyRuntimeError::new_err(
+                    "offset value 0 is not allowed (offsets are 1-based)",
+                ));
             }
             Some((*s, None))
         }
         Some([s, e]) => {
             if *s == 0 || *e == 0 {
-                return Err(PyRuntimeError::new_err("offset value 0 is not allowed (offsets are 1-based)"));
+                return Err(PyRuntimeError::new_err(
+                    "offset value 0 is not allowed (offsets are 1-based)",
+                ));
             }
             if *e > 0 && *e < *s {
-                return Err(PyRuntimeError::new_err("offset end must be >= offset start"));
+                return Err(PyRuntimeError::new_err(
+                    "offset end must be >= offset start",
+                ));
             }
             Some((*s, Some(*e)))
         }
@@ -795,7 +875,9 @@ pub fn bulk_coverage(
     };
 
     if mnase && parsed_offset.is_some() {
-        return Err(PyRuntimeError::new_err("--MNase and --Offset are mutually exclusive"));
+        return Err(PyRuntimeError::new_err(
+            "--MNase and --Offset are mutually exclusive",
+        ));
     }
 
     let read_mode = if mnase {
@@ -806,19 +888,7 @@ pub fn bulk_coverage(
         ReadMode::Normal
     };
 
-    let rna_strand = match filter_rna_strand.as_deref() {
-        None => None,
-        Some("forward") => Some(RnaStrand::Forward),
-        Some("reverse") => Some(RnaStrand::Reverse),
-        Some(other) => return Err(PyRuntimeError::new_err(
-            format!("filter_rna_strand must be 'forward' or 'reverse', got {:?}", other)
-        )),
-    };
-
-    let path_label: Vec<(PathBuf, String)> = bam_files
-        .into_iter()
-        .zip(bam_labels.into_iter())
-        .collect();
+    let path_label: Vec<(PathBuf, String)> = bam_files.into_iter().zip(bam_labels).collect();
     let bam_path_refs: Vec<(&Path, &str)> = path_label
         .iter()
         .map(|(p, l)| (p.as_path(), l.as_str()))
@@ -832,9 +902,6 @@ pub fn bulk_coverage(
         step_size,
         bc_tag,
         umi_tag.as_deref(),
-        min_mapq,
-        sam_flag_include,
-        sam_flag_exclude,
         &chr_to_skip,
         &ignore_for_normalization,
         blacklist_path.as_deref(),
@@ -843,12 +910,12 @@ pub fn bulk_coverage(
         dup,
         genome_2bit.as_deref(),
         motif_filter.as_deref(),
+        record_filter.as_ref(),
         qc.as_ref(),
         normalize,
         scale_factor,
         format,
         read_mode,
-        rna_strand,
         num_threads,
         chunk_size,
     )

@@ -283,7 +283,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_file": typer.Option(
         ...,
         "-o",
-        "--outfile",
+        "--outFile",
         metavar="PATH",
         rich_help_panel=_IO,
         help="The file to write results to. This can be a .tsv file with the results, an image for a plot, or an "
@@ -292,7 +292,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_prefix": typer.Option(
         ...,
         "-o",
-        "--outprefix",
+        "--outFilePrefix",
         metavar="PATH",
         rich_help_panel=_IO,
         help="Prefix for output file names.",
@@ -300,7 +300,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "group_info": typer.Option(
         ...,
         "-gi",
-        "--groupinfo",
+        "--groupInfo",
         metavar=".tsv",
         rich_help_panel=_IO,
         help="A 4-column tsv file with cell grouping information in the format: `sample::barcode, UMAP1, UMAP2, "
@@ -335,7 +335,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
     "cell_tag": typer.Option(
         "BC",
         "-ct",
-        "--celltag",
+        "--cellTag",
         metavar="XX",
         rich_help_panel=_BAM,
         help="Name of the BAM tag from which to extract barcodes.",
@@ -343,7 +343,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
     "group_tag": typer.Option(
         None,
         "-gt",
-        "--grouptag",
+        "--groupTag",
         metavar="XX",
         rich_help_panel=_BAM,
         help="In case of a grouped BAM file, such as the one containing Read Group (``RG``) or Sample (``SM``) tag, "
@@ -363,7 +363,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "smart_labels": typer.Option(
         False,
-        "--smart-labels",
+        "--smartLabels",
         rich_help_panel=_BAM,
         help="Instead of manually specifying labels for the input BAM files, use the file name after removing the "
         "path and extension.",
@@ -380,7 +380,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "chr_to_skip": typer.Option(
         None,
-        "--chr-to-skip",
+        "--chrToSkip",
         metavar="CHR",
         rich_help_panel=_BAM,
         help="A space separated list of chromosomes to exclude, e.g. ``--chr-to-skip chrM chrX``. Useful for "
@@ -389,14 +389,14 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
     "bin_size": typer.Option(
         10000,
         "-bs",
-        "--binsize",
+        "--binSize",
         metavar="INT",
         rich_help_panel=_BAM,
         help="Size of the bins, in bases, to calculate coverage.",
     ),
     "distance_between_bins": typer.Option(
         0,
-        "--distance-between-bins",
+        "--distanceBetweenBins",
         metavar="INT",
         rich_help_panel=_BAM,
         help="The gap length, in bases, between bins for calculating coverage. Larger values can be used to sample "
@@ -408,7 +408,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
 FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
     "duplicate_filter": typer.Option(
         None,
-        "--duplicate-filter",
+        "--duplicateFilter",
         metavar="FILTER",
         rich_help_panel=_FILTER,
         help="How to filter for duplicates? Different combinations (using start/end/umi) are possible. Read start "
@@ -421,7 +421,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
     "motif_filter": typer.Option(
         None,
         "-m",
-        "--motif-filter",
+        "--motifFilter",
         metavar="STR",
         rich_help_panel=_FILTER,
         help="Check whether a given motif is present in the read and the corresponding reference genome. This checks "
@@ -432,7 +432,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
     "genome_2bit": typer.Option(
         None,
         "-g",
-        "--genome-2bit",
+        "--genome2bit",
         metavar="file.2bit",
         rich_help_panel=_FILTER,
         help="If ``--motif-filter`` is provided, please also provide the genome sequence in 2bit format.",
@@ -440,7 +440,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
     "gc_content_filter": typer.Option(
         None,
         "-gc",
-        "--gc-content-filter",
+        "--GCcontentFilter",
         metavar="STR",
         rich_help_panel=_FILTER,
         help="Check whether the GC content of the read falls within the provided range. Input format must be "
@@ -449,7 +449,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "min_aligned_fraction": typer.Option(
         None,
-        "--min-aligned-fraction",
+        "--minAlignedFraction",
         metavar="FLOAT",
         rich_help_panel=_FILTER,
         help="Minimum fraction of the read that should be aligned to be counted. This includes mismatches tolerated "
@@ -462,14 +462,14 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     "min_mapping_quality": typer.Option(
         None,
         "-mq",
-        "--min-mapping-quality",
+        "--minMappingQuality",
         metavar="INT",
         rich_help_panel=_READ,
         help="If set, only reads that have a mapping quality score of at least this are considered.",
     ),
     "sam_flag_include": typer.Option(
         None,
-        "--sam-flag-include",
+        "--samFlagInclude",
         metavar="INT",
         rich_help_panel=_READ,
         help="Include reads based on SAM flag. For example, to get only reads that are the first mate, use a flag of "
@@ -477,7 +477,7 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "sam_flag_exclude": typer.Option(
         None,
-        "--sam-flag-exclude",
+        "--samFlagExclude",
         metavar="INT",
         rich_help_panel=_READ,
         help="Exclude reads based on the SAM flag. For example, to get only reads that map to the forward strand, "
@@ -485,7 +485,7 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "min_fragment_length": typer.Option(
         0,
-        "--min-fragment-length",
+        "--minFragmentLength",
         metavar="INT",
         rich_help_panel=_READ,
         help="The minimum fragment length needed for read/pair inclusion. Useful in ATAC-seq experiments for "
@@ -493,14 +493,14 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "max_fragment_length": typer.Option(
         0,
-        "--max-fragment-length",
+        "--maxFragmentLength",
         metavar="INT",
         rich_help_panel=_READ,
         help="The maximum fragment length accepted for read/pair inclusion.",
     ),
     "filter_rna_strand": typer.Option(
         None,
-        "--filter-rna-strand",
+        "--filterRNAstrand",
         metavar="STRAND",
         rich_help_panel=_READ,
         help="Selects RNA-seq reads (single-end or paired-end) originating from genes on the given strand. This "
@@ -512,7 +512,7 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     "extend_reads": typer.Option(
         None,
         "-e",
-        "--extend-reads",
+        "--extendReads",
         metavar="INT",
         rich_help_panel=_READ,
         help="Extend reads to the given fragment size (in bases). If omitted, reads are not extended.\n\n"
@@ -523,7 +523,7 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "center_reads": typer.Option(
         False,
-        "--center-reads",
+        "--centerReads",
         rich_help_panel=_READ,
         help="Center reads with respect to the fragment length. For paired-end data the read is centered at the "
         "fragment length defined by the two ends of the fragment; for single-end data the given fragment length is "
@@ -536,7 +536,7 @@ OTHER_OPTS: dict[str, typer.models.OptionInfo] = {
     "number_of_processors": typer.Option(
         "max",
         "-p",
-        "--number-of-processors",
+        "--numberOfProcessors",
         callback=normalize_processors,
         rich_help_panel=_OTHER,
         help='Number of processors to use. You can also type "max/2" to use half the maximum number of processors or '
@@ -611,7 +611,7 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "transcript_id": typer.Option(
         None,
-        "--transcript-id",
+        "--transcriptID",
         metavar="STR",
         rich_help_panel=_GTF,
         help="The column-3 feature type processed as a region (transcript). (Default: ``transcript`` for GTF; "
@@ -619,7 +619,7 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "exon_id": typer.Option(
         "exon",
-        "--exon-id",
+        "--exonID",
         metavar="STR",
         rich_help_panel=_GTF,
         help="When a GTF/GFF file is used to provide regions, entries with this value as their feature (column 3) "
@@ -628,7 +628,7 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
     ),
     "transcript_id_tag": typer.Option(
         None,
-        "--transcript-id-tag",
+        "--transcriptIDtag",
         metavar="STR",
         rich_help_panel=_GTF,
         help="The column-9 attribute key whose value names each region. For GTF this is stored as a key:value pair "

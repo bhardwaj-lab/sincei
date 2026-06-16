@@ -19,7 +19,7 @@ pub(crate) struct ScRecordOptions {
 ///
 /// The chromosome is intentionally *not* stored: every caller queries one
 /// chromosome at a time, so the chromosome name is already known from the
-/// work item and need not be re-derived (and re-allocated) per record.
+/// work chunk and need not be re-derived (and re-allocated) per record.
 pub struct ScRecord<'a> {
     pub alignment_start: usize,
     pub alignment_end: usize,
@@ -64,35 +64,12 @@ impl<'a> ScRecord<'a> {
         bc_tag: &Tag,
         umi_tag: Option<&Tag>,
         count_tag: Option<&Tag>,
-        min_mapq: Option<u8>,
-        sam_flag_include: Option<u16>,
-        sam_flag_exclude: Option<u16>,
         opts: &ScRecordOptions,
     ) -> Result<Option<Self>> {
         let flags = record.flags();
 
         if flags.is_unmapped() || flags.is_secondary() || flags.is_supplementary() {
             return Ok(None);
-        }
-
-        // SAM flag filters.
-        let raw_flags = u16::from(flags);
-        if let Some(include) = sam_flag_include {
-            if raw_flags & include != include {
-                return Ok(None);
-            }
-        }
-        if let Some(exclude) = sam_flag_exclude {
-            if raw_flags & exclude != 0 {
-                return Ok(None);
-            }
-        }
-
-        if let Some(min_q) = min_mapq {
-            match record.mapping_quality() {
-                Some(q) if q.get() >= min_q => {}
-                _ => return Ok(None),
-            }
         }
 
         let Some(aln_start) = record
@@ -153,7 +130,11 @@ impl<'a> ScRecord<'a> {
         let (read_sequence, read_length, gc_content) = if opts.store_sequence {
             let seq: Vec<u8> = record.sequence().iter().collect();
             let len = seq.len();
-            let gc = if opts.compute_gc { gc_fraction(&seq) } else { None };
+            let gc = if opts.compute_gc {
+                gc_fraction(&seq)
+            } else {
+                None
+            };
             (Some(seq), len, gc)
         } else if opts.compute_gc {
             let mut gc_count = 0usize;
@@ -164,7 +145,11 @@ impl<'a> ScRecord<'a> {
                 }
                 len += 1;
             }
-            let gc = if len > 0 { Some(gc_count as f32 / len as f32) } else { None };
+            let gc = if len > 0 {
+                Some(gc_count as f32 / len as f32)
+            } else {
+                None
+            };
             (None, len, gc)
         } else {
             (None, record.sequence().len(), None)

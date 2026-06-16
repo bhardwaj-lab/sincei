@@ -25,27 +25,20 @@ use noodles::sam::header::ReferenceSequences;
 use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
 
 use super::count_utils::BamReader;
-
-/// When set, always reconstruct the header from the binary reference
-/// dictionary, skipping the strict SAM-text parse.  Useful for testing the
-/// fallback, or as an escape hatch if a header parses but is semantically wrong.
-fn force_lenient() -> bool {
-    std::env::var_os("SINCEI_FORCE_LENIENT_HEADER").is_some()
-}
+use super::filters::MotifFilter;
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header text
 /// (see module docs).  Builds an indexed reader so a missing `.bai` is still
 /// reported here rather than later.
 pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
-    if force_lenient() {
-        return read_header_from_binary_dict(path);
-    }
     let mut reader = bam::io::indexed_reader::Builder::default()
         .build_from_path(path)
-        .with_context(|| format!(
-            "failed to open indexed BAM (is a .bai file present?): {}",
-            path.display()
-        ))?;
+        .with_context(|| {
+            format!(
+                "failed to open indexed BAM (does the .bai index file exist?): {}",
+                path.display()
+            )
+        })?;
     match reader.read_header() {
         Ok(header) => Ok(header),
         Err(_) => read_header_from_binary_dict(path),
@@ -57,17 +50,15 @@ pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
 pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
     let mut reader = bam::io::indexed_reader::Builder::default()
         .build_from_path(path)
-        .with_context(|| format!(
-            "failed to open indexed BAM (is a .bai file present?): {}",
-            path.display()
-        ))?;
-    let header = if force_lenient() {
-        read_header_from_binary_dict(path)?
-    } else {
-        match reader.read_header() {
-            Ok(header) => header,
-            Err(_) => read_header_from_binary_dict(path)?,
-        }
+        .with_context(|| {
+            format!(
+                "failed to open indexed BAM (does the .bai index file exist?): {}",
+                path.display()
+            )
+        })?;
+    let header = match reader.read_header() {
+        Ok(header) => header,
+        Err(_) => read_header_from_binary_dict(path)?,
     };
     Ok((reader, header))
 }
@@ -79,12 +70,14 @@ pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
 /// `magic[4] "BAM\1"`, `l_text: u32`, `text[l_text]`, `n_ref: u32`, then per
 /// reference: `l_name: u32`, `name[l_name]` (NUL-terminated), `l_ref: u32`.
 fn read_header_from_binary_dict(path: &Path) -> Result<Header> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open BAM: {}", path.display()))?;
+    let file =
+        File::open(path).with_context(|| format!("failed to open BAM: {}", path.display()))?;
     let mut reader = bgzf::io::Reader::new(file);
 
     let mut magic = [0u8; 4];
-    reader.read_exact(&mut magic).context("failed to read BAM magic number")?;
+    reader
+        .read_exact(&mut magic)
+        .context("failed to read BAM magic number")?;
     anyhow::ensure!(&magic == b"BAM\x01", "not a BAM file: {}", path.display());
 
     // Skip the (non-compliant) SAM header text.
@@ -97,7 +90,9 @@ fn read_header_from_binary_dict(path: &Path) -> Result<Header> {
     for _ in 0..n_ref {
         let l_name = read_u32(&mut reader)? as usize;
         let mut name_buf = vec![0u8; l_name];
-        reader.read_exact(&mut name_buf).context("failed to read reference name")?;
+        reader
+            .read_exact(&mut name_buf)
+            .context("failed to read reference name")?;
         let name: BString = CStr::from_bytes_with_nul(&name_buf)
             .map_err(|e| anyhow::anyhow!("invalid reference name in BAM header: {e}"))?
             .to_bytes()
@@ -118,4 +113,59 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     let mut buf = [0u8; 4];
     reader.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
+}
+
+/// Per-worker (per-thread) reusable state for the chunk-parallel counters.
+///
+/// Rayon's `map_init` hands one `BamWorker` to each thread, which then
+/// processes many chunks.  This amortizes two costs:
+///   * opening the BAM file and parsing its header, and
+///   * opening the 2bit genome for the motif filter.
+///
+/// The reader is keyed by path so a thread that alternates between input BAMs
+/// only reopens when the path actually changes.
+pub(crate) struct BamWorker<'a> {
+    path: Option<&'a Path>,
+    reader: Option<BamReader>,
+    header: Option<Header>,
+    motif: Option<MotifFilter>,
+}
+
+impl<'a> BamWorker<'a> {
+    pub(crate) fn new() -> Self {
+        Self {
+            path: None,
+            reader: None,
+            header: None,
+            motif: None,
+        }
+    }
+
+    /// Ensure the reader is open for `path` (reopening only on a path change)
+    /// and, when `motif_ingredients` is supplied, that the motif filter has
+    /// been constructed once for this worker, then borrow the reader, header,
+    /// and optional motif filter as disjoint parts so all three can be used
+    /// simultaneously inside the per-chunk loop.
+    pub(crate) fn prepare(
+        &mut self,
+        path: &'a Path,
+        motif_ingredients: Option<(&Path, &[(String, String)])>,
+    ) -> Result<(&mut BamReader, &Header, &mut Option<MotifFilter>)> {
+        if self.path != Some(path) {
+            let (reader, header) = open_indexed_bam(path)?;
+            self.reader = Some(reader);
+            self.header = Some(header);
+            self.path = Some(path);
+        }
+        if self.motif.is_none()
+            && let Some((genome, motifs)) = motif_ingredients
+        {
+            self.motif = Some(MotifFilter::new(genome, motifs.to_vec())?);
+        }
+        Ok((
+            self.reader.as_mut().expect("just set above"),
+            self.header.as_ref().expect("just set above"),
+            &mut self.motif,
+        ))
+    }
 }

@@ -4,14 +4,13 @@ use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::bam_io::read_bam_header;
-use super::count_utils::{BamWorker, build_csr, derive_record_opts, effective_interval, write_counts_anndata};
-use super::profiling::{log_phase, profile_enabled};
-use super::filters::{DupMethod, DuplicateFilter, QcFilter};
+use super::bam_io::{BamWorker, read_bam_header};
+use super::count_utils::{build_csr, derive_record_opts, effective_interval, write_counts_anndata};
+use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter};
 use super::params::{CountingParams, parse_region};
 use super::parse_annotation::parse_bed_file;
 use super::region_index::{BinIndex, RegionIndex, build_bin_index};
-use super::sc_record::{parse_tag, ScRecord};
+use super::sc_record::{ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × genomic-bin matrix,
 /// then write the result as an AnnData HDF5 file.
@@ -29,8 +28,8 @@ pub fn count_bam_bins(
     bc_tag: &str,
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
-    min_mapq: Option<u8>,
     params: &CountingParams,
+    record_filter: Option<&RawRecordFilter>,
     qc_filter: Option<&QcFilter>,
     dup_method: Option<DupMethod>,
     genome_path: Option<&Path>,
@@ -45,9 +44,6 @@ pub fn count_bam_bins(
     anyhow::ensure!(step_size > 0, "step_size must be greater than zero");
     anyhow::ensure!(!bam_paths.is_empty(), "at least one BAM file is required");
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
-
-    let prof = profile_enabled();
-    let t_setup = std::time::Instant::now();
 
     let has_motif = genome_path.is_some() && motifs.is_some();
     let record_opts = derive_record_opts(qc_filter, has_motif);
@@ -102,14 +98,24 @@ pub fn count_bam_bins(
         .flat_map(|(bam_idx, &(bam_path, _))| {
             chrom_sizes.iter().flat_map(move |(chrom, chrom_len)| {
                 (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                    (bam_idx, bam_path, chrom.clone(), start, (start + chunk_size).min(*chrom_len))
+                    (
+                        bam_idx,
+                        bam_path,
+                        chrom.clone(),
+                        start,
+                        (start + chunk_size).min(*chrom_len),
+                    )
                 })
             })
         })
         .collect();
-    work.sort_unstable_by(|a, b| (b.4 - b.3).cmp(&(a.4 - a.3)));
+    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
-    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
         .build()
@@ -122,9 +128,6 @@ pub fn count_bam_bins(
         _ => None,
     };
 
-    log_phase(prof, "setup", t_setup);
-    let t_count = std::time::Instant::now();
-
     // Count each chunk into its own map, then combine them with a parallel
     // tree reduction.  The previous design collected all per-chunk maps and
     // merged them on a single thread, which was ~15% of wall-clock time.
@@ -132,11 +135,12 @@ pub fn count_bam_bins(
         work.par_iter()
             .map_init(
                 BamWorker::new,
-                |worker, &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)| -> Result<AHashMap<(usize, usize), u32>> {
-                    worker.prepare(bam_path, motif_ingredients)?;
-                    let (reader, header, motif) = worker.parts();
+                |worker,
+                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 -> Result<AHashMap<(usize, usize), u32>> {
+                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
-                    // Each work item covers a single chromosome, so its bin
+                    // Each work chunk covers a single chromosome, so its bin
                     // geometry is looked up once here rather than per read.
                     let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
                     else {
@@ -164,12 +168,21 @@ pub fn count_bam_bins(
                         Err(_) => return Ok(AHashMap::new()),
                     };
 
-                    let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+                    let mut dup_filter: Option<DuplicateFilter> =
+                        dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
                     let cell_offset = bam_idx * n_barcodes;
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
+
+                        if let Some(rf) = record_filter {
+                            let flags = u16::from(record.flags());
+                            let mapq = record.mapping_quality().map(|q| q.get());
+                            if !rf.passes(flags, mapq) {
+                                continue;
+                            }
+                        }
 
                         let Some(sc_rec) = ScRecord::from_bam_record(
                             &record,
@@ -177,11 +190,11 @@ pub fn count_bam_bins(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             count_tag_parsed.as_ref(),
-                            min_mapq,
-                            params.sam_flag_include,
-                            params.sam_flag_exclude,
                             &record_opts,
-                        )? else { continue };
+                        )?
+                        else {
+                            continue;
+                        };
 
                         // Ownership: a read belongs to the chunk containing its
                         // alignment_start.  Skip reads owned by a previous chunk.
@@ -189,32 +202,44 @@ pub fn count_bam_bins(
                             continue;
                         }
 
-                        if let Some((region_start, region_end)) = region_bounds {
-                            if sc_rec.alignment_end <= region_start
-                                || sc_rec.alignment_start >= region_end
-                            {
-                                continue;
-                            }
+                        if let Some((region_start, region_end)) = region_bounds
+                            && (sc_rec.alignment_end <= region_start
+                                || sc_rec.alignment_start >= region_end)
+                        {
+                            continue;
                         }
 
-                        let Some(barcode) = sc_rec.barcode else { continue };
-                        let Some(&local_bc_idx) = barcode_index.get(barcode) else { continue };
+                        let Some(barcode) = sc_rec.barcode else {
+                            continue;
+                        };
+                        let Some(&local_bc_idx) = barcode_index.get(barcode) else {
+                            continue;
+                        };
 
-                        if let Some(qc) = qc_filter {
-                            if !qc.passes(&sc_rec) { continue; }
+                        if let Some(qc) = qc_filter
+                            && !qc.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(ref mut dup) = dup_filter {
-                            if !dup.passes(&sc_rec) { continue; }
+                        if let Some(ref mut dup) = dup_filter
+                            && !dup.passes(&sc_rec)
+                        {
+                            continue;
                         }
-                        if let Some(mf) = motif.as_mut() {
-                            if !mf.passes(&sc_rec, chrom)? { continue; }
+                        if let Some(mf) = motif.as_mut()
+                            && !mf.passes(&sc_rec, chrom)?
+                        {
+                            continue;
                         }
 
                         let (eff_start, eff_end) = effective_interval(&sc_rec, params);
                         let cell_idx = cell_offset + local_bc_idx;
 
-                        // eff_start/eff_end may extend past the chunk boundary and
-                        // still land in bins anywhere on the chromosome.
+                        // Largest-overlap-wins: assign the read to exactly one
+                        // bin — the one whose [bin_start, bin_start+bin_size)
+                        // interval overlaps the effective read interval the most.
+                        // For non-overlapping bins this is equivalent to placing
+                        // the read at the center of its effective interval.
                         if eff_end > 0 && n_bins > 0 {
                             let last_bin = ((eff_end - 1) / step_size).min(n_bins - 1);
                             let first_bin = if eff_start + 1 > bin_size {
@@ -222,9 +247,22 @@ pub fn count_bam_bins(
                             } else {
                                 0
                             };
+                            let mut best_bin = first_bin;
+                            let mut best_overlap = 0usize;
                             for bin in first_bin..=last_bin {
-                                let feature_idx = chrom_offset + bin;
-                                if blacklisted_bins.is_empty() || !blacklisted_bins.contains(&feature_idx) {
+                                let bin_start = bin * step_size;
+                                let bin_end = bin_start + bin_size;
+                                let overlap = eff_end.min(bin_end) - eff_start.max(bin_start);
+                                if overlap > best_overlap {
+                                    best_overlap = overlap;
+                                    best_bin = bin;
+                                }
+                            }
+                            if best_overlap > 0 {
+                                let feature_idx = chrom_offset + best_bin;
+                                if blacklisted_bins.is_empty()
+                                    || !blacklisted_bins.contains(&feature_idx)
+                                {
                                     *local_acc.entry((cell_idx, feature_idx)).or_insert(0) +=
                                         sc_rec.count;
                                 }
@@ -247,13 +285,7 @@ pub fn count_bam_bins(
             )
     })?;
 
-    log_phase(prof, "count + merge", t_count);
-    let t_csr = std::time::Instant::now();
-
     let matrix = build_csr(&global_acc, n_cells, n_features)?;
-
-    log_phase(prof, "build_csr", t_csr);
-    let t_write = std::time::Instant::now();
 
     write_counts_anndata(
         output_path,
@@ -264,8 +296,6 @@ pub fn count_bam_bins(
         compression,
         compression_level,
     )?;
-
-    log_phase(prof, "write_anndata", t_write);
 
     Ok(())
 }
@@ -287,7 +317,9 @@ fn blacklisted_bin_indices(
             continue;
         };
         for bl_iv in bl_chrom_idx.iter() {
-            if bl_iv.end == 0 { continue; }
+            if bl_iv.end == 0 {
+                continue;
+            }
             let last_bl_bin = ((bl_iv.end - 1) / step_size).min(n_bins - 1);
             let first_bl_bin = if bl_iv.start + 1 > bin_size {
                 (bl_iv.start - bin_size + step_size) / step_size

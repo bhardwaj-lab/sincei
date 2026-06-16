@@ -8,6 +8,72 @@ use twobit::TwoBitFile;
 
 use super::sc_record::ScRecord;
 
+// Raw-record filter
+
+/// Cheap per-record filter evaluated directly on a raw BAM record's flags and
+/// mapping quality, before any tag parsing or [`ScRecord`] construction.
+///
+/// Keeping this separate from [`QcFilter`] lets callers reject reads before
+/// paying for barcode/UMI tag lookups or sequence/CIGAR processing.
+pub struct RawRecordFilter {
+    /// Minimum mapping quality (MAPQ).
+    pub min_mapq: Option<u8>,
+    /// Only keep reads for which `flags & include == include`.
+    pub sam_flag_include: Option<u16>,
+    /// Drop reads for which `flags & exclude != 0`.
+    pub sam_flag_exclude: Option<u16>,
+    /// Strand filter for RNA-seq reads (dUTP library protocol); `"forward"`
+    /// (keeps minus-strand reads) or `"reverse"` (keeps plus-strand reads).
+    pub filter_rna_strand: Option<String>,
+}
+
+impl RawRecordFilter {
+    pub fn new() -> Self {
+        Self {
+            min_mapq: None,
+            sam_flag_include: None,
+            sam_flag_exclude: None,
+            filter_rna_strand: None,
+        }
+    }
+
+    /// Returns `true` if the record passes all active thresholds.
+    pub fn passes(&self, flags: u16, mapq: Option<u8>) -> bool {
+        if let Some(min_q) = self.min_mapq {
+            match mapq {
+                Some(q) if q >= min_q => {}
+                _ => return false,
+            }
+        }
+
+        if let Some(include) = self.sam_flag_include
+            && flags & include != include
+        {
+            return false;
+        }
+
+        if let Some(exclude) = self.sam_flag_exclude
+            && flags & exclude != 0
+        {
+            return false;
+        }
+
+        if let Some(ref strand) = self.filter_rna_strand
+            && rna_strand_filter(flags, strand)
+        {
+            return false;
+        }
+
+        true
+    }
+}
+
+impl Default for RawRecordFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // QC filter
 
 /// Per-record quality-control filter.
@@ -47,41 +113,40 @@ impl QcFilter {
             } else {
                 rec.alignment_end - rec.alignment_start
             };
-            if let Some(min) = self.min_fragment_length {
-                if frag_len < min {
-                    return false;
-                }
+            if let Some(min) = self.min_fragment_length
+                && frag_len < min
+            {
+                return false;
             }
-            if let Some(max) = self.max_fragment_length {
-                if frag_len > max {
-                    return false;
-                }
+            if let Some(max) = self.max_fragment_length
+                && frag_len > max
+            {
+                return false;
             }
         }
 
         // GC content.
-        if self.min_gc.is_some() || self.max_gc.is_some() {
-            if let Some(gc) = rec.gc_content {
-                if let Some(min) = self.min_gc {
-                    if gc < min {
-                        return false;
-                    }
-                }
-                if let Some(max) = self.max_gc {
-                    if gc > max {
-                        return false;
-                    }
-                }
+        if (self.min_gc.is_some() || self.max_gc.is_some())
+            && let Some(gc) = rec.gc_content
+        {
+            if let Some(min) = self.min_gc
+                && gc < min
+            {
+                return false;
+            }
+            if let Some(max) = self.max_gc
+                && gc > max
+            {
+                return false;
             }
         }
 
         // Aligned fraction.
-        if let Some(min_af) = self.min_aligned_fraction {
-            if let Some(af) = rec.aligned_fraction {
-                if af < min_af {
-                    return false;
-                }
-            }
+        if let Some(min_af) = self.min_aligned_fraction
+            && let Some(af) = rec.aligned_fraction
+            && af < min_af
+        {
+            return false;
         }
 
         true
@@ -127,9 +192,8 @@ pub enum DupMethod {
 // actually deduplicated — the hot path borrows them from the record.
 //
 // The chromosome is deliberately *not* part of the key: each `DuplicateFilter`
-// lives for exactly one work item, and every work item covers a single
+// lives for exactly one work chunk, and every chunk covers a single
 // chromosome, so the chromosome is constant for the filter's whole lifetime.
-// Including it would add a wasted per-read copy without changing any outcome.
 // Reads sharing an alignment start always land in the same chunk, so
 // duplicates are never split across filters.
 type DupKey = (Option<Vec<u8>>, usize, usize, Option<Vec<u8>>);
@@ -157,20 +221,14 @@ impl DuplicateFilter {
         let barcode = || rec.barcode.map(<[u8]>::to_vec);
         let umi = || rec.umi.map(<[u8]>::to_vec);
         let key: DupKey = match self.method {
-            DupMethod::BarcodeStart => {
-                (barcode(), rec.alignment_start, 0, None)
-            }
-            DupMethod::BarcodeStartEnd => {
-                (barcode(), rec.alignment_start, rec.alignment_end, None)
-            }
-            DupMethod::BarcodeUmiStart => {
-                (barcode(), rec.alignment_start, 0, umi())
-            }
+            DupMethod::BarcodeStart => (barcode(), rec.alignment_start, 0, None),
+            DupMethod::BarcodeStartEnd => (barcode(), rec.alignment_start, rec.alignment_end, None),
+            DupMethod::BarcodeUmiStart => (barcode(), rec.alignment_start, 0, umi()),
             DupMethod::BarcodeUmiStartEnd => {
                 (barcode(), rec.alignment_start, rec.alignment_end, umi())
             }
         };
-        // insert returns true when the key was newly inserted (first occurrence).
+        // insert returns true when a new key is inserted.
         self.seen.insert(key)
     }
 }
@@ -178,8 +236,7 @@ impl DuplicateFilter {
 // Motif filter
 
 /// Filter that checks for a nucleotide motif at the 5′ end of the read and the
-/// corresponding genomic overhang, following the logic from
-/// `sincei.Utilities.checkMotifs`.
+/// corresponding genomic overhang.
 ///
 /// A record passes if **any** of the supplied `(read_motif, ref_motif)` pairs
 /// matches.  For forward reads the read motif is compared to the first N bases
@@ -203,7 +260,7 @@ impl MotifFilter {
     /// Returns `true` if the record passes the motif filter.
     ///
     /// `chrom` is the record's chromosome (known by the caller from the work
-    /// item).  If `read_sequence` is `None` on the record (sequence was not
+    /// chunk).  If `read_sequence` is `None` on the record (sequence was not
     /// stored), the filter is vacuously passed.
     pub fn passes(&mut self, rec: &ScRecord<'_>, chrom: &str) -> Result<bool> {
         let Some(stored_seq) = &rec.read_sequence else {
@@ -256,12 +313,44 @@ impl MotifFilter {
                 Err(_) => continue,
             };
 
-            if ref_seq.as_bytes().eq_ignore_ascii_case(ref_motif.as_bytes()) {
+            if ref_seq
+                .as_bytes()
+                .eq_ignore_ascii_case(ref_motif.as_bytes())
+            {
                 return Ok(true);
             }
         }
 
         Ok(false)
+    }
+}
+
+/// Returns `true` if the read should be **excluded** based on the RNA strand filter.
+///
+/// This assumes a dUTP-based paired-end library: "forward" keeps reads from genes
+/// on the forward strand (= read2-forward or read1-with-forward-mate).  Single-end
+/// logic inverts the strand relative to paired-end since there is only one read
+/// per fragment.
+///
+/// `flags` is the raw SAM flag field (u16 little-endian bit pattern).
+pub fn rna_strand_filter(flags: u16, strand: &str) -> bool {
+    let paired = flags & 0x1 != 0;
+    if paired {
+        match strand {
+            // Keep read2-on-forward (0x80 set, 0x10 clear) OR read1-with-forward-mate (0x40 set, 0x20 clear).
+            "forward" => !((flags & 0x90 == 0x80) || (flags & 0x60 == 0x40)),
+            // Keep read2-on-reverse (0x80 | 0x10 both set) OR read1-with-reverse-mate (0x40 | 0x20 both set).
+            "reverse" => !((flags & 0x90 == 0x90) || (flags & 0x60 == 0x60)),
+            _ => false,
+        }
+    } else {
+        match strand {
+            // dUTP single-end forward: keep reads on reverse strand (0x10 set).
+            "forward" => flags & 0x10 == 0,
+            // dUTP single-end reverse: keep reads on forward strand (0x10 clear).
+            "reverse" => flags & 0x10 != 0,
+            _ => false,
+        }
     }
 }
 
@@ -274,4 +363,3 @@ fn complement(b: u8) -> u8 {
         _ => b'N',
     }
 }
-

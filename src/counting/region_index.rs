@@ -173,5 +173,13 @@ pub fn build_bin_index(
     }
 
     let n_bins = var.len();
-    (BinIndex { bin_size, step_size, chrom_bins, n_bins }, var)
+    (
+        BinIndex {
+            bin_size,
+            step_size,
+            chrom_bins,
+            n_bins,
+        },
+        var,
+    )
 }

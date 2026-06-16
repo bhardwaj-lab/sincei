@@ -1,10 +1,10 @@
-mod filter_barcodes;
-mod filter_stats;
 mod count_reads;
-mod utils;
 pub mod counting;
 pub mod export;
+mod filter_barcodes;
+mod filter_stats;
 pub mod preprocessing;
+mod utils;
 
 use pyo3::prelude::*;
 use pyo3::types::PyModule;

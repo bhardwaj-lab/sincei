@@ -3,17 +3,7 @@
 Profiling / benchmarking drivers for the sincei Rust backend. These are
 standalone scripts — they are not part of the published package.
 
-## Per-phase profiling of `scCountReads`
-
-The counting backend is instrumented with opt-in, env-gated phase timers
-(`src/counting/profiling.rs`). Setting `SINCEI_PROFILE=1` makes it print
-`[profile] <phase> <seconds>` lines to stderr for:
-
-- `setup` — barcode index, header read, bin index, blacklist, work-list build
-- `count (parallel)` — the multi-threaded per-chunk BAM scan + accumulation
-- `merge` — combining per-thread partial count maps
-- `build_csr` — assembling the CSR matrix
-- `write_anndata` — HDF5 / AnnData write (affected by `--compression`)
+## Benchmarking `scCountReads`
 
 **Always build in release mode first** — a debug build is many times slower
 and distorts the relative breakdown:

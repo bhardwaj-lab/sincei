@@ -104,7 +104,6 @@ def main(
     # Options exposed for parity but not honored by the barcode-detection backend.
     backend.warn_unsupported(
         region=region,
-        rank_plot=rank_plot,
         group_tag=group_tag,
         labels=labels,
         smart_labels=smart_labels,
@@ -144,6 +143,11 @@ def main(
         for i, (barcode, count) in enumerate(barcode_counts):
             selected = count >= min_count
             out.write(f"{i}\t{barcode}\t{count}\t{selected}\n")
+
+    if rank_plot:
+        from sincei.plotting._barcode_rank import plot_barcode_rank
+
+        plot_barcode_rank(barcode_counts, rank_plot, min_count=min_count or None)
 
     return 0
 

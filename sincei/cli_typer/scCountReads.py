@@ -65,11 +65,11 @@ VALUE_TAG = typer.Option(
     metavar="XX",
     rich_help_panel=_COUNTING,
     help='Instead of counting each read/fragment as "1", add the values from a given BAM tag to the count matrix. '
-    "For example, this can be used to count the number of methylated CpG per fragment.",
+    "For example, this can be used to count the number of methylated CpG per read.",
 )
 GENOME_CHUNK_SIZE = typer.Option(
     None,
-    "--genome-chunk-size",
+    "--genomeChunkSize",
     metavar="INT",
     rich_help_panel=_COUNTING,
     help="Manually specify the size of the genome provided to each processor. The default (None) determines this "
@@ -79,16 +79,16 @@ COMPRESSION = typer.Option(
     Compression.none,
     "--compression",
     metavar="METHOD",
-    rich_help_panel=_COUNTING,
+    rich_help_panel=_IO,
     help="HDF5 compression for the output .h5ad datasets.\n\n"
-    "[bold yellow]none[/bold yellow]: no compression (anndata's default; fastest, larger files).\n\n"
-    "[bold yellow]gzip[/bold yellow]: deflate compression (smaller files; count data compresses well).",
+    "[bold yellow]none[/bold yellow]: no compression (default; fastest, larger files).\n\n"
+    "[bold yellow]gzip[/bold yellow]: deflate compression (smaller filesize).",
 )
 COMPRESSION_LEVEL = typer.Option(
     4,
     "--compression-level",
     metavar="INT",
-    rich_help_panel=_COUNTING,
+    rich_help_panel=_IO,
     help="Compression level (0-9) when --compression is gzip. Ignored for 'none'.",
 )
 
@@ -107,7 +107,7 @@ def _count_reads(
     bam_files: list[str],
     barcodes: str,
     out_file: str,
-    bed: str | None,
+    bed: str | None = None,
     labels: list[str] | None,
     smart_labels: bool,
     region: str | None,
@@ -135,6 +135,7 @@ def _count_reads(
     transcript_id: str | None = None,
     exon_id: str = "exon",
     transcript_id_tag: str | None = None,
+    metagene: bool = False,
     compression: Compression = Compression.none,
     compression_level: int = 4,
     number_of_processors: int = 0,
@@ -146,7 +147,6 @@ def _count_reads(
     # Options accepted by the CLI for parity with deepTools but not (yet) implemented
     backend.warn_unsupported(
         group_tag=group_tag,
-        filter_rna_strand=filter_rna_strand,
         labels=labels,
         smart_labels=smart_labels,
     )
@@ -168,6 +168,7 @@ def _count_reads(
         extend_reads=extend_reads,
         center_reads=center_reads,
         dup_method=backend.dup_method(duplicate_filter),
+        filter_rna_strand=filter_rna_strand.value if filter_rna_strand else None,
         genome_2bit=genome_2bit,
         motif_filter=backend.parse_motif_filter(motif_filter),
         min_gc=min_gc,
@@ -183,8 +184,6 @@ def _count_reads(
         shared["chunk_size"] = genome_chunk_size
 
     if mode == "bins":
-        if bed:
-            backend.warn_unsupported(bed=bed)
         # stepSize = binSize + gap; a zero gap yields contiguous bins.
         step_size = bin_size + (distance_between_bins or 0)
         internal.count_bins(bam_files, bin_size=bin_size, step_size=step_size, **shared)
@@ -199,6 +198,7 @@ def _count_reads(
             feature_type=transcript_id,
             exon_type=exon_id,
             name_attr=transcript_id_tag,
+            metagene=metagene,
             **shared,
         )
 
@@ -211,14 +211,9 @@ def bins(
     bam_files: list[str] = INPUT_OUTPUT_OPTS["bam_files"],
     barcodes: str = INPUT_OUTPUT_OPTS["barcodes"],
     out_file: str = INPUT_OUTPUT_OPTS["out_file"],
-    bed: str = typer.Option(
-        None,
-        "--bed",
-        metavar=".bed/.gtf",
-        rich_help_panel=_IO,
-        help="BED/GTF files to limit the coverage analysis to the regions in them.",
-    ),
     region: str | None = INPUT_OUTPUT_OPTS["region"],
+    compression: Compression = COMPRESSION,
+    compression_level: int = COMPRESSION_LEVEL,
     # BAM options
     labels: list[str] = BAM_OPTS["labels"],
     smart_labels: bool = BAM_OPTS["smart_labels"],
@@ -246,8 +241,6 @@ def bins(
     # Counting options
     value_tag: str | None = VALUE_TAG,
     genome_chunk_size: int | None = GENOME_CHUNK_SIZE,
-    compression: Compression = COMPRESSION,
-    compression_level: int = COMPRESSION_LEVEL,
     # Other options
     number_of_processors: str = OTHER_OPTS["number_of_processors"],
     verbose: bool = OTHER_OPTS["verbose"],
@@ -258,7 +251,6 @@ def bins(
         bam_files=bam_files,
         barcodes=barcodes,
         out_file=out_file,
-        bed=bed,
         labels=labels,
         smart_labels=smart_labels,
         region=region,
@@ -299,11 +291,13 @@ def features(
     bed: str = typer.Option(
         ...,
         "--bed",
-        metavar=".bed/.gtf",
+        metavar=".bed/.gtf/.gff",
         rich_help_panel=_IO,
-        help="BED/GTF files to limit the coverage analysis to the regions in them.",
+        help="BED/GTF/GFF files to limit the coverage analysis to the regions in them.",
     ),
     region: str | None = INPUT_OUTPUT_OPTS["region"],
+    compression: Compression = COMPRESSION,
+    compression_level: int = COMPRESSION_LEVEL,
     # BAM options
     labels: list[str] = BAM_OPTS["labels"],
     smart_labels: bool = BAM_OPTS["smart_labels"],
@@ -331,12 +325,18 @@ def features(
     # Counting options
     value_tag: str | None = VALUE_TAG,
     genome_chunk_size: int | None = GENOME_CHUNK_SIZE,
-    compression: Compression = COMPRESSION,
-    compression_level: int = COMPRESSION_LEVEL,
     # GTF / GFF options (only affect GTF/GFF inputs, ignored for BED)
     transcript_id: str | None = GTF_GFF_OPTS["transcript_id"],
     exon_id: str = GTF_GFF_OPTS["exon_id"],
     transcript_id_tag: str | None = GTF_GFF_OPTS["transcript_id_tag"],
+    metagene: bool = typer.Option(
+        False,
+        "--metagene",
+        rich_help_panel="GTF / GFF options",
+        help="Group exon intervals by gene (gene_id attribute) and count each read once per gene. "
+        "Reads overlapping multiple exons of the same gene are counted once, assigned to the gene "
+        "with the greatest total exon overlap.",
+    ),
     # Other options
     number_of_processors: str = OTHER_OPTS["number_of_processors"],
     verbose: bool = OTHER_OPTS["verbose"],
@@ -377,6 +377,7 @@ def features(
         transcript_id=transcript_id,
         exon_id=exon_id,
         transcript_id_tag=transcript_id_tag,
+        metagene=metagene,
         number_of_processors=number_of_processors,
         verbose=verbose,
     )

@@ -7,9 +7,8 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use crate::counting::bam_io::read_bam_header;
-use crate::counting::count_utils::BamWorker;
-use crate::counting::filters::{DupMethod, DuplicateFilter};
+use crate::counting::bam_io::{BamWorker, read_bam_header};
+use crate::counting::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
 use crate::counting::parse_annotation::parse_bed_file;
 use crate::counting::region_index::RegionIndex;
 use crate::counting::sc_record::{ScRecord, ScRecordOptions, parse_tag};
@@ -25,6 +24,7 @@ struct BarcodeStat {
     internal_dupes: u64,
     external_dupes: u64,
     singletons: u64,
+    wrong_strand: u64,
     wrong_motif: u64,
     wrong_gc: u64,
     low_aligned_fraction: u64,
@@ -42,6 +42,7 @@ impl BarcodeStat {
             self.internal_dupes,
             self.external_dupes,
             self.singletons,
+            self.wrong_strand,
             self.wrong_motif,
             self.wrong_gc,
             self.low_aligned_fraction,
@@ -60,6 +61,7 @@ impl AddAssign for BarcodeStat {
         self.internal_dupes += other.internal_dupes;
         self.external_dupes += other.external_dupes;
         self.singletons += other.singletons;
+        self.wrong_strand += other.wrong_strand;
         self.wrong_motif += other.wrong_motif;
         self.wrong_gc += other.wrong_gc;
         self.low_aligned_fraction += other.low_aligned_fraction;
@@ -106,6 +108,7 @@ pub fn run_filter_stats(
     min_gc: Option<f32>,
     max_gc: Option<f32>,
     min_aligned_fraction: Option<f32>,
+    filter_rna_strand: Option<&str>,
     num_threads: usize,
     chunk_size: usize,
 ) -> Result<(Vec<String>, Vec<Vec<u64>>)> {
@@ -154,14 +157,18 @@ pub fn run_filter_stats(
     let mut chunks: Vec<(String, usize, usize)> = chrom_sizes
         .iter()
         .flat_map(|(chrom, chrom_len)| {
-            (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                (chrom.clone(), start, (start + chunk_size).min(*chrom_len))
-            })
+            (0..*chrom_len)
+                .step_by(chunk_size)
+                .map(move |start| (chrom.clone(), start, (start + chunk_size).min(*chrom_len)))
         })
         .collect();
-    chunks.sort_unstable_by(|a, b| (b.2 - b.1).cmp(&(a.2 - a.1)));
+    chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.2 - b.1));
 
-    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
         .build()
@@ -179,147 +186,168 @@ pub fn run_filter_stats(
             .map_init(
                 BamWorker::new,
                 |worker, &(ref chrom, chunk_start, chunk_end)| -> Result<Vec<BarcodeStat>> {
-                worker.prepare(bam_path, motif_ingredients)?;
-                let (reader, header, motif) = worker.parts();
+                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
-                let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+                    let mut dup_filter: Option<DuplicateFilter> =
+                        dup_method.map(DuplicateFilter::new);
 
-                let mut local_stats: Vec<BarcodeStat> =
-                    (0..n_barcodes).map(|_| BarcodeStat::default()).collect();
+                    let mut local_stats: Vec<BarcodeStat> =
+                        (0..n_barcodes).map(|_| BarcodeStat::default()).collect();
 
-                // Align to the global sampling grid so that bins are consistent
-                // across chunks.  The grid starts at 0 on each chromosome with
-                // step = stride.  First bin whose start falls in [chunk_start,
-                // chunk_end) is ceil(chunk_start / stride) * stride.
-                let first_bin = if chunk_start == 0 {
-                    0
-                } else {
-                    ((chunk_start + stride - 1) / stride) * stride
-                };
-
-                let mut bin_start = first_bin;
-                while bin_start < chunk_end {
-                    let bin_end = (bin_start + bin_size).min(chunk_end);
-
-                    let region_str = format!("{}:{}-{}", chrom, bin_start + 1, bin_end);
-                    let region: noodles::core::Region = match region_str.parse() {
-                        Ok(r) => r,
-                        Err(_) => { bin_start += stride; continue; }
-                    };
-                    let query = match reader.query(header, &region) {
-                        Ok(q) => q,
-                        Err(_) => { bin_start += stride; continue; }
+                    // Align to the global sampling grid so that bins are consistent
+                    // across chunks.  The grid starts at 0 on each chromosome with
+                    // step = stride.  First bin whose start falls in [chunk_start,
+                    // chunk_end) is ceil(chunk_start / stride) * stride.
+                    let first_bin = if chunk_start == 0 {
+                        0
+                    } else {
+                        chunk_start.div_ceil(stride) * stride
                     };
 
-                    for result in query.records() {
-                        let record = result.context("failed to read BAM record")?;
+                    let mut bin_start = first_bin;
+                    while bin_start < chunk_end {
+                        let bin_end = (bin_start + bin_size).min(chunk_end);
 
-                        let Some(sc_rec) = ScRecord::from_bam_record(
-                            &record,
-                            header,
-                            &bc_tag_parsed,
-                            umi_tag_parsed.as_ref(),
-                            None,
-                            None,
-                            None,
-                            None,
-                            &record_opts,
-                        )? else { continue };
+                        let region_str = format!("{}:{}-{}", chrom, bin_start + 1, bin_end);
+                        let region: noodles::core::Region = match region_str.parse() {
+                            Ok(r) => r,
+                            Err(_) => {
+                                bin_start += stride;
+                                continue;
+                            }
+                        };
+                        let query = match reader.query(header, &region) {
+                            Ok(q) => q,
+                            Err(_) => {
+                                bin_start += stride;
+                                continue;
+                            }
+                        };
 
-                        // Ownership: skip reads that started before this bin.
-                        if sc_rec.alignment_start < bin_start {
-                            continue;
-                        }
+                        for result in query.records() {
+                            let record = result.context("failed to read BAM record")?;
 
-                        let Some(barcode) = sc_rec.barcode else { continue };
-                        let Some(&cell_i) = barcode_idx.get(barcode) else { continue };
+                            let Some(sc_rec) = ScRecord::from_bam_record(
+                                &record,
+                                header,
+                                &bc_tag_parsed,
+                                umi_tag_parsed.as_ref(),
+                                None,
+                                &record_opts,
+                            )?
+                            else {
+                                continue;
+                            };
 
-                        let raw_flags = u16::from(record.flags());
-                        let s = &mut local_stats[cell_i];
-                        s.total += 1;
-                        let mut fail = false;
+                            // Ownership: skip reads that started before this bin.
+                            if sc_rec.alignment_start < bin_start {
+                                continue;
+                            }
 
-                        if let Some(ref bl) = blacklist {
-                            if is_blacklisted(bl, chrom, sc_rec.alignment_start, sc_rec.alignment_end) {
+                            let Some(barcode) = sc_rec.barcode else {
+                                continue;
+                            };
+                            let Some(&cell_i) = barcode_idx.get(barcode) else {
+                                continue;
+                            };
+
+                            let raw_flags = u16::from(record.flags());
+                            let s = &mut local_stats[cell_i];
+                            s.total += 1;
+                            let mut fail = false;
+
+                            if let Some(ref bl) = blacklist
+                                && is_blacklisted(
+                                    bl,
+                                    chrom,
+                                    sc_rec.alignment_start,
+                                    sc_rec.alignment_end,
+                                )
+                            {
                                 s.blacklisted += 1;
                                 fail = true;
                             }
-                        }
 
-                        if let Some(min_q) = min_mapq {
-                            if record.mapping_quality().map_or(true, |q| q.get() < min_q) {
+                            if let Some(min_q) = min_mapq
+                                && record.mapping_quality().is_none_or(|q| q.get() < min_q)
+                            {
                                 s.low_mapq += 1;
                                 fail = true;
                             }
-                        }
 
-                        if let Some(include) = sam_flag_include {
-                            if raw_flags & include != include {
+                            if let Some(include) = sam_flag_include
+                                && raw_flags & include != include
+                            {
                                 s.missing_flags += 1;
                                 fail = true;
                             }
-                        }
 
-                        if let Some(exclude) = sam_flag_exclude {
-                            if raw_flags & exclude != 0 {
+                            if let Some(exclude) = sam_flag_exclude
+                                && raw_flags & exclude != 0
+                            {
                                 s.excluded_flags += 1;
                                 fail = true;
                             }
-                        }
 
-                        if let Some(ref mut dup) = dup_filter {
-                            if !dup.passes(&sc_rec) {
+                            if let Some(ref mut dup) = dup_filter
+                                && !dup.passes(&sc_rec)
+                            {
                                 s.internal_dupes += 1;
                                 fail = true;
                             }
-                        }
 
-                        if raw_flags & 0x400 != 0 {
-                            s.external_dupes += 1;
-                            fail = true;
-                        }
+                            if raw_flags & 0x400 != 0 {
+                                s.external_dupes += 1;
+                                fail = true;
+                            }
 
-                        if raw_flags & 0x1 != 0 && raw_flags & 0x8 != 0 {
-                            s.singletons += 1;
-                            fail = true;
-                        }
+                            if raw_flags & 0x1 != 0 && raw_flags & 0x8 != 0 {
+                                s.singletons += 1;
+                                fail = true;
+                            }
 
-                        if min_gc.is_some() || max_gc.is_some() {
-                            if let Some(gc) = sc_rec.gc_content {
-                                let gc_fail = min_gc.map_or(false, |lo| gc < lo)
-                                    || max_gc.map_or(false, |hi| gc > hi);
+                            if let Some(strand) = filter_rna_strand
+                                && rna_strand_filter(raw_flags, strand)
+                            {
+                                s.wrong_strand += 1;
+                                fail = true;
+                            }
+
+                            if (min_gc.is_some() || max_gc.is_some())
+                                && let Some(gc) = sc_rec.gc_content
+                            {
+                                let gc_fail = min_gc.is_some_and(|lo| gc < lo)
+                                    || max_gc.is_some_and(|hi| gc > hi);
                                 if gc_fail {
                                     s.wrong_gc += 1;
                                     fail = true;
                                 }
                             }
-                        }
 
-                        if let Some(mf) = motif.as_mut() {
-                            if !mf.passes(&sc_rec, chrom)? {
+                            if let Some(mf) = motif.as_mut()
+                                && !mf.passes(&sc_rec, chrom)?
+                            {
                                 s.wrong_motif += 1;
                                 fail = true;
                             }
-                        }
 
-                        if let Some(min_af) = min_aligned_fraction {
-                            if let Some(af) = sc_rec.aligned_fraction {
-                                if af < min_af {
-                                    s.low_aligned_fraction += 1;
-                                    fail = true;
-                                }
+                            if let Some(min_af) = min_aligned_fraction
+                                && let Some(af) = sc_rec.aligned_fraction
+                                && af < min_af
+                            {
+                                s.low_aligned_fraction += 1;
+                                fail = true;
+                            }
+
+                            if fail {
+                                s.filtered += 1;
                             }
                         }
 
-                        if fail {
-                            s.filtered += 1;
-                        }
+                        bin_start += stride;
                     }
 
-                    bin_start += stride;
-                }
-
-                Ok(local_stats)
+                    Ok(local_stats)
                 },
             )
             .collect::<Result<Vec<_>>>()
@@ -354,6 +382,7 @@ pub fn run_filter_stats(
     min_gc = None,
     max_gc = None,
     min_aligned_fraction = None,
+    filter_rna_strand = None,
     num_threads = 0,
     chunk_size = 1_000_000,
 ))]
@@ -375,6 +404,7 @@ pub fn filter_stats(
     min_gc: Option<f32>,
     max_gc: Option<f32>,
     min_aligned_fraction: Option<f32>,
+    filter_rna_strand: Option<String>,
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<(Vec<String>, Vec<Vec<u64>>)> {
@@ -402,6 +432,7 @@ pub fn filter_stats(
         min_gc,
         max_gc,
         min_aligned_fraction,
+        filter_rna_strand.as_deref(),
         num_threads,
         chunk_size,
     )

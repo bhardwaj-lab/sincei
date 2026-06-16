@@ -17,6 +17,7 @@ use crate::counting::region_index::{ChromIndex, Interval, RegionIndex};
 
 type BinsByBarcode = AHashMap<String, AHashSet<(String, usize)>>;
 type BlacklistIndex = RegionIndex;
+type BarcodeCounts = (Vec<(String, usize)>, Vec<String>);
 
 fn run_filter_barcodes(
     bamfile: &Path,
@@ -30,7 +31,7 @@ fn run_filter_barcodes(
     chr_to_skip: &[String],
     num_threads: usize,
     chunk_size: usize,
-) -> Result<(Vec<(String, usize)>, Vec<String>)> {
+) -> Result<BarcodeCounts> {
     if bin_size == 0 {
         anyhow::bail!("bin_size must be greater than zero");
     }
@@ -60,14 +61,18 @@ fn run_filter_barcodes(
     let mut chunks: Vec<(String, usize, usize)> = chrom_sizes
         .iter()
         .flat_map(|(chrom, chrom_len)| {
-            (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                (chrom.clone(), start, (start + chunk_size).min(*chrom_len))
-            })
+            (0..*chrom_len)
+                .step_by(chunk_size)
+                .map(move |start| (chrom.clone(), start, (start + chunk_size).min(*chrom_len)))
         })
         .collect();
-    chunks.sort_unstable_by(|a, b| (b.2 - b.1).cmp(&(a.2 - a.1)));
+    chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.2 - b.1));
 
-    let n_threads = if num_threads == 0 { rayon::current_num_threads() } else { num_threads };
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
         .build()
@@ -143,7 +148,12 @@ fn run_filter_barcodes(
                     };
 
                     if whitelist_is_active
-                        && !barcode_is_whitelisted(&barcode, &whitelist_set, &whitelist, min_hamming_dist)
+                        && !barcode_is_whitelisted(
+                            &barcode,
+                            &whitelist_set,
+                            &whitelist,
+                            min_hamming_dist,
+                        )
                     {
                         continue;
                     }
@@ -195,9 +205,8 @@ fn load_blacklist_index(path: &Path) -> Result<BlacklistIndex> {
     let mut intervals_by_chromosome: AHashMap<String, Vec<Interval>> = AHashMap::new();
 
     for (line_number, line) in reader.lines().enumerate() {
-        let line = line.with_context(|| {
-            format!("failed to read blacklist line {}", line_number + 1)
-        })?;
+        let line =
+            line.with_context(|| format!("failed to read blacklist line {}", line_number + 1))?;
         let line = line.trim();
 
         if line.is_empty() || line.starts_with('#') {
@@ -205,12 +214,17 @@ fn load_blacklist_index(path: &Path) -> Result<BlacklistIndex> {
         }
 
         let mut fields = line.split('\t');
-        let Some(chromosome) = fields.next() else { continue };
+        let Some(chromosome) = fields.next() else {
+            continue;
+        };
         let Some(start) = fields.next() else { continue };
         let Some(end) = fields.next() else { continue };
 
         let start = start.parse::<usize>().with_context(|| {
-            format!("invalid blacklist start position on line {}", line_number + 1)
+            format!(
+                "invalid blacklist start position on line {}",
+                line_number + 1
+            )
         })?;
         let end = end.parse::<usize>().with_context(|| {
             format!("invalid blacklist end position on line {}", line_number + 1)
@@ -223,7 +237,12 @@ fn load_blacklist_index(path: &Path) -> Result<BlacklistIndex> {
         intervals_by_chromosome
             .entry(chromosome.to_string())
             .or_default()
-            .push(Interval { start, end, val: 0, name: String::new() });
+            .push(Interval {
+                start,
+                end,
+                val: 0,
+                name: String::new(),
+            });
     }
 
     Ok(intervals_by_chromosome
@@ -316,7 +335,7 @@ pub fn filter_barcodes(
     chr_to_skip: Vec<String>,
     num_threads: usize,
     chunk_size: usize,
-) -> PyResult<(Vec<(String, usize)>, Vec<String>)> {
+) -> PyResult<BarcodeCounts> {
     run_filter_barcodes(
         bamfile.as_path(),
         whitelist,

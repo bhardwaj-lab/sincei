@@ -29,10 +29,27 @@ _STAT_COLUMNS = [
     "internal_dupes",
     "external_dupes",
     "singletons",
+    "wrong_strand",
     "wrong_motif",
     "wrong_gc",
     "low_aligned_fraction",
 ]
+
+
+def _format_row(row) -> list[str]:
+    """Format one backend stat row for the TSV.
+
+    Mirrors the original ``sincei``: ``total`` is the absolute number of sampled
+    reads, while every other column is reported as a percentage of ``total``
+    (``count / total * 100``).  When ``total`` is 0 the percentage is undefined,
+    so those cells are left blank (matching the original's NaN -> empty output).
+    """
+    total = row[0]
+    cells = [str(total)]
+    for value in row[1:]:
+        cells.append("" if total == 0 else str(value / total * 100))
+    return cells
+
 
 DESCRIPTION = (
     "Produce per-cell statistics after filtering reads by user-defined criteria.\n\n"
@@ -81,32 +98,17 @@ def main(
     min_mapping_quality: int | None = READ_OPTS["min_mapping_quality"],
     sam_flag_include: int | None = READ_OPTS["sam_flag_include"],
     sam_flag_exclude: int | None = READ_OPTS["sam_flag_exclude"],
-    min_fragment_length: int = READ_OPTS["min_fragment_length"],
-    max_fragment_length: int = READ_OPTS["max_fragment_length"],
     filter_rna_strand: FilterRNAStrand | None = READ_OPTS["filter_rna_strand"],
     labels: list[str] = BAM_OPTS["labels"],
     smart_labels: bool = BAM_OPTS["smart_labels"],
-    region: str | None = INPUT_OUTPUT_OPTS["region"],
     blacklist: list[str] = BAM_OPTS["blacklist"],
     chr_to_skip: list[str] = BAM_OPTS["chr_to_skip"],
-    extend_reads: int | None = READ_OPTS["extend_reads"],
-    center_reads: bool = READ_OPTS["center_reads"],
     number_of_processors: str = OTHER_OPTS["number_of_processors"],
     verbose: bool = OTHER_OPTS["verbose"],
     help: bool = OTHER_OPTS["help"],
 ) -> int:
     if verbose:
         log_parameters(bam_files=bam_files, barcodes=barcodes, out_file=out_file)
-
-    # Options exposed for parity but not honored by the sampling-based backend.
-    backend.warn_unsupported(
-        region=region,
-        extend_reads=extend_reads,
-        center_reads=center_reads,
-        min_fragment_length=backend.optional_length(min_fragment_length),
-        max_fragment_length=backend.optional_length(max_fragment_length),
-        filter_rna_strand=filter_rna_strand,
-    )
 
     min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
     barcode_list = backend.read_barcodes(barcodes)
@@ -121,6 +123,7 @@ def main(
         min_mapq=min_mapping_quality,
         sam_flag_include=sam_flag_include,
         sam_flag_exclude=sam_flag_exclude,
+        filter_rna_strand=filter_rna_strand.value if filter_rna_strand else None,
         chr_to_skip=chr_to_skip or [],
         blacklist_path=backend.first_blacklist(blacklist),
         dup_method=backend.dup_method(duplicate_filter),
@@ -139,7 +142,7 @@ def main(
         for bam, label in zip(bam_files, sample_labels):
             result_barcodes, stat_rows = internal.filter_stats(bam, **kwargs)
             for barcode, row in zip(result_barcodes, stat_rows):
-                out.write("\t".join([label, barcode, *map(str, row)]) + "\n")
+                out.write("\t".join([label, barcode, *_format_row(row)]) + "\n")
 
     return 0
 

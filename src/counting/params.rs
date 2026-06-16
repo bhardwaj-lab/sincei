@@ -5,14 +5,6 @@ use std::path::PathBuf;
 /// These control pre-counting filtering and fragment-interval adjustments that
 /// are independent of the per-record QC/duplicate/motif filters.
 pub struct CountingParams {
-    /// Only count reads for which `flags & include == include`.
-    /// Handled inside [`ScRecord::from_bam_record`]; does not require extra
-    /// fields on the record.
-    pub sam_flag_include: Option<u16>,
-
-    /// Skip reads for which `flags & exclude != 0`.
-    pub sam_flag_exclude: Option<u16>,
-
     /// Chromosomes to exclude entirely (e.g. `["chrM", "chrUn"]`).
     pub chr_to_skip: Vec<String>,
 
@@ -27,17 +19,14 @@ pub struct CountingParams {
 
     /// Extend reads to this fragment length.
     ///
-    /// For proper paired-end reads the insert size from TLEN is used instead
+    /// For properly paired reads the insert size from TLEN is used instead
     /// (up to `4 × extend_reads`); the supplied value is only applied to
-    /// single-end or improper-pair reads.
-    ///
-    /// Mirrors `extendReads` / `defaultFragmentLength` in `ReadCounter.py`.
+    /// single-end or improperly paired reads.
     pub extend_reads: Option<usize>,
 
     /// After computing the extended interval, replace it with a window of
-    /// `read_length` bp centered on the fragment midpoint.
-    ///
-    /// Mirrors `center_read` in `ReadCounter.py`.
+    /// `read_length` bp centered on the fragment midpoint. This can be useful
+    /// to get sharper signal around enriched regions.
     pub center_reads: bool,
 
     /// For GTF / GFF3 annotation files: the column-3 feature type that defines
@@ -47,23 +36,30 @@ pub struct CountingParams {
 
     /// For GTF / GFF3 annotation files: the column-3 feature type that defines
     /// an exon.  `None` selects the per-format default (`"exon"`).  Only used
-    /// in metagene mode (not yet implemented); accepted and stored now so the
+    /// if `metagene` is true; accepted and stored now so the
     /// surface is stable.  Ignored for BED files.
     pub exon_type: Option<String>,
 
     /// For GTF / GFF3 annotation files: the column-9 attribute key whose value
     /// names the feature.  `None` selects the per-format default
-    /// (`"transcript_id"` for GTF, `"ID"` for GFF3).  Falls back to
-    /// `"chrom:start-end"` when the attribute is absent. Ignored for BED files
-    /// (uses the 4th column instead).
+    /// (`"transcript_id"` for GTF, `"ID"` for GFF3).  Ignored for BED files
+    /// (uses the 4th column instead). Falls back to `"chrom:start-end"` when
+    /// the attribute is absent.
     pub name_attr: Option<String>,
+
+    /// When `true`, count reads per gene rather than per transcript.
+    ///
+    /// Exon intervals (type determined by `exon_type`, default `"exon"`) are
+    /// grouped by their `name_attr` value (default `"gene_id"` for GTF,
+    /// `"Parent"` for GFF3).  A read that overlaps multiple exons of the same
+    /// gene is counted only once for that gene.  The `feature_type` field is
+    /// ignored in metagene mode.
+    pub metagene: bool,
 }
 
 impl CountingParams {
     pub fn new() -> Self {
         Self {
-            sam_flag_include: None,
-            sam_flag_exclude: None,
             chr_to_skip: Vec::new(),
             region: None,
             blacklist_path: None,
@@ -72,6 +68,7 @@ impl CountingParams {
             feature_type: None,
             exon_type: None,
             name_attr: None,
+            metagene: false,
         }
     }
 }

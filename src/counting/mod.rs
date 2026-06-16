@@ -5,13 +5,12 @@ pub mod feature_matrix;
 pub mod filters;
 pub mod params;
 pub mod parse_annotation;
-pub mod profiling;
 pub mod region_index;
 pub mod sc_record;
 
 pub use bin_matrix::count_bam_bins;
 pub use feature_matrix::count_bam_features;
-pub use filters::{DupMethod, DuplicateFilter, MotifFilter, QcFilter};
+pub use filters::{DupMethod, DuplicateFilter, MotifFilter, QcFilter, RawRecordFilter};
 pub use params::CountingParams;
 pub use parse_annotation::{
     parse_annotation_files, parse_bed_file, parse_gff_file, parse_gtf_file,
