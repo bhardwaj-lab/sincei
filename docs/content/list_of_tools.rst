@@ -14,6 +14,8 @@ Command Line tools
     tools/scClusterCells
     tools/scBulkCoverage
     tools/scFindVCRs
+    tools/scScoreFeatures
+    tools/scExportSignal
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.
 
@@ -29,6 +31,8 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scCombineCounts`
 * :doc:`tools/scClusterCells`
 * :doc:`tools/scFindVCRs`
+* :doc:`tools/scScoreFeatures`
+* :doc:`tools/scExportSignal`
 
 The table below summarizes input and output of each tool:
 
@@ -55,4 +59,6 @@ The table below summarizes input and output of each tool:
 |:ref:`scClusterCells`                 | analysis         | h5ad object           | .tsv file with clusters, png with UMAP      | Perform dimensionality reduction and clustering on the output of scCountReads.                              |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scBulkCoverage`                 | analysis         | tsv file + BAM file   | bigwig files                                | Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).    |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scExportSignal`                 | analysis         | h5ad object           | bedgraph matrix, mtx, loom file             | Export AnnData to other formats.                                                                     |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+

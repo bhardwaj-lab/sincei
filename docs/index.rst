@@ -91,6 +91,7 @@ tool                                 description
 :ref:`scCombineCounts`         Concatenate/merge the counts from different samples/batches or different modalities.
 :ref:`scClusterCells`          Perform dimensionality reduction and clustering on the output of scCountReads.
 :ref:`scBulkCoverage`          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
+:ref:`scExportSignal`          Export AnnData to other formats.
 ========================== ============================================================================================================
 
 
