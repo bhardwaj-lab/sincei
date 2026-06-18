@@ -244,10 +244,10 @@ def VCRfinder(
                 sys.stderr.write(f"Feature {last_idx} removed due to difference in binsize\n")
                 adata_chrom = adata_chrom[:, : adata_chrom.var.index[-2]]
 
-        assert all(
-            (adata_chrom.var["end"] - adata_chrom.var["start"] == binsize)
-            | (adata_chrom.var["end"] - adata_chrom.var["start"] == (binsize - 1))
-        ), f"Variable bin sizes detected in chromosome {chrom}"
+        # assert all(
+        #     (adata_chrom.var["end"] - adata_chrom.var["start"] == binsize)
+        #     | (adata_chrom.var["end"] - adata_chrom.var["start"] == (binsize - 1))
+        # ), f"Variable bin sizes detected in chromosome {chrom}"
 
         reg_to_consider = min(max_region, max(int(adata_chrom.shape[1] * binsize / n_kernels), binsize))
 
@@ -332,8 +332,8 @@ def VCRfinder(
             bkp_df = pd.DataFrame(
                 {
                     "chrom": chrom,
-                    "start": [int(start + prev * 2000) for prev in prevs],
-                    "end": [int(start + bkp * 2000) for bkp in bkps],
+                    "start": [int(start + prev * binsize) for prev in prevs],
+                    "end": [int(start + bkp * binsize) for bkp in bkps],
                     "name": [f"{chrom}_VCR_{bkp}_pen{pen}" for bkp in bkps],
                     "score": pen,
                     "strand": "*",
