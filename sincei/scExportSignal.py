@@ -18,15 +18,13 @@ def get_args():
         "--outFileFormat",
         type=str,
         default="h5ad",
-        choices=["bm", "mtx", "loom"],
+        choices=["bm", "mtx"],
         help="Output file format for `scExportSignal`. "
         '"bm" refers to the BedGraphMatrix format, useful for single-cell data visualization '
         "with pyGenomneTracks. It stores data in dense format, so we recommend choosing a "
         "region to export instead of the whole dataset."
         '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
-        "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt"
-        '"loom" refers to the loom file format, an hddf5-based legacy format for single-cell '
-        "genomics data.",
+        "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
         metavar="FORMAT",
         required=True,
     )
@@ -45,7 +43,9 @@ def get_args():
 
 
 def parse_arguments(args=None):
-    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["input", "outFilePrefix"])
+    io_args = ParserCommon.inputOutputOptions(
+        opts=["h5adfile", "outFilePrefix"], requiredOpts=["input", "outFilePrefix"]
+    )
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
@@ -134,7 +134,7 @@ def main(args=None):
         df = df.drop(["chrom_numeric", "start_numeric"])
 
         # Write to .bm file
-        df.write_csv(output_bm, separator="\t", include_header=False)
+        df.write_csv(args.outFilePrefix + ".bm", separator="\t", include_header=False)
 
     elif args.outFileFormat == "mtx":
         mtxFile = args.outFilePrefix + ".counts.mtx"
@@ -155,12 +155,9 @@ def main(args=None):
         f.write("\n")
         f.close()
 
-        ## write the matrix as .mtx
-        sp = sparse.csr_matrix(num_reads_per_bin)
+        # write the matrix as .mtx
+        sp = sparse.csr_matrix(adata.X)
         io.mmwrite(mtxFile, sp, field="integer")
-
-    elif args.outFileFormat == "loom":
-        adata.write_loom(args.outFilePrefix + ".loom")
 
 
 if __name__ == "__main__":
