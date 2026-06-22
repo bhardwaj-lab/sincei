@@ -29,7 +29,7 @@ def main(
     out_file: str = INPUT_OUTPUT_OPTS["out_prefix"],
     out_file_format: ExportFormat = typer.Option(
         ...,
-        "--outfile-format",
+        "--outFileFormat",
         metavar="FORMAT",
         rich_help_panel="Export options",
         help="Output file format.\n\n"

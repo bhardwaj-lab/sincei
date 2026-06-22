@@ -5,8 +5,8 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 
 use super::bam_io::{BamWorker, read_bam_header};
-use super::count_utils::{build_csr, derive_record_opts, effective_interval, write_counts_anndata};
-use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter};
+use super::count_utils::{build_csr, write_counts_anndata};
+use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
 use super::parse_annotation::{build_counting_index, parse_annotation_files, parse_bed_file};
 
@@ -83,7 +83,7 @@ pub fn count_bam_features(
 
     // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
     // Only include chromosomes that appear in counting_index.
-    // Sort by descending chunk size for the LPT heuristic.
+    // Sort by descending chunk size.
     let mut work: Vec<(usize, &Path, String, usize, usize)> = Vec::new();
     for (bam_idx, &(bam_path, _)) in bam_paths.iter().enumerate() {
         let hdr = read_bam_header(bam_path)?;
@@ -227,7 +227,7 @@ pub fn count_bam_features(
                             continue;
                         }
 
-                        let (eff_start, eff_end) = effective_interval(&sc_rec, params);
+                        let (eff_start, eff_end) = sc_rec.effective_interval(params);
                         let cell_idx = cell_offset + local_bc_idx;
 
                         // Largest-overlap-wins: each read contributes to exactly

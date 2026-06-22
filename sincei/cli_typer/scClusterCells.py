@@ -40,7 +40,7 @@ def main(
     out_file_umap: str = typer.Option(
         None,
         "-ou",
-        "--outfile-umap",
+        "--outFileUMAP",
         rich_help_panel=_CLUSTERING,
         help="The output plot file (for UMAP). If specified, a 4-column .tsv file with the same prefix is also "
         "created with the cell IDs, raw UMAP coordinates (UMAP1 and UMAP2) and Leiden cluster number.",
@@ -48,14 +48,14 @@ def main(
     cluster_resolution: float = typer.Option(
         1.0,
         "-cr",
-        "--cluster-resolution",
+        "--clusterResolution",
         rich_help_panel=_CLUSTERING,
         help="Resolution parameter for Leiden clustering. Values lower than 1.0 result in fewer clusters, while "
         "higher values lead to splitting of clusters. In most cases the optimum is between 0.8 and 1.2.",
     ),
     dim_red: DimRed | None = typer.Option(
         None,
-        "--dim-red",
+        "--dimRed",
         metavar="METHOD",
         rich_help_panel=_CLUSTERING,
         help="Dimensionality reduction modality to perform Leiden clustering on. If not given, the program searches "

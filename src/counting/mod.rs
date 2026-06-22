@@ -1,6 +1,7 @@
 pub mod bam_io;
 pub mod bin_matrix;
 pub mod count_utils;
+pub mod coverage;
 pub mod feature_matrix;
 pub mod filters;
 pub mod params;

@@ -57,7 +57,7 @@ fn run_filter_barcodes(
         .map(|(name, seq)| (name.to_string(), seq.length().get()))
         .collect();
 
-    // Build chunk work list sorted by descending size (LPT heuristic).
+    // Build chunk work list sorted by descending size.
     let mut chunks: Vec<(String, usize, usize)> = chrom_sizes
         .iter()
         .flat_map(|(chrom, chrom_len)| {

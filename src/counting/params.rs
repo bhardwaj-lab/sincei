@@ -79,28 +79,33 @@ impl Default for CountingParams {
     }
 }
 
-/// Parse a region string (`"chrom:start-end"` or `"chrom"`) into
-/// `(chrom, start, end)` using 0-based half-open coordinates.
+/// Parse a region string into `(chrom, start, end)` using 0-based half-open
+/// coordinates.
 ///
-/// Input coordinates are treated as 1-based inclusive (samtools style).
+/// Accepts `"chrom"`, `"chrom:start"`, or `"chrom:start:end"`. The coordinate
+/// separator may be `':'` (the form the CLI normalizes to) or `'-'` (samtools
+/// style). Input coordinates are 1-based inclusive; the returned start is
+/// 0-based and the end is exclusive. A missing start defaults to 0 and a
+/// missing end to `usize::MAX`.
 pub(super) fn parse_region(region: &str) -> anyhow::Result<(String, usize, usize)> {
-    if let Some((chrom, rest)) = region.split_once(':') {
-        if let Some((start_str, end_str)) = rest.split_once('-') {
-            let start: usize = start_str
-                .parse()
-                .map_err(|_| anyhow::anyhow!("invalid region start in {:?}", region))?;
-            let end: usize = end_str
-                .parse()
-                .map_err(|_| anyhow::anyhow!("invalid region end in {:?}", region))?;
-            // Convert 1-based inclusive → 0-based half-open.
-            Ok((chrom.to_string(), start.saturating_sub(1), end))
-        } else {
-            Err(anyhow::anyhow!(
-                "region {:?} must be 'chrom:start-end' or 'chrom'",
-                region
-            ))
-        }
-    } else {
-        Ok((region.to_string(), 0, usize::MAX))
-    }
+    let Some((chrom, rest)) = region.split_once(':') else {
+        // Bare chromosome (note: chromosome names may themselves contain '-',
+        // so we only split on the first ':').
+        return Ok((region.to_string(), 0, usize::MAX));
+    };
+
+    let mut coords = rest.splitn(2, [':', '-']);
+    let start: usize = coords
+        .next()
+        .unwrap_or("")
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("invalid region start in {:?}", region))?;
+    let end: usize = match coords.next() {
+        Some(end_str) => end_str
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid region end in {:?}", region))?,
+        None => usize::MAX,
+    };
+    // Convert 1-based inclusive → 0-based half-open.
+    Ok((chrom.to_string(), start.saturating_sub(1), end))
 }

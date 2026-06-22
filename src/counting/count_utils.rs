@@ -1,69 +1,91 @@
-use std::fs::File;
 use std::path::Path;
 
 use ahash::AHashMap;
 
 use anndata::backend::{Compression, WriteConfig, set_default_write_config};
-use anndata::{AnnData, AnnDataOp};
+use anndata::data::DynCsrMatrix;
+use anndata::{AnnData, AnnDataOp, ArrayElemOp};
 use anndata_hdf5::H5;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use nalgebra_sparse::CsrMatrix;
-use noodles::bam;
-use noodles::bgzf;
 use polars::prelude::*;
 
-use super::filters::QcFilter;
-use super::params::CountingParams;
 use super::region_index::VarMeta;
-use super::sc_record::{ScRecord, ScRecordOptions};
 
-/// Concrete type of a BAI-indexed BAM reader opened from a file path.
-pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
+/// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
+///
+/// Bool / string matrices are rejected.  Shared by the downstream commands
+/// (`find_vcrs`, `score_features`) that need a dense-friendly float matrix.
+pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
+    let dyn_csr: DynCsrMatrix = adata
+        .x()
+        .get::<DynCsrMatrix>()?
+        .context("AnnData has no X matrix")?;
 
-pub(crate) fn effective_interval(rec: &ScRecord<'_>, params: &CountingParams) -> (usize, usize) {
-    let (start, end) = match params.extend_reads {
-        None => (rec.alignment_start, rec.alignment_end),
-        Some(frag_len) => {
-            let max_paired = 4 * frag_len;
-            let tlen_abs = rec.template_length.unsigned_abs() as usize;
-            let use_tlen = rec.is_proper_pair && tlen_abs > 0 && tlen_abs <= max_paired;
+    fn convert<T: Copy>(m: CsrMatrix<T>, f: impl Fn(T) -> f64) -> CsrMatrix<f64> {
+        let (nrows, ncols) = (m.nrows(), m.ncols());
+        let (offsets, indices, values) = m.disassemble();
+        CsrMatrix::try_from_csr_data(
+            nrows,
+            ncols,
+            offsets,
+            indices,
+            values.into_iter().map(f).collect(),
+        )
+        .expect("disassembled CSR data is valid by construction")
+    }
 
-            if use_tlen {
-                if rec.is_reverse {
-                    let mate = rec.next_alignment_start.unwrap_or(rec.alignment_start);
-                    (mate, rec.alignment_end)
-                } else {
-                    (rec.alignment_start, rec.alignment_start + tlen_abs)
-                }
-            } else if rec.is_reverse {
-                (
-                    rec.alignment_end.saturating_sub(frag_len),
-                    rec.alignment_end,
-                )
-            } else {
-                (rec.alignment_start, rec.alignment_start + frag_len)
-            }
+    Ok(match dyn_csr {
+        DynCsrMatrix::F64(m) => m,
+        DynCsrMatrix::F32(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::I8(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::I16(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::I32(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::I64(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::U8(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::U16(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::U32(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::U64(m) => convert(m, |v| v as f64),
+        DynCsrMatrix::Bool(_) | DynCsrMatrix::String(_) => {
+            bail!("AnnData X matrix must be numeric (found bool/string data)")
         }
-    };
-
-    if params.center_reads && rec.read_length > 0 {
-        let center = (start + end) / 2;
-        let half = rec.read_length / 2;
-        let cs = center.saturating_sub(half);
-        (cs, cs + rec.read_length)
-    } else {
-        (start, end)
-    }
+    })
 }
 
-pub(crate) fn derive_record_opts(qc: Option<&QcFilter>, has_motif: bool) -> ScRecordOptions {
-    ScRecordOptions {
-        compute_gc: qc.is_some_and(|f| f.needs_gc()),
-        compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
-        store_sequence: has_motif,
-    }
+/// Read an integer column from a polars `DataFrame` (e.g. an AnnData `var`
+/// table), casting to `i64` and erroring on missing column or null values.
+pub(crate) fn df_i64_col(df: &DataFrame, name: &str) -> Result<Vec<i64>> {
+    let col = df
+        .column(name)
+        .with_context(|| format!("adata.var is missing required column {name:?}"))?
+        .cast(&DataType::Int64)
+        .with_context(|| format!("adata.var[{name:?}] must be numeric"))?;
+    col.i64()?
+        .iter()
+        .enumerate()
+        .map(|(i, v)| v.ok_or_else(|| anyhow::anyhow!("null value in var[{name:?}] at row {i}")))
+        .collect()
 }
 
+/// Read a string column from a polars `DataFrame`, erroring on missing column
+/// or null values.
+pub(crate) fn df_str_col(df: &DataFrame, name: &str) -> Result<Vec<String>> {
+    let col = df
+        .column(name)
+        .with_context(|| format!("adata.var is missing required column {name:?}"))?
+        .cast(&DataType::String)
+        .with_context(|| format!("adata.var[{name:?}] must be string-typed"))?;
+    col.str()?
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            v.map(str::to_string)
+                .ok_or_else(|| anyhow::anyhow!("null value in var[{name:?}] at row {i}"))
+        })
+        .collect()
+}
+
+/// Build a sparse count matrix in CSR format from a HashMap COO accumulator.
 pub(super) fn build_csr(
     accumulator: &AHashMap<(usize, usize), u32>,
     n_rows: usize,
@@ -110,8 +132,8 @@ pub(crate) fn write_counts_anndata(
 ) -> Result<()> {
     // Choose the HDF5 dataset compression.  anndata-rs defaults to blosc-zstd,
     // which standard h5py / scanpy cannot read without an external filter
-    // plugin, so we never use it: only `none` (anndata's modern default) or
-    // gzip (built-in deflate, universally readable).
+    // plugin, so only support `none` (anndata's modern default) or gzip
+    // (built-in deflate, universally readable).
     let compression = match compression {
         "none" => None,
         "gzip" => Some(Compression::Gzip(compression_level)),
@@ -134,7 +156,7 @@ pub(crate) fn write_counts_anndata(
             barcode_col.push(bc.clone());
         }
     }
-    let obs = DataFrame::new(
+    let obs_df = DataFrame::new(
         n_cells,
         vec![
             Column::new("sample".into(), sample_col),
@@ -163,7 +185,7 @@ pub(crate) fn write_counts_anndata(
     adata.set_x(matrix)?;
     // Index first (creates the obs/var elements), then the columns.
     adata.set_obs_names(obs_index.into_iter().collect())?;
-    adata.set_obs(obs)?;
+    adata.set_obs(obs_df)?;
     adata.set_var_names(var_index.into_iter().collect())?;
     adata.set_var(var_df)?;
     adata.close()?;

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import typer
 
-from ._common_args import INPUT_OUTPUT_OPTS, OTHER_OPTS, log_parameters, override, preprocess_args
+from sincei import _sincei as internal
+
+from ._common_args import (
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    log_parameters,
+    override,
+    preprocess_args,
+)
 
 DESCRIPTION = (
     "Call variable chromatin regions (VCRs) from binned chromatin data.\n\n"
@@ -44,7 +52,7 @@ def main(
     max_region_size: int = typer.Option(
         None,
         "-mr",
-        "--max-region-size",
+        "--maxRegionSize",
         metavar="INT",
         rich_help_panel="VCR options",
         help="The maximum region size to be considered, in base pairs. Larger regions may increase compute time. "
@@ -53,7 +61,7 @@ def main(
     n_kernels: int = typer.Option(
         20,
         "-nk",
-        "--n-kernels",
+        "--nKernels",
         metavar="INT",
         rich_help_panel="VCR options",
         help="The number of kernels to use for the score map. More kernels generally lead to a better segmentation, "
@@ -80,17 +88,30 @@ def main(
     verbose: bool = OTHER_OPTS["verbose"],
     help: bool = OTHER_OPTS["help"],
 ) -> int:
-    log_parameters(
-        input=input,
-        region=region,
-        bin_size=bin_size,
+    if verbose:
+        log_parameters(
+            input=input,
+            region=region,
+            bin_size=bin_size,
+            max_region_size=max_region_size,
+            n_kernels=n_kernels,
+            penalties=penalties,
+            out_file=out_file,
+            number_of_processors=number_of_processors,
+            verbose=verbose,
+        )
+
+    result_path = internal.find_vcrs(
+        input,
+        bin_size,
+        out_file,
         max_region_size=max_region_size,
         n_kernels=n_kernels,
         penalties=penalties,
-        out_file=out_file,
-        number_of_processors=number_of_processors,
-        verbose=verbose,
+        region=region,
+        num_threads=number_of_processors,
     )
+    typer.echo(result_path)
     return 0
 
 

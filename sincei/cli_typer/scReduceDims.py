@@ -65,7 +65,7 @@ _REDUCTION = "Dimensionality reduction options"
 N_COMPS = typer.Option(
     20,
     "-n",
-    "--n-comps",
+    "--nComps",
     rich_help_panel=_REDUCTION,
     help="Number of principal components or topics to reduce the dimensionality to. Use a higher number for samples "
     "with more expected heterogeneity.",
@@ -73,7 +73,7 @@ N_COMPS = typer.Option(
 N_NEIGHBORS = typer.Option(
     30,
     "-nk",
-    "--n-neighbors",
+    "--nNeighbors",
     rich_help_panel=_REDUCTION,
     help="Number of nearest neighbours to consider for UMAP. Choose this considering the total number of cells and "
     "the expected number of clusters; smaller numbers lead to more fragmented clusters.",
@@ -87,7 +87,7 @@ BINARIZE = typer.Option(
 OUT_FILE_TRAINED_MODEL = typer.Option(
     None,
     "-om",
-    "--outfile-trained-model",
+    "--outFileTrainedModel",
     rich_help_panel=_REDUCTION,
     help="The output file for the trained model. The saved model can be used later to embed/compare new cells to the "
     "existing cluster of cells.",
@@ -146,13 +146,13 @@ def lda(
     # LDA options
     n_passes: int = typer.Option(
         5,
-        "--n-passes",
+        "--nPasses",
         rich_help_panel="LDA options",
         help="Number of passes through the corpus for LDA model fitting.",
     ),
     n_iterations: int = typer.Option(
         50,
-        "--n-iterations",
+        "--nIterations",
         rich_help_panel="LDA options",
         help="Number of iterations per pass for LDA model fitting.",
     ),
@@ -170,7 +170,7 @@ def lda(
     ),
     gamma_threshold: float = typer.Option(
         None,
-        "--gamma-threshold",
+        "--gammaThreshold",
         rich_help_panel="LDA options",
         help="Minimum change in the topic matrix to stop the LDA model fitting. If not given, the model is fit for "
         "the number of passes and iterations specified above.",
@@ -236,7 +236,7 @@ def glmpca(
     glmpca_family: GLMPCAFamily = typer.Option(
         GLMPCAFamily.poisson,
         "-gf",
-        "--glmpca-family",
+        "--glmPCAfamily",
         metavar="FAMILY",
         rich_help_panel="glmPCA options",
         help="The choice of exponential family distribution to use for the glmPCA method.\n\n"

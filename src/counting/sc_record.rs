@@ -5,6 +5,8 @@ use noodles::sam::alignment::Record as _;
 use noodles::sam::alignment::record::cigar::op::Kind as CigarKind;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
+use super::params::CountingParams;
+
 /// Controls which optional fields are computed when building an [`ScRecord`].
 pub(crate) struct ScRecordOptions {
     pub(crate) compute_gc: bool,
@@ -195,6 +197,44 @@ impl<'a> ScRecord<'a> {
             aligned_fraction,
             read_sequence,
         }))
+    }
+
+    /// Genomic interval to credit this read to, after applying `extend_reads`
+    /// and `center_reads` from `params`.
+    pub(crate) fn effective_interval(&self, params: &CountingParams) -> (usize, usize) {
+        let (start, end) = match params.extend_reads {
+            None => (self.alignment_start, self.alignment_end),
+            Some(frag_len) => {
+                let max_paired = 4 * frag_len;
+                let tlen_abs = self.template_length.unsigned_abs() as usize;
+                let use_tlen = self.is_proper_pair && tlen_abs > 0 && tlen_abs <= max_paired;
+
+                if use_tlen {
+                    if self.is_reverse {
+                        let mate = self.next_alignment_start.unwrap_or(self.alignment_start);
+                        (mate, self.alignment_end)
+                    } else {
+                        (self.alignment_start, self.alignment_start + tlen_abs)
+                    }
+                } else if self.is_reverse {
+                    (
+                        self.alignment_end.saturating_sub(frag_len),
+                        self.alignment_end,
+                    )
+                } else {
+                    (self.alignment_start, self.alignment_start + frag_len)
+                }
+            }
+        };
+
+        if params.center_reads && self.read_length > 0 {
+            let center = (start + end) / 2;
+            let half = self.read_length / 2;
+            let cs = center.saturating_sub(half);
+            (cs, cs + self.read_length)
+        } else {
+            (start, end)
+        }
     }
 }
 

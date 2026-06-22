@@ -47,7 +47,7 @@ def main(
     min_hamming_dist: int = typer.Option(
         0,
         "-d",
-        "--min-hamming-dist",
+        "--minHammingDist",
         metavar="INT",
         rich_help_panel=_BARCODE,
         help="Minimum hamming distance to match the barcode in whitelist. Note that increasing the hamming distance "
@@ -56,7 +56,7 @@ def main(
     min_count: int = typer.Option(
         0,
         "-mc",
-        "--min-count",
+        "--minCount",
         metavar="INT",
         rich_help_panel=_BARCODE,
         help="Minimum number of bins with non-zero counts in order to report a barcode. Note that this number ranges "
@@ -65,7 +65,7 @@ def main(
     rank_plot: str = typer.Option(
         None,
         "-rp",
-        "--rank-plot",
+        "--rankPlot",
         metavar="STR",
         rich_help_panel=_BARCODE,
         help='The output file name to plot the ranked counts per barcode (similar to the "knee plot", but counts are '
@@ -135,7 +135,7 @@ def main(
 
     # Match scFilterBarcodes.py: a TSV with a leading (unnamed) index column plus
     # `barcode`, `count` (number of non-zero bins the barcode was seen in), and
-    # `selected` (True when count >= --min-count).  All detected barcodes are
+    # `selected` (True when count >= --minCount).  All detected barcodes are
     # listed, sorted by descending count for a knee-plot-friendly ordering.
     barcode_counts.sort(key=lambda bc: (-bc[1], bc[0]))
     with open(out_file, "w") as out:

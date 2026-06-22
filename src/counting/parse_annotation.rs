@@ -8,6 +8,16 @@ use noodles::{bed, gff, gtf};
 
 use super::region_index::{ChromIndex, Interval, RegionIndex, VarMeta};
 
+/// Map a noodles GFF/GTF strand to a single character (`'+'`, `'-'`, or `'*'`).
+fn gff_strand_to_char(s: gff::feature::record::Strand) -> char {
+    use gff::feature::record::Strand;
+    match s {
+        Strand::Forward => '+',
+        Strand::Reverse => '-',
+        _ => '*',
+    }
+}
+
 /// Per-chromosome unsorted interval lists plus the ordered per-feature metadata,
 /// as produced by the raw (pre-index) parsers below.
 type RawIntervals = (AHashMap<String, Vec<Interval>>, Vec<VarMeta>);
@@ -87,11 +97,20 @@ fn parse_bed_raw(path: &Path) -> Result<RawIntervals> {
             })
             .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
 
+        // 6th column (strand) lives in other_fields[2] for a Reader<3, _>.
+        let strand = record
+            .other_fields()
+            .get(2)
+            .and_then(|s| s.to_string().chars().next())
+            .map(|c| if c == '+' || c == '-' { c } else { '*' })
+            .unwrap_or('*');
+
         var.push(VarMeta {
             chrom: chrom.clone(),
             start,
             end,
             name: name.clone(),
+            strand,
         });
         intervals_by_chrom.entry(chrom).or_default().push(Interval {
             start,
@@ -160,11 +179,14 @@ where
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
 
+        let strand = gff_strand_to_char(record.strand());
+
         var.push(VarMeta {
             chrom: chrom.clone(),
             start,
             end,
             name: name.clone(),
+            strand,
         });
         intervals_by_chrom.entry(chrom).or_default().push(Interval {
             start,
@@ -397,6 +419,7 @@ where
                     start,
                     end,
                     name: gene_name.clone(),
+                    strand: gff_strand_to_char(record.strand()),
                 });
                 idx
             }

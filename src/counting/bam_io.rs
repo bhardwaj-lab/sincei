@@ -1,15 +1,3 @@
-//! BAM opening helpers with a lenient header fallback.
-//!
-//! noodles validates the SAM header text strictly (per the hts-spec), which
-//! makes it reject some real-world BAMs — notably 10x Genomics output, whose
-//! `@HD` line lacks a conforming `VN` version field.
-//! We fall back to reconstructing the header straight from the BAM **binary**
-//! reference dictionary, which is a simple, well-defined block that 10x writes
-//! correctly.
-//!
-//! The fallback only triggers when the strict parse fails, so fully compliant
-//! BAMs are read exactly as before (preserving `@RG`/`@PG`/etc.).
-
 use std::ffi::CStr;
 use std::fs::File;
 use std::io::{self, Read};
@@ -24,8 +12,10 @@ use noodles::sam::Header;
 use noodles::sam::header::ReferenceSequences;
 use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
 
-use super::count_utils::BamReader;
 use super::filters::MotifFilter;
+
+/// Concrete type of a BAI-indexed BAM reader opened from a file path.
+pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header text
 /// (see module docs).  Builds an indexed reader so a missing `.bai` is still
@@ -47,6 +37,16 @@ pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
 
 /// Open a BAI-indexed BAM reader together with its header, tolerating
 /// non-compliant SAM header text.
+///
+/// noodles validates the SAM header text strictly (per the hts-spec), which
+/// makes it reject some real-world BAMs, notably, 10x Genomics output, whose
+/// `@HD` line lacks a conforming `VN` version field.
+/// We fall back to reconstructing the header straight from the BAM **binary**
+/// reference dictionary, which is a simple, well-defined block that 10x writes
+/// correctly.
+///
+/// The fallback only triggers when the strict parse fails, so fully compliant
+/// BAMs are read exactly as before (preserving `@RG`/`@PG`/etc.).
 pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
     let mut reader = bam::io::indexed_reader::Builder::default()
         .build_from_path(path)

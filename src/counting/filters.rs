@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use twobit::TwoBitFile;
 
-use super::sc_record::ScRecord;
+use super::sc_record::{ScRecord, ScRecordOptions};
 
 // Raw-record filter
 
@@ -168,6 +168,16 @@ impl QcFilter {
     /// Returns whether the aligned fraction must be computed to evaluate this filter.
     pub(super) fn needs_aligned_fraction(&self) -> bool {
         self.min_aligned_fraction.is_some()
+    }
+}
+
+/// Derive the [`ScRecordOptions`] needed to evaluate `qc` and, when
+/// `has_motif` is set, the motif filter (which needs the raw read sequence).
+pub(crate) fn derive_record_opts(qc: Option<&QcFilter>, has_motif: bool) -> ScRecordOptions {
+    ScRecordOptions {
+        compute_gc: qc.is_some_and(|f| f.needs_gc()),
+        compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
+        store_sequence: has_motif,
     }
 }
 

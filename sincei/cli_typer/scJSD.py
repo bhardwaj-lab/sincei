@@ -53,17 +53,17 @@ def main(
     number_of_samples: int = typer.Option(
         100000,
         "-n",
-        "--number-of-samples",
+        "--numberOfSamples",
         rich_help_panel="Sampling options",
         help="The number of bins that are sampled from the genome, for which the overlapping number of reads is "
         "computed.",
     ),
     skip_zeros: bool = typer.Option(
         False,
-        "--skip-zeros",
+        "--skipZeros",
         rich_help_panel="Sampling options",
         help="If set, regions with zero overlapping reads for *all* given BAM files are ignored. This results in a "
-        "reduced number of read counts compared to --number-of-samples.",
+        "reduced number of read counts compared to --numberOfSamples.",
     ),
     number_of_processors: str = OTHER_OPTS["number_of_processors"],
     verbose: bool = OTHER_OPTS["verbose"],

@@ -575,21 +575,21 @@ OTHER_OPTS: dict[str, typer.models.OptionInfo] = {
 PLOT_OPTS: dict[str, typer.models.OptionInfo] = {
     "plot_width": typer.Option(
         10.0,
-        "--plot-width",
+        "--plotWidth",
         metavar="FLOAT",
         rich_help_panel=_PLOT,
         help="Output plot width (in cm).",
     ),
     "plot_height": typer.Option(
         10.0,
-        "--plot-height",
+        "--plotHeight",
         metavar="FLOAT",
         rich_help_panel=_PLOT,
         help="Output plot height (in cm).",
     ),
     "plot_file_format": typer.Option(
         PlotFileFormat.png,
-        "--plot-file-format",
+        "--plotFileFormat",
         metavar="FORMAT",
         rich_help_panel=_PLOT,
         help="Image format type. If given, this option will be used to save the plot file.\n\n"
@@ -623,8 +623,7 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="STR",
         rich_help_panel=_GTF,
         help="When a GTF/GFF file is used to provide regions, entries with this value as their feature (column 3) "
-        "are treated as exons. CDS would be another common value. NOTE: only used in metagene mode (not yet "
-        "implemented); accepted now for forward compatibility.",
+        "are treated as exons. CDS would be another common value. NOTE: only used in metagene mode.",
     ),
     "transcript_id_tag": typer.Option(
         None,

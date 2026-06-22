@@ -45,7 +45,7 @@ def main(
     out_metrics: str = typer.Option(
         None,
         "-om",
-        "--out-metrics",
+        "--outMetrics",
         rich_help_panel=_QC,
         help="Prefix of the output file with calculated QC metrics. If given, the cell metrics are printed in "
         "<prefix>.cell.tsv and region metrics as <prefix>.region.tsv.",
@@ -53,7 +53,7 @@ def main(
     filter_cell_args: str = typer.Option(
         None,
         "-fc",
-        "--filter-cell-args",
+        "--filterCellArgs",
         rich_help_panel=_QC,
         help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, '
         'maxvalue; ...." where arg_name is a cell QC metric present in the input h5ad file. Run with "--describe" to '
@@ -62,7 +62,7 @@ def main(
     filter_region_args: str = typer.Option(
         None,
         "-fr",
-        "--filter-region-args",
+        "--filterRegionArgs",
         rich_help_panel=_QC,
         help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; '
         '...." where arg_name is a region QC metric present in the input h5ad file. Run with "--describe" to view all '
@@ -71,7 +71,7 @@ def main(
     region_blacklist: list[str] = typer.Option(
         None,
         "-rb",
-        "--region-blacklist",
+        "--regionBlacklist",
         metavar="BED",
         rich_help_panel=_QC,
         help="A BED or GTF file containing regions that should be excluded from all analyses. Regions in the anndata "
@@ -80,7 +80,7 @@ def main(
     cell_blacklist: str = typer.Option(
         None,
         "-cb",
-        "--cell-blacklist",
+        "--cellBlacklist",
         rich_help_panel=_QC,
         help="A list of barcodes to be excluded from the clustering. The barcodes (along with sample labels) must be "
         "present in the input object.",
@@ -88,7 +88,7 @@ def main(
     chrom_blacklist: list[str] = typer.Option(
         None,
         "-chb",
-        "--chrom-blacklist",
+        "--chromBlacklist",
         metavar="CHR",
         rich_help_panel=_QC,
         help="A space separated list of chromosomes to exclude, e.g. chrM chrUn.",

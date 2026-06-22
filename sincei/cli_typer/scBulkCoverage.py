@@ -53,7 +53,7 @@ def main(
     out_file_format: OutFileFormat = typer.Option(
         OutFileFormat.bigwig,
         "-of",
-        "--outfile-format",
+        "--outFileFormat",
         metavar="FORMAT",
         rich_help_panel=_COVERAGE,
         help="Output file type.\n\nOne of: [bold yellow]bigwig[/bold yellow], [bold yellow]bedgraph[/bold yellow].",
@@ -61,7 +61,7 @@ def main(
     normalize_using: NormalizeUsing = typer.Option(
         NormalizeUsing.cpm,
         "-n",
-        "--normalize-using",
+        "--normalizeUsing",
         metavar="METHOD",
         rich_help_panel=_COVERAGE,
         help="How to normalize the pseudo-bulk counts.\n\n"
@@ -74,7 +74,7 @@ def main(
     ignore_for_normalization: list[str] = typer.Option(
         None,
         "-ig",
-        "--ignore-for-normalization",
+        "--ignoreForNormalization",
         metavar="CHR",
         rich_help_panel=_COVERAGE,
         help="Chromosomes to skip while calculating normalization factors.",
@@ -82,14 +82,14 @@ def main(
     normalize_by_reference: str = typer.Option(
         None,
         "-nr",
-        "--normalize-by-reference",
+        "--normalizeByReference",
         rich_help_panel=_COVERAGE,
         help="NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the "
-        "--group-info file). Note that the --normalize-using method is applied beforehand.",
+        "--group-info file). Note that the --normalizeUsing method is applied beforehand.",
     ),
     scale_factor: float = typer.Option(
         1.0,
-        "--scale-factor",
+        "--scaleFactor",
         rich_help_panel=_COVERAGE,
         help="The computed scaling factor (or 1, if not applicable) will be multiplied by this.",
     ),
@@ -148,7 +148,6 @@ def main(
         backend.warn_unsupported(
             normalize_by_reference=normalize_by_reference,
             group_tag=group_tag,
-            region=region,
         )
 
         min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
@@ -165,6 +164,7 @@ def main(
             step_size=step_size,
             bc_tag=cell_tag,
             umi_tag=None,
+            region=region,
             min_mapq=min_mapping_quality,
             sam_flag_include=sam_flag_include,
             sam_flag_exclude=sam_flag_exclude,

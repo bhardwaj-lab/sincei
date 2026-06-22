@@ -11,13 +11,12 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use crate::counting::bam_io::{BamWorker, read_bam_header};
-use crate::counting::count_utils::{derive_record_opts, effective_interval};
-use crate::counting::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter};
-use crate::counting::params::CountingParams;
-use crate::counting::parse_annotation::parse_bed_file;
-use crate::counting::region_index::build_bin_index;
-use crate::counting::sc_record::{ScRecord, parse_tag};
+use super::bam_io::{BamWorker, read_bam_header};
+use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
+use super::params::{CountingParams, parse_region};
+use super::parse_annotation::parse_bed_file;
+use super::region_index::build_bin_index;
+use super::sc_record::{ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {
@@ -108,7 +107,7 @@ fn get_effective_interval(
     mode: ReadMode,
 ) -> Option<(usize, usize)> {
     match mode {
-        ReadMode::Normal => Some(effective_interval(rec, params)),
+        ReadMode::Normal => Some(rec.effective_interval(params)),
         ReadMode::MNase => apply_mnase(rec),
         ReadMode::Offset(start, end) => apply_offset(rec, start, end),
     }
@@ -218,6 +217,7 @@ pub fn run_bulk_coverage(
     step_size: usize,
     bc_tag: &str,
     umi_tag: Option<&str>,
+    region: Option<&str>,
     chr_to_skip: &[String],
     ignore_for_normalization: &[String],
     blacklist_path: Option<&Path>,
@@ -269,7 +269,7 @@ pub fn run_bulk_coverage(
 
     let params = CountingParams {
         chr_to_skip: chr_to_skip.to_vec(),
-        region: None,
+        region: region.map(String::from),
         blacklist_path: blacklist_path.map(|p| p.to_path_buf()),
         extend_reads,
         center_reads,
@@ -278,6 +278,10 @@ pub fn run_bulk_coverage(
         name_attr: None,
         metagene: false,
     };
+
+    // Optional region restriction (chrom[:start-end]); reads outside it are
+    // not counted, so the output covers only the requested region.
+    let region_filter = params.region.as_deref().map(parse_region).transpose()?;
 
     // Chromosomes to skip, as a byte-slice set to avoid per-contig allocation.
     let skip_set: AHashSet<&[u8]> = chr_to_skip.iter().map(|s| s.as_bytes()).collect();
@@ -304,7 +308,9 @@ pub fn run_bulk_coverage(
         .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
         .transpose()?;
 
-    // Build chunk work list sorted by descending size (LPT).
+    // Build chunk work list sorted by descending size.  When a region is
+    // requested, only emit chunks on its chromosome that overlap it, so a
+    // multi-chromosome BAM doesn't enumerate (and later skip) every chunk.
     let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
         .iter()
         .enumerate()
@@ -320,6 +326,12 @@ pub fn run_bulk_coverage(
                     )
                 })
             })
+        })
+        .filter(|(_, _, chrom, chunk_start, chunk_end)| match &region_filter {
+            Some((region_chrom, region_start, region_end)) => {
+                chrom == region_chrom && chunk_start < region_end && chunk_end > region_start
+            }
+            None => true,
         })
         .collect();
     work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
@@ -357,6 +369,19 @@ pub fn run_bulk_coverage(
                     else {
                         return Ok(AHashMap::new());
                     };
+
+                    // Hoisted region filter: a region on a different chromosome
+                    // skips the whole chunk; otherwise carry its bounds.
+                    let region_bounds = match &region_filter {
+                        Some((region_chrom, region_start, region_end)) => {
+                            if region_chrom.as_str() != chrom.as_str() {
+                                return Ok(AHashMap::new());
+                            }
+                            Some((*region_start, *region_end))
+                        }
+                        None => None,
+                    };
+
                     let chunk_blacklist = blacklist.as_ref().and_then(|bl| {
                         bl.get(chrom.as_str())
                             .or_else(|| chrom.strip_prefix("chr").and_then(|c| bl.get(c)))
@@ -400,6 +425,13 @@ pub fn run_bulk_coverage(
                         };
 
                         if sc_rec.alignment_start < chunk_start {
+                            continue;
+                        }
+
+                        if let Some((region_start, region_end)) = region_bounds
+                            && (sc_rec.alignment_end <= region_start
+                                || sc_rec.alignment_start >= region_end)
+                        {
                             continue;
                         }
 
@@ -713,6 +745,7 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
     step_size = 100,
     bc_tag = "CB",
     umi_tag = None,
+    region = None,
     min_mapq = None,
     sam_flag_include = None,
     sam_flag_exclude = None,
@@ -747,6 +780,7 @@ pub fn bulk_coverage(
     step_size: usize,
     bc_tag: &str,
     umi_tag: Option<String>,
+    region: Option<String>,
     min_mapq: Option<u8>,
     sam_flag_include: Option<u16>,
     sam_flag_exclude: Option<u16>,
@@ -902,6 +936,7 @@ pub fn bulk_coverage(
         step_size,
         bc_tag,
         umi_tag.as_deref(),
+        region.as_deref(),
         &chr_to_skip,
         &ignore_for_normalization,
         blacklist_path.as_deref(),

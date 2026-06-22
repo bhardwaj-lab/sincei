@@ -152,7 +152,7 @@ pub fn run_filter_stats(
     let stride = bin_size.saturating_add(distance_between_bins).max(1);
     let n_barcodes = barcodes.len();
 
-    // Build chunk work list sorted by descending size (LPT heuristic).
+    // Build chunk work list sorted by descending size.
     // Each chunk will iterate the sampling bins whose start falls within it.
     let mut chunks: Vec<(String, usize, usize)> = chrom_sizes
         .iter()

@@ -10,6 +10,9 @@ pub struct VarMeta {
     /// `chrom:start-end` for bins / unnamed BED features, or the feature name
     /// when the annotation provides one.
     pub name: String,
+    /// Strand of the feature: `'+'`, `'-'`, or `'*'` when unstranded / unknown
+    /// (always `'*'` for bins and BED features without a strand column).
+    pub strand: char,
 }
 
 /// A half-open genomic interval `[start, end)` carrying an arbitrary value.
@@ -116,8 +119,8 @@ impl<'a> Iterator for FindIter<'a> {
 /// annotation or BAM header).
 pub type RegionIndex = AHashMap<String, ChromIndex>;
 
-// Bin index
-
+/// Bin index
+///
 /// Precomputed geometry for a uniform-bin tiling of the genome.
 ///
 /// Bin `i` on chromosome `c` covers the half-open interval
@@ -163,6 +166,7 @@ pub fn build_bin_index(
                 start: bin_start,
                 end: bin_end,
                 name: format!("{}:{}-{}", chrom, bin_start, bin_end),
+                strand: '*',
             });
             n_bins += 1;
             bin_start += step_size;

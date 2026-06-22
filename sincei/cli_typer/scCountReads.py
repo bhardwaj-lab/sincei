@@ -86,7 +86,7 @@ COMPRESSION = typer.Option(
 )
 COMPRESSION_LEVEL = typer.Option(
     4,
-    "--compression-level",
+    "--compressionLevel",
     metavar="INT",
     rich_help_panel=_IO,
     help="Compression level (0-9) when --compression is gzip. Ignored for 'none'.",
