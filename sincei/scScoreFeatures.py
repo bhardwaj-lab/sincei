@@ -29,6 +29,7 @@ def get_args():
 
     scoring_opts.add_argument(
         "--features",
+        "-f",
         help="Path to the BED or GTF file containing the features to use for aggregation/scoring.",
         dest="GTF",
         metavar="FILE",
@@ -74,12 +75,12 @@ def get_args():
     )
 
     aggregate_opts.add_argument(
-        "--penalty",
-        "-pen",
-        help="Penalty value to determine which VCRs to use for aggregation. Used only when the input is "
-        "a BED file created with ``scFindVCRs`` with a range of penalties (stored in the 5th column). Default: %(default)s.",
-        metavar="FLOAT",
-        type=float,
+        "--bedScoreFilter",
+        "-bsf",
+        help="Provide a range (two values separated by space), or a threshold (upper limit) of score to determine which entries to use for aggregation."
+        " Used only when the input is a BED file containing scores (stored in the 5th column). Default: %(default)s.",
+        metavar="LIST",
+        nargs='+',
         default=None,
         required=False,
     )
@@ -153,8 +154,7 @@ def parseArguments(args=None):
 binned chromatin data into Variable Chromatin Regions (use --VCR with output from scFindVCRs).
 """,
         usage="""
-scScoreFeatures -m aggregate -i INPUT_binned.h5ad --features VCRs.bed  -o OUTPUT_aggregate.h5ad
-scScoreFeatures -m activities -i INPUT_binned.h5ad --features genes.gtf -o OUTPUT_activities.h5ad
+scScoreFeatures -m <mode> -i INPUT_binned.h5ad --features <bed or gtf> -o OUTPUT_activities.h5ad
 """,
         add_help=False,
     )
@@ -174,6 +174,15 @@ def main(args=None):
 
     if not args.verbose:
         warnings.filterwarnings("ignore")
+    # check scoreFilter
+    if args.bedScoreFilter is not None:
+        if len(args.bedScoreFilter) == 1: # single-score: use as upper limit
+            args.bedScoreFilter = [0, args.bedScoreFilter[0]]
+        if len(args.bedScoreFilter) > 2: # single-score: use as upper limit
+            raise ValueError(
+            "Please provide a single value, or two values for bedScoreFilter"
+            )
+        args.bedScoreFilter = [int(x) for x in args.bedScoreFilter]
 
     # Import here to avoid circular imports
     import anndata as ad
@@ -188,7 +197,7 @@ def main(args=None):
         mode=args.mode,
         overlap_policy=args.overlapPolicy,
         center_scores=args.centerScores,
-        penalty=args.penalty,
+        bedFilter=args.bedScoreFilter,
         decay=args.decay,
         max_region=args.maxRegion,
         gene_body=args.geneBody,

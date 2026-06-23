@@ -13,7 +13,7 @@ def _parse_gtf_genes(gtf_path):
     Parse a GTF/BED file using deeptoolsintervals and extract gene/feature information.
 
     Returns a DataFrame with gene_name, chrom, start, end, strand, and score.
-    For BED files, score corresponds to the 5th column (e.g. penalty value).
+    For BED files, score corresponds to the 5th column (e.g. bedFilter value).
     For GTF files, score is typically the file name and can be ignored.
     """
     gtf = GTF(
@@ -342,7 +342,7 @@ def FeatureScorer(
     gtf,
     mode,
     overlap_policy="partial",
-    penalty=None,
+    bedFilter=None,
     decay=0.75,
     max_region=100,
     gene_body=True,
@@ -387,9 +387,8 @@ def FeatureScorer(
         Whether to scale the scores to unit variance and center them around zero, by default False.
         This destroys the sparsity of the output matrix and can lead to increased memory usage.
         Use with caution for large datasets.
-    penalty : float, optional
-        Optional parameter to select VCRs of a particular penalty value from a BED file with VCRs
-        calculated using multiple penalties.
+    bedFilter : list, optional
+        Optional parameter to select features with a given "score", in case the input BED file already has a `score` column (column 5).
     decay : float, optional
         Decay parameter for calculating the decay weights, by default 0.75. Higher values lead to
         faster decay. Weights are calculated as ``exp(-decay * distance_in_kb / 10)``. This parameter
@@ -432,13 +431,15 @@ def FeatureScorer(
     if genes_df.empty:
         raise ValueError("No genes/features found in the input file.")
 
-    # Filter VCR BED by penalty value
-    if penalty is not None and "gene_name" in genes_df.columns:
-        genes_df = genes_df[genes_df["gene_name"].str.contains(f"_pen{penalty}", na=False)]
+    # Filter VCR BED by bedFilter value
+    if bedFilter is not None:
+        genes_df = genes_df[(pd.to_numeric(genes_df["score"], errors='coerce') >= bedFilter[0]) &
+                            (pd.to_numeric(genes_df["score"], errors='coerce') <= bedFilter[1])
+                            ]
         if genes_df.empty:
             raise ValueError(
-                f"No VCRs found with penalty value {penalty} in the VCR BED file. "
-                f"Check the 5th column of the BED file for available penalty values."
+            "No features found with score values {} in the input BED file. \n"
+            "Check the 5th column of the BED file for available scores.".format(bedFilter)
             )
 
     # Ensure adata.var coordinate columns are numeric (may be categorical from h5ad)
