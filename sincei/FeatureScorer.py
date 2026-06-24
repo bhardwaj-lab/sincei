@@ -101,7 +101,7 @@ def get_decay_weights(
     feature_ends,
     strand="+",
     decay=0.75,
-    gene_body=True,
+    gene_body=None,
     excluded_regions=[],
 ):
     """
@@ -144,7 +144,7 @@ def get_decay_weights(
         # No decay - all weights are 1
         return np.ones(len(feature_starts), dtype=np.float64)
 
-    # Scale distance decay per kilobase
+    # Scale distance decay per 10-kb
     lam = decay / 10000.0
 
     if gene_body:
@@ -319,10 +319,10 @@ def _compute_gene_activity_single(
         overlap_fractions = (clip_end - clip_start) / feat_lengths
         weights = weights * overlap_fractions
 
-    # Apply gene size factor if requested
+    # Apply gene size factor if requested (divide by number of overlapping features)
     if gene_size_factor:
-        gene_length = gene_end - gene_start
-        size_factor = gene_length
+        # gene_length = gene_end - gene_start
+        size_factor = 1 / len(feature_starts)
         weights = weights * size_factor
 
     # Get counts for overlapping features and compute weighted sum
@@ -345,8 +345,8 @@ def FeatureScorer(
     bedFilter=None,
     decay=0.75,
     max_region=100,
-    gene_body=True,
-    gene_size_factor=True,
+    gene_body=None,
+    gene_size_factor=False,
     exclude_in_range=None,
     center_scores=False,
     verbose=False,
@@ -433,13 +433,14 @@ def FeatureScorer(
 
     # Filter VCR BED by bedFilter value
     if bedFilter is not None:
-        genes_df = genes_df[(pd.to_numeric(genes_df["score"], errors='coerce') >= bedFilter[0]) &
-                            (pd.to_numeric(genes_df["score"], errors='coerce') <= bedFilter[1])
-                            ]
+        genes_df = genes_df[
+            (pd.to_numeric(genes_df["score"], errors="coerce") >= bedFilter[0])
+            & (pd.to_numeric(genes_df["score"], errors="coerce") <= bedFilter[1])
+        ]
         if genes_df.empty:
             raise ValueError(
-            "No features found with score values {} in the input BED file. \n"
-            "Check the 5th column of the BED file for available scores.".format(bedFilter)
+                "No features found with score values {} in the input BED file. \n"
+                "Check the 5th column of the BED file for available scores.".format(bedFilter)
             )
 
     # Ensure adata.var coordinate columns are numeric (may be categorical from h5ad)
@@ -469,13 +470,11 @@ def FeatureScorer(
     if mode == "aggregate":
         # aggregate mode: simple sum of counts within VCR
         effective_decay = 0.0
-        effective_max_region = 0
         gene_body = True
         gene_size_factor = False
         exclude_in_range = None
     elif mode == "activities":
         effective_decay = decay
-        effective_max_region = max_region
     else:
         raise ValueError(f"Unknown mode: {mode}. Must be 'aggregate' or 'activities'")
 
@@ -502,7 +501,7 @@ def FeatureScorer(
         return _compute_gene_activity_single(
             adata,
             gene_row,
-            effective_max_region,
+            max_region,
             effective_decay,
             gene_body,
             gene_size_factor,
@@ -578,19 +577,19 @@ def FeatureScorer(
         obs=adata.obs.copy(),
         var=var_df,
     )
-    if mode == "activities":
-        if center_scores:
-            from scanpy.pp import scale
+    if center_scores:
+        from scanpy.pp import scale
 
-            sys.stderr.write(
-                "WARNING: Centering the scores destroys the sparsity of the output matrix and can lead "
-                "to increased memory usage. Use with caution for large datasets.\n"
-            )
-            scale(adata_out, zero_center=True)
-        else:
-            from sklearn.preprocessing import normalize
+        sys.stderr.write(
+            "WARNING: Centering the scores destroys the sparsity of the output matrix and can lead "
+            "to increased memory usage. Use with caution for large datasets.\n"
+        )
+        scale(adata_out, zero_center=True)
 
-            normalize(adata_out.X, norm="l1", copy=False)
+    if mode == "activities" and not center_scores:
+        from sklearn.preprocessing import normalize
+
+        normalize(adata_out.X, norm="l1", copy=False)
 
     sys.stdout.write(f"Created AnnData with {adata_out.n_obs} cells and {adata_out.n_vars} features.\n")
 
