@@ -32,6 +32,7 @@ jobs:
         miniconda-version: "latest"
         auto-activate-base: false
         activate-environment: sincei
+        python-version: ${{ matrix.python-version }}
         environment-file: requirements.yml
     - name: Check environment
       run: |
