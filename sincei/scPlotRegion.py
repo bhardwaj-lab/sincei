@@ -11,145 +11,7 @@ import numpy as np
 
 from sincei import ParserCommon
 
-
-def get_args():
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group("Plot Options")
-
-    group.add_argument(
-        "-r",
-        "--region",
-        required=True,
-        help="Genomic region in CHROM:START-END format",
-    )
-
-    group.add_argument(
-        "-m",
-        "--mode",
-        required=True,
-        choices=["sum", "mean"],
-        default="sum",
-        help="Aggregation mode for the top subplot",
-    )
-
-    group.add_argument(
-        "--summarize",
-        action="store_true",
-        help="Sum contiguous columns to reduce matrix width for heatmap plotting (default: False)",
-    )
-
-    group.add_argument(
-        "--signal-min",
-        type=float,
-        help="Minimum value for pseudobulk track plot (default: data min)",
-    )
-
-    group.add_argument(
-        "--signal-max",
-        type=float,
-        help="Maximum value for pseudobulk track plot (default: data max)",
-    )
-
-    group.add_argument(
-        "--map-min",
-        type=float,
-        help="Minimum value for cell heatmap (default: data min)",
-    )
-
-    group.add_argument(
-        "--map-max",
-        type=float,
-        help="Maximum value for cell heatmap (default: data max)",
-    )
-
-    group.add_argument(
-        "--color",
-        type=str,
-        default="red",
-        help="Color for top line plot (default: red)",
-    )
-
-    group.add_argument(
-        "--colormap",
-        type=str,
-        default="Reds",
-        help="Colormap for heatmap (default: Reds)",
-    )
-
-    group.add_argument(
-        "--figsize",
-        type=float,
-        nargs=2,
-        default=(14, 8),
-        help="Figure size in inches (width height, default: 14 8)",
-    )
-
-    group.add_argument(
-        "--dpi",
-        type=int,
-        default=300,
-        help="DPI for output PNG (default: 300)",
-    )
-
-    return parser
-
-
-def parse_arguments(args=None):
-    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["input", "outFile"])
-    other_args = ParserCommon.otherOptions()
-
-    parser = argparse.ArgumentParser(
-        prog="scPlotRegion",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[io_args, get_args(), other_args],
-        description="""
-``scPlotRegion`` plots pseudobulk chromatin signal across a genomic region with individual cell
-profiles below.
-""",
-        usage="""
-scPlotRegion -i INPUT_binned.h5ad --region CHROM:START-END -o OUTPUT_PREFIX
-""",
-        add_help=False,
-    )
-
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    args = parser.parse_args(args)
-
-    # Validate mode is specified
-    if args.mode is None:
-        parser.error("You must specify --mode. Choose either 'activities' or 'aggregate'.")
-
-    return args
-
-
-def parse_region(region_str):
-    """Parse region in either CHROM or CHROM:START-END format.
-
-    Returns a tuple (chrom, start, end). For chromosome-only input `start` and
-    `end` will be returned as 0 and np.inf so every feature in the chromosome is included.
-    """
-    s = region_str.strip()
-
-    # CHROM only
-    if re.fullmatch(r"[^:]+", s):
-        return s, None, None
-
-    # CHROM:START-END
-    match = re.fullmatch(r"([^:]+):(\d+)-(\d+)", s)
-    if not match:
-        raise ValueError(f"Invalid region '{region_str}'. Expected 'CHROM' or 'CHROM:START-END'")
-
-    chrom, start_str, end_str = match.groups()
-    start = int(start_str)
-    end = int(end_str)
-    if start > end:
-        raise ValueError(f"Invalid region '{region_str}'. START must be <= END.")
-
-    return chrom, start, end
+### ------ Functions ------
 
 
 def get_region_mask(var_df, chrom: str, start: int, end: int):
@@ -236,10 +98,131 @@ def format_genomic_tick_labels(min_val: int, max_val: int, n_ticks: int = 9):
     return tick_vals, tick_labels, unit
 
 
-def main():
-    args = get_args()
+### ------ Args ------
 
-    chrom, region_start, region_end = parse_region(args.region)
+
+def parseArguments(args=None):
+    io_args = ParserCommon.inputOutputOptions(
+        opts=["h5adfile", "outFilePrefix"], requiredOpts=["input", "outFilePrefix"]
+    )
+    other_args = ParserCommon.otherOptions()
+
+    parser = argparse.ArgumentParser(
+        prog="scPlotRegion",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[io_args, get_args(), other_args],
+        description="""
+``scPlotRegion`` plots signal from individual cells in a given genomic region as a heatmap (in the style of a trackplot),
+togather with the summary profiles (pseudobulk signal) on top.
+""",
+        usage="""
+scPlotRegion -i INPUT_binned.h5ad --region CHROM:START-END -o OUTPUT_PREFIX
+""",
+        add_help=False,
+    )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    return parser
+
+
+def get_args():
+    parser = argparse.ArgumentParser(add_help=False)
+    group = parser.add_argument_group("Plot Options")
+
+    group.add_argument(
+        "--region",
+        "-r",
+        required=True,
+        help="Genomic region in CHROM:START-END format",
+    )
+
+    group.add_argument(
+        "--mode",
+        "-m",
+        required=True,
+        choices=["sum", "mean"],
+        default="sum",
+        help="How to aggregate signal for plotting the summary profiles (pseudobulk) on top. (default: %(default)s)",
+    )
+
+    group.add_argument(
+        "--summarize",
+        action="store_true",
+        help="Sum contiguous columns to reduce matrix width for plotting the heatmap (default: False)",
+    )
+
+    group.add_argument(
+        "--signalMin",
+        type=float,
+        help="Minimum value for pseudobulk track plot (default: minimum signal in the region)",
+    )
+
+    group.add_argument(
+        "--signalMax",
+        type=float,
+        help="Maximum value for pseudobulk summary profile (default: maximum signal in the region)",
+    )
+
+    group.add_argument(
+        "--hmapMin",
+        type=float,
+        help="Minimum value for single-cell heatmap signal (default: minimum signal in the region)",
+    )
+
+    group.add_argument(
+        "--hmapMax",
+        type=float,
+        help="Maximum value for single-cell heatmap signal (default: maximum signal in the region)",
+    )
+
+    group.add_argument(
+        "--summaryPlotColor",
+        type=str,
+        default="red",
+        help="Color for the pseudobulk summary profile plot (default: %(default)s)",
+    )
+
+    group.add_argument(
+        "--colorMap",
+        type=str,
+        default="Reds",
+        help="Colormap for heatmap. Must be a valid `matplotlib colormap` entry (default: %(default)s)",
+    )
+
+    group.add_argument(
+        "--figsize",
+        type=float,
+        nargs=2,
+        default=(14, 8),
+        help="Figure size in inches (<width>, <height>; (default: %(default)s))",
+    )
+
+    group.add_argument(
+        "--dpi",
+        type=int,
+        default=300,
+        help="DPI for output PNG (default: %(default)s)",
+    )
+
+    group.add_argument(
+        "--outFileFormat",
+        help="image format type. If given, this option "
+        "overrides the image format inferred from the suffix of the outFilePrefix",
+        default=None,
+        choices=["png", "pdf", "svg", "eps", "plotly"],
+    )
+
+    return parser
+
+
+def main(args=None):
+    args = parseArguments().parse_args(args)
+
+    chrom, region_start, region_end = ParserCommon.parse_region(args.region)
     adata = ad.read_h5ad(args.input)
 
     # If region is CHROM-only (start/end are None) select all features on that
@@ -294,8 +277,8 @@ def main():
     )
 
     # Top line plot + fill
-    axes[0].plot(x_positions, agg, color=args.color, linewidth=1.5)
-    axes[0].fill_between(x_positions, agg, 0, color=args.color, alpha=0.9, linewidth=0)
+    axes[0].plot(x_positions, agg, color=args.summaryPlotColor, linewidth=1.5)
+    axes[0].fill_between(x_positions, agg, 0, color=args.summaryPlotColor, alpha=0.9, linewidth=0)
     axes[0].set_ylabel(None)
     axes[0].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
 
@@ -308,13 +291,13 @@ def main():
     axes[0].set_yticks([ymin, ymax])
 
     # Set Y limits based on user input or data min/max or arguments.
-    if args.signal_min:
-        signal_min = args.signal_min
+    if args.signalMin:
+        signal_min = args.signalMin
     else:
         signal_min = float(agg.min())
 
-    if args.signal_max:
-        signal_max = args.signal_max
+    if args.signalMax:
+        signal_max = args.signalMax
     else:
         signal_max = float(agg.max())
 
@@ -326,13 +309,13 @@ def main():
     axes[0].set_ylim(signal_min, signal_max)
 
     # Set heatmap color limits based on user input or data min/max or arguments.
-    if args.map_min:
-        map_min = args.map_min
+    if args.hmapMin:
+        map_min = args.hmapMin
     else:
         map_min = float(X_plot.min())
 
-    if args.map_max:
-        map_max = args.map_max
+    if args.hmapMax:
+        map_max = args.hmapMax
     else:
         map_max = float(X_plot.max())
 
@@ -345,7 +328,7 @@ def main():
     im = axes[1].imshow(
         X_plot,
         aspect="auto",
-        cmap=args.colormap,
+        cmap=args.colorMap,
         interpolation="nearest",
         vmin=map_min,
         vmax=map_max,
@@ -389,9 +372,10 @@ def main():
     cbar.ax.yaxis.set_ticks_position("left")
     cbar.ax.yaxis.set_label_position("left")
 
+    if not args.outFileFormat:
+        args.outFileFormat = None
     plt.margins(x=0.1, y=0.1)
-    plt.show()
-    fig.savefig(args.outputFilePrefix + ".png", dpi=args.dpi, bbox_inches="tight")
+    fig.savefig(args.outFilePrefix, dpi=args.dpi, bbox_inches="tight", format=args.outFileFormat)
     plt.close(fig)
 
 

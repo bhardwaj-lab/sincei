@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import re
 from deeptools.utilities import smartLabels
 import importlib.metadata
 
@@ -600,6 +601,32 @@ def genomicRegion(string):
     if len(region) == 0:
         raise argparse.ArgumentTypeError("{} is not a valid region".format(string))
     return region
+
+
+def parse_region(region_str):
+    """Parse region in either CHROM or CHROM:START-END format.
+
+    Returns a tuple (chrom, start, end). For chromosome-only input `start` and
+    `end` will be returned as 0 and np.inf so every feature in the chromosome is included.
+    """
+    s = region_str.strip()
+
+    # CHROM only
+    if re.fullmatch(r"[^:]+", s):
+        return s, None, None
+
+    # CHROM:START-END
+    match = re.fullmatch(r"([^:]+):(\d+)-(\d+)", s)
+    if not match:
+        raise ValueError(f"Invalid region '{region_str}'. Expected 'CHROM' or 'CHROM:START-END'")
+
+    chrom, start_str, end_str = match.groups()
+    start = int(start_str)
+    end = int(end_str)
+    if start > end:
+        raise ValueError(f"Invalid region '{region_str}'. START must be <= END.")
+
+    return chrom, start, end
 
 
 def numberOfProcessors(string):

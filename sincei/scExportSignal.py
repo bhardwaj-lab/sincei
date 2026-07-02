@@ -5,8 +5,31 @@ import sys
 import argparse
 import anndata as ad
 from scipy import sparse, io
-
+import numpy as np
+import pandas as pd
 from sincei import ParserCommon
+
+# ignore anndata .var modification warning
+import warnings
+from anndata import ImplicitModificationWarning
+
+warnings.simplefilter(action="ignore", category=ImplicitModificationWarning)
+
+
+# Helper function to convert chromosome labels to a numeric order
+def chromosome_to_numeric(chrom):
+    chrom = chrom.upper().strip("CHR")
+    try:
+        return int(chrom)
+    except ValueError:
+        # Handle special cases ("X", "Y", "MT") by giving them a higher order value
+        if chrom == "X":
+            return 23
+        elif chrom == "Y":
+            return 24
+        elif chrom == "MT" or chrom == "M":
+            return 25
+        return 100  # for any unexpected case, assign a high number
 
 
 def get_args():
@@ -17,7 +40,7 @@ def get_args():
     group.add_argument(
         "--outFileFormat",
         type=str,
-        default="h5ad",
+        default=None,
         choices=["bm", "mtx"],
         help="Output file format for `scExportSignal`. "
         '"bm" refers to the BedGraphMatrix format, useful for single-cell data visualization '
@@ -42,7 +65,7 @@ def get_args():
     return parser
 
 
-def parse_arguments(args=None):
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(
         opts=["h5adfile", "outFilePrefix"], requiredOpts=["input", "outFilePrefix"]
     )
@@ -53,7 +76,7 @@ def parse_arguments(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[io_args, get_args(), other_args],
         description="""
-``scExportSignal`` exports AnnData to other formats.
+``scExportSignal`` exports sincei-supportred .h5ad (anndata) file to other formats.
 """,
         usage="""
 scExportSignal -i INPUT.h5ad -f FORMAT -o OUTPUT
@@ -66,44 +89,25 @@ scExportSignal -i INPUT.h5ad -f FORMAT -o OUTPUT
         parser.print_help()
         sys.exit(0)
 
-    args = parser.parse_args(args)
-
-    return args
-
-
-# Helper function to convert chromosome labels to a numeric order
-def chromosome_to_numeric(chrom):
-    chrom = chrom.upper().strip("CHR")
-    try:
-        return int(chrom)
-    except ValueError:
-        # Handle special cases ("X", "Y", "MT") by giving them a higher order value
-        if chrom == "X":
-            return 23
-        elif chrom == "Y":
-            return 24
-        elif chrom == "MT" or chrom == "M":
-            return 25
-        return 100  # for any unexpected case, assign a high number
+    return parser
 
 
 def main(args=None):
     """Main entry point for scExportSignal."""
 
+    args = parseArguments().parse_args(args)
     adata = ad.read_h5ad(args.input)
 
     # Subset region
     if args.region is not None:
         chrom, start, end = ParserCommon.parse_region(args.region)
-        adata = adata[adata.obs["chr"] == chrom]
+        adata = adata[:, adata.var["chrom"] == chrom]
+        adata.var[["start", "end"]] = adata.var[["start", "end"]].apply(pd.to_numeric)
         if start is not None and end is not None:
-            adata = adata[(adata.obs["start"] >= start) & (adata.obs["end"] <= end)]
+            adata = adata[:, (adata.var["start"] >= int(start)) & (adata.var["end"] <= int(end))]
 
     # Export to formats
     if args.outFileFormat == "bm":
-        import numpy as np
-        import pandas as pd
-
         chrom = adata.var["chrom"].to_numpy()  # assuming 'chrom' field
         start = adata.var["start"].to_numpy()  # assuming 'start' field
         end = adata.var["end"].to_numpy()  # assuming 'end' field
@@ -126,15 +130,12 @@ def main(args=None):
         )
 
         row_data = pd.DataFrame(row_data.astype(float))
-        df = df.hstack(row_data)
-
-        df = df.sort("chrom_numeric", "start_numeric")
-
+        df = pd.concat([df, row_data], axis=1)
+        df = df.sort_values(["chrom_numeric", "start_numeric"])
         # Drop numeric columns
-        df = df.drop(["chrom_numeric", "start_numeric"])
-
+        df = df.drop(["chrom_numeric", "start_numeric"], axis=1)
         # Write to .bm file
-        df.write_csv(args.outFilePrefix + ".bm", separator="\t", include_header=False)
+        df.to_csv(args.outFilePrefix + ".bm", sep="\t", header=False)
 
     elif args.outFileFormat == "mtx":
         mtxFile = args.outFilePrefix + ".counts.mtx"
