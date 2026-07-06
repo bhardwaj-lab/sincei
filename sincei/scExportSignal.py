@@ -16,20 +16,57 @@ from anndata import ImplicitModificationWarning
 warnings.simplefilter(action="ignore", category=ImplicitModificationWarning)
 
 
-# Helper function to convert chromosome labels to a numeric order
-def chromosome_to_numeric(chrom):
-    chrom = chrom.upper().strip("CHR")
-    try:
-        return int(chrom)
-    except ValueError:
-        # Handle special cases ("X", "Y", "MT") by giving them a higher order value
-        if chrom == "X":
-            return 23
-        elif chrom == "Y":
-            return 24
-        elif chrom == "MT" or chrom == "M":
-            return 25
-        return 100  # for any unexpected case, assign a high number
+# Helper function to build a chromosome label -> numeric order mapping
+def chromosome_to_numeric(chroms):
+    """Map chromosome labels to a numeric sort order.
+
+    Only the unique labels in ``chroms`` are considered. The ordering is:
+    numbered (autosomal) chromosomes first, keeping their own number
+    regardless of a "chr"/"CHR" prefix (e.g. "chr7" -> 7); then the sex
+    chromosomes (X, Y) immediately after the highest-numbered autosome;
+    then the mitochondrial chromosome (MT/M); and finally any remaining
+    contigs/scaffolds, which get increasing values in sorted order.
+
+    Returns a dict mapping each original label to its numeric order.
+    """
+    autosomes = {}  # label -> chromosome number
+    sex = {}  # label -> "X"/"Y"
+    mito = []  # mitochondrial labels
+    other = []  # contigs / scaffolds
+
+    for chrom in set(chroms):
+        # Drop a leading "chr"/"CHR" prefix, case-insensitively.
+        name = chrom.upper()
+        if name.startswith("CHR"):
+            name = name[3:]
+        try:
+            autosomes[chrom] = int(name)
+        except ValueError:
+            if name in ("X", "Y"):
+                sex[chrom] = name
+            elif name in ("MT", "M"):
+                mito.append(chrom)
+            else:
+                other.append(chrom)
+
+    mapping = dict(autosomes)
+    counter = max(autosomes.values(), default=0)
+
+    # Sex chromosomes ("X", "Y")
+    for target in ("X", "Y"):
+        for chrom in sorted(label for label, s in sex.items() if s == target):
+            counter += 1
+            mapping[chrom] = counter
+    # Mitochondrial chromosomes ("MT", "M")
+    for chrom in sorted(mito):
+        counter += 1
+        mapping[chrom] = counter
+    # Remaining contigs/scaffolds get increasing values
+    for chrom in sorted(other):
+        counter += 1
+        mapping[chrom] = counter
+
+    return mapping
 
 
 def get_args():
@@ -112,17 +149,20 @@ def main(args=None):
         start = adata.var["start"].to_numpy()  # assuming 'start' field
         end = adata.var["end"].to_numpy()  # assuming 'end' field
         row_data = adata.X.toarray()  # Extract the data matrix
-        row_data = np.rot90(row_data, k=3)  # Rotate the matrix 270 degrees
+        row_data = np.rot90(row_data, k=3)  # Rotate the matrix 270 degrees (to feature x cell)
 
-        # Convert chromosomes and region starts to numeric values for sorting
-        chrom_numeric = np.array([chromosome_to_numeric(c) for c in chrom])
-        start_numeric = np.array([int(s) for s in start])
+        # Convert chromosomes and region bounds to numeric values for sorting
+        chrom_order = chromosome_to_numeric(chrom)
+        chrom_numeric = pd.Series(chrom).map(chrom_order).to_numpy()
+        start_numeric = start.astype(int)
+        end_numeric = end.astype(int)
 
         # Create a polars DataFrame and sort by chromosome and region start
         df = pd.DataFrame(
             {
                 "chrom_numeric": chrom_numeric,
                 "start_numeric": start_numeric,
+                "end_numeric": end_numeric,
                 "chrom": chrom,
                 "start": start.astype(int),
                 "end": end.astype(int),
@@ -131,9 +171,9 @@ def main(args=None):
 
         row_data = pd.DataFrame(row_data.astype(float))
         df = pd.concat([df, row_data], axis=1)
-        df = df.sort_values(["chrom_numeric", "start_numeric"])
+        df = df.sort_values(["chrom_numeric", "start_numeric", "end_numeric"])
         # Drop numeric columns
-        df = df.drop(["chrom_numeric", "start_numeric"], axis=1)
+        df = df.drop(["chrom_numeric", "start_numeric", "end_numeric"], axis=1)
         # Write to .bm file
         df.to_csv(args.outFilePrefix + ".bm", sep="\t", header=False)
 
