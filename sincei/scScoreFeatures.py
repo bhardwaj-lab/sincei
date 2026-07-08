@@ -27,12 +27,13 @@ def get_args():
     scoring_opts.add_argument(
         "--overlapPolicy",
         "-op",
-        help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in --features.\n"
-        " Options are: \n "
-        "    - ``partial``: count reads in anndata regions proportionally to the overlap fraction, \n "
-        "                   (counts_considered = feature_counts * overlap_length / region_length.) \n "
-        "    - ``all``: count all reads in the partially overlapping anndata regions.\n"
-        "    - ``none``: Only count reads in anndata regions that are fully contained within BED/GTF regions.\n"
+        help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in "
+        "``--features``.\n"
+        "Options are: \n "
+        "- ``partial``: count reads in anndata regions proportionally to the overlap fraction,"
+        "(counts_considered = feature_counts * overlap_length / region_length). \n "
+        "- ``all``: count all reads in the partially overlapping anndata regions. \n "
+        "- ``none``: Only count reads in anndata regions that are fully contained within BED/GTF regions. \n"
         "Default: %(default)s.",
         choices=["partial", "all", "none"],
         type=str,
@@ -63,8 +64,8 @@ def get_args():
     scoring_opts.add_argument(
         "--bedScoreFilter",
         "-bsf",
-        help="Provide a range (two values separated by space), or a threshold (upper limit) of score to determine which input features to consider for scoring."
-        " Used only when the input is a BED file containing scores (stored in the 5th column). Default: %(default)s.",
+        help="Provide a range (two values separated by space), or a threshold (upper limit) of score to determine which input features to consider for scoring. "
+        "Used only when the input is a BED file containing scores (stored in the 5th column). Default: %(default)s.",
         metavar="LIST",
         nargs="+",
         default=None,

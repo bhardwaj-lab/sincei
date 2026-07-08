@@ -13,9 +13,9 @@ Command Line tools
     tools/scCombineCounts
     tools/scClusterCells
     tools/scBulkCoverage
-    tools/scPlotRegion
     tools/scFindVCRs
     tools/scScoreFeatures
+    tools/scPlotRegion
     tools/scExportSignal
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.

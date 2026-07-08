@@ -82,14 +82,15 @@ def get_args():
         type=str,
         choices=["multi-sample", "multi-modal"],
         default="multi-sample",
-        help="How to merge the counts from the provided samples. "
-        "``multi-sample``: assumes that each sample is independent, "
+        help="How to merge the counts from the provided samples. \n "
+        "- ``multi-sample``: assumes that each sample is independent, "
         "but were counted in the same manner (i.e. on same features), therefore "
-        "it looks for feature overlaps, but not for barcode overlaps. "
-        "``multi-modal``: assumes that the counts were generated in 2 different ways, "
+        "it looks for feature overlaps, but not for barcode overlaps. \n "
+        "- ``multi-modal``: assumes that the counts were generated in 2 different ways, "
         "but from the same set of cells (for example, using a multi-omic assay), "
         "therefore it looks for the overlap of cell barcodes, but not for the overlaps "
-        "of features (Default: %(default)s)",
+        "of features.\n"
+        "Default: %(default)s",
     )
 
     return parser

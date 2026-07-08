@@ -63,10 +63,8 @@ def get_args():
         "--maxRegionSize",
         "-mr",
         type=int,
-        help="""
-        The maximum region size to be considered, in base pairs. Larger regions may increase compute time.
-        Defaults to 100 times the bin size.
-        """,
+        help="The maximum region size to be considered, in base pairs. Larger regions may increase "
+        "compute time. Defaults to 100 times the bin size.",
         default=None,
     )
 
@@ -74,9 +72,8 @@ def get_args():
         "--nKernels",
         "-nk",
         type=int,
-        help="""
-        The number of kernels to use for the score map. More kernels generally lead to a better segmentation,
-        but increase the computational cost.""",
+        help="The number of kernels to use for the score map. More kernels generally lead to a better "
+        "segmentation, but increase the computational cost.",
         default=20,
     )
 
@@ -85,11 +82,9 @@ def get_args():
         "-pen",
         nargs="+",
         type=float,
-        help="""
-        Penalty value for change-point detection. Higher values result in fewer segments. Multiple values
-        can be provided (separated by space). Each penalty value will produce a separate set of regions within
-        which can be seperated from the output BED file by filtering on the "score" column.
-        """,
+        help="Penalty value for change-point detection. Higher values result in fewer segments. Multiple "
+        "values can be provided (separated by space). Each penalty value will produce a separate set of "
+        'regions within which can be seperated from the output BED file by filtering on the "score" column.',
         default=[0.05, 0.1, 0.5],
     )
 
@@ -97,22 +92,18 @@ def get_args():
         "--outFile",
         "-o",
         type=str,
-        help="""
-        Name of the output file (BED format) with genome segmentation result. The penalty threshold that defines
-        each segment is saved in the "score" column of the BED file, and the BED file can be filtered based on this
-        column to obtain non-overlapping segments.
-        """,
+        help="Name of the output file (BED format) with genome segmentation result. The penalty threshold "
+        'that defines each segment is saved in the "score" column of the BED file, and the BED file can be '
+        "filtered based on this column to obtain non-overlapping segments.",
         required=True,
     )
 
     vcr_options.add_argument(
         "--region",
         "-r",
-        help="""
-        Region of the genome to limit the operation to - this is useful when testing parameters to
-        reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or
-        ``--region chr10:456700:891000``.
-        """,
+        help="Region of the genome to limit the operation to - this is useful when testing parameters to "
+        "reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or "
+        "``--region chr10:456700:891000``.",
         metavar="CHR:START:END",
         required=False,
         type=ParserCommon.genomicRegion,
@@ -121,8 +112,7 @@ def get_args():
     vcr_options.add_argument(
         "--numberOfProcessors",
         "-p",
-        help='Number of processors to use. Type "max/2" to '
-        'use half the maximum number of processors or "max" '
+        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" '
         'to use all available processors. (Default: "max")',
         metavar="INT",
         type=ParserCommon.numberOfProcessors,
