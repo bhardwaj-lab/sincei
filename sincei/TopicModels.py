@@ -102,8 +102,8 @@ class TOPICMODEL:
 
         Returns
         -------
-        cell_topic : np.ndarray
-            Cell-topic matrix
+        cell_topic : pandas.DataFrame
+            Cell-topic matrix (cells x topics).
         """
 
         cell_topic = np.zeros((len(self.cells), self.n_topics), dtype=float)
