@@ -28,55 +28,6 @@ def get_region_mask(var_df, chrom: str, start: int, end: int):
     )
 
 
-# Helper function to reduce matrix width for heatmap plotting by summing contiguous columns.
-def summarize_matrix_for_heatmap(X, dpi, figsize, heatmap_fraction=0.8):
-    """
-    Reduce matrix width for heatmap plotting by summing contiguous column bins.
-
-    Parameters
-    ----------
-    X : array-like, shape (n_rows, n_cols)
-        Input matrix.
-    dpi : int or float
-        Figure DPI used for plotting.
-    figsize : tuple(float, float)
-        Matplotlib figure size in inches.
-    heatmap_fraction : float, default=0.8
-        Fraction of horizontal figure width occupied by the heatmap.
-
-    Returns
-    -------
-    X_binned : np.ndarray
-        Matrix with same number of rows and reduced number of columns.
-    bin_size : int
-        Number of original columns summed per output column.
-    max_cols : int
-        Target maximum number of columns based on pixel budget.
-    """
-    X_arr = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
-    if X_arr.ndim != 2:
-        raise ValueError("X must be a 2D matrix.")
-
-    n_rows, n_cols = X_arr.shape
-    max_cols = max(1, int(dpi * figsize[0] * heatmap_fraction))
-
-    # No reduction needed
-    if n_cols <= max_cols:
-        return X_arr, 1, max_cols
-
-    # Number of original bins merged into one plotted bin
-    bin_size = int(np.ceil(n_cols / max_cols))
-    n_new_cols = int(np.ceil(n_cols / bin_size))
-
-    # Pad to a multiple of bin_size, then sum within each group
-    pad_cols = n_new_cols * bin_size - n_cols
-    if pad_cols > 0:
-        X_arr = np.pad(X_arr, ((0, 0), (0, pad_cols)), mode="constant")
-
-    X_binned = X_arr.reshape(n_rows, n_new_cols, bin_size).sum(axis=2)
-    return X_binned, bin_size, max_cols
-
-
 # Helper function to format the unit of coordinate tick labels.
 def format_genomic_tick_labels(min_val: int, max_val: int, n_ticks: int = 9):
     span = max_val - min_val
@@ -147,12 +98,6 @@ def get_args():
         choices=["sum", "mean"],
         default="sum",
         help="How to aggregate signal for plotting the summary profiles (pseudobulk) on top. (default: %(default)s)",
-    )
-
-    group.add_argument(
-        "--summarize",
-        action="store_true",
-        help="Sum contiguous columns to reduce matrix width for plotting the heatmap (default: False)",
     )
 
     group.add_argument(
@@ -260,9 +205,6 @@ def main(args=None):
         agg = X.mean(axis=0)
 
     x_positions = np.arange(X.shape[1])
-
-    if args.summarize:
-        X = summarize_matrix_for_heatmap(X, dpi=args.dpi, figsize=args.figsize)[0]
 
     # Reorder rows so higher-sum rows are on top
     row_order = np.argsort(X.sum(axis=1))[::-1]
