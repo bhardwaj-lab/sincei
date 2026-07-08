@@ -604,10 +604,10 @@ def genomicRegion(string):
 
 
 def parse_region(region_str):
-    """Parse region in either CHROM or CHROM:START-END format.
+    """Parse region in either CHROM, CHROM:START-END, or CHROM:START:END format.
 
-    Returns a tuple (chrom, start, end). For chromosome-only input `start` and
-    `end` will be returned as 0 and np.inf so every feature in the chromosome is included.
+    Returns a tuple (chrom, start, end). For chromosome-only input, ``start`` and
+    ``end`` are returned as None.
     """
     s = region_str.strip()
 
@@ -615,10 +615,12 @@ def parse_region(region_str):
     if re.fullmatch(r"[^:]+", s):
         return s, None, None
 
-    # CHROM:START-END
-    match = re.fullmatch(r"([^:]+):(\d+)-(\d+)", s)
+    # CHROM:START-END or CHROM:START:END
+    match = re.fullmatch(r"([^:]+):(\d+)(?:-|:)(\d+)", s)
     if not match:
-        raise ValueError(f"Invalid region '{region_str}'. Expected 'CHROM' or 'CHROM:START-END'")
+        raise ValueError(
+            f"Invalid region '{region_str}'. Expected 'CHROM', 'CHROM:START-END', or 'CHROM:START:END'"
+        )
 
     chrom, start_str, end_str = match.groups()
     start = int(start_str)
