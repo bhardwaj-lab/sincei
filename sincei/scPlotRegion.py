@@ -223,7 +223,7 @@ def main(args=None):
     args = parseArguments().parse_args(args)
 
     chrom, region_start, region_end = ParserCommon.parse_region(args.region)
-    adata = ad.read_h5ad(args.input)
+    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
 
     # If region is CHROM-only (start/end are None) select all features on that
     # chromosome and infer bounds from the selected features. Otherwise use the

@@ -173,7 +173,7 @@ def main(args=None):
     from sincei.FeatureScorer import FeatureScorer
 
     # Load input AnnData
-    adata = ad.read_h5ad(args.input)
+    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
 
     adata_out = FeatureScorer(
         adata=adata,

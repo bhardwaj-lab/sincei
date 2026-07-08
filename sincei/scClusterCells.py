@@ -159,6 +159,7 @@ def main(args=None):
     except:
         sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
         exit()
+    adata = ParserCommon.validateAnndata(adata, args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy

@@ -108,6 +108,7 @@ def main(args=None):
         # try smartlabel
         args.labels = [smartLabel(x) for x in args.input]
     adata_list = [sc.read_h5ad(x) for x in args.input]
+    ParserCommon.validateAnndataList(adata_list, args.input)
 
     if args.method == "multi-sample":
         ## concatenate labels and match chrom, start, end

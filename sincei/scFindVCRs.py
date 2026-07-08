@@ -139,7 +139,7 @@ def main(args=None):
     if args.maxRegionSize is None:
         args.maxRegionSize = args.binSize * 100
 
-    adata = ad.read_h5ad(args.input)
+    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
 
     pen_bed_df = VCRfinder(
         adata=adata,

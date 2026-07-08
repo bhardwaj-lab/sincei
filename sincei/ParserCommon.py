@@ -682,6 +682,110 @@ def smartLabels(labels):
     return smrt
 
 
+# Columns that every sincei-generated .h5ad file is expected to carry.
+REQUIRED_OBS_COLUMNS = ["sample", "barcodes"]
+REQUIRED_VAR_COLUMNS = ["chrom", "start", "end", "name"]
+
+
+def _anndataErrors(adata, filename=None):
+    """Return an error message if ``adata`` is not a valid sincei input, else None.
+
+    Checks that the object is non-empty (has at least one observation and one
+    variable) and that ``.obs`` carries the columns ``["sample", "barcodes"]``
+    and ``.var`` carries ``["chrom", "start", "end", "name"]``. Every detected
+    problem is included in the message.
+    """
+    problems = []
+
+    if adata.n_obs == 0:
+        problems.append("  .obs has 0 observations (cells)")
+    if adata.n_vars == 0:
+        problems.append("  .var has 0 variables (features)")
+
+    missing_obs = [c for c in REQUIRED_OBS_COLUMNS if c not in adata.obs.columns]
+    missing_var = [c for c in REQUIRED_VAR_COLUMNS if c not in adata.var.columns]
+    if missing_obs:
+        problems.append(f"  .obs is missing {missing_obs} (required: {REQUIRED_OBS_COLUMNS})")
+    if missing_var:
+        problems.append(f"  .var is missing {missing_var} (required: {REQUIRED_VAR_COLUMNS})")
+
+    if not problems:
+        return None
+
+    where = f"'{filename}'" if filename else "the input .h5ad file"
+    return "\n".join([f"{where} is not a valid sincei input:"] + problems)
+
+
+def validateAnndata(adata, filename=None):
+    """Check that an AnnData object has the fields required by sincei tools.
+
+    This validator is meant to be called by every tool that accepts a single
+    .h5ad input, right after the file is read.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        The object to validate.
+    filename : str, optional
+        Source file name, used only to make the error message clearer.
+
+    Returns
+    -------
+    anndata.AnnData
+        The same object, unchanged, so the call can be chained inline
+        (e.g. ``adata = ParserCommon.validateAnndata(ad.read_h5ad(path), path)``).
+
+    Notes
+    -----
+    If any required column is missing from ``.obs`` or ``.var``, an error
+    message is written to stderr and the program exits with status 1.
+    """
+    error = _anndataErrors(adata, filename)
+    if error is not None:
+        sys.stderr.write(error + "\n")
+        sys.exit(1)
+
+    return adata
+
+
+def validateAnndataList(adatas, filenames=None):
+    """Validate several AnnData objects, reporting all invalid ones before exiting.
+
+    Unlike calling :func:`validateAnndata` in a loop (which exits on the first
+    bad file), this checks every object first so the user sees the missing
+    columns for *all* invalid inputs in a single error report.
+
+    Parameters
+    ----------
+    adatas : sequence of anndata.AnnData
+        The objects to validate.
+    filenames : sequence of str, optional
+        Source file names, aligned with ``adatas``, used in the error messages.
+
+    Returns
+    -------
+    list of anndata.AnnData
+        The same objects, unchanged.
+
+    Notes
+    -----
+    If any object is missing required ``.obs``/``.var`` columns, a report
+    covering every invalid input is written to stderr and the program exits
+    with status 1.
+    """
+    if filenames is None:
+        filenames = [None] * len(adatas)
+
+    errors = [
+        error for adata, filename in zip(adatas, filenames) if (error := _anndataErrors(adata, filename)) is not None
+    ]
+    if errors:
+        sys.stderr.write("\n".join(errors) + "\n")
+        sys.exit(1)
+
+    return list(adatas)
+
+
 def validateInputs(args, process_barcodes=True):
     """
     Ensure that right input is provided from argparse

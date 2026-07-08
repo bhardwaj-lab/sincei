@@ -133,7 +133,7 @@ def main(args=None):
     """Main entry point for scExportSignal."""
 
     args = parseArguments().parse_args(args)
-    adata = ad.read_h5ad(args.input)
+    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
 
     # Subset region
     if args.region is not None:
