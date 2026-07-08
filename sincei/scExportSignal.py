@@ -151,9 +151,12 @@ def main(args=None):
         chrom = adata.var["chrom"].to_numpy()  # assuming 'chrom' field
         start = adata.var["start"].to_numpy()  # assuming 'start' field
         end = adata.var["end"].to_numpy()  # assuming 'end' field
-        row_data = adata.X.toarray()  # Extract the data matrix
-        row_data = np.rot90(row_data, k=3)  # Rotate the matrix 270 degrees (to feature x cell)
-
+        X = adata.X
+        if hasattr(X, "toarray"):
+            X = X.toarray()
+        else:
+            X = np.asarray(X)
+        row_data = X.T  # features x cells
         # Convert chromosomes and region bounds to numeric values for sorting
         chrom_order = chromosome_to_numeric(chrom)
         chrom_numeric = pd.Series(chrom).map(chrom_order).to_numpy()
