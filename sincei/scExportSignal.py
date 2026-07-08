@@ -181,7 +181,7 @@ def main(args=None):
         # Drop numeric columns
         df = df.drop(["chrom_numeric", "start_numeric", "end_numeric"], axis=1)
         # Write to .bm file
-        df.to_csv(args.outFilePrefix + ".bm", sep="\t", header=False)
+        df.to_csv(args.outFilePrefix + ".bm", sep="\t", header=False, index=False)
 
     elif args.outFileFormat == "mtx":
         mtxFile = args.outFilePrefix + ".counts.mtx"
