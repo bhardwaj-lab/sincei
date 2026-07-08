@@ -160,7 +160,7 @@ def main(args=None):
         start_numeric = start.astype(int)
         end_numeric = end.astype(int)
 
-        # Create a polars DataFrame and sort by chromosome and region start
+        # Create a pandas DataFrame and sort by chromosome and region start
         df = pd.DataFrame(
             {
                 "chrom_numeric": chrom_numeric,
