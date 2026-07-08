@@ -237,21 +237,21 @@ def main(args=None):
     axes[0].set_ylim(ymin, ymax)
     # Only min/max ticks on top Y axis
     axes[0].set_yticks([ymin, ymax])
-    # Set heatmap color limits based on user input or data min/max or arguments.
-    if args.hmapMin:
+    # Set heatmap color limits based on user input or data min/max.
+    if args.hmapMin is not None:
         map_min = args.hmapMin
     else:
         map_min = float(X_plot.min())
 
-    if args.hmapMax:
+    if args.hmapMax is not None:
         map_max = args.hmapMax
     else:
         map_max = float(X_plot.max())
 
-    # If all values are zero, set color limits to [0, 1].
-    if X_plot.min == 0 and X_plot.max == 0:
-        sys.output.write("All values in heatmap are zero. Setting color limits to [0, 1].\n")
-        map_min, map_max = 0, 1
+    # If all values are zero, set color limits to [0, 1] so imshow has a valid range.
+    if map_min == 0.0 and map_max == 0.0:
+        sys.stderr.write("All values in heatmap are zero. Setting color limits to [0, 1].\n")
+        map_max = 1.0
 
     # Heatmap
     im = axes[1].imshow(
