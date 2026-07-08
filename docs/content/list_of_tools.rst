@@ -13,6 +13,7 @@ Command Line tools
     tools/scCombineCounts
     tools/scClusterCells
     tools/scBulkCoverage
+    tools/scPlotRegion
     tools/scFindVCRs
     tools/scScoreFeatures
     tools/scExportSignal
@@ -32,6 +33,7 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scClusterCells`
 * :doc:`tools/scFindVCRs`
 * :doc:`tools/scScoreFeatures`
+* :doc:`tools/scPlotRegion`
 * :doc:`tools/scExportSignal`
 
 The table below summarizes input and output of each tool:
@@ -59,6 +61,8 @@ The table below summarizes input and output of each tool:
 |:ref:`scClusterCells`                 | analysis         | h5ad object           | .tsv file with clusters, png with UMAP      | Perform dimensionality reduction and clustering on the output of scCountReads.                              |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scBulkCoverage`                 | analysis         | tsv file + BAM file   | bigwig files                                | Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).    |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scPlotRegion`                   | analysis         | h5ad object           | png                                         | Plot genomic regions of interest from sincei output.                                                        |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scExportSignal`                 | analysis         | h5ad object           | bedgraph matrix, mtx, loom                  | Export sincei-supportred .h5ad (anndata) object to other formats.                                           |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
