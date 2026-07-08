@@ -116,10 +116,10 @@ def parseArguments(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[io_args, get_args(), other_args],
         description="""
-``scExportSignal`` exports sincei-supportred .h5ad (anndata) file to other formats.
+``scExportSignal`` exports sincei-supported .h5ad (anndata) file to other formats.
 """,
         usage="""
-scExportSignal -i INPUT.h5ad -f FORMAT -o OUTPUT
+scExportSignal -i INPUT.h5ad --outFileFormat FORMAT -o OUTPUT
 """,
         add_help=False,
     )
