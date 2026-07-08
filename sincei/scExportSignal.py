@@ -78,13 +78,16 @@ def get_args():
         "--outFileFormat",
         type=str,
         default=None,
-        choices=["bm", "mtx"],
+        choices=["bm", "mtx", "loom"],
         help="Output file format for `scExportSignal`. "
         '"bm" refers to the BedGraphMatrix format, useful for single-cell data visualization '
-        "with pyGenomneTracks. It stores data in dense format, so we recommend choosing a "
-        "region to export instead of the whole dataset."
+        "with pyGenomeTracks. It stores data in dense format, so we recommend choosing a "
+        "region to export instead of the whole dataset. "
         '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
-        "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
+        "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt . "
+        '"loom" refers to the Loom file format, which is a legacy single-cell sparse-matrix format. '
+        "Note: conversion to loom requires loompy, which is not installed by default. You may "
+        "install it by running ``pip install loompy``.",
         metavar="FORMAT",
         required=True,
     )
@@ -199,6 +202,21 @@ def main(args=None):
         # write the matrix as .mtx
         sp = sparse.csr_matrix(adata.X)
         io.mmwrite(mtxFile, sp, field="integer")
+
+    elif args.outFileFormat == "loom":
+        try:
+            import loompy
+        except ImportError:
+            sys.stderr.write("Error: loompy is not installed. Please install it by running 'pip install loompy'.\n")
+            sys.exit(1)
+
+        loomFile = args.outFilePrefix + ".loom"
+        loompy.create(
+            loomFile,
+            adata.X.T,  # Loom expects features x cells
+            row_attrs={k: adata.var[k].values for k in adata.var.columns},
+            col_attrs={k: adata.obs[k].values for k in adata.obs.columns},
+        )
 
 
 if __name__ == "__main__":
