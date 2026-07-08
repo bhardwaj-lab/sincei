@@ -94,7 +94,7 @@ def get_args():
     group.add_argument(
         "--mode",
         "-m",
-        required=True,
+        required=False,
         choices=["sum", "mean"],
         default="sum",
         help="How to aggregate signal for plotting the summary profiles (pseudobulk) on top. (default: %(default)s)",
