@@ -618,9 +618,7 @@ def parse_region(region_str):
     # CHROM:START-END or CHROM:START:END
     match = re.fullmatch(r"([^:]+):(\d+)(?:-|:)(\d+)", s)
     if not match:
-        raise ValueError(
-            f"Invalid region '{region_str}'. Expected 'CHROM', 'CHROM:START-END', or 'CHROM:START:END'"
-        )
+        raise ValueError(f"Invalid region '{region_str}'. Expected 'CHROM', 'CHROM:START-END', or 'CHROM:START:END'")
 
     chrom, start_str, end_str = match.groups()
     start = int(start_str)
