@@ -697,23 +697,28 @@ def _is_string(series):
     import pandas as pd
 
     # Strings are stored either as pandas' StringDtype or as plain object dtype.
-    return isinstance(series.dtype, pd.StringDtype) or series.dtype == object
+    return bool(isinstance(series.dtype, pd.StringDtype) or series.dtype == object)
 
 
-def _is_integer(series):
+def _to_integer(series):
     import pandas as pd
 
-    return pd.api.types.is_integer_dtype(series.dtype)
+    # .astype(object) first so categoricals are cast by value, not code.
+    # Raises ValueError/TypeError if any value cannot be parsed as an integer.
+    return pd.to_numeric(series.astype(object)).astype("int64")
 
 
-# Expected dtype for a subset of the required columns, as
-# (frame, column, human-readable type, predicate) tuples.
+# Expected type for each type-constrained required column, as
+# (frame, column, human-readable type, handler) tuples. A predicate handler
+# (``_is_*``) returns a bool saying whether the dtype is right; a coercion
+# handler (``_to_integer``) returns the converted column to store in place and
+# raises if the values cannot be cast.
 REQUIRED_COLUMN_TYPES = [
     ("obs", "sample", "categorical", _is_categorical),
     ("obs", "barcodes", "string", _is_string),
     ("var", "chrom", "categorical", _is_categorical),
-    ("var", "start", "integer", _is_integer),
-    ("var", "end", "integer", _is_integer),
+    ("var", "start", "integer", _to_integer),
+    ("var", "end", "integer", _to_integer),
 ]
 
 
@@ -722,9 +727,12 @@ def _anndataErrors(adata, filename=None):
 
     Checks that the object is non-empty (has at least one observation and one
     variable), that ``.obs`` carries the columns ``["sample", "barcodes"]`` and
-    ``.var`` carries ``["chrom", "start", "end", "name"]``, and that the key
-    columns have the expected dtypes (see ``REQUIRED_COLUMN_TYPES``). Every
-    detected problem is included in the message.
+    ``.var`` carries ``["chrom", "start", "end", "name"]``, and that the
+    categorical/string columns have the expected dtypes (see
+    ``REQUIRED_COLUMN_TYPES``). The integer ``.var`` columns
+    (``["start", "end"]``) are coerced to integer in place; a column that
+    cannot be cast is reported as a problem. Every detected problem is
+    included in the message.
     """
     problems = []
 
@@ -740,12 +748,24 @@ def _anndataErrors(adata, filename=None):
     if missing_var:
         problems.append(f"  .var is missing {missing_var} (required: {REQUIRED_VAR_COLUMNS})")
 
-    # Type checks, only for columns that are actually present (a missing
-    # column is already reported above).
-    for frame_name, col, expected, check in REQUIRED_COLUMN_TYPES:
+    # Type-check (and, for integer columns, coerce in place) each present
+    # column; a missing required column is already reported above.
+    for frame_name, col, expected, handler in REQUIRED_COLUMN_TYPES:
         frame = adata.obs if frame_name == "obs" else adata.var
-        if col in frame.columns and not check(frame[col]):
-            problems.append(f"  .{frame_name}['{col}'] must be {expected}, but has dtype '{frame[col].dtype}'")
+        if col not in frame.columns:
+            continue
+        try:
+            result = handler(frame[col])
+        except (ValueError, TypeError) as e:
+            problems.append(f"  .{frame_name}['{col}'] must be castable to {expected}, but the cast failed: {e}")
+            continue
+        if isinstance(result, bool):
+            # Predicate handler: result says whether the dtype is acceptable.
+            if not result:
+                problems.append(f"  .{frame_name}['{col}'] must be {expected}, but has dtype '{frame[col].dtype}'")
+        else:
+            # Coercion handler: store the converted column in place.
+            frame[col] = result
 
     if not problems:
         return None
@@ -770,13 +790,16 @@ def validateAnndata(adata, filename=None):
     Returns
     -------
     anndata.AnnData
-        The same object, unchanged, so the call can be chained inline
+        The same object, with ``.var["start"]``/``.var["end"]`` coerced to
+        integer, so the call can be chained inline
         (e.g. ``adata = ParserCommon.validateAnndata(ad.read_h5ad(path), path)``).
 
     Notes
     -----
-    If any required column is missing from ``.obs`` or ``.var``, an error
-    message is written to stderr and the program exits with status 1.
+    If the object is invalid (empty, missing a required ``.obs``/``.var``
+    column, a wrong-typed column, or a ``start``/``end`` that cannot be cast
+    to integer), an error message is written to stderr and the program exits
+    with status 1.
     """
     error = _anndataErrors(adata, filename)
     if error is not None:
@@ -803,11 +826,13 @@ def validateAnndataList(adatas, filenames=None):
     Returns
     -------
     list of anndata.AnnData
-        The same objects, unchanged.
+        The same objects, with ``.var["start"]``/``.var["end"]`` coerced to
+        integer.
 
     Notes
     -----
-    If any object is missing required ``.obs``/``.var`` columns, a report
+    If any object is invalid (empty, missing a required ``.obs``/``.var``
+    column, a wrong-typed column, or an uncastable ``start``/``end``), a report
     covering every invalid input is written to stderr and the program exits
     with status 1.
     """
