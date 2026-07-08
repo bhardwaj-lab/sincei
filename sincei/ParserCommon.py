@@ -687,13 +687,44 @@ REQUIRED_OBS_COLUMNS = ["sample", "barcodes"]
 REQUIRED_VAR_COLUMNS = ["chrom", "start", "end", "name"]
 
 
+def _is_categorical(series):
+    import pandas as pd
+
+    return isinstance(series.dtype, pd.CategoricalDtype)
+
+
+def _is_string(series):
+    import pandas as pd
+
+    # Strings are stored either as pandas' StringDtype or as plain object dtype.
+    return isinstance(series.dtype, pd.StringDtype) or series.dtype == object
+
+
+def _is_integer(series):
+    import pandas as pd
+
+    return pd.api.types.is_integer_dtype(series.dtype)
+
+
+# Expected dtype for a subset of the required columns, as
+# (frame, column, human-readable type, predicate) tuples.
+REQUIRED_COLUMN_TYPES = [
+    ("obs", "sample", "categorical", _is_categorical),
+    ("obs", "barcodes", "string", _is_string),
+    ("var", "chrom", "categorical", _is_categorical),
+    ("var", "start", "integer", _is_integer),
+    ("var", "end", "integer", _is_integer),
+]
+
+
 def _anndataErrors(adata, filename=None):
     """Return an error message if ``adata`` is not a valid sincei input, else None.
 
     Checks that the object is non-empty (has at least one observation and one
-    variable) and that ``.obs`` carries the columns ``["sample", "barcodes"]``
-    and ``.var`` carries ``["chrom", "start", "end", "name"]``. Every detected
-    problem is included in the message.
+    variable), that ``.obs`` carries the columns ``["sample", "barcodes"]`` and
+    ``.var`` carries ``["chrom", "start", "end", "name"]``, and that the key
+    columns have the expected dtypes (see ``REQUIRED_COLUMN_TYPES``). Every
+    detected problem is included in the message.
     """
     problems = []
 
@@ -708,6 +739,13 @@ def _anndataErrors(adata, filename=None):
         problems.append(f"  .obs is missing {missing_obs} (required: {REQUIRED_OBS_COLUMNS})")
     if missing_var:
         problems.append(f"  .var is missing {missing_var} (required: {REQUIRED_VAR_COLUMNS})")
+
+    # Type checks, only for columns that are actually present (a missing
+    # column is already reported above).
+    for frame_name, col, expected, check in REQUIRED_COLUMN_TYPES:
+        frame = adata.obs if frame_name == "obs" else adata.var
+        if col in frame.columns and not check(frame[col]):
+            problems.append(f"  .{frame_name}['{col}'] must be {expected}, but has dtype '{frame[col].dtype}'")
 
     if not problems:
         return None

@@ -196,7 +196,7 @@ def main(args=None):
     adata = ad.AnnData(sp.T)
     adata.obs = pd.DataFrame(
         {
-            "sample": [x.split("::")[-2] for x in newlabels],
+            "sample": pd.Categorical([x.split("::")[-2] for x in newlabels]),
             "barcodes": [x.split("::")[-1] for x in newlabels],
         },
         index=newlabels,
@@ -206,9 +206,9 @@ def main(args=None):
 
     adata.var = pd.DataFrame(
         {
-            "chrom": [x.split("_")[0] for x in rows],
-            "start": [x.split("_")[1] for x in rows],
-            "end": [y.split("::")[0] for y in [x.split("_")[2] for x in rows]],
+            "chrom": pd.Categorical([x.split("_")[0] for x in rows]),
+            "start": [int(x.split("_")[1]) for x in rows],
+            "end": [int(y.split("::")[0]) for y in [x.split("_")[2] for x in rows]],
             "name": [x.split("::")[1] for x in rows],
         },
         index=rows,
