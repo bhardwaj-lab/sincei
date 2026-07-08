@@ -224,32 +224,19 @@ def main(args=None):
     axes[0].set_ylabel(None)
     axes[0].tick_params(axis="x", which="both", bottom=False, labelbottom=False)
 
-    if agg.min() == 0 and agg.max() == 0:
-        axes[0].set_ylim(0, 1)
-
-    # Only min/max ticks on top Y axis
-    axes[0].set_ylim(agg.min(), agg.max())
     ymin, ymax = float(np.min(agg)), float(np.max(agg))
+    if ymin == 0.0 and ymax == 0.0:
+        ymax = 1.0
+
+    # Set Y limits based on user input or data min/max.
+    if args.signalMin is not None:
+        ymin = args.signalMin
+    if args.signalMax is not None:
+        ymax = args.signalMax
+
+    axes[0].set_ylim(ymin, ymax)
+    # Only min/max ticks on top Y axis
     axes[0].set_yticks([ymin, ymax])
-
-    # Set Y limits based on user input or data min/max or arguments.
-    if args.signalMin:
-        signal_min = args.signalMin
-    else:
-        signal_min = float(agg.min())
-
-    if args.signalMax:
-        signal_max = args.signalMax
-    else:
-        signal_max = float(agg.max())
-
-    # If all values are zero, set color limits to [0, 1].
-    if X_plot.min == 0 and X_plot.max == 0:
-        sys.output.write("All values in track plot are zero. Setting color limits to [0, 1].\n")
-        map_min, map_max = 0, 1
-
-    axes[0].set_ylim(signal_min, signal_max)
-
     # Set heatmap color limits based on user input or data min/max or arguments.
     if args.hmapMin:
         map_min = args.hmapMin
