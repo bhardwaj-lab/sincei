@@ -192,6 +192,16 @@ def main(args=None):
         verbose=args.verbose,
     )
 
+    if adata_out.uns is not None:
+        print(".uns copied from input to output")
+        adata_out.uns = adata.uns
+    if adata_out.obsm is not None:
+        print(".obsm copied from input to output")
+        adata_out.obsm = adata.obsm
+    if adata_out.obsp is not None:
+        print(".obsp copied from input to output")
+        adata_out.obsp = adata.obsp
+
     # Save output
     adata_out.write_h5ad(args.outFile)
     sys.stdout.write(f"Output saved to {args.outFile}\n")
