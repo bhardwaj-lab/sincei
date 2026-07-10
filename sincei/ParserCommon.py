@@ -693,13 +693,6 @@ def _is_categorical(series):
     return isinstance(series.dtype, pd.CategoricalDtype)
 
 
-def _is_string(series):
-    import pandas as pd
-
-    # Strings are stored either as pandas' StringDtype or as plain object dtype.
-    return bool(isinstance(series.dtype, pd.StringDtype) or series.dtype == object)
-
-
 def _to_integer(series):
     import pandas as pd
 
@@ -715,7 +708,7 @@ def _to_integer(series):
 # raises if the values cannot be cast.
 REQUIRED_COLUMN_TYPES = [
     ("obs", "sample", "categorical", _is_categorical),
-    ("obs", "barcodes", "string", _is_string),
+    ("obs", "barcodes", "categorical", _is_categorical),
     ("var", "chrom", "categorical", _is_categorical),
     ("var", "start", "integer", _to_integer),
     ("var", "end", "integer", _to_integer),
