@@ -158,7 +158,7 @@ def get_args():
         help="image format type. If given, this option "
         "overrides the image format inferred from the suffix of the outFilePrefix",
         default=None,
-        choices=["png", "pdf", "svg", "eps", "plotly"],
+        choices=["png", "pdf", "svg", "eps"],
     )
 
     return parser

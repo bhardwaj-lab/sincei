@@ -681,90 +681,50 @@ def smartLabels(labels):
         )
     return smrt
 
-
-# Columns that every sincei-generated .h5ad file is expected to carry.
-REQUIRED_OBS_COLUMNS = ["sample", "barcodes"]
-REQUIRED_VAR_COLUMNS = ["chrom", "start", "end", "name"]
-
-
-def _is_categorical(series):
-    import pandas as pd
-
-    return isinstance(series.dtype, pd.CategoricalDtype)
-
-
-def _to_integer(series):
-    import pandas as pd
-
-    # .astype(object) first so categoricals are cast by value, not code.
-    # Raises ValueError/TypeError if any value cannot be parsed as an integer.
-    return pd.to_numeric(series.astype(object)).astype("int64")
-
-
-# Expected type for each type-constrained required column, as
-# (frame, column, human-readable type, handler) tuples. A predicate handler
-# (``_is_*``) returns a bool saying whether the dtype is right; a coercion
-# handler (``_to_integer``) returns the converted column to store in place and
-# raises if the values cannot be cast.
-REQUIRED_COLUMN_TYPES = [
-    ("obs", "sample", "categorical", _is_categorical),
-    ("obs", "barcodes", "categorical", _is_categorical),
-    ("var", "chrom", "categorical", _is_categorical),
-    ("var", "start", "integer", _to_integer),
-    ("var", "end", "integer", _to_integer),
-]
-
+def ensure_dtype(df, column_name, dtype, label):
+    """
+    Check if a column is present and specific type. If not, convert or return error
+    """
+    if column_name not in df.columns:
+        return f"'{label}' : Column absent'{column_name}': {e}"
+    else:
+        try:
+            if df[column_name].dtype != dtype:
+                # Attempt conversion
+                df[column_name] = df[column_name].astype(dtype)
+        except Exception as e:
+            # Return the error message if something goes wrong
+            return f"'{label}' : Error converting column '{column_name}': {e}"
 
 def _anndataErrors(adata, filename=None):
-    """Return an error message if ``adata`` is not a valid sincei input, else None.
-
-    Checks that the object is non-empty (has at least one observation and one
-    variable), that ``.obs`` carries the columns ``["sample", "barcodes"]`` and
-    ``.var`` carries ``["chrom", "start", "end", "name"]``, and that the
-    categorical/string columns have the expected dtypes (see
-    ``REQUIRED_COLUMN_TYPES``). The integer ``.var`` columns
-    (``["start", "end"]``) are coerced to integer in place; a column that
-    cannot be cast is reported as a problem. Every detected problem is
-    included in the message.
+    """
+    Return an error message if ``adata`` is not a valid sincei input, else None.
     """
     problems = []
+    # Columns that every sincei-generated .h5ad file is expected to carry.
+    VAR_CAT = ["chrom", "name"]
+    VAR_INT = ["start", "end"]
+    REQUIRED_VAR_COLUMNS = VAR_CAT + VAR_INT
+    REQUIRED_OBS_COLUMNS = ["sample", "barcodes"]
 
     if adata.n_obs == 0:
         problems.append("  .obs has 0 observations (cells)")
     if adata.n_vars == 0:
         problems.append("  .var has 0 variables (features)")
 
-    missing_obs = [c for c in REQUIRED_OBS_COLUMNS if c not in adata.obs.columns]
-    missing_var = [c for c in REQUIRED_VAR_COLUMNS if c not in adata.var.columns]
-    if missing_obs:
-        problems.append(f"  .obs is missing {missing_obs} (required: {REQUIRED_OBS_COLUMNS})")
-    if missing_var:
-        problems.append(f"  .var is missing {missing_var} (required: {REQUIRED_VAR_COLUMNS})")
+    for col in REQUIRED_OBS_COLUMNS:
+        problems.append(ensure_dtype(adata.obs, col, 'category', 'obs'))
+    for col in VAR_CAT:
+        problems.append(ensure_dtype(adata.var, col, 'category', 'var'))
+    for col in VAR_INT:
+        problems.append(ensure_dtype(adata.var, col, int, 'var'))
 
-    # Type-check (and, for integer columns, coerce in place) each present
-    # column; a missing required column is already reported above.
-    for frame_name, col, expected, handler in REQUIRED_COLUMN_TYPES:
-        frame = adata.obs if frame_name == "obs" else adata.var
-        if col not in frame.columns:
-            continue
-        try:
-            result = handler(frame[col])
-        except (ValueError, TypeError) as e:
-            problems.append(f"  .{frame_name}['{col}'] must be castable to {expected}, but the cast failed: {e}")
-            continue
-        if isinstance(result, bool):
-            # Predicate handler: result says whether the dtype is acceptable.
-            if not result:
-                problems.append(f"  .{frame_name}['{col}'] must be {expected}, but has dtype '{frame[col].dtype}'")
-        else:
-            # Coercion handler: store the converted column in place.
-            frame[col] = result
-
+    problems = [x for x in problems if x is not None]
     if not problems:
         return None
 
     where = f"'{filename}'" if filename else "the input .h5ad file"
-    return "\n".join([f"{where} is not a valid sincei input:"] + problems)
+    return "\n".join([f"{where} is not a valid sincei-formatted input file:"] + problems)
 
 
 def validateAnndata(adata, filename=None):
@@ -803,31 +763,8 @@ def validateAnndata(adata, filename=None):
 
 
 def validateAnndataList(adatas, filenames=None):
-    """Validate several AnnData objects, reporting all invalid ones before exiting.
-
-    Unlike calling :func:`validateAnndata` in a loop (which exits on the first
-    bad file), this checks every object first so the user sees the missing
-    columns for *all* invalid inputs in a single error report.
-
-    Parameters
-    ----------
-    adatas : sequence of anndata.AnnData
-        The objects to validate.
-    filenames : sequence of str, optional
-        Source file names, aligned with ``adatas``, used in the error messages.
-
-    Returns
-    -------
-    list of anndata.AnnData
-        The same objects, with ``.var["start"]``/``.var["end"]`` coerced to
-        integer.
-
-    Notes
-    -----
-    If any object is invalid (empty, missing a required ``.obs``/``.var``
-    column, a wrong-typed column, or an uncastable ``start``/``end``), a report
-    covering every invalid input is written to stderr and the program exits
-    with status 1.
+    """
+    Validate several AnnData objects, reporting all invalid ones before exiting.
     """
     if filenames is None:
         filenames = [None] * len(adatas)
