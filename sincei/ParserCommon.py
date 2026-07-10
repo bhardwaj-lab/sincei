@@ -681,6 +681,7 @@ def smartLabels(labels):
         )
     return smrt
 
+
 def ensure_dtype(df, column_name, dtype, label):
     """
     Check if a column is present and specific type. If not, convert or return error
@@ -695,6 +696,7 @@ def ensure_dtype(df, column_name, dtype, label):
         except Exception as e:
             # Return the error message if something goes wrong
             return f"'{label}' : Error converting column '{column_name}': {e}"
+
 
 def _anndataErrors(adata, filename=None):
     """
@@ -713,11 +715,11 @@ def _anndataErrors(adata, filename=None):
         problems.append("  .var has 0 variables (features)")
 
     for col in REQUIRED_OBS_COLUMNS:
-        problems.append(ensure_dtype(adata.obs, col, 'category', 'obs'))
+        problems.append(ensure_dtype(adata.obs, col, "category", "obs"))
     for col in VAR_CAT:
-        problems.append(ensure_dtype(adata.var, col, 'category', 'var'))
+        problems.append(ensure_dtype(adata.var, col, "category", "var"))
     for col in VAR_INT:
-        problems.append(ensure_dtype(adata.var, col, int, 'var'))
+        problems.append(ensure_dtype(adata.var, col, int, "var"))
 
     problems = [x for x in problems if x is not None]
     if not problems:

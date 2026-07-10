@@ -202,7 +202,7 @@ def main(args=None):
         f.write("\n")
         f.close()
 
-        # write the matrix as .mtx
+        # write the matrix as .mtx (Note:remember to change "field" in future when working with floats)
         sp = sparse.csr_matrix(adata.X)
         io.mmwrite(mtxFile, sp, field="integer")
 
