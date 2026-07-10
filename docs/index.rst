@@ -77,7 +77,7 @@ Getting Help
 Command line tools available in sincei
 --------------------------------------
 
-Tools for a typical single-cell analysis workflow (WIP: work in progress/not available yet)
+Tools for a typical single-cell analysis workflow
 
 ========================== ============================================================================================================
 tool                                 description
@@ -91,6 +91,8 @@ tool                                 description
 :ref:`scCombineCounts`         Concatenate/merge the counts from different samples/batches or different modalities.
 :ref:`scClusterCells`          Perform dimensionality reduction and clustering on the output of scCountReads.
 :ref:`scBulkCoverage`          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
+:ref:`scPlotRegion`            Plot genomic regions of interest from sincei output.
+:ref:`scExportSignal`          Export sincei-supportred .h5ad (anndata) object to other formats.
 ========================== ============================================================================================================
 
 

@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import re
 from deeptools.utilities import smartLabels
 import importlib.metadata
 
@@ -118,18 +119,6 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "and `scJSD`, the output file is a .tsv file. For other tools, the output file is "
             "an updated .h5ad file with the result of the requested operation.",
             required=True if "outFile" in requiredOpts else False,
-        )
-
-    if "outFileFormat" in opts:
-        group.add_argument(
-            "--outFileFormat",
-            type=str,
-            default="h5ad",
-            choices=["h5ad", "mtx"],
-            help="Output file format. By default, write an anndata object of name "
-            "<prefix>.h5ad, which can be opened with scanpy, or used with downstream tools. "
-            '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
-            "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
         )
 
     return parser
@@ -614,6 +603,32 @@ def genomicRegion(string):
     return region
 
 
+def parse_region(region_str):
+    """Parse region in either CHROM, CHROM:START-END, or CHROM:START:END format.
+
+    Returns a tuple (chrom, start, end). For chromosome-only input, ``start`` and
+    ``end`` are returned as None.
+    """
+    s = region_str.strip()
+
+    # CHROM only
+    if re.fullmatch(r"[^:]+", s):
+        return s, None, None
+
+    # CHROM:START-END or CHROM:START:END
+    match = re.fullmatch(r"([^:]+):(\d+)(?:-|:)(\d+)", s)
+    if not match:
+        raise ValueError(f"Invalid region '{region_str}'. Expected 'CHROM', 'CHROM:START-END', or 'CHROM:START:END'")
+
+    chrom, start_str, end_str = match.groups()
+    start = int(start_str)
+    end = int(end_str)
+    if start > end:
+        raise ValueError(f"Invalid region '{region_str}'. START must be <= END.")
+
+    return chrom, start, end
+
+
 def numberOfProcessors(string):
     try:
         # Use os.sched_getaffinity if available (Linux)
@@ -665,6 +680,105 @@ def smartLabels(labels):
             "Please be aware that in case of overlapping barcodes the counts will be merged."
         )
     return smrt
+
+
+def ensure_dtype(df, column_name, dtype, label):
+    """
+    Check if a column is present and specific type. If not, convert or return error
+    """
+    if column_name not in df.columns:
+        return f"'{label}' : Column absent'{column_name}': {e}"
+    else:
+        try:
+            if df[column_name].dtype != dtype:
+                # Attempt conversion
+                df[column_name] = df[column_name].astype(dtype)
+        except Exception as e:
+            # Return the error message if something goes wrong
+            return f"'{label}' : Error converting column '{column_name}': {e}"
+
+
+def _anndataErrors(adata, filename=None):
+    """
+    Return an error message if ``adata`` is not a valid sincei input, else None.
+    """
+    problems = []
+    # Columns that every sincei-generated .h5ad file is expected to carry.
+    VAR_CAT = ["chrom", "name"]
+    VAR_INT = ["start", "end"]
+    REQUIRED_VAR_COLUMNS = VAR_CAT + VAR_INT
+    REQUIRED_OBS_COLUMNS = ["sample", "barcodes"]
+
+    if adata.n_obs == 0:
+        problems.append("  .obs has 0 observations (cells)")
+    if adata.n_vars == 0:
+        problems.append("  .var has 0 variables (features)")
+
+    for col in REQUIRED_OBS_COLUMNS:
+        problems.append(ensure_dtype(adata.obs, col, "category", "obs"))
+    for col in VAR_CAT:
+        problems.append(ensure_dtype(adata.var, col, "category", "var"))
+    for col in VAR_INT:
+        problems.append(ensure_dtype(adata.var, col, int, "var"))
+
+    problems = [x for x in problems if x is not None]
+    if not problems:
+        return None
+
+    where = f"'{filename}'" if filename else "the input .h5ad file"
+    return "\n".join([f"{where} is not a valid sincei-formatted input file:"] + problems)
+
+
+def validateAnndata(adata, filename=None):
+    """Check that an AnnData object has the fields required by sincei tools.
+
+    This validator is meant to be called by every tool that accepts a single
+    .h5ad input, right after the file is read.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        The object to validate.
+    filename : str, optional
+        Source file name, used only to make the error message clearer.
+
+    Returns
+    -------
+    anndata.AnnData
+        The same object, with ``.var["start"]``/``.var["end"]`` coerced to
+        integer, so the call can be chained inline
+        (e.g. ``adata = ParserCommon.validateAnndata(ad.read_h5ad(path), path)``).
+
+    Notes
+    -----
+    If the object is invalid (empty, missing a required ``.obs``/``.var``
+    column, a wrong-typed column, or a ``start``/``end`` that cannot be cast
+    to integer), an error message is written to stderr and the program exits
+    with status 1.
+    """
+    error = _anndataErrors(adata, filename)
+    if error is not None:
+        sys.stderr.write(error + "\n")
+        sys.exit(1)
+
+    return adata
+
+
+def validateAnndataList(adatas, filenames=None):
+    """
+    Validate several AnnData objects, reporting all invalid ones before exiting.
+    """
+    if filenames is None:
+        filenames = [None] * len(adatas)
+
+    errors = [
+        error for adata, filename in zip(adatas, filenames) if (error := _anndataErrors(adata, filename)) is not None
+    ]
+    if errors:
+        sys.stderr.write("\n".join(errors) + "\n")
+        sys.exit(1)
+
+    return list(adatas)
 
 
 def validateInputs(args, process_barcodes=True):

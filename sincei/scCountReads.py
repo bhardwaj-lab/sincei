@@ -127,17 +127,6 @@ def get_args():
         "density of the BAM file.",
     )
 
-    optional.add_argument(
-        "--outFileFormat",
-        type=str,
-        default="h5ad",
-        choices=["h5ad", "mtx"],
-        help="Output file format. Default is to write an anndata object of name "
-        "<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. "
-        '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
-        "<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
-    )
-
     return parser
 
 
@@ -158,13 +147,7 @@ def main(args=None):
     else:
         bed_regions = None
 
-    ## create row/colNames
-    if args.outFileFormat == "mtx":
-        mtxFile = args.outFilePrefix + ".counts.mtx"
-        rowNamesFile = args.outFilePrefix + ".rownames.txt"
-        colNamesFile = args.outFilePrefix + ".colnames.txt"
-    else:
-        rowNamesFile = None
+    rowNamesFile = None
 
     stepSize = args.binSize + args.distanceBetweenBins
     c = countR.CountReadsPerBin(
@@ -208,38 +191,28 @@ def main(args=None):
             "region is covered by reads.\n"
         )
 
-    ## write mtx/rownames if asked
-    if args.outFileFormat == "mtx":
-        f = open(colNamesFile, "w")
-        f.write("\n".join(newlabels))
-        f.write("\n")
-        f.close()
-        ## write the matrix as .mtx
-        sp = sparse.csr_matrix(num_reads_per_bin)
-        io.mmwrite(mtxFile, sp, field="integer")
-    else:
-        # write anndata
-        sp = sparse.csr_matrix(num_reads_per_bin)
-        adata = ad.AnnData(sp.T)
-        adata.obs = pd.DataFrame(
-            {
-                "sample": [x.split("::")[-2] for x in newlabels],
-                "barcodes": [x.split("::")[-1] for x in newlabels],
-            },
-            index=newlabels,
-        )
+    # write anndata
+    sp = sparse.csr_matrix(num_reads_per_bin)
+    adata = ad.AnnData(sp.T)
+    adata.obs = pd.DataFrame(
+        {
+            "sample": [x.split("::")[-2] for x in newlabels],
+            "barcodes": [x.split("::")[-1] for x in newlabels],
+        },
+        index=newlabels,
+    )
 
-        rows = list(regionList)
+    rows = list(regionList)
 
-        adata.var = pd.DataFrame(
-            {
-                "chrom": [x.split("_")[0] for x in rows],
-                "start": [x.split("_")[1] for x in rows],
-                "end": [y.split("::")[0] for y in [x.split("_")[2] for x in rows]],
-                "name": [x.split("::")[1] for x in rows],
-            },
-            index=rows,
-        )
+    adata.var = pd.DataFrame(
+        {
+            "chrom": [x.split("_")[0] for x in rows],
+            "start": [int(x.split("_")[1]) for x in rows],
+            "end": [int(y.split("::")[0]) for y in [x.split("_")[2] for x in rows]],
+            "name": [x.split("::")[1] for x in rows],
+        },
+        index=rows,
+    )
 
-        # export as h5ad
-        adata.write_h5ad(args.outFilePrefix + ".h5ad")
+    # export as h5ad
+    adata.write_h5ad(args.outFilePrefix + ".h5ad")

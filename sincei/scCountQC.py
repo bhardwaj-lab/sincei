@@ -110,7 +110,7 @@ def get_args():
         "--filterCellArgs",
         "-fc",
         type=str,
-        help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ...." '
+        help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ..." '
         "where arg_name is the QC metric for cells present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
@@ -120,7 +120,7 @@ def get_args():
         "--filterRegionArgs",
         "-fr",
         type=str,
-        help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ...." '
+        help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ..." '
         "where arg_name is the QC metric for regions present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
@@ -166,6 +166,7 @@ def main(args=None):
     except:
         sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
         exit()
+    adata = ParserCommon.validateAnndata(adata, args.input)
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:

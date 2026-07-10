@@ -15,7 +15,8 @@ Command Line tools
     tools/scBulkCoverage
     tools/scFindVCRs
     tools/scScoreFeatures
-    
+    tools/scPlotRegion
+    tools/scExportSignal
 
 The following tools use **BAM files** as input. These BAM files could can from any single-cell genomics protocol, as long as they have a **tag** that specifies the cell barcodes.
 
@@ -32,6 +33,8 @@ The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output 
 * :doc:`tools/scClusterCells`
 * :doc:`tools/scFindVCRs`
 * :doc:`tools/scScoreFeatures`
+* :doc:`tools/scPlotRegion`
+* :doc:`tools/scExportSignal`
 
 The table below summarizes input and output of each tool:
 
@@ -41,7 +44,7 @@ The table below summarizes input and output of each tool:
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 | tool                                 | type             | input files           | main output file(s)                         | application                                                                                                 |
 +======================================+==================+=======================+=============================================+=============================================================================================================+
-|:ref:`scFilterBarcodes`               | preprocessing    | BAM/SAM files         | text file with filtered cell barcodes       | Identify and filter cell barcodes (for droplet-based single-cell seq)                                       |
+|:ref:`scFilterBarcodes`               | preprocessing    | BAM/SAM files         | text file with filtered cell barcodes       | Identify and filter cell barcodes (for droplet-based single-cell seq).                                      |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scFilterStats`                  | QC               | BAM/SAM files         | text file with QC per cell                  | Produce per-cell statistics after filtering reads by user-defined criteria.                                 |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
@@ -53,9 +56,13 @@ The table below summarizes input and output of each tool:
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scScoreFeatures`                | analysis         | h5ad object + BED/GTF | h5ad object with gene activity scores       | Calculate gene activity scores from chromatin features/bins or aggregate bins into VCRs.                    |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
-|:ref:`scCombineCounts`                | preprocessing    | h5ad objects          | merged h5ad object                          | Concatenate/merge the counts from different samples/batches or modalities                                   |
+|:ref:`scCombineCounts`                | preprocessing    | h5ad objects          | merged h5ad object                          | Concatenate/merge the counts from different samples/batches or modalities.                                  |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scClusterCells`                 | analysis         | h5ad object           | .tsv file with clusters, png with UMAP      | Perform dimensionality reduction and clustering on the output of scCountReads.                              |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
 |:ref:`scBulkCoverage`                 | analysis         | tsv file + BAM file   | bigwig files                                | Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).    |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scPlotRegion`                   | analysis         | h5ad object           | png                                         | Plot genomic regions of interest from sincei output.                                                        |
++--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+|:ref:`scExportSignal`                 | analysis         | h5ad object           | bedgraph matrix, mtx, loom                  | Export sincei-supportred .h5ad (anndata) object to other formats.                                           |
 +--------------------------------------+------------------+-----------------------+---------------------------------------------+-------------------------------------------------------------------------------------------------------------+

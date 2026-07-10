@@ -133,6 +133,18 @@ def get_args():
         "0.8 and 1.2. (Default: %(default)s)",
     )
 
+    general.add_argument(
+        "--numberOfProcessors",
+        "-p",
+        help='Number of processors to use. Type "max/2" to '
+        'use half the maximum number of processors or "max" '
+        'to use all available processors. (Default: "max")',
+        metavar="INT",
+        type=ParserCommon.numberOfProcessors,
+        default=ParserCommon.numberOfProcessors("max"),
+        required=False,
+    )
+
     return parser
 
 
@@ -147,6 +159,7 @@ def main(args=None):
     except:
         sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
         exit()
+    adata = ParserCommon.validateAnndata(adata, args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -163,7 +176,7 @@ def main(args=None):
             smart_code="lfu",
         )
         model_object.runLSA()
-        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        cell_topic = model_object.get_cell_topic()
         ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
         adata = adata[cell_topic.index]
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
@@ -174,11 +187,11 @@ def main(args=None):
             adata,
             binarize=args.binarize,
             n_topics=args.nPrinComps,
-            n_passes=2,
-            n_workers=4,
+            n_passes=5,
+            n_workers=args.numberOfProcessors,
         )
         model_object.runLDA()
-        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        cell_topic = model_object.get_cell_topic()
         ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
         adata = adata[cell_topic.index]
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])

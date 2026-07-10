@@ -27,12 +27,13 @@ def get_args():
     scoring_opts.add_argument(
         "--overlapPolicy",
         "-op",
-        help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in --features.\n"
-        " Options are: \n "
-        "    - ``partial``: count reads in anndata regions proportionally to the overlap fraction, \n "
-        "                   (counts_considered = feature_counts * overlap_length / region_length.) \n "
-        "    - ``all``: count all reads in the partially overlapping anndata regions.\n"
-        "    - ``none``: Only count reads in anndata regions that are fully contained within BED/GTF regions.\n"
+        help="Policy for handling regions present in .h5ad input file that only partially overlap regions present in "
+        "``--features``.\n"
+        "Options are: \n "
+        "- ``partial``: count reads in anndata regions proportionally to the overlap fraction,"
+        "(counts_considered = feature_counts * overlap_length / region_length). \n "
+        "- ``all``: count all reads in the partially overlapping anndata regions. \n "
+        "- ``none``: Only count reads in anndata regions that are fully contained within BED/GTF regions. \n"
         "Default: %(default)s.",
         choices=["partial", "all", "none"],
         type=str,
@@ -63,8 +64,8 @@ def get_args():
     scoring_opts.add_argument(
         "--bedScoreFilter",
         "-bsf",
-        help="Provide a range (two values separated by space), or a threshold (upper limit) of score to determine which input features to consider for scoring."
-        " Used only when the input is a BED file containing scores (stored in the 5th column). Default: %(default)s.",
+        help="Provide a range (two values separated by space), or a threshold (upper limit) of score to determine which input features to consider for scoring. "
+        "Used only when the input is a BED file containing scores (stored in the 5th column). Default: %(default)s.",
         metavar="LIST",
         nargs="+",
         default=None,
@@ -173,7 +174,7 @@ def main(args=None):
     from sincei.FeatureScorer import FeatureScorer
 
     # Load input AnnData
-    adata = ad.read_h5ad(args.input)
+    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
 
     adata_out = FeatureScorer(
         adata=adata,
@@ -190,6 +191,16 @@ def main(args=None):
         n_threads=args.numberOfProcessors,
         verbose=args.verbose,
     )
+
+    if adata_out.uns is not None:
+        print(".uns copied from input to output")
+        adata_out.uns = adata.uns
+    if adata_out.obsm is not None:
+        print(".obsm copied from input to output")
+        adata_out.obsm = adata.obsm
+    if adata_out.obsp is not None:
+        print(".obsp copied from input to output")
+        adata_out.obsp = adata.obsp
 
     # Save output
     adata_out.write_h5ad(args.outFile)

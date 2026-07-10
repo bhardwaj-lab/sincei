@@ -41,7 +41,7 @@ def parseArguments(args=None):
         parents=[io_args, get_args(), bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-``scFilterBarcodes`` identifies barcodes present in a BAM files and produces a list. You can
+``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a list. You can
 optionally filter these barcodes by matching them to a whitelist or based on total counts.
 """,
         usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt",
@@ -187,7 +187,6 @@ def getFiltered_worker(arglist):
     return BCset
 
 
-#
 def count_occurrences(res):
     r"""count occurrences of elements (barcodes) in a list of sets
 

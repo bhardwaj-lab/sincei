@@ -12,7 +12,7 @@ def _parse_gtf_genes(gtf_path):
     """
     Parse a GTF/BED file using deeptoolsintervals and extract gene/feature information.
 
-    Returns a DataFrame with gene_name, chrom, start, end, strand, and score.
+    Returns a DataFrame with name, chrom, start, end, strand, and score.
     For BED files, score corresponds to the 5th column (e.g. bedFilter value).
     For GTF files, score is typically the file name and can be ignored.
     """
@@ -33,7 +33,7 @@ def _parse_gtf_genes(gtf_path):
 
             genes.append(
                 {
-                    "gene_name": gene_name,
+                    "name": gene_name,
                     "chrom": chrom,
                     "start": gene_start,
                     "end": gene_end,
@@ -242,13 +242,13 @@ def _compute_gene_activity_single(
     """
     Compute gene activity for a single gene.
 
-    Returns (gene_name, activity_vector) or None if no overlapping features.
+    Returns (name, activity_vector) or None if no overlapping features.
     """
     chrom = gene_row["chrom"]
     gene_start = int(gene_row["start"])
     gene_end = int(gene_row["end"])
     strand = gene_row.get("strand", "+")
-    gene_name = gene_row["gene_name"]
+    gene_name = gene_row["name"]
 
     # Define region to consider (gene body + max_region upstream/downstream)
     max_region = max_region * 1000  # convert from kb to base pairs
@@ -283,7 +283,7 @@ def _compute_gene_activity_single(
     if exclude_in_range in ("TSS", "genes") and genes_arrays is not None:
         # Filter genes using pre-converted arrays for performance
         chrom_mask = genes_arrays["chrom"] == chrom
-        name_mask = genes_arrays["gene_name"] != gene_name
+        name_mask = genes_arrays["name"] != gene_name
         region_mask = (genes_arrays["start"] < region_end) & (genes_arrays["end"] > region_start)
         other_genes_mask = chrom_mask & name_mask & region_mask
 
@@ -456,7 +456,7 @@ def FeatureScorer(
         raise ValueError("No common chromosomes between data and BED/GTF")
 
     # Remove duplicate gene names (keep first occurrence)
-    genes_df = genes_df.drop_duplicates(subset="gene_name", keep="first")
+    genes_df = genes_df.drop_duplicates(subset="name", keep="first")
 
     # Validate exclude_in_range parameter
     if exclude_in_range is not None and exclude_in_range not in ("TSS", "genes"):
@@ -483,7 +483,7 @@ def FeatureScorer(
     if exclude_in_range in ("TSS", "genes"):
         genes_arrays = {
             "chrom": genes_df["chrom"].values,
-            "gene_name": genes_df["gene_name"].values,
+            "name": genes_df["name"].values,
             "start": genes_df["start"].values.astype(np.int64),
             "end": genes_df["end"].values.astype(np.int64),
             "strand": genes_df["strand"].values,
@@ -566,10 +566,10 @@ def FeatureScorer(
         sys.stderr.write("WARNING: No gene activities computed - check chromosome naming consistency\n")
 
     # Create output AnnData
-    var_df = pd.DataFrame({"gene_name": gene_names}, index=gene_names)
+    var_df = pd.DataFrame({"name": gene_names}, index=gene_names)
 
     # Add gene coordinates to var
-    gene_info = genes_df.set_index("gene_name").loc[gene_names, ["chrom", "start", "end", "strand"]]
+    gene_info = genes_df.set_index("name").loc[gene_names, ["chrom", "start", "end", "strand"]]
     var_df = var_df.join(gene_info)
 
     adata_out = ad.AnnData(

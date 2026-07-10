@@ -55,6 +55,8 @@ scFilterBarcodes = "sincei.scFilterBarcodes:main"
 scFilterStats = "sincei.scFilterStats:main"
 scJSD = "sincei.scJSD:main"
 scScoreFeatures = "sincei.scScoreFeatures:main"
+scExportSignal = "sincei.scExportSignal:main"
+scPlotRegion = "sincei.scPlotRegion:main"
 sincei = "sincei.sincei:main"
 
 
