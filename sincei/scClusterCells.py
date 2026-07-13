@@ -32,14 +32,14 @@ from sincei.TopicModels import TOPICMODEL
 from sincei.GLMPCA import EXPONENTIAL_FAMILY_DICT  # GLMPCA
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
     plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), plot_args, other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scClusterCells`` clusters cells based on the input count matrix (output of scCountReads) and
 performs dimensionality reduction, community detection and 2D projection (UMAP) of the cells. The
@@ -49,6 +49,11 @@ and corresponding cluster id for each barcode.
         usage="scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op umap.png",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -81,7 +86,7 @@ def get_args():
         type=str,
         choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
-        help="The dimensionality reduction method for clustering. (Default: %(default)s)",
+        help="The dimensionality reduction method to use before clustering cells. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -90,7 +95,8 @@ def get_args():
         type=str,
         choices=EXPONENTIAL_FAMILY_DICT.keys(),
         default="poisson",
-        help="The choice of exponential family distribution to use for glmPCA method. (Default: %(default)s)",
+        help="The choice of exponential family distribution to use for glmPCA method. "
+        "Used only if --method 'glmPCA' is selected. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -128,6 +134,18 @@ def get_args():
         "0.8 and 1.2. (Default: %(default)s)",
     )
 
+    general.add_argument(
+        "--numberOfProcessors",
+        "-p",
+        help='Number of processors to use. Type "max/2" to '
+        'use half the maximum number of processors or "max" '
+        'to use all available processors. (Default: "max")',
+        metavar="INT",
+        type=ParserCommon.numberOfProcessors,
+        default=ParserCommon.numberOfProcessors("max"),
+        required=False,
+    )
+
     return parser
 
 
@@ -142,6 +160,7 @@ def main(args=None):
     except:
         sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
         exit()
+    adata = ParserCommon.validateAnndata(adata, args.input)
 
     if args.method == "logPCA":
         ## log1p+PCA using scanpy
@@ -158,7 +177,7 @@ def main(args=None):
             smart_code="lfu",
         )
         model_object.runLSA()
-        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        cell_topic = model_object.get_cell_topic()
         ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
         adata = adata[cell_topic.index]
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])
@@ -169,11 +188,11 @@ def main(args=None):
             adata,
             binarize=args.binarize,
             n_topics=args.nPrinComps,
-            n_passes=2,
-            n_workers=4,
+            n_passes=5,
+            n_workers=args.numberOfProcessors,
         )
         model_object.runLDA()
-        cell_topic = model_object.get_cell_topic(pop_sparse_cells=True)
+        cell_topic = model_object.get_cell_topic()
         ## update the anndata object, drop cells which are not in the anndata, drop 1st PC
         adata = adata[cell_topic.index]
         adata.obsm["X_pca"] = np.asarray(cell_topic.iloc[:, 1 : args.nPrinComps])

@@ -14,6 +14,9 @@ sincei provides a flexible, easy-to-use command-line interface to work with sing
  - Perform read-level and count-level quality control.
  - Perform dimensionality reduction and clustering of all kinds of single-cell data (open chromatin, histone marks, methylation, gene expression etc..).
  - Create coverage files (bigwigs) for visualization.
+ - Along with additional tools for visualization, interpretation/annotation of cells.
+
+sincei is also part of the [scVerse ecosystem](https://scverse.org/), and it's command-line tools can easily with combined with various Python or R packages for further analysis.
 
 For details, please [**read our preprint**](https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1) describing sincei.
 
@@ -34,7 +37,7 @@ conda create -n sincei -c bioconda -c conda-forge sincei
 Alternatively, a development version can be installed via GitHub.
 
 ```
-conda create -n sincei python=3.10
+conda create -n sincei -c conda-forge python=3.12
 conda activate sincei
 pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
 ```

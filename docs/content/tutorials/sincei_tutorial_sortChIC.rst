@@ -3,7 +3,7 @@ Analysis of sc-sortChIC data using sincei
 
 Below, we demonstrate how to use sincei to explore data from the protocol single-cell sortChIC,
 presented in `Zeller, Yueng et. al. (2023) <https://www.nature.com/articles/s41588-022-01260-3>`__. This
-dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me3** histone
+dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K4me1** histone
 mark in single-cells from adult mouse bone marrow. We will also use a metadata file that contain the
 cell labels defined using celltype-specific surface markers identified by FACS. This will provide
 independent confirmation that our clustering captures known cell-types.
@@ -16,30 +16,26 @@ For convenience, we provide a subset of the original data on
 
 The test data contains:
 
-- **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from
-  **chromosome 1** (mm10/GRCm38)
-- **mm10_chr1.2bit:** 2-bit file storing the sequence information for
-  mouse chromosome 1
-- **mm10_blacklist.bed:** blacklisted regions to avoid
+- **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from **chromosome 1** (mm10/GRCm38)
 - **sortChIC_barcodes.txt:** barcodes corresponding to the 384-well plate (1 barcode per cell)
-- **metadata.txt:** metadata file that defines cell types from FACS label
+- **metadata.tsv:** metadata file that defines cell types from FACS label
+- **mm10_chr1.2bit:** 2-bit file storing the sequence information for mouse chromosome 1
+- **mm10_chr1_genes.bed:** BED file containing the genomic coordinates for selected chromosome 1 genes
+- **mm10_blacklist.bed:** BED file with blacklisted regions to avoid for counting
 
 .. code:: bash
 
-    mkdir sortchic_testdata
+    mkdir sortchic_testdata sincei_output
     cd sortchic_testdata
-    wget -O sortChIC_testdata.zip https://figshare.com/ndownloader/articles/23544774/versions/2
-    unzip sortChIC_testdata.zip
-    tar -xvzf sortChIC_testdata.tar.gz ## releases 12 files
-
-    rm sortChIC_testdata.tar.gz sortChIC_testdata.zip && cd ../ # cleanup
+    # download the dataset manually from figshare: https://figshare.com/articles/dataset/sortChIC_testdata_package/23544774
+    # save in sortchic_testdata folder (default file name: 23544774.zip)
+    unzip 23544774.zip && rm 23544774.zip && cd ../ ## releases 13 files
 
     ## save as bash variables
-
     blacklist=sortchic_testdata/mm10_blacklist.bed
     barcodes=sortchic_testdata/sortChIC_barcodes.txt
     genome=sortchic_testdata/mm10_chr1.2bit
-    bamfiles=sortchic_testdata/\*.bam
+    bamfiles=(sortchic_testdata/*.bam)
 
 2. Quality control - I (read-level)
 -------------------------------------
@@ -156,7 +152,7 @@ appropriate metrics to filter out the unwanted cells/regions.
 
     # export the single-cell level metrics
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
-    -om sincei_output/countqc_50kb_bins
+        -om sincei_output/countqc_50kb_bins
 
     # visualize output using multiQC
     multiqc sincei_output # see results in multiqc_report.html
@@ -168,9 +164,9 @@ many cells (using ``--filterCellArgs``).
 .. code:: bash
 
     scCountQC -i sincei_output/scCounts_50kb_bins.h5ad \
-    -o sincei_output/scCounts_50kb_bins_filtered.h5ad \
-    --filterRegionArgs "n_cells_by_counts: 50, 2000" \
-    --filterCellArgs "n_genes_by_counts: 100, 3000"
+        -o sincei_output/scCounts_50kb_bins_filtered.h5ad \
+        --filterRegionArgs "n_cells_by_counts: 50, 2000" \
+        --filterCellArgs "n_genes_by_counts: 100, 3000"
     # Applying filters
     # Cells post-filtering: 1333
     # Features post-filtering: 2561
@@ -195,8 +191,40 @@ data.
     # Coherence Score:  -1.5
     # also produces the tsv file "sincei_output/scClusterCells_UMAP.tsv"
 
+6. Gene-level scoring
+------------------------------------------
+
+Next, we can determine the identity of each of our cell clusters by aggregating the H3K4me1 signal
+over known genes. We will use the gene coordinates provided in the BED file ``mm10_chr1_genes.bed``
+and our binned H3K4me1 anndata.
+Each cell will be assigned a score for each gene, which is the sum of the counts in the bins that
+overlap with the gene coordinates. Bear in mind that this depends on the bin size used in the
+counting step, smaller bins will result in more granular scoring.
+:ref:`scScoreFeatures` conserves the clustering, dimension reduction and UMAP information of the
+input anndata, so the scores can be plotted on the UMAP obtained from the 50Kb bins.
+
+.. code:: bash
+
+    scScoreFeatures -i sincei_output/scCounts_50kb_bins_clustered.h5ad \
+        -f sortchic_testdata/mm10_chr1_genes.bed \
+        -o sincei_output/scScores_genes_50kb_bins.h5ad
+
+Plotting the gene scores on our UMAP output from :ref:`scClusterCells` allows us to identify the
+cell-types in our clusters based on the distribution of their markers. For example, see the genes
+*March4* and *Dars*:
+
+.. image:: ./../images/March4_Dars_scores_umap.png
+   :height: 700 px
+   :width: 1600 px
+   :scale: 50 %
+
+Alternatively, we can use :ref:`scCountReads` again over genes to get the exact  counts for each
+gene, and then use :ref:`scCountQC` to filter out low-count genes. However, the additional
+information obtained from the clustering will need to be manually transferred from the binned
+anndata to the gene-level anndata.
+
 (optional) Validation of clustering using metadata
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Below, we load this data in R and compare it to the cell metadata provided with our files to verify
 that our clustering separates celltypes in a biologically meaningful way.
@@ -204,7 +232,7 @@ that our clustering separates celltypes in a biologically meaningful way.
 We can color our UMAP output from :ref:`scClusterCells` with the cell-type information based on
 FACS-sorting from sortChIC.
 
-..collapse:: Clustering validation (click for Python code)
+.. collapse:: Clustering validation (click for Python code)
 
     .. code-block:: python
 
@@ -212,23 +240,31 @@ FACS-sorting from sortChIC.
         import pandas as pd
         import matplotlib.pyplot as plt
 
-        metadata = pd.read_csv('metadata.tsv', sep='\t', header=0, index_col=0)
+        metadata = pd.read_csv('sortchic_testdata/metadata.tsv', sep='\t', header=0, index_col=0)
 
         adata = sc.read_h5ad('sincei_output/scCounts_50kb_bins_clustered.h5ad')
 
         adata.obs = adata.obs.merge(metadata['ctype'], left_index=True, right_index=True, how='left')
 
+        adata = adata[adata.obs['ctype'] != "AllCells", :]
+        adata = adata[~adata.obs['ctype'].isna(), :]
+
+        adata.obs["ctype"] = adata.obs["ctype"].astype("category")
+
+        ctype_colors = {
+            "Bcells": "#1f77b4",
+            "Tcells": "#e377c2",
+            "NKs": "#8c564b",
+            "Monocytes": "#2ca02c",
+            "Granulocytes": "#ff7f0e",
+            "Eryths": "#d62728",
+            "DCs": "#9467bd",
+        }
+
         # make plots
-        sc.pl.umap(
-            adata,
-            color=['leiden', 'celltype'],
-            palette='Paired',
-            title=['sincei Clusters (LSA + Leiden)', 'Published Cell Types'],
-            legend_fontsize=14,
-            legend_loc='on data',
-            frameon=False,
-            size=60,
-            )
+        sc.pl.umap(adata, color=["leiden", "ctype"],
+           title=["Sincei clusters (LSA + Leiden)", "sortChIC cell-types (from FACS)"],
+           legend_loc="right margin", legend_fontsize=8, return_fig=True)
 
         for ax in plt.gcf().axes:
             ax.title.set_size(fontsize=16)
@@ -278,7 +314,7 @@ FACS-sorting from sortChIC.
 
 
 .. image:: ./../images/UMAP_compared_withOrig_sortChIC.png
-   :height: 800px
+   :height: 700 px
    :width: 1600 px
    :scale: 50 %
 
@@ -287,7 +323,111 @@ data using **sincei**. This was done using only 1/20th of original data (chromos
 pre-processing steps, therefore the results should only improve with full data, better cell/region
 filtering and optimizing the analysis parameters.
 
-6. Creating bigwigs and visualizing signal on IGV
+(optional) Fast visualization of genomic regions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Using :ref:`scPlotRegion` we can get a first idea of the signal distribution in our data for a given
+genomic region. This tool takes the anndata produced by :ref:`scCountReads` and produces a plot of
+the total signal and the per-cell signal in the region.
+
+*Note:* the resolution of the plot is determined by the bin size used in :ref:`scCountReads`. For
+example, if we used 50kb bins, the plot will be at 50kb resolution. If we used 2kb bins, the plot
+will be at 2kb resolution.
+
+.. code:: bash
+
+    scPlotRegion -i sincei_output/scCounts_50kb_bins_filtered.h5ad \
+        --region chr1:33250000-37450000 \
+        --hmapMax 10 \
+        -o sincei_output/scPlotRegion_sortChIC.png
+
+.. image:: ./../images/scPlotRegion_sortChIC.png
+   :height: 1000 px
+   :width: 1600 px
+   :scale: 50 %
+
+(optional) Finding informative features for clustering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of using 50kb bins, we can also use smaller bins (2kb) to find the most informative regions
+for clustering. The tool :ref:`scFindVCRs` identifies the variable regions in the genome by
+combining these smaller bins into larger variable regions. We can then use these variable regions to
+produce a dimensionality reduction and clustering to separate our cell types.
+
+First, we produce a 2kb bin anndata of our dataset.
+
+.. code:: bash
+
+    scCountReads bins -p 20 \
+        --binSize 2000 \
+        --cellTag BC \
+        --region chr1 \
+        --minMappingQuality 10 \
+        --samFlagInclude 64 \
+        --samFlagExclude 2048 \
+        --duplicateFilter 'start_bc_umi' \
+        --extendReads \
+        -bl ${blacklist} \
+        -bc ${barcodes} \
+        -o sincei_output/scCounts_2kb_bins \
+        --smartLabels \
+        -b ${bamfiles}
+    # Number of bins found: 96883
+
+We then run :ref:`scFindVCRs`. We pass the anndata, its binsize, and the value (or multiple values) for the
+penalty parameter to the tool. The output is a BED file containing the resulting VCRs. For more
+information on the VCR algorithm, consult :ref:`scFindVCRs`.
+
+.. code:: bash
+
+    scFindVCRs -i sincei_output/scCounts_2kb_bins.h5ad \
+        --binSize 2000 \
+        --penalty 0.005 \
+        -o sincei_output/VCRs.bed
+
+We can use :ref:`scScoreFeatures` to make an anndata with our VCRs as features. We use the 2kb bin
+anndata and the VCR BED file as input. Since the VCRs will always be larger or equal than the bins
+used to find them, and their boundaries will match, this is equivalent to running
+:ref:`scCountReads` using the VCR BED file to count reads in features.
+
+.. code:: bash
+
+    scScoreFeatures -i sincei_output/scCounts_2kb_bins.h5ad \
+            -f sincei_output/VCRs.bed \
+            -o sincei_output/scScores_VCRs_2kb_bins.h5ad
+
+Next, we filter the low and high count cells and regions, and cluster the filtered data using.
+
+.. code:: bash
+
+    scCountQC -i sincei_output/scScores_VCRs_2kb_bins.h5ad \
+        -o sincei_output/scScores_VCRs_2kb_bins_filtered.h5ad \
+        --filterRegionArgs "n_cells_by_counts: 200, 2000" \
+        --filterCellArgs "n_genes_by_counts: 100, 10000"
+    # Applying filters
+    # Cells post-filtering: 1374
+    # Features post-filtering: 13475
+
+    scClusterCells -i sincei_output/scScores_VCRs_2kb_bins_filtered.h5ad \
+        --method LSA -n 30 --clusterResolution 0.7 \
+        --outFileUMAP sincei_output/scClusterCells_VCR_UMAP.png \
+        -o sincei_output/scScores_VCRs_2kb_bins_clustered.h5ad
+    # Coherence Score:  -0.7
+    # also produces the tsv file "sincei_output/scClusterCells_VCR_UMAP.tsv"
+
+The resulting UMAP and clusters tell a similar story as our previous results, from LSA on 50kb
+filtered bins.
+
+.. image:: ./../images/VCR_UMAP_compared_withOrig_sortChIC.png
+   :height: 700 px
+   :width: 1600 px
+   :scale: 50 %
+
+Choosing what features (bins, genes, peaks, VCRs, etc.) and dimensionality method reduction to use
+depends on the dataset under scrutiny. We recommend exploring different methods to find what works
+well for your data.
+
+7. Creating bigwigs and visualizing signal on IGV
 ---------------------------------------------------
 
 For further exploration of data, it can be useful to create pseudo-bulk coverage files (bigwigs)
@@ -316,9 +456,12 @@ CPM-normalized bigwigs at 1kb resolution.
 
 We can now inspect our bigwigs on `IGV <https://software.broadinstitute.org/software/igv/>`__.
 We can clearly see some regions with cell-type specific signal, such as the ones here for genes
-Prim3 and Tmem131.
+Prim2 and Mir5103.
 
 .. image:: ./../images/igv_snapshot_sortChIC.png
-   :height: 500px
+   :height: 500 px
    :width: 6000 px
    :scale: 50 %
+
+Note that VCRs follow the signal more closely than the 50kb bins, and can be used to identify
+specific regions in the genome and help with biological interpretation of the data.

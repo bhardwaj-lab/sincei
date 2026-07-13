@@ -29,7 +29,7 @@ from sincei.Utilities import (
 from sincei import ParserCommon
 
 
-def parseArguments():
+def parseArguments(args=None):
     filterParser = ParserCommon.filterOptions()
 
     io_args = ParserCommon.inputOutputOptions(opts=["bamfiles", "barcodes", "outFile"], requiredOpts=["barcodes"])
@@ -77,6 +77,11 @@ bins of size --binSize spaced --distanceBetweenBins apart.
         usage="scFilterStats -b sample1.bam sample2.bam -bc barcodes.txt -bl blacklist.bed -o stats.tsv",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -290,10 +295,8 @@ def main(args=None):
         if args.groupTag:
             checkBAMtag(x, bam, args.groupTag)
             sys.stderr.write(
-                "--groupTag is not implemented for scFilterStats yet! \
-            Please split your BAM file by {} and re-run scFilterStats. \n".format(
-                    args.groupTag
-                )
+                f"--groupTag is not implemented for scFilterStats yet!\n"
+                f"Please split your BAM file by {args.groupTag} and re-run scFilterStats.\n"
             )
             exit(1)
         x.close()

@@ -3,7 +3,6 @@
 
 import argparse
 import sys
-import os
 
 from deeptools import parserCommon, bamHandler, utilities
 from deeptools.mapReduce import mapReduce
@@ -30,7 +29,7 @@ from sincei.Utilities import *
 from sincei import ParserCommon
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["bamfile", "whitelist", "outFile"], requiredOpts=["bamfile"])
     bam_args = ParserCommon.bamOptions(
         suppress_args=["labels", "smartLabels", "distanceBetweenBins", "region"],
@@ -42,12 +41,17 @@ def parseArguments():
         parents=[io_args, get_args(), bam_args, other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
-``scFilterBarcodes`` identifies barcodes present in a BAM files and produces a list. You can
+``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a list. You can
 optionally filter these barcodes by matching them to a whitelist or based on total counts.
 """,
-        usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt" "",
+        usage="scFilterBarcodes -b sample.bam -w whitelist.txt -o barcodes_detected.txt",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -70,8 +74,8 @@ def get_args():
     general.add_argument(
         "--minCount",
         "-mc",
-        help="Minimum no. of bins with non-zero counts, in order to report a barcode. Note that this number would range "
-        "from 0 to genome size/binSize. ",
+        help="Minimum no. of bins with non-zero counts, in order to report a barcode. Note that this number should range "
+        "from 0 to genome size/binSize. Barcodes with less than `--minCounts` bins are excluded. Default: %(default)s.",
         metavar="INT",
         type=int,
         default=0,
@@ -82,7 +86,7 @@ def get_args():
         "--minMappingQuality",
         "-mq",
         metavar="INT",
-        help="If set, only reads that have a mapping " "quality score of at least this are " "considered.",
+        help="If set, only reads with mapping quality score above this value are considered.",
         type=int,
     )
 
@@ -91,7 +95,7 @@ def get_args():
         "-rp",
         type=parserCommon.writableFile,
         help='The output file name to plot the ranked counts per barcode (similar to the "knee plot",'
-        "but counts are be the number of non-zero bins in this case).",
+        "but counts are be the number of non-zero bins in this case). Plot format is guessed from the file suffix.",
     )
 
     return parser
@@ -183,7 +187,6 @@ def getFiltered_worker(arglist):
     return BCset
 
 
-#
 def count_occurrences(res):
     r"""count occurrences of elements (barcodes) in a list of sets
 

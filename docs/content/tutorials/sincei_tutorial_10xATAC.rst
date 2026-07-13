@@ -32,7 +32,7 @@ statistics from :ref:`scFilterStats`. Low quality cells in this data can be iden
 criteria, such as:
 
 - high number of PCR duplicates (filtered using `--duplicateFilter`)
-- high fraction of reads aligned to blacklisted regions (filtered using `--blackListFileName`)
+- high fraction of reads aligned to blacklisted regions (filtered using `--blacklist`)
 - high fraction of reads with poor mapping quality (filtered using `--minMappingQuality`)
 - vey high/low GC content of the aligned reads, indicating the reads were mostly aligned to
   low-complexity regions (filtered using `--GCcontentFilter`)
@@ -53,7 +53,7 @@ criteria, such as:
          --samFlagInclude 64 \
          --samFlagExclude 256 \
          --samFlagExclude 2048 \
-         --blackListFileName ${blacklist}  \
+         --blacklist ${blacklist}  \
          --barcodes ${barcodes} \
          --cellTag CB \
          --label atac_${rep} \
@@ -96,7 +96,7 @@ from our whitelist of barcodes. We avoid counting reads in blacklisted regions o
          --samFlagInclude 64 \
          --samFlagExclude 2048 \
          --extendReads \
-         --blackListFileName ${blacklist} \
+         --blacklist ${blacklist} \
          --barcodes ${barcodes} \
          --cellTag CB \
          -o sincei_output/atac/scCounts_atac_peaks_${rep} \

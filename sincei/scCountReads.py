@@ -32,7 +32,7 @@ you want to count the read coverage for specific regions only, use the ``feature
 standard output of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) and colNames
 (cell barcodes).
 
-Detailed help for each sub-command is available by typing::
+Detailed help for each sub-command is available by typing:
 
     scCountReads bins -h
     scCountReads features -h
@@ -44,16 +44,16 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
         conflict_handler="resolve",
     )
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(title="Counting mode")
 
     read_args = ParserCommon.readOptions(suppress_args=["filterRNAstrand"])
     filter_args = ParserCommon.filterOptions()
     other_args = ParserCommon.otherOptions()
 
     # bins mode options
-    subparsers.add_parser(
+    bins_subparser = subparsers.add_parser(
         "bins",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             ParserCommon.inputOutputOptions(
                 opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],
@@ -69,13 +69,13 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
         ],
         help="The reads are counted in bins of equal size. The bin size and distance between bins can be adjusted.",
         add_help=False,
-        usage="%(prog)s -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
+        usage="scCountReads bins -bs 10000 --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
     )
 
     # BED file arguments
-    subparsers.add_parser(
+    features_subparser = subparsers.add_parser(
         "features",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             ParserCommon.inputOutputOptions(
                 opts=["bamfiles", "barcodes", "outFilePrefix", "BED"],
@@ -91,11 +91,26 @@ scCountReads features --BED selection.bed --bamfiles file1.bam file2.bam --barco
             get_args(),
             other_args,
         ],
-        help="The user provides a BED/GTF file containing all regions "
-        "that should be counted. A common use would be to count scRNA-seq reads on Genes.",
-        usage="%(prog)s --BED selection.bed --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
+        help="The user provides a BED/GTF file containing all regions that "
+        "should be counted. A common use would be to count scRNA-seq reads on Genes.",
+        usage="scCountReads features --BED selection.bed [genes.gtf] --bamfiles file1.bam file2.bam --barcodes whitelist.txt -o results",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    # If no arguments are provided to bins mode, show help and exit
+    if sys.argv[1] == "bins" and len(sys.argv) == 2:
+        bins_subparser.print_help()
+        sys.exit(0)
+
+    # If no arguments are provided to features mode, show help and exit
+    if sys.argv[1] == "features" and len(sys.argv) == 2:
+        features_subparser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -110,17 +125,6 @@ def get_args():
         help="Manually specify the size of the genome provided to each processor. "
         "The default value of None specifies that this is determined by read "
         "density of the BAM file.",
-    )
-
-    optional.add_argument(
-        "--outFileFormat",
-        type=str,
-        default="h5ad",
-        choices=["h5ad", "mtx"],
-        help="Output file format. Default is to write an anndata object of name "
-        "<prefix>.h5ad, which can either be opened in scanpy, or by downstream tools. "
-        '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would be '
-        "<prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt",
     )
 
     return parser
@@ -143,13 +147,7 @@ def main(args=None):
     else:
         bed_regions = None
 
-    ## create row/colNames
-    if args.outFileFormat == "mtx":
-        mtxFile = args.outFilePrefix + ".counts.mtx"
-        rowNamesFile = args.outFilePrefix + ".rownames.txt"
-        colNamesFile = args.outFilePrefix + ".colnames.txt"
-    else:
-        rowNamesFile = None
+    rowNamesFile = None
 
     stepSize = args.binSize + args.distanceBetweenBins
     c = countR.CountReadsPerBin(
@@ -193,38 +191,28 @@ def main(args=None):
             "region is covered by reads.\n"
         )
 
-    ## write mtx/rownames if asked
-    if args.outFileFormat == "mtx":
-        f = open(colNamesFile, "w")
-        f.write("\n".join(newlabels))
-        f.write("\n")
-        f.close()
-        ## write the matrix as .mtx
-        sp = sparse.csr_matrix(num_reads_per_bin)
-        io.mmwrite(mtxFile, sp, field="integer")
-    else:
-        # write anndata
-        sp = sparse.csr_matrix(num_reads_per_bin)
-        adata = ad.AnnData(sp.T)
-        adata.obs = pd.DataFrame(
-            {
-                "sample": [x.split("::")[-2] for x in newlabels],
-                "barcodes": [x.split("::")[-1] for x in newlabels],
-            },
-            index=newlabels,
-        )
+    # write anndata
+    sp = sparse.csr_matrix(num_reads_per_bin)
+    adata = ad.AnnData(sp.T)
+    adata.obs = pd.DataFrame(
+        {
+            "sample": [x.split("::")[-2] for x in newlabels],
+            "barcodes": [x.split("::")[-1] for x in newlabels],
+        },
+        index=newlabels,
+    )
 
-        rows = list(regionList)
+    rows = list(regionList)
 
-        adata.var = pd.DataFrame(
-            {
-                "chrom": [x.split("_")[0] for x in rows],
-                "start": [x.split("_")[1] for x in rows],
-                "end": [y.split("::")[0] for y in [x.split("_")[2] for x in rows]],
-                "name": [x.split("::")[1] for x in rows],
-            },
-            index=rows,
-        )
+    adata.var = pd.DataFrame(
+        {
+            "chrom": [x.split("_")[0] for x in rows],
+            "start": [int(x.split("_")[1]) for x in rows],
+            "end": [int(y.split("::")[0]) for y in [x.split("_")[2] for x in rows]],
+            "name": [x.split("::")[1] for x in rows],
+        },
+        index=rows,
+    )
 
-        # export as h5ad
-        adata.write_h5ad(args.outFilePrefix + ".h5ad")
+    # export as h5ad
+    adata.write_h5ad(args.outFilePrefix + ".h5ad")

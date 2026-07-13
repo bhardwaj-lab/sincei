@@ -13,11 +13,13 @@ The following modules are available for use directly in python.
    :maxdepth: 2
    :hidden:
 
+   modules/ReadCounter
    modules/ExponentialFamily
    modules/GLMPCA
    modules/TopicModels
    modules/multimodalClustering
-   modules/ReadCounter
+   modules/VCRfinder
+   modules/FeatureScorer
    modules/RegionQuery
    modules/WriteBedGraph
    modules/Utilities
@@ -26,6 +28,14 @@ The following modules are available for use directly in python.
 * :doc:`modules/ReadCounter`
    Compute the coverage from bam files in genomic bins or regions (specified in BED or GTF files) and
    return a `cell x feature` count matrix. Can used for genome-wide coverage or for specified regions.
+
+* :doc:`modules/VCRfinder`
+   Find variable chromatin regions (VCRs) from binned data.
+
+* :doc:`modules/FeatureScorer`
+   Compute gene activity scores for an `AnnData` or sum counts of genomic bins overlapping features
+   in a BED/GTF file. Can be used to compute gene activity scores from chromatin features/bins or
+   aggregate bins into VCRs.
 
 * :doc:`modules/ExponentialFamily`
    Implementation of many exponential family distributions to be used with the :doc:`modules/GLMPCA`.
@@ -41,7 +51,7 @@ The following modules are available for use directly in python.
 
 * :doc:`modules/multimodalClustering`
    Performs multi-graph clustering for cells with multi-modal data stored in a `MuData` object and
-   return clusters and UMAP embeddings. 
+   return clusters and UMAP embeddings.
 
 * :doc:`modules/RegionQuery`
    Get overlaps between the features in an AnnData and regions in a BED or GTF file.

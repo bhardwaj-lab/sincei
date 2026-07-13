@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
 import argparse
 import numpy as np
 import pandas as pd
@@ -74,7 +75,7 @@ def parseArguments(args=None):
 
     parser = argparse.ArgumentParser(
         parents=[io_args, bam_args, read_args, filter_args, get_args(), other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scJSD`` samples regions in the genome from BAM files and compares the cumulative read coverages
 for each cell on those regions to a synthetic cell with poisson distributed reads using the Jensen-Shannon
@@ -85,6 +86,11 @@ homogeneously distributed.
         usage="plotFingerprint -b treatment.bam control.bam " "-plot fingerprint.png",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 

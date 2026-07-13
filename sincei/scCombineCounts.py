@@ -20,13 +20,13 @@ from sincei import ParserCommon
 from sincei.ParserCommon import smartLabel
 
 
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfiles"])
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
         parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scCombineCounts`` combines multiple count matrices (output of scCountReads) into one, either
 assuming they are different samples (``multi-sample``) or different measurements on the same set of cells
@@ -40,6 +40,11 @@ scCombineCounts -i modality1.h5ad modality2.h5ad -o combined.h5mu -m multi-modal
 """,
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -77,14 +82,15 @@ def get_args():
         type=str,
         choices=["multi-sample", "multi-modal"],
         default="multi-sample",
-        help="How to merge the counts from the provided samples. "
-        "``multi-sample``: assumes that each sample is independent, "
+        help="How to merge the counts from the provided samples. \n "
+        "- ``multi-sample``: assumes that each sample is independent, "
         "but were counted in the same manner (i.e. on same features), therefore "
-        "it looks for feature overlaps, but not for barcode overlaps. "
-        "``multi-modal``: assumes that the counts were generated in 2 different ways, "
+        "it looks for feature overlaps, but not for barcode overlaps. \n "
+        "- ``multi-modal``: assumes that the counts were generated in 2 different ways, "
         "but from the same set of cells (for example, using a multi-omic assay), "
         "therefore it looks for the overlap of cell barcodes, but not for the overlaps "
-        "of features (Default: %(default)s)",
+        "of features.\n"
+        "Default: %(default)s",
     )
 
     return parser
@@ -103,6 +109,7 @@ def main(args=None):
         # try smartlabel
         args.labels = [smartLabel(x) for x in args.input]
     adata_list = [sc.read_h5ad(x) for x in args.input]
+    ParserCommon.validateAnndataList(adata_list, args.input)
 
     if args.method == "multi-sample":
         ## concatenate labels and match chrom, start, end

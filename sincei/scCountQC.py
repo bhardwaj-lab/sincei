@@ -24,13 +24,22 @@ def filter_adata(
     filter_region_dict=None,
     filter_cell_dict=None,
     bad_chrom=None,
+    bad_regions=None,
     bad_cells=None,
 ):
     # 1. regions
     if bad_chrom:
         adata = adata[:, ~adata.var.chrom.isin(bad_chrom)]
+    if bad_regions:
+        adata = adata[:, ~adata.var.index.isin(bad_regions)]
     if filter_region_dict:
         for key in filter_region_dict.keys():
+            if key not in adata.var.columns:
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key))
+                continue
+            if len(filter_region_dict[key]) == 1:
+                # only one value present, assume second value = max
+                filter_region_dict[key] = [filter_region_dict[key][0], max(adata.var[key])]
             adata = adata[
                 :,
                 (adata.var[key] >= filter_region_dict[key][0]) & (adata.var[key] <= filter_region_dict[key][1]),
@@ -41,6 +50,12 @@ def filter_adata(
         adata = adata[~adata.obs.index.isin(bad_cells)]
     if filter_cell_dict:
         for key in filter_cell_dict.keys():
+            if key not in adata.obs.columns:
+                sys.stderr.write("Filter argument '{}' is not available. Skipping..".format(key))
+                continue
+            if len(filter_cell_dict[key]) == 1:
+                # only one value present, assume second value = max
+                filter_cell_dict[key] = [filter_cell_dict[key][0], max(adata.var[key])]
             adata = adata[
                 (adata.obs[key] >= filter_cell_dict[key][0]) & (adata.obs[key] <= filter_cell_dict[key][1]),
                 :,
@@ -49,66 +64,25 @@ def filter_adata(
     return adata
 
 
-"""
-def make_plots(adata, fname=None):
-    # plotting
-    import matplotlib
-    import matplotlib.pyplot as plt
-    matplotlib.use('Agg')
-    matplotlib.rcParams['pdf.fonttype'] = 42
-    matplotlib.rcParams['svg.fonttype'] = 'none'
-    import seaborn as sns# seaborn colormaps conflicts with deeptools colormaps
-
-    ## filtering of regions
-    plt.figure()
-    pl1=sns.violinplot(data=adata.var, x='total_counts', y='chrom')
-    plt.figure()
-    pl2=sns.distplot(np.log10(adata.var['total_counts']+1))
-    plt.figure()
-    pl3=sns.distplot(adata.var['mean_counts'])
-    plt.figure()
-    pl4=sns.distplot(adata.var['fraction_cells_with_signal'])
-    ## cells
-    plt.figure()
-    pl5=sns.scatterplot(data=adata.obs, x='total_counts', y='pct_counts_in_top_100_genes')
-    pl5.set(xscale="log")
-    plt.figure()
-    pl6=sns.distplot(adata.obs['fraction_regions_with_signal'])
-    plt.figure()
-    pl7=sns.scatterplot(data=adata.obs, x='total_counts', y='fraction_regions_with_signal')
-
-    plist=[pl1, pl2, pl3, pl4, pl5, pl6, pl7]
-    if fname:
-        with PdfPages(fname) as pp:
-            for plot in plist:
-                pp.savefig(plot.figure)
-    return plist
-
-    general.add_argument('--outPlot', '-op',
-                         type=str,
-                         help='The output plot file. This describes the distribution of filtering metrics pre and post filtering')
-    if args.outPlot:
-        make_plots(adata, fname=args.outPlot)
-        if cellfilter or regionfilter or badcells or badchrom:
-            make_plots(adata_filt, fname=args.outPlot+".filtered.pdf")
-"""
-
-
-def parseArguments():
+def parseArguments(args=None):
     io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"])
-    plot_args = ParserCommon.plotOptions()
     other_args = ParserCommon.otherOptions()
     parser = argparse.ArgumentParser(
-        parents=[io_args, get_args(), plot_args, other_args],
+        parents=[io_args, get_args(), other_args],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
 ``scCountQC`` calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads) and
 (optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an updated .h5ad
-object (if filtering is requested) or the filtering metrics (--outMetrics) and plots (--outPlot).
+object (if filtering is requested) or the filtering metrics (--outMetrics).
 """,
-        usage="scCountQC -i cellCounts.h5ad -o qc_metrics.tsv",
+        usage="scCountQC -i cellCounts.h5ad -o cellCounts.filtered.h5ad -om qc_metrics.tsv",
         add_help=False,
     )
+
+    # If no arguments are provided, show help and exit
+    if args is None and len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
     return parser
 
@@ -136,7 +110,7 @@ def get_args():
         "--filterCellArgs",
         "-fc",
         type=str,
-        help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ...." '
+        help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ..." '
         "where arg_name is the QC metric for cells present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
@@ -146,10 +120,19 @@ def get_args():
         "--filterRegionArgs",
         "-fr",
         type=str,
-        help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ...." '
+        help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ..." '
         "where arg_name is the QC metric for regions present in the input h5ad file. In order to view all available "
         'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
         "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
+    )
+
+    general.add_argument(
+        "--region_blacklist",
+        "-rb",
+        help="A BED or GTF file containing regions that should be excluded from all analyses. "
+        "Regions in the anndata object that overlap with blacklisted regions will be removed.",
+        metavar="BED",
+        nargs="+",
     )
 
     general.add_argument(
@@ -165,8 +148,9 @@ def get_args():
         "--chrom_blacklist",
         "-chb",
         default=None,
-        type=str,
-        help="A comma separated list of chromosomes to exclude. eg. chrM, chrUn",
+        help="A space separated list of chromosomes to exclude. eg. chrM chrUn",
+        metavar=("CHR1", "CHR2"),
+        nargs="+",
     )
 
     return parser
@@ -182,6 +166,7 @@ def main(args=None):
     except:
         sys.stderr.write("\n Error: Input file can not be read (doesn't appear to be a valid anndata object) \n")
         exit()
+    adata = ParserCommon.validateAnndata(adata, args.input)
     ## add QC stats to the anndata object
     # 1. scanpy metrics # fraction of regions/genes with signal are included in the metrics (pct_dropouts/n_genes_by_counts)
     try:
@@ -244,17 +229,37 @@ def main(args=None):
         badcells = None
 
     if args.chrom_blacklist:
-        badchrom = args.chrom_blacklist.strip().split(",")
+        badchrom = args.chrom_blacklist
     else:
         badchrom = None
 
-    if cellfilter or regionfilter or badcells or badchrom:
+    if args.region_blacklist:
+        from deeptoolsintervals import GTF
+
+        blacklist_tree = GTF(args.region_blacklist)
+        # Find regions that overlap with the blacklist
+        badregions = []
+        for region_id, row in adata.var.iterrows():
+            chrom = str(row["chrom"])
+            start = int(row["start"])
+            end = int(row["end"])
+            # findOverlaps returns overlapping intervals; if any exist, region is blacklisted
+            overlaps = blacklist_tree.findOverlaps(chrom, start, end)
+            if overlaps is not None and len(overlaps) > 0:
+                badregions.append(region_id)
+        if badregions and args.verbose:
+            sys.stdout.write(f"Found {len(badregions)} regions overlapping with blacklist\n")
+    else:
+        badregions = None
+
+    if cellfilter or regionfilter or badcells or badchrom or badregions:
         sys.stdout.write("Applying filters \n")
         adata_filt = filter_adata(
             adata,
             filter_region_dict=regionfilter,
             filter_cell_dict=cellfilter,
             bad_chrom=badchrom,
+            bad_regions=badregions,
             bad_cells=badcells,
         )
         sys.stdout.write("Cells post-filtering: {} \n".format(adata_filt.shape[0]))

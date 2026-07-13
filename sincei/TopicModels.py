@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from gensim import corpora, matutils, models
 import copy
-from sklearn.preprocessing import binarize
+from sklearn.preprocessing import binarize as sklearn_binarize
 
 ### ------ Functions ------
 
@@ -22,7 +22,8 @@ class TOPICMODEL:
         If True, the input matrix will be binarized (default is False). Recommended for LDA.
     smart_code : str
         SMART (System for the Mechanical Analysis and Retrieval of Text) code for weighting of input matrix for TFIDF.
-        Only valid for the LSA model. The default ("lfu") corresponds to "log"TF * IDF, and "pivoted unique" normalization of document length. For more information, see: https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
+        Only valid for the LSA model. The default ("lfu") corresponds to "log" TF * IDF, and "pivoted unique"
+        normalization of document length. For more information, see: https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
     n_passes : int, optional
         Number of passes for the LDA model. Default is 1.
     n_workers : int, optional
@@ -42,7 +43,7 @@ class TOPICMODEL:
         self.regions_dict = corpora.dictionary.Dictionary([adata.var_names.to_list()])
         mtx = adata.X.copy().transpose()
         if binarize:
-            mtx = binarize(mtx, copy=True)
+            mtx = sklearn_binarize(mtx, copy=True)
         self.corpus = matutils.Sparse2Corpus(mtx)
         self.shape = adata.shape
         self.n_topics = n_topics
@@ -80,53 +81,38 @@ class TOPICMODEL:
         """
 
         self.lda_model = models.LdaMulticore(
-            corpus=self.corpus, num_topics=self.n_topics, passes=self.n_passes, workers=self.n_workers
+            corpus=self.corpus,
+            num_topics=self.n_topics,
+            passes=self.n_passes,
+            iterations=500,
+            alpha=50.0,
+            eta=0.1,
+            chunksize=5000,
+            workers=self.n_workers,
+            minimum_probability=0.0,
         )
-        # get topic distributions for each document
-        self.cell_topic_dist = self.lda_model[self.corpus]
+        # get topic distributions for each document as dense topic vectors
+        self.cell_topic_dist = self.lda_model.get_document_topics(self.corpus, minimum_probability=0.0)
         # get topic-word distributions
         self.topic_region_dist = self.lda_model.get_topics()
 
-    def get_cell_topic(self, pop_sparse_cells=False):
+    def get_cell_topic(self):
         r"""
         Get cell-topic matrix from the ``TOPICMODEL`` object.
 
         Returns
         -------
-        cell_topic : pandas dataframe
-            Cell-topic matrix
+        cell_topic : pandas.DataFrame
+            Cell-topic matrix (cells x topics).
         """
 
-        cells = copy.deepcopy(self.cells)
-        ## make cell-topic df
-        li = [[tup[0] for tup in x] for x in self.cell_topic_dist]
-        li_val = [[tup[1] for tup in x] for x in self.cell_topic_dist]
+        cell_topic = np.zeros((len(self.cells), self.n_topics), dtype=float)
+        for i, topic_weights in enumerate(self.cell_topic_dist):
+            for topic_id, weight in topic_weights:
+                if topic_id < self.n_topics:
+                    cell_topic[i, topic_id] = weight
 
-        # if all documents don't have same set of topics, (optionally) remove them
-        if len(set([len(x) for x in li_val])) > 1:
-            bad_idx = sorted([i for i, v in enumerate(li_val) if len(v) != self.n_topics], reverse=True)
-            print(f"{len(bad_idx)} cells were detected which don't contribute to all {self.n_topics} topics.")
-            if pop_sparse_cells:
-                print("Removing these cells from the analysis")
-                for x in bad_idx:
-                    li_val.pop(x)
-                    li.pop(x)
-                    cells.pop(x)
-
-                li_val = np.stack(li_val)
-                cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
-            else:
-                cell_topic = np.zeros((len(li_val), self.n_topics))
-                for i, v in enumerate(li_val):
-                    for j, val in enumerate(v):
-                        print(f"Index [{i}, {li[i][j]}] = {val}")
-                        cell_topic[i, li[i][j]] = val
-                cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
-
-        else:
-            li_val = np.stack(li_val)
-            cell_topic = pd.DataFrame(li_val, columns=[f"topic_{x}" for x in range(self.n_topics)])
-
-        cell_topic.index = cells
+        cell_topic = pd.DataFrame(cell_topic, columns=[f"topic_{x}" for x in range(self.n_topics)])
+        cell_topic.index = self.cells
 
         return cell_topic
