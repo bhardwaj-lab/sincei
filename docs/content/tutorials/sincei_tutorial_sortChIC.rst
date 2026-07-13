@@ -3,7 +3,7 @@ Analysis of sc-sortChIC data using sincei
 
 Below, we demonstrate how to use sincei to explore data from the protocol single-cell sortChIC,
 presented in `Zeller, Yueng et. al. (2023) <https://www.nature.com/articles/s41588-022-01260-3>`__. This
-dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K27me3** histone
+dataset includes BAM files that contain reads with MNase cuts targetted at the **H3K4me1** histone
 mark in single-cells from adult mouse bone marrow. We will also use a metadata file that contain the
 cell labels defined using celltype-specific surface markers identified by FACS. This will provide
 independent confirmation that our clustering captures known cell-types.
@@ -16,27 +16,22 @@ For convenience, we provide a subset of the original data on
 
 The test data contains:
 
-- **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from
-  **chromosome 1** (mm10/GRCm38)
-- **mm10_chr1.2bit:** 2-bit file storing the sequence information for
-  mouse chromosome 1
-- **mm10_chr1.bed:** BED file containing the genomic coordinates for selected chromosome 1 genes
-- **mm10_blacklist.bed:** blacklisted regions to avoid
+- **4x BAM files** (indexed): contain data from 4x 384-well plates, reads are taken from **chromosome 1** (mm10/GRCm38)
 - **sortChIC_barcodes.txt:** barcodes corresponding to the 384-well plate (1 barcode per cell)
 - **metadata.tsv:** metadata file that defines cell types from FACS label
+- **mm10_chr1.2bit:** 2-bit file storing the sequence information for mouse chromosome 1
+- **mm10_chr1_genes.bed:** BED file containing the genomic coordinates for selected chromosome 1 genes
+- **mm10_blacklist.bed:** BED file with blacklisted regions to avoid for counting
 
 .. code:: bash
 
     mkdir sortchic_testdata sincei_output
     cd sortchic_testdata
-    wget -O sortChIC_testdata.zip https://figshare.com/ndownloader/articles/23544774/versions/2
-    unzip sortChIC_testdata.zip
-    tar -xvzf sortChIC_testdata.tar.gz ## releases 12 files
-
-    rm sortChIC_testdata.tar.gz sortChIC_testdata.zip && cd ../ # cleanup
+    # download the dataset manually from figshare: https://figshare.com/articles/dataset/sortChIC_testdata_package/23544774
+    # save in sortchic_testdata folder (default file name: 23544774.zip)
+    unzip 23544774.zip && rm 23544774.zip && cd ../ ## releases 13 files
 
     ## save as bash variables
-
     blacklist=sortchic_testdata/mm10_blacklist.bed
     barcodes=sortchic_testdata/sortChIC_barcodes.txt
     genome=sortchic_testdata/mm10_chr1.2bit
@@ -199,9 +194,9 @@ data.
 6. Gene-level scoring
 ------------------------------------------
 
-Next, we can determine the identity of each of our cell clusters by aggregating the H3K27me3 signal
+Next, we can determine the identity of each of our cell clusters by aggregating the H3K4me1 signal
 over known genes. We will use the gene coordinates provided in the BED file ``mm10_chr1_genes.bed``
-and our binned H3K27me3 anndata.
+and our binned H3K4me1 anndata.
 Each cell will be assigned a score for each gene, which is the sum of the counts in the bins that
 overlap with the gene coordinates. Bear in mind that this depends on the bin size used in the
 counting step, smaller bins will result in more granular scoring.
@@ -410,7 +405,7 @@ Next, we filter the low and high count cells and regions, and cluster the filter
         --filterRegionArgs "n_cells_by_counts: 200, 2000" \
         --filterCellArgs "n_genes_by_counts: 100, 10000"
     # Applying filters
-    # Cells post-filtering: 1374 
+    # Cells post-filtering: 1374
     # Features post-filtering: 13475
 
     scClusterCells -i sincei_output/scScores_VCRs_2kb_bins_filtered.h5ad \
