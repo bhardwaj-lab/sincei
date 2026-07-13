@@ -69,7 +69,7 @@ def get_args():
         '"Frequency": binarize the coverage per bin and normalize to the total no. of cells per group. \n'
         '"Mean": get mean signal per bin across cells in each group.\n'
         '"None": simply return the sum of coverage per group.\n'
-        'Default: %(default)s.',
+        "Default: %(default)s.",
         choices=["CPM", "Frequency", "Mean", "None"],
         default="CPM",
     )
@@ -82,14 +82,14 @@ def get_args():
         default=None,
     )
 
-#    optional.add_argument(
-#        "--normalizeByReference",
-#        "-nr",
-#        help="NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)"
-#        "Note that the --normalizeUsing method is applied beforehand.",
-#        choices=["ratio", "log2_ratio", "difference", "None"],
-#        default=None,
-#    )
+    #    optional.add_argument(
+    #        "--normalizeByReference",
+    #        "-nr",
+    #        help="NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)"
+    #        "Note that the --normalizeUsing method is applied beforehand.",
+    #        choices=["ratio", "log2_ratio", "difference", "None"],
+    #        default=None,
+    #    )
 
     optional.add_argument(
         "--scaleFactor",
