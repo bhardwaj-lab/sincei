@@ -53,9 +53,7 @@ def format_genomic_tick_labels(min_val: int, max_val: int, n_ticks: int = 9):
 
 
 def parseArguments(args=None):
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["h5adfile", "outFilePrefix"], requiredOpts=["input", "outFilePrefix"]
-    )
+    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["input", "outFile"])
     other_args = ParserCommon.otherOptions()
 
     parser = argparse.ArgumentParser(
@@ -304,7 +302,7 @@ def main(args=None):
     if not args.outFileFormat:
         args.outFileFormat = None
     plt.margins(x=0.1, y=0.1)
-    fig.savefig(args.outFilePrefix, dpi=args.dpi, bbox_inches="tight", format=args.outFileFormat)
+    fig.savefig(args.outFile, dpi=args.dpi, bbox_inches="tight", format=args.outFileFormat)
     plt.close(fig)
 
 

@@ -15,7 +15,7 @@ Version: {metadata.version("sincei")}
 
 Each tool begins with the prefix sc<tool_name>, such as:
 
- $ scBulkCoverage -b file1.bam -g groupinfo.txt -o coverage
+ $ scFilterBarcodes -b INPUT.bam -w whitelist.txt -o barcodeRanks.tsv
 
 [ Tools for a typical single-cell analysis workflow ]
 
@@ -23,11 +23,13 @@ Each tool begins with the prefix sc<tool_name>, such as:
     scFilterStats           Produce per-cell statistics after filtering reads by user-defined criteria.
     scCountReads            Counts reads for each barcode on genomic bins or user-defined features.
     scCountQC               Perform quality control and filter the output of scCountReads.
-    scFindVCRs              Call variable chromatin regions (VCRs) from binned chromatin data.
-    scScoreFeatures         Calculate gene activity scores from chromatin features/bins.
     scCombineCounts         Concatenate/merge the counts from different samples/batches or modalities.
+    scFindVCRs              Call variable chromatin regions (VCRs) from binned chromatin data.
     scClusterCells          Perform dimensionality reduction and clustering on the output of scCountReads.
+    scScoreFeatures         Calculate gene or feature-wise scores from binned data to inform cell-type annotation.
+    scPlotRegion            Plot per-cell and pseudo-bulk signal on a genomic region as a trackplot.
     scBulkCoverage          Get pseudo-bulk coverage per group using a user-supplied cell->group mapping (output of scClusterCells).
+    scExportSignal          Convert and export sincei-formatted .h5ad/anndata files into other formats.
 """,
     )
 

@@ -115,9 +115,9 @@ def inputOutputOptions(args=None, opts=None, requiredOpts=[], suppress_args=None
             "--outFile",
             "-o",
             type=str,
-            help="The file to write results to. For `scFilterStats`, `scFilterBarcodes` "
-            "and `scJSD`, the output file is a .tsv file. For other tools, the output file is "
-            "an updated .h5ad file with the result of the requested operation.",
+            help="The file to write results to. For `scFilterStats` & `scFilterBarcodes` "
+            "the output file is a .tsv file. For `scPlotRegion` the output is an image file. "
+            "For other tools, the output file is an (updated) `.h5ad` file with the result of the requested operation.",
             required=True if "outFile" in requiredOpts else False,
         )
 
