@@ -86,7 +86,7 @@ def get_args():
         type=str,
         choices=["logPCA", "LSA", "LDA", "glmPCA"],
         default="LSA",
-        help="The dimensionality reduction method for clustering. (Default: %(default)s)",
+        help="The dimensionality reduction method to use before clustering cells. (Default: %(default)s)",
     )
 
     general.add_argument(
@@ -95,7 +95,8 @@ def get_args():
         type=str,
         choices=EXPONENTIAL_FAMILY_DICT.keys(),
         default="poisson",
-        help="The choice of exponential family distribution to use for glmPCA method. (Default: %(default)s)",
+        help="The choice of exponential family distribution to use for glmPCA method. "
+        "Used only if --method 'glmPCA' is selected. (Default: %(default)s)",
     )
 
     general.add_argument(

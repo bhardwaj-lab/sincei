@@ -64,7 +64,7 @@ def get_args():
         "-mr",
         type=int,
         help="The maximum region size to be considered, in base pairs. Larger regions may increase "
-        "compute time. Defaults to 100 times the bin size.",
+        "compute time. Defaults to 100 times the bin size. Default: %(default)s.",
         default=None,
     )
 
@@ -73,7 +73,7 @@ def get_args():
         "-nk",
         type=int,
         help="The number of kernels to use for the score map. More kernels generally lead to a better "
-        "segmentation, but increase the computational cost.",
+        "segmentation, but increase the computational cost. Default: %(default)s.",
         default=20,
     )
 
@@ -84,7 +84,7 @@ def get_args():
         type=float,
         help="Penalty value for change-point detection. Higher values result in fewer segments. Multiple "
         "values can be provided (separated by space). Each penalty value will produce a separate set of "
-        'regions within which can be seperated from the output BED file by filtering on the "score" column.',
+        'regions within which can be seperated from the output BED file by filtering on the "score" column. Default: %(default)s.',
         default=[0.05, 0.1, 0.5],
     )
 

@@ -68,7 +68,8 @@ def get_args():
         '"CPM": normalized each bin to the counts per million mapped reads in that group.\n'
         '"Frequency": binarize the coverage per bin and normalize to the total no. of cells per group. \n'
         '"Mean": get mean signal per bin across cells in each group.\n'
-        '"None": simply return the sum of coverage per group.',
+        '"None": simply return the sum of coverage per group.\n'
+        'Default: %(default)s.',
         choices=["CPM", "Frequency", "Mean", "None"],
         default="CPM",
     )
@@ -76,19 +77,19 @@ def get_args():
     optional.add_argument(
         "--ignoreForNormalization",
         "-ig",
-        help="Chromosomes to skip while calculating normalization factors",
+        help="Chromosome names (space-separated) to skip while calculating normalization factors.",
         nargs="+",
         default=None,
     )
 
-    optional.add_argument(
-        "--normalizeByReference",
-        "-nr",
-        help="NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)"
-        "Note that the --normalizeUsing method is applied beforehand.",
-        choices=["ratio", "log2_ratio", "difference", "None"],
-        default=None,
-    )
+#    optional.add_argument(
+#        "--normalizeByReference",
+#        "-nr",
+#        help="NOT IMPLEMENTED: Normalize each group of cells by a reference group (which must be present in the --groupinfo file)"
+#        "Note that the --normalizeUsing method is applied beforehand.",
+#        choices=["ratio", "log2_ratio", "difference", "None"],
+#        default=None,
+#    )
 
     optional.add_argument(
         "--scaleFactor",
