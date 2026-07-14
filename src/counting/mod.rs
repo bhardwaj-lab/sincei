@@ -14,7 +14,7 @@ pub use feature_matrix::count_bam_features;
 pub use filters::{DupMethod, DuplicateFilter, MotifFilter, QcFilter, RawRecordFilter};
 pub use params::CountingParams;
 pub use parse_annotation::{
-    parse_annotation_files, parse_bed_file, parse_gff_file, parse_gtf_file,
+    DEFAULT_EXON_TYPES, GENCODE_TRANSCRIPT_TYPE, parse_annotation_files, parse_blacklist_bed,
 };
-pub use region_index::{BinIndex, ChromIndex, Interval, RegionIndex, VarMeta, build_bin_index};
+pub use region_index::{BinIndex, ChromIndex, Feature, GenomeIndex, Interval, build_bin_index};
 pub use sc_record::ScRecord;

@@ -8,7 +8,7 @@ use super::bam_io::{BamWorker, read_bam_header};
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::parse_annotation::{build_counting_index, parse_annotation_files, parse_bed_file};
+use super::parse_annotation::{build_counting_index, parse_annotation_files, parse_blacklist_bed};
 
 // Maximum number of distinct regions a single read can overlap and still be
 // assigned correctly.  In practice reads are short and features rarely pile up
@@ -62,9 +62,20 @@ pub fn count_bam_features(
         .collect();
     let n_cells = bam_paths.len() * n_barcodes;
 
+    // `Vec<String>` -> `&[&str]` for the parser, which borrows the type names.
+    let feature_types: Option<Vec<&str>> = params
+        .feature_type
+        .as_ref()
+        .map(|t| t.iter().map(String::as_str).collect());
+    let exon_types: Option<Vec<&str>> = params
+        .exon_type
+        .as_ref()
+        .map(|t| t.iter().map(String::as_str).collect());
+
     let (mut feature_index, var_meta) = parse_annotation_files(
         [annotation_path],
-        params.feature_type.as_deref(),
+        feature_types.as_deref(),
+        exon_types.as_deref(),
         params.name_attr.as_deref(),
         params.metagene,
     )?;
@@ -74,7 +85,7 @@ pub fn count_bam_features(
     let blacklist = params
         .blacklist_path
         .as_deref()
-        .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
+        .map(parse_blacklist_bed)
         .transpose()?;
     let counting_index = build_counting_index(&feature_index, blacklist.as_ref());
 
@@ -241,14 +252,14 @@ pub fn count_bam_features(
                             let overlap = eff_end.min(sub.end) - eff_start.max(sub.start);
                             let mut merged = false;
                             for entry in hits[..n_hits].iter_mut() {
-                                if entry.0 == sub.val {
+                                if entry.0 == sub.var_idx {
                                     entry.1 += overlap;
                                     merged = true;
                                     break;
                                 }
                             }
                             if !merged && n_hits < MAX_REGION_HITS {
-                                hits[n_hits] = (sub.val, overlap);
+                                hits[n_hits] = (sub.var_idx, overlap);
                                 n_hits += 1;
                             }
                         }

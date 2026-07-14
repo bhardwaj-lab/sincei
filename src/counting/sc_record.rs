@@ -103,7 +103,7 @@ impl<'a> ScRecord<'a> {
         let mate_is_reverse = flags.is_mate_reverse_complemented();
         let template_length = record.template_length() as i64;
 
-        // Mate position (1-based → 0-based).
+        // Mate position (1-based -> 0-based).
         let next_alignment_start = record
             .mate_alignment_start()
             .map(|res| res.map(|pos| pos.get().saturating_sub(1)))
@@ -270,6 +270,32 @@ fn get_tag_bytes<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'a [u
     }
 }
 
+/// A minimal single-end, forward-strand `ScRecord` spanning `[start, end)`.
+///
+/// Test-only: the counting filters and `effective_interval` operate on parsed
+/// records, so tests build them directly rather than round-tripping a BAM.
+#[cfg(test)]
+pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
+    ScRecord {
+        alignment_start: start,
+        alignment_end: end,
+        is_reverse: false,
+        is_proper_pair: false,
+        is_paired: false,
+        is_read1: false,
+        mate_is_reverse: false,
+        template_length: 0,
+        next_alignment_start: None,
+        read_length: end - start,
+        barcode: None,
+        umi: None,
+        count: 1,
+        gc_content: None,
+        aligned_fraction: None,
+        read_sequence: None,
+    }
+}
+
 fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<u32>> {
     match record.data().get(tag) {
         Some(Ok(value)) => match value {
@@ -289,5 +315,141 @@ fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<u32>> {
         },
         Some(Err(e)) => Err(e).context("failed to decode count tag"),
         None => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::counting::params::CountingParams;
+
+    #[test]
+    fn parse_tag_requires_exactly_two_characters() {
+        assert_eq!(parse_tag("CB").unwrap(), Tag::new(b'C', b'B'));
+        assert!(parse_tag("C").is_err());
+        assert!(parse_tag("CBX").is_err());
+        assert!(parse_tag("").is_err());
+    }
+
+    #[test]
+    fn gc_fraction_counts_g_and_c() {
+        assert_eq!(gc_fraction(b"GCGC"), Some(1.0));
+        assert_eq!(gc_fraction(b"ATAT"), Some(0.0));
+        assert_eq!(gc_fraction(b"GATC"), Some(0.5));
+        // N is neither GC nor a reason to change the denominator.
+        assert_eq!(gc_fraction(b"GN"), Some(0.5));
+        assert_eq!(gc_fraction(b""), None);
+    }
+
+    #[test]
+    fn without_extension_the_alignment_span_is_used_verbatim() {
+        let rec = test_record(100, 150);
+        assert_eq!(rec.effective_interval(&CountingParams::new()), (100, 150));
+    }
+
+    #[test]
+    fn extend_reads_lengthens_single_end_reads_in_the_read_direction() {
+        let params = CountingParams {
+            extend_reads: Some(200),
+            ..CountingParams::new()
+        };
+
+        // Forward: extend downstream from the start.
+        let fwd = test_record(1000, 1050);
+        assert_eq!(fwd.effective_interval(&params), (1000, 1200));
+
+        // Reverse: extend upstream from the end.
+        let mut rev = test_record(1000, 1050);
+        rev.is_reverse = true;
+        assert_eq!(rev.effective_interval(&params), (850, 1050));
+    }
+
+    #[test]
+    fn extend_reads_prefers_the_observed_insert_size_for_proper_pairs() {
+        let params = CountingParams {
+            extend_reads: Some(200),
+            ..CountingParams::new()
+        };
+
+        // Forward mate: TLEN wins over the requested fragment length.
+        let mut fwd = test_record(1000, 1050);
+        fwd.is_proper_pair = true;
+        fwd.template_length = 300;
+        assert_eq!(fwd.effective_interval(&params), (1000, 1300));
+
+        // Reverse mate: the fragment runs from the mate's start to this read's end.
+        let mut rev = test_record(1250, 1300);
+        rev.is_proper_pair = true;
+        rev.is_reverse = true;
+        rev.template_length = -300;
+        rev.next_alignment_start = Some(1000);
+        assert_eq!(rev.effective_interval(&params), (1000, 1300));
+    }
+
+    #[test]
+    fn implausible_insert_sizes_fall_back_to_the_requested_length() {
+        let params = CountingParams {
+            extend_reads: Some(200),
+            ..CountingParams::new()
+        };
+
+        // |TLEN| > 4 × extend_reads is treated as a mapping artifact.
+        let mut rec = test_record(1000, 1050);
+        rec.is_proper_pair = true;
+        rec.template_length = 801;
+        assert_eq!(rec.effective_interval(&params), (1000, 1200));
+
+        // Exactly 4 × extend_reads is still plausible.
+        rec.template_length = 800;
+        assert_eq!(rec.effective_interval(&params), (1000, 1800));
+    }
+
+    #[test]
+    fn reverse_read_extension_saturates_at_the_chromosome_start() {
+        let params = CountingParams {
+            extend_reads: Some(200),
+            ..CountingParams::new()
+        };
+        let mut rec = test_record(10, 60);
+        rec.is_reverse = true;
+        assert_eq!(rec.effective_interval(&params), (0, 60));
+    }
+
+    #[test]
+    fn center_reads_replaces_the_fragment_with_a_read_length_window() {
+        let params = CountingParams {
+            center_reads: true,
+            ..CountingParams::new()
+        };
+
+        // Fragment [100, 300) centered at 200; a 50 bp read spans [175, 225).
+        let mut rec = test_record(100, 300);
+        rec.read_length = 50;
+        assert_eq!(rec.effective_interval(&params), (175, 225));
+    }
+
+    #[test]
+    fn center_reads_applies_after_extension() {
+        let params = CountingParams {
+            extend_reads: Some(200),
+            center_reads: true,
+            ..CountingParams::new()
+        };
+
+        // Extended to [1000, 1200), centered at 1100; a 50 bp read spans [1075, 1125).
+        let mut rec = test_record(1000, 1050);
+        rec.read_length = 50;
+        assert_eq!(rec.effective_interval(&params), (1075, 1125));
+    }
+
+    #[test]
+    fn center_reads_is_a_no_op_for_zero_length_reads() {
+        let params = CountingParams {
+            center_reads: true,
+            ..CountingParams::new()
+        };
+        let mut rec = test_record(100, 300);
+        rec.read_length = 0;
+        assert_eq!(rec.effective_interval(&params), (100, 300));
     }
 }

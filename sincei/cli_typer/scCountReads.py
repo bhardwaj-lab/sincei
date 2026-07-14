@@ -132,8 +132,8 @@ def _count_reads(
     min_aligned_fraction: float | None,
     value_tag: str | None,
     genome_chunk_size: int | None,
-    transcript_id: str | None = None,
-    exon_id: str = "exon",
+    transcript_id: list[str] | None = None,
+    exon_id: list[str] | None = None,
     transcript_id_tag: str | None = None,
     metagene: bool = False,
     compression: Compression = Compression.none,
@@ -326,8 +326,8 @@ def features(
     value_tag: str | None = VALUE_TAG,
     genome_chunk_size: int | None = GENOME_CHUNK_SIZE,
     # GTF / GFF options (only affect GTF/GFF inputs, ignored for BED)
-    transcript_id: str | None = GTF_GFF_OPTS["transcript_id"],
-    exon_id: str = GTF_GFF_OPTS["exon_id"],
+    transcript_id: list[str] | None = GTF_GFF_OPTS["transcript_id"],
+    exon_id: list[str] | None = GTF_GFF_OPTS["exon_id"],
     transcript_id_tag: str | None = GTF_GFF_OPTS["transcript_id_tag"],
     metagene: bool = typer.Option(
         False,

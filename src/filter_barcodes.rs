@@ -13,10 +13,10 @@ use rayon::prelude::*;
 use triple_accel::hamming::hamming;
 
 use crate::counting::bam_io::{open_indexed_bam, read_bam_header};
-use crate::counting::region_index::{ChromIndex, Interval, RegionIndex};
+use crate::counting::region_index::{ChromIndex, GenomeIndex, Interval};
 
 type BinsByBarcode = AHashMap<String, AHashSet<(String, usize)>>;
-type BlacklistIndex = RegionIndex;
+type BlacklistIndex = GenomeIndex;
 type BarcodeCounts = (Vec<(String, usize)>, Vec<String>);
 
 fn run_filter_barcodes(
@@ -43,7 +43,7 @@ fn run_filter_barcodes(
     let blacklist_index = if let Some(p) = blacklist_file_name {
         load_blacklist_index(p)?
     } else {
-        RegionIndex::new()
+        GenomeIndex::new()
     };
 
     let tag = parse_tag(cell_tag)?;
@@ -240,8 +240,7 @@ fn load_blacklist_index(path: &Path) -> Result<BlacklistIndex> {
             .push(Interval {
                 start,
                 end,
-                val: 0,
-                name: String::new(),
+                var_idx: 0,
             });
     }
 
@@ -349,5 +348,5 @@ pub fn filter_barcodes(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }

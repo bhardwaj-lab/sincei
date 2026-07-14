@@ -27,8 +27,10 @@ name = "sincei"
 crate-type = ["cdylib"]
 
 [dependencies]
-# PyO3 for Python interoperability
-pyo3 = { version = "0.27", features = ["extension-module", "anyhow"] }
+# PyO3 for Python interoperability.
+#
+# Extension module is skipped so the Python interpreter can be loaded dynamically at runtime.
+pyo3 = { version = "0.27", features = ["anyhow"] }
 
 # Python's logging system from Rust
 pyo3-log = { version = "0.13" }
@@ -68,6 +70,9 @@ csv = { version = "1.4.0" }
 # BAM/SAM parsing
 noodles = { version = "0.111", features = ["bam", "sam", "bgzf", "bed", "gff", "gtf", "core"] }
 
+# gzip/BGZF decompression for annotation files (BED/GTF/GFF3)
+flate2 = { version = "1" }
+
 # 2bit genome file reading (for motif checking with reference genome)
 twobit = { version = "0.2" }
 
@@ -75,18 +80,19 @@ twobit = { version = "0.2" }
 triple_accel = {version = "0.4" }
 
 # Iter tools
-itertools = { version = "0.14" }
+itertools = { version = "0.15" }
 
 # BigWig and BigBed parsing and writing
 bigtools = { version = "0.5" }
 
 # AnnData
-# PyO3 dependency conflict. Temporary fix by using the git versions. TODO: fix for release.
-#anndata = "0.6.2"
-anndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
-anndata-hdf5 = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
-#pyanndata = "0.6"
-pyanndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "cf0b312f2834884bd708595a63f12f34f1905b7b"}
+anndata = { version = "0.7" }
+anndata-hdf5 = { version = "0.5" }
+
+# New pyanndata version not available yet on crates.io
+# TODO: fix for release
+# pyanndata = { version = "0.7" }
+pyanndata = { git = "https://github.com/kaizhang/anndata-rs.git", rev = "2cbb7618dc5d07b801a6b265cc07a71aac639879" }
 
 # Progress bars for CLI
 indicatif = { version = "0.18", features = ["rayon"] }
@@ -96,6 +102,15 @@ bstr = { version = "1.12" }
 
 # Fast non-cryptographic hasher
 ahash = { version = "0.8" }
+
+[build-dependencies]
+# Locates the active interpreter's lib dir, so test binaries linking libpython
+# can find it at run time (see build.rs)
+pyo3-build-config = { version = "0.27" }
+
+[dev-dependencies]
+# Temporary files/directories for parser tests
+tempfile = { version = "3" }
 
 # jemalloc for faster memory allocation on non-MSVC platforms (e.g. Linux, macOS)
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

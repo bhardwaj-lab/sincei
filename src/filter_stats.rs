@@ -9,8 +9,8 @@ use rayon::prelude::*;
 
 use crate::counting::bam_io::{BamWorker, read_bam_header};
 use crate::counting::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
-use crate::counting::parse_annotation::parse_bed_file;
-use crate::counting::region_index::RegionIndex;
+use crate::counting::parse_annotation::parse_blacklist_bed;
+use crate::counting::region_index::GenomeIndex;
 use crate::counting::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 
 #[derive(Default, Clone)]
@@ -82,7 +82,7 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
     }
 }
 
-fn is_blacklisted(bl: &RegionIndex, chrom: &str, start: usize, end: usize) -> bool {
+fn is_blacklisted(bl: &GenomeIndex, chrom: &str, start: usize, end: usize) -> bool {
     bl.get(chrom)
         .or_else(|| chrom.strip_prefix("chr").and_then(|c| bl.get(c)))
         .or_else(|| bl.get(&format!("chr{chrom}")))
@@ -124,9 +124,7 @@ pub fn run_filter_stats(
         store_sequence: motifs.is_some(),
     };
 
-    let blacklist: Option<RegionIndex> = blacklist_path
-        .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
-        .transpose()?;
+    let blacklist: Option<GenomeIndex> = blacklist_path.map(parse_blacklist_bed).transpose()?;
 
     // Keyed by raw bytes so the per-read barcode lookup never allocates.
     let barcode_idx: AHashMap<&[u8], usize> = barcodes
@@ -412,7 +410,7 @@ pub fn filter_stats(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
     run_filter_stats(
         bam_path.as_path(),
@@ -436,5 +434,5 @@ pub fn filter_stats(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }

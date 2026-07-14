@@ -8,8 +8,8 @@ use super::bam_io::{BamWorker, read_bam_header};
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::parse_annotation::parse_bed_file;
-use super::region_index::{BinIndex, RegionIndex, build_bin_index};
+use super::parse_annotation::parse_blacklist_bed;
+use super::region_index::{BinIndex, GenomeIndex, build_bin_index};
 use super::sc_record::{ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × genomic-bin matrix,
@@ -85,7 +85,7 @@ pub fn count_bam_bins(
     let blacklist = params
         .blacklist_path
         .as_deref()
-        .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
+        .map(parse_blacklist_bed)
         .transpose()?;
     let blacklisted_bins = blacklisted_bin_indices(&bin_index, blacklist.as_ref());
 
@@ -302,7 +302,7 @@ pub fn count_bam_bins(
 
 fn blacklisted_bin_indices(
     bin_index: &BinIndex,
-    blacklist: Option<&RegionIndex>,
+    blacklist: Option<&GenomeIndex>,
 ) -> AHashSet<usize> {
     let Some(bl) = blacklist else {
         return AHashSet::new();
@@ -332,4 +332,98 @@ fn blacklisted_bin_indices(
         }
     }
     set
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::counting::region_index::{ChromIndex, Interval};
+
+    fn blacklist(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
+        let intervals = spans
+            .iter()
+            .map(|&(start, end)| Interval {
+                start,
+                end,
+                var_idx: 0,
+            })
+            .collect();
+        [(chrom.to_string(), ChromIndex::build(intervals))]
+            .into_iter()
+            .collect()
+    }
+
+    /// chr1 (300 bp) and chr2 (100 bp) tiled into 100 bp bins:
+    /// feature indices 0,1,2 = chr1 bins; 3 = chr2 bin.
+    fn two_chrom_index() -> BinIndex {
+        let (index, _) = build_bin_index(
+            &[("chr1".to_string(), 300), ("chr2".to_string(), 100)],
+            100,
+            100,
+        );
+        index
+    }
+
+    fn sorted(set: AHashSet<usize>) -> Vec<usize> {
+        let mut v: Vec<usize> = set.into_iter().collect();
+        v.sort_unstable();
+        v
+    }
+
+    #[test]
+    fn no_blacklist_means_no_excluded_bins() {
+        assert!(blacklisted_bin_indices(&two_chrom_index(), None).is_empty());
+    }
+
+    #[test]
+    fn a_blacklist_region_excludes_every_bin_it_touches() {
+        // [150, 160) lies inside the second chr1 bin.
+        let excluded =
+            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(150, 160)])));
+        assert_eq!(sorted(excluded), vec![1]);
+
+        // A region spanning a bin boundary excludes both bins.
+        let excluded =
+            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(90, 110)])));
+        assert_eq!(sorted(excluded), vec![0, 1]);
+
+        // A region covering the whole chromosome excludes all of its bins.
+        let excluded =
+            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(0, 300)])));
+        assert_eq!(sorted(excluded), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn excluded_bins_are_offset_by_chromosome() {
+        // chr2's only bin is feature index 3, not 0.
+        let excluded =
+            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr2", &[(10, 20)])));
+        assert_eq!(sorted(excluded), vec![3]);
+    }
+
+    #[test]
+    fn blacklist_regions_on_unknown_chromosomes_are_ignored() {
+        let excluded = blacklisted_bin_indices(
+            &two_chrom_index(),
+            Some(&blacklist("chrUnplaced", &[(0, 50)])),
+        );
+        assert!(excluded.is_empty());
+    }
+
+    #[test]
+    fn a_blacklist_region_past_the_chromosome_end_clamps_to_the_last_bin() {
+        let excluded =
+            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(250, 5000)])));
+        assert_eq!(sorted(excluded), vec![2]);
+    }
+
+    #[test]
+    fn sliding_bins_that_overlap_a_blacklist_region_are_all_excluded() {
+        // 100 bp bins every 50 bp on a 300 bp chromosome: bins start at
+        // 0, 50, 100, 150, 200, 250.  A region at [120, 130) is covered by the
+        // bins starting at 50 and 100.
+        let (index, _) = build_bin_index(&[("chr1".to_string(), 300)], 100, 50);
+        let excluded = blacklisted_bin_indices(&index, Some(&blacklist("chr1", &[(120, 130)])));
+        assert_eq!(sorted(excluded), vec![1, 2]);
+    }
 }

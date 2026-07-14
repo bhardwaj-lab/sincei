@@ -566,6 +566,6 @@ pub fn find_vcrs(
         region.as_deref(),
         num_threads,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
     Ok(out_file.display().to_string())
 }

@@ -54,7 +54,31 @@ dependencies = [
 [[package]]
 name = "anndata"
 version = "0.7.0"
-source = "git+https://github.com/kaizhang/anndata-rs.git?rev=cf0b312f2834884bd708595a63f12f34f1905b7b#cf0b312f2834884bd708595a63f12f34f1905b7b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f551da3c4d1eba883f889e0d94ca56da2103538b9d3ab807a41feaac68ee6482"
+dependencies = [
+ "anyhow",
+ "flate2",
+ "indexmap",
+ "itertools 0.14.0",
+ "log",
+ "nalgebra-sparse",
+ "ndarray",
+ "num",
+ "parking_lot",
+ "paste",
+ "permutation",
+ "polars",
+ "rayon",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
+
+[[package]]
+name = "anndata"
+version = "0.7.0"
+source = "git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879#2cbb7618dc5d07b801a6b265cc07a71aac639879"
 dependencies = [
  "anyhow",
  "flate2",
@@ -76,10 +100,26 @@ dependencies = [
 
 [[package]]
 name = "anndata-hdf5"
-version = "0.5.2"
-source = "git+https://github.com/kaizhang/anndata-rs.git?rev=cf0b312f2834884bd708595a63f12f34f1905b7b#cf0b312f2834884bd708595a63f12f34f1905b7b"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45549b64cc7401453a89885f79d3089d85fe83e2e6f79f1db1bef155fc58fd2c"
 dependencies = [
- "anndata",
+ "anndata 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "anyhow",
+ "blosc-src",
+ "hdf5-metno",
+ "hdf5-metno-sys",
+ "itertools 0.14.0",
+ "libz-sys",
+ "ndarray",
+]
+
+[[package]]
+name = "anndata-hdf5"
+version = "0.5.3"
+source = "git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879#2cbb7618dc5d07b801a6b265cc07a71aac639879"
+dependencies = [
+ "anndata 0.7.0 (git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879)",
  "anyhow",
  "blosc-src",
  "hdf5-metno",
@@ -1736,6 +1776,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3157,11 +3206,11 @@ dependencies = [
 
 [[package]]
 name = "pyanndata"
-version = "0.7.0"
-source = "git+https://github.com/kaizhang/anndata-rs.git?rev=cf0b312f2834884bd708595a63f12f34f1905b7b#cf0b312f2834884bd708595a63f12f34f1905b7b"
+version = "0.7.1"
+source = "git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879#2cbb7618dc5d07b801a6b265cc07a71aac639879"
 dependencies = [
- "anndata",
- "anndata-hdf5",
+ "anndata 0.7.0 (git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879)",
+ "anndata-hdf5 0.5.3 (git+https://github.com/kaizhang/anndata-rs.git?rev=2cbb7618dc5d07b801a6b265cc07a71aac639879)",
  "anyhow",
  "downcast-rs",
  "flate2",
@@ -3992,14 +4041,15 @@ name = "sincei"
 version = "0.7.0-dev"
 dependencies = [
  "ahash",
- "anndata",
- "anndata-hdf5",
+ "anndata 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "anndata-hdf5 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "anyhow",
  "bigtools",
  "bstr",
  "csv",
+ "flate2",
  "indicatif",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "nalgebra 0.34.2",
  "nalgebra-sparse",
  "ndarray",
@@ -4009,10 +4059,12 @@ dependencies = [
  "polars",
  "pyanndata",
  "pyo3",
+ "pyo3-build-config",
  "pyo3-log",
  "pyo3-polars",
  "rayon",
  "statrs",
+ "tempfile",
  "tikv-jemallocator",
  "tokio",
  "triple_accel",

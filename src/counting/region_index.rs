@@ -1,32 +1,32 @@
 use ahash::AHashMap;
 
-/// Per-feature metadata, ordered by feature (column) index.  Used to populate
-/// the AnnData `var` DataFrame (`chrom`, `start`, `end`, `name`).
+/// A genomic feature defined by a chromosome, half-open interval, name, and strand.
 #[derive(Clone, Debug)]
-pub struct VarMeta {
+pub struct Feature {
     pub chrom: String,
     pub start: usize,
     pub end: usize,
-    /// `chrom:start-end` for bins / unnamed BED features, or the feature name
-    /// when the annotation provides one.
+    /// Feature name or `chrom:start-end` for bins/unnamed features.
     pub name: String,
-    /// Strand of the feature: `'+'`, `'-'`, or `'*'` when unstranded / unknown
-    /// (always `'*'` for bins and BED features without a strand column).
+    /// Strand of the feature: `'+'`, `'-'`, or `'*'` (unstranded/unknown).
     pub strand: char,
 }
 
-/// A half-open genomic interval `[start, end)` carrying an arbitrary value.
+/// A half-open genomic interval `[start, end)` and what feature it belongs to
+/// (noted in `var_idx`).
+///
+/// Several intervals may share a `var_idx`. E.g., the exons of one transcript,
+/// or the pieces a feature is split by blacklist subtraction.
 #[derive(Clone, Debug)]
 pub struct Interval {
     pub start: usize,
     pub end: usize,
-    /// Feature or bin index — used as the column key in the count matrix.
-    pub val: usize,
-    /// Feature name (e.g. gene ID, `"chrom:start-end"`). Empty for blacklist intervals.
-    pub name: String,
+    /// The index in `Vec<Feature>` to which this interval belongs.
+    pub var_idx: usize,
 }
 
-/// Per-chromosome interval index backed by a sorted flat array.
+/// Searchable index over all the intervals on a chromosome, as a sorted flat
+/// array.
 ///
 /// Intervals are sorted by `start` at build time.  `max_end[i]` is the
 /// prefix-maximum of `end` over `intervals[0..=i]`, enabling O(log N + k)
@@ -54,19 +54,36 @@ impl ChromIndex {
         Self { intervals, max_end }
     }
 
-    /// Return all intervals that overlap the half-open query `[start, end)`.
+    /// Return all intervals that overlap the half-open query `[start, end)`,
+    /// in descending order of `start`.
     ///
-    /// `partition_point` gives the first index where `iv.start >= end`; all
-    /// indices below it are candidates.  Scanning backwards, we yield hits
-    /// and stop early when `max_end[i] <= start`.
+    /// Since the intervals are sorted by `start`, `partition_point` finds the
+    /// first one that begins at or after the query ends.  It, and everything
+    /// after it, starts too late to overlap, so only the intervals below it are
+    /// candidates.  Those are then walked back-to-front, which lets the scan
+    /// stop as soon as it can:
+    ///
+    /// * `take_while` **ends** the scan at the first interval whose `max_end`
+    ///   (the greatest `end` among it and everything before it) is at or before
+    ///   the query's start.  No earlier interval can reach the query either, so
+    ///   there is nothing left to find — this is what keeps a lookup O(log N + k)
+    ///   rather than a walk to index 0.
+    /// * `filter` **skips** an individual interval that ends at or before the
+    ///   query's start.  Its neighbours may still overlap (they can be nested
+    ///   inside a longer one), so the scan carries on.
+    ///
+    /// Everything surviving both starts before the query ends and ends after it
+    /// begins, which is exactly a half-open overlap.
     pub fn find(&self, start: usize, end: usize) -> impl Iterator<Item = &Interval> {
-        let p = self.intervals.partition_point(|iv| iv.start < end);
-        FindIter {
-            intervals: &self.intervals,
-            max_end: &self.max_end,
-            query_start: start,
-            idx: p,
-        }
+        let candidates = self.intervals.partition_point(|iv| iv.start < end);
+
+        self.intervals[..candidates]
+            .iter()
+            .zip(&self.max_end[..candidates])
+            .rev()
+            .take_while(move |(_, max_end)| **max_end > start)
+            .map(|(interval, _)| interval)
+            .filter(move |interval| interval.end > start)
     }
 
     /// Iterate all intervals in start-sorted order.
@@ -83,58 +100,38 @@ impl ChromIndex {
     }
 }
 
-struct FindIter<'a> {
-    intervals: &'a [Interval],
-    max_end: &'a [usize],
-    query_start: usize,
-    idx: usize,
-}
-
-impl<'a> Iterator for FindIter<'a> {
-    type Item = &'a Interval;
-
-    fn next(&mut self) -> Option<&'a Interval> {
-        loop {
-            if self.idx == 0 {
-                return None;
-            }
-            self.idx -= 1;
-            // max_end[idx] is the max end of intervals[0..=idx].
-            // If that max ≤ query_start, no remaining interval can overlap.
-            if self.max_end[self.idx] <= self.query_start {
-                return None;
-            }
-            let iv = &self.intervals[self.idx];
-            if iv.end > self.query_start {
-                return Some(iv);
-            }
-        }
-    }
-}
-
-/// Per-chromosome interval index.
+/// Searchable index over the intervals of a **whole genome**: one
+/// [`ChromIndex`] per chromosome, keyed by chromosome name.
+///
+/// Callers resolve `chrom -> ChromIndex` once per work chunk (each covers a
+/// single chromosome) and then query that index per read.
 ///
 /// `AHashMap` preserves the insertion order of chromosome names, so iteration
 /// order is deterministic (matches the order chromosomes were first seen in the
 /// annotation or BAM header).
-pub type RegionIndex = AHashMap<String, ChromIndex>;
+pub type GenomeIndex = AHashMap<String, ChromIndex>;
 
-/// Bin index
+/// Geometry of a uniform-bin tiling of a **whole genome**, covering every
+/// chromosome at once.
 ///
-/// Precomputed geometry for a uniform-bin tiling of the genome.
+/// The alternative to a [`GenomeIndex`], for when the regions are a regular
+/// tiling rather than arbitrary annotation features.  Nothing is searched and no
+/// [`Interval`] is stored: a bin's position is arithmetic, so the bin holding a
+/// read is found in O(1) rather than O(log N + k).
 ///
 /// Bin `i` on chromosome `c` covers the half-open interval
 /// `[i * step_size,  min(i * step_size + bin_size, chrom_size))`.
 ///
-/// `step_size == bin_size` → non-overlapping tiles (most common).
-/// `step_size < bin_size`  → sliding windows.
-///
-/// The hot-loop lookup is O(1) arithmetic — no binary search needed.
+/// `step_size == bin_size` -> non-overlapping tiles (most common).
+/// `step_size < bin_size`  -> sliding windows.
 pub struct BinIndex {
     pub bin_size: usize,
     pub step_size: usize,
-    /// `chrom → (first_feature_idx, n_bins_on_chrom)`, in BAM-header order.
+    /// `chrom -> (first_feature_idx, n_bins_on_chrom)`, in BAM-header order.
+    /// The first element turns a bin's index within its chromosome into its
+    /// column in the count matrix.
     pub chrom_bins: AHashMap<String, (usize, usize)>,
+    /// Total bins across all chromosomes — the number of matrix columns.
     pub n_bins: usize,
 }
 
@@ -147,8 +144,8 @@ pub fn build_bin_index(
     chrom_sizes: &[(String, usize)],
     bin_size: usize,
     step_size: usize,
-) -> (BinIndex, Vec<VarMeta>) {
-    let mut var: Vec<VarMeta> = Vec::new();
+) -> (BinIndex, Vec<Feature>) {
+    let mut var: Vec<Feature> = Vec::new();
     let mut chrom_bins: AHashMap<String, (usize, usize)> = AHashMap::new();
 
     for (chrom, chrom_size) in chrom_sizes {
@@ -161,7 +158,7 @@ pub fn build_bin_index(
         let mut bin_start = 0;
         while bin_start < chrom_size {
             let bin_end = (bin_start + bin_size).min(chrom_size);
-            var.push(VarMeta {
+            var.push(Feature {
                 chrom: chrom.clone(),
                 start: bin_start,
                 end: bin_end,
@@ -186,4 +183,123 @@ pub fn build_bin_index(
         },
         var,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn iv(start: usize, end: usize, var_idx: usize) -> Interval {
+        Interval {
+            start,
+            end,
+            var_idx,
+        }
+    }
+
+    /// Feature indices overlapping `[start, end)`, sorted so assertions do not
+    /// depend on the (descending-start) iteration order of `find`.
+    fn hits(idx: &ChromIndex, start: usize, end: usize) -> Vec<usize> {
+        let mut v: Vec<usize> = idx.find(start, end).map(|iv| iv.var_idx).collect();
+        v.sort_unstable();
+        v
+    }
+
+    #[test]
+    fn find_returns_overlapping_intervals_only() {
+        // Deliberately unsorted input: `build` must sort by start.
+        let idx = ChromIndex::build(vec![iv(20, 30, 2), iv(0, 10, 0), iv(5, 15, 1)]);
+
+        assert_eq!(hits(&idx, 12, 13), vec![1]);
+        assert_eq!(hits(&idx, 0, 5), vec![0]);
+        assert_eq!(hits(&idx, 0, 25), vec![0, 1, 2]);
+        assert_eq!(hits(&idx, 30, 40), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn find_treats_intervals_as_half_open() {
+        let idx = ChromIndex::build(vec![iv(10, 20, 0)]);
+
+        // Touching at the ends is not an overlap.
+        assert_eq!(hits(&idx, 0, 10), Vec::<usize>::new());
+        assert_eq!(hits(&idx, 20, 30), Vec::<usize>::new());
+        // One shared base is.
+        assert_eq!(hits(&idx, 9, 11), vec![0]);
+        assert_eq!(hits(&idx, 19, 21), vec![0]);
+    }
+
+    #[test]
+    fn find_handles_nested_intervals() {
+        // The max_end prefix-maximum exists so a long interval early in the
+        // sorted order is not missed once a short later one ends before the query.
+        let idx = ChromIndex::build(vec![iv(0, 1000, 0), iv(10, 20, 1), iv(500, 510, 2)]);
+
+        assert_eq!(hits(&idx, 900, 950), vec![0]);
+        assert_eq!(hits(&idx, 505, 506), vec![0, 2]);
+        assert_eq!(hits(&idx, 15, 16), vec![0, 1]);
+    }
+
+    #[test]
+    fn find_on_empty_index_yields_nothing() {
+        let idx = ChromIndex::build(vec![]);
+        assert!(idx.is_empty());
+        assert_eq!(idx.len(), 0);
+        assert_eq!(hits(&idx, 0, 100), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn find_returns_every_duplicate_at_the_same_start() {
+        let idx = ChromIndex::build(vec![iv(100, 200, 0), iv(100, 200, 1), iv(100, 150, 2)]);
+        assert_eq!(hits(&idx, 120, 130), vec![0, 1, 2]);
+        assert_eq!(hits(&idx, 160, 170), vec![0, 1]);
+    }
+
+    #[test]
+    fn bins_tile_the_chromosome_and_clamp_the_last_bin() {
+        let (index, var) = build_bin_index(&[("chr1".to_string(), 250)], 100, 100);
+
+        assert_eq!(index.n_bins, 3);
+        assert_eq!(index.chrom_bins.get("chr1"), Some(&(0, 3)));
+        let spans: Vec<(usize, usize)> = var.iter().map(|v| (v.start, v.end)).collect();
+        assert_eq!(spans, vec![(0, 100), (100, 200), (200, 250)]);
+        assert_eq!(var[2].name, "chr1:200-250");
+        assert!(var.iter().all(|v| v.strand == '*'));
+    }
+
+    #[test]
+    fn step_size_below_bin_size_produces_sliding_windows() {
+        let (index, var) = build_bin_index(&[("chr1".to_string(), 100)], 50, 25);
+
+        assert_eq!(index.n_bins, 4);
+        let spans: Vec<(usize, usize)> = var.iter().map(|v| (v.start, v.end)).collect();
+        assert_eq!(spans, vec![(0, 50), (25, 75), (50, 100), (75, 100)]);
+    }
+
+    #[test]
+    fn chromosome_offsets_are_cumulative_and_empty_chroms_are_skipped() {
+        let (index, var) = build_bin_index(
+            &[
+                ("chr1".to_string(), 150),
+                ("chrEmpty".to_string(), 0),
+                ("chr2".to_string(), 100),
+            ],
+            100,
+            100,
+        );
+
+        assert_eq!(index.chrom_bins.get("chr1"), Some(&(0, 2)));
+        assert_eq!(index.chrom_bins.get("chr2"), Some(&(2, 1)));
+        assert!(!index.chrom_bins.contains_key("chrEmpty"));
+        assert_eq!(index.n_bins, 3);
+        assert_eq!(var[2].chrom, "chr2");
+    }
+
+    #[test]
+    fn chromosome_shorter_than_one_bin_gets_a_single_clamped_bin() {
+        let (index, var) = build_bin_index(&[("chr1".to_string(), 30)], 100, 100);
+
+        assert_eq!(index.n_bins, 1);
+        assert_eq!((var[0].start, var[0].end), (0, 30));
+        assert_eq!(var[0].name, "chr1:0-30");
+    }
 }

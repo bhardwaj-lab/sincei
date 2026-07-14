@@ -166,7 +166,7 @@ pub fn count_bins(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
     // Build (path, sample_name) pairs — sample name is the file stem.
     let path_sample: Vec<(PathBuf, String)> = bam_paths
@@ -205,7 +205,7 @@ pub fn count_bins(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }
 
 /// Count reads into a cell × genomic-feature matrix and write the result as an
@@ -264,8 +264,8 @@ pub fn count_features(
     blacklist_path: Option<PathBuf>,
     extend_reads: Option<usize>,
     center_reads: bool,
-    feature_type: Option<String>,
-    exon_type: Option<String>,
+    feature_type: Option<Vec<String>>,
+    exon_type: Option<Vec<String>>,
     name_attr: Option<String>,
     metagene: bool,
     dup_method: Option<String>,
@@ -313,7 +313,7 @@ pub fn count_features(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
     let path_sample: Vec<(PathBuf, String)> = bam_paths
         .iter()
@@ -350,5 +350,5 @@ pub fn count_features(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }

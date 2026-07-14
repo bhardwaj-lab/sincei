@@ -373,3 +373,296 @@ fn complement(b: u8) -> u8 {
         _ => b'N',
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::counting::sc_record::test_record;
+
+    // SAM flag bits used below.
+    const PAIRED: u16 = 0x1;
+    const PROPER_PAIR: u16 = 0x2;
+    const REVERSE: u16 = 0x10;
+    const MATE_REVERSE: u16 = 0x20;
+    const READ1: u16 = 0x40;
+    const READ2: u16 = 0x80;
+    const DUPLICATE: u16 = 0x400;
+
+    #[test]
+    fn a_filter_with_no_thresholds_keeps_everything() {
+        let f = RawRecordFilter::new();
+        assert!(f.passes(0, None));
+        assert!(f.passes(DUPLICATE, Some(0)));
+    }
+
+    #[test]
+    fn min_mapq_rejects_low_and_missing_mapping_qualities() {
+        let f = RawRecordFilter {
+            min_mapq: Some(30),
+            ..RawRecordFilter::new()
+        };
+
+        assert!(f.passes(0, Some(30)));
+        assert!(f.passes(0, Some(60)));
+        assert!(!f.passes(0, Some(29)));
+        // An absent MAPQ cannot clear the bar.
+        assert!(!f.passes(0, None));
+    }
+
+    #[test]
+    fn sam_flag_include_requires_every_requested_bit() {
+        let f = RawRecordFilter {
+            sam_flag_include: Some(PAIRED | PROPER_PAIR),
+            ..RawRecordFilter::new()
+        };
+
+        assert!(f.passes(PAIRED | PROPER_PAIR, None));
+        assert!(f.passes(PAIRED | PROPER_PAIR | REVERSE, None));
+        // Only one of the two required bits is set.
+        assert!(!f.passes(PAIRED, None));
+        assert!(!f.passes(0, None));
+    }
+
+    #[test]
+    fn sam_flag_exclude_rejects_any_forbidden_bit() {
+        let f = RawRecordFilter {
+            sam_flag_exclude: Some(DUPLICATE | 0x200),
+            ..RawRecordFilter::new()
+        };
+
+        assert!(f.passes(PAIRED, None));
+        assert!(!f.passes(DUPLICATE, None));
+        assert!(!f.passes(0x200, None));
+    }
+
+    #[test]
+    fn paired_end_rna_strand_filter_follows_the_dutp_convention() {
+        // "forward" keeps read2-on-forward and read1-with-forward-mate.
+        assert!(!rna_strand_filter(PAIRED | READ2, "forward"));
+        assert!(!rna_strand_filter(PAIRED | READ1, "forward"));
+        assert!(rna_strand_filter(PAIRED | READ2 | REVERSE, "forward"));
+        assert!(rna_strand_filter(PAIRED | READ1 | MATE_REVERSE, "forward"));
+
+        // "reverse" is the mirror image.
+        assert!(!rna_strand_filter(PAIRED | READ2 | REVERSE, "reverse"));
+        assert!(!rna_strand_filter(PAIRED | READ1 | MATE_REVERSE, "reverse"));
+        assert!(rna_strand_filter(PAIRED | READ2, "reverse"));
+        assert!(rna_strand_filter(PAIRED | READ1, "reverse"));
+    }
+
+    #[test]
+    fn single_end_rna_strand_filter_inverts_the_paired_end_logic() {
+        // dUTP single-end: a "forward" gene yields reads on the reverse strand.
+        assert!(!rna_strand_filter(REVERSE, "forward"));
+        assert!(rna_strand_filter(0, "forward"));
+
+        assert!(!rna_strand_filter(0, "reverse"));
+        assert!(rna_strand_filter(REVERSE, "reverse"));
+    }
+
+    #[test]
+    fn an_unrecognized_strand_name_excludes_nothing() {
+        assert!(!rna_strand_filter(PAIRED | READ2, "sideways"));
+        assert!(!rna_strand_filter(0, ""));
+    }
+
+    #[test]
+    fn record_filter_applies_the_rna_strand_filter() {
+        let f = RawRecordFilter {
+            filter_rna_strand: Some("forward".to_string()),
+            ..RawRecordFilter::new()
+        };
+
+        assert!(f.passes(PAIRED | READ2, None));
+        assert!(!f.passes(PAIRED | READ2 | REVERSE, None));
+    }
+
+    #[test]
+    fn qc_filter_with_no_thresholds_keeps_everything() {
+        assert!(QcFilter::new().passes(&test_record(100, 200)));
+    }
+
+    #[test]
+    fn fragment_length_uses_the_alignment_span_for_single_end_reads() {
+        let f = QcFilter {
+            min_fragment_length: Some(50),
+            max_fragment_length: Some(150),
+            ..QcFilter::new()
+        };
+
+        assert!(f.passes(&test_record(1000, 1100))); // span 100
+        assert!(f.passes(&test_record(1000, 1050))); // span 50, at the minimum
+        assert!(f.passes(&test_record(1000, 1150))); // span 150, at the maximum
+        assert!(!f.passes(&test_record(1000, 1049))); // span 49
+        assert!(!f.passes(&test_record(1000, 1151))); // span 151
+    }
+
+    #[test]
+    fn fragment_length_uses_the_insert_size_for_paired_end_reads() {
+        let f = QcFilter {
+            max_fragment_length: Some(150),
+            ..QcFilter::new()
+        };
+
+        // A 100 bp alignment on a 500 bp fragment is judged by |TLEN|, not the span.
+        let mut rec = test_record(1000, 1100);
+        rec.template_length = 500;
+        assert!(!f.passes(&rec));
+
+        // The sign of TLEN is irrelevant.
+        rec.template_length = -500;
+        assert!(!f.passes(&rec));
+
+        rec.template_length = 120;
+        assert!(f.passes(&rec));
+    }
+
+    #[test]
+    fn gc_thresholds_are_inclusive_at_the_bounds() {
+        let f = QcFilter {
+            min_gc: Some(0.3),
+            max_gc: Some(0.7),
+            ..QcFilter::new()
+        };
+
+        let mut rec = test_record(0, 100);
+        for (gc, expected) in [
+            (0.3, true),
+            (0.5, true),
+            (0.7, true),
+            (0.29, false),
+            (0.71, false),
+        ] {
+            rec.gc_content = Some(gc);
+            assert_eq!(f.passes(&rec), expected, "gc = {gc}");
+        }
+    }
+
+    #[test]
+    fn gc_and_aligned_fraction_thresholds_pass_when_the_value_was_not_computed() {
+        // The counting loop only computes these when a filter asks for them, so
+        // an uncomputed value must never silently drop a read.
+        let f = QcFilter {
+            min_gc: Some(0.9),
+            min_aligned_fraction: Some(0.9),
+            ..QcFilter::new()
+        };
+
+        let rec = test_record(0, 100);
+        assert!(rec.gc_content.is_none());
+        assert!(rec.aligned_fraction.is_none());
+        assert!(f.passes(&rec));
+    }
+
+    #[test]
+    fn min_aligned_fraction_rejects_poorly_matched_reads() {
+        let f = QcFilter {
+            min_aligned_fraction: Some(0.8),
+            ..QcFilter::new()
+        };
+
+        let mut rec = test_record(0, 100);
+        rec.aligned_fraction = Some(0.8);
+        assert!(f.passes(&rec));
+        rec.aligned_fraction = Some(0.79);
+        assert!(!f.passes(&rec));
+    }
+
+    #[test]
+    fn record_options_are_derived_from_the_active_filters() {
+        let none = derive_record_opts(None, false);
+        assert!(!none.compute_gc);
+        assert!(!none.compute_aligned_fraction);
+        assert!(!none.store_sequence);
+
+        let gc_only = QcFilter {
+            max_gc: Some(0.6),
+            ..QcFilter::new()
+        };
+        let opts = derive_record_opts(Some(&gc_only), false);
+        assert!(opts.compute_gc);
+        assert!(!opts.compute_aligned_fraction);
+
+        let af_only = QcFilter {
+            min_aligned_fraction: Some(0.5),
+            ..QcFilter::new()
+        };
+        let opts = derive_record_opts(Some(&af_only), true);
+        assert!(!opts.compute_gc);
+        assert!(opts.compute_aligned_fraction);
+        // The motif filter is the only consumer of the stored sequence.
+        assert!(opts.store_sequence);
+    }
+
+    /// A record carrying a barcode/UMI, since the duplicate key is built from them.
+    fn dup_record<'a>(barcode: &'a [u8], umi: &'a [u8], start: usize, end: usize) -> ScRecord<'a> {
+        let mut rec = test_record(start, end);
+        rec.barcode = Some(barcode);
+        rec.umi = Some(umi);
+        rec
+    }
+
+    #[test]
+    fn barcode_start_dedup_keeps_only_the_first_read_at_a_position() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStart);
+
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        // Same barcode and start: a duplicate, even with a different end and UMI.
+        assert!(!f.passes(&dup_record(b"AAA", b"U2", 100, 250)));
+        // A different barcode at the same start is a different cell.
+        assert!(f.passes(&dup_record(b"CCC", b"U1", 100, 200)));
+        // A different start is a different fragment.
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 101, 200)));
+    }
+
+    #[test]
+    fn barcode_start_end_dedup_distinguishes_reads_by_their_end() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        assert!(!f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        // Same start, different end: kept.
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 250)));
+    }
+
+    #[test]
+    fn umi_aware_dedup_keeps_distinct_umis_at_the_same_position() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeUmiStart);
+
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        assert!(!f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        // A different UMI at the same position is an independent molecule.
+        assert!(f.passes(&dup_record(b"AAA", b"U2", 100, 200)));
+    }
+
+    #[test]
+    fn barcode_umi_start_end_dedup_uses_the_full_fingerprint() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeUmiStartEnd);
+
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        assert!(!f.passes(&dup_record(b"AAA", b"U1", 100, 200)));
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 100, 250)));
+        assert!(f.passes(&dup_record(b"AAA", b"U2", 100, 200)));
+    }
+
+    #[test]
+    fn reads_without_a_barcode_still_deduplicate_against_each_other() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStart);
+
+        assert!(f.passes(&test_record(100, 200)));
+        assert!(!f.passes(&test_record(100, 200)));
+        assert!(f.passes(&test_record(300, 400)));
+    }
+
+    #[test]
+    fn complement_maps_bases_and_treats_anything_else_as_n() {
+        assert_eq!(complement(b'A'), b'T');
+        assert_eq!(complement(b'T'), b'A');
+        assert_eq!(complement(b'G'), b'C');
+        assert_eq!(complement(b'C'), b'G');
+        // Lower case is handled, and unknown bases collapse to N.
+        assert_eq!(complement(b'a'), b'T');
+        assert_eq!(complement(b'N'), b'N');
+        assert_eq!(complement(b'X'), b'N');
+    }
+}

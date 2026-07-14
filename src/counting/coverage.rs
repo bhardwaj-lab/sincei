@@ -14,7 +14,7 @@ use rayon::prelude::*;
 use super::bam_io::{BamWorker, read_bam_header};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::parse_annotation::parse_bed_file;
+use super::parse_annotation::parse_blacklist_bed;
 use super::region_index::build_bin_index;
 use super::sc_record::{ScRecord, parse_tag};
 
@@ -90,7 +90,7 @@ fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, 
     let idx_s = idx_s as usize;
     let idx_e = (idx_e.min(len)) as usize;
 
-    // For reverse reads the stretch is reversed (3′→5′ in genomic order),
+    // For reverse reads the stretch is reversed (3′->5′ in genomic order),
     // so index 0 corresponds to the genomic end of the alignment.
     Some(if rec.is_reverse {
         let geno_s = rec.alignment_end.saturating_sub(idx_e);
@@ -129,7 +129,7 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
         .with_context(|| format!("failed to open group info file: {}", path.display()))?;
     let reader = BufReader::new(file);
 
-    // label → bam index
+    // label -> bam index
     let label_to_bam: AHashMap<&str, usize> = bam_labels
         .iter()
         .enumerate()
@@ -250,10 +250,10 @@ pub fn run_bulk_coverage(
         anyhow::bail!("no cells matched between group_info and BAM labels");
     }
 
-    // cell_global_idx → group_idx
+    // cell_global_idx -> group_idx
     let cell_group: Vec<usize> = parsed.cells.iter().map(|(_, _, g)| *g).collect();
 
-    // (bam_idx, barcode bytes) → cell_global_idx — keys borrow from parsed.cells.
+    // (bam_idx, barcode bytes) -> cell_global_idx — keys borrow from parsed.cells.
     // Byte-keyed so the per-read lookup never allocates.
     let cell_index: AHashMap<(usize, &[u8]), usize> = parsed
         .cells
@@ -305,7 +305,7 @@ pub fn run_bulk_coverage(
     let blacklist = params
         .blacklist_path
         .as_deref()
-        .map(|p| parse_bed_file(p).map(|(idx, _)| idx))
+        .map(parse_blacklist_bed)
         .transpose()?;
 
     // Build chunk work list sorted by descending size.  When a region is
@@ -327,12 +327,14 @@ pub fn run_bulk_coverage(
                 })
             })
         })
-        .filter(|(_, _, chrom, chunk_start, chunk_end)| match &region_filter {
-            Some((region_chrom, region_start, region_end)) => {
-                chrom == region_chrom && chunk_start < region_end && chunk_end > region_start
-            }
-            None => true,
-        })
+        .filter(
+            |(_, _, chrom, chunk_start, chunk_end)| match &region_filter {
+                Some((region_chrom, region_start, region_end)) => {
+                    chrom == region_chrom && chunk_start < region_end && chunk_end > region_start
+                }
+                None => true,
+            },
+        )
         .collect();
     work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
@@ -517,7 +519,7 @@ pub fn run_bulk_coverage(
         .collect();
 
     // For each bin, know its chromosome so we can apply ignore_for_normalization.
-    // Build bin_idx → chrom mapping lazily from chrom_sizes + bin_index.
+    // Build bin_idx -> chrom mapping lazily from chrom_sizes + bin_index.
     let bin_to_chrom: AHashMap<usize, &str> = chrom_sizes
         .iter()
         .filter_map(|(chrom, _)| {
@@ -813,7 +815,7 @@ pub fn bulk_coverage(
     }
 
     let normalize = parse_normalize_method(normalize_using)
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
     let format = match out_format {
         "bigwig" | "bw" => OutputFormat::BigWig,
@@ -829,7 +831,7 @@ pub fn bulk_coverage(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
     // MNase defaults: fragment length 130–200 bp unless explicitly overridden.
     let min_fragment_length = if mnase && min_fragment_length.is_none() {
@@ -954,5 +956,5 @@ pub fn bulk_coverage(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }

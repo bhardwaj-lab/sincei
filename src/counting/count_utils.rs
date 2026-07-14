@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use nalgebra_sparse::CsrMatrix;
 use polars::prelude::*;
 
-use super::region_index::VarMeta;
+use super::region_index::Feature;
 
 /// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
 ///
@@ -126,7 +126,7 @@ pub(crate) fn write_counts_anndata(
     matrix: CsrMatrix<u32>,
     bam_paths: &[(&Path, &str)],
     barcodes: &[String],
-    var: &[VarMeta],
+    var: &[Feature],
     compression: &str,
     compression_level: u8,
 ) -> Result<()> {
@@ -190,4 +190,104 @@ pub(crate) fn write_counts_anndata(
     adata.set_var(var_df)?;
     adata.close()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Dense view of a CSR matrix, for readable assertions.
+    fn dense(m: &CsrMatrix<u32>) -> Vec<Vec<u32>> {
+        let mut out = vec![vec![0u32; m.ncols()]; m.nrows()];
+        for (r, c, &v) in m.triplet_iter() {
+            out[r][c] = v;
+        }
+        out
+    }
+
+    #[test]
+    fn build_csr_places_every_entry_at_its_coordinate() {
+        let acc: AHashMap<(usize, usize), u32> = [((0, 1), 5), ((1, 0), 3), ((1, 2), 7)]
+            .into_iter()
+            .collect();
+
+        let m = build_csr(&acc, 2, 3).unwrap();
+
+        assert_eq!((m.nrows(), m.ncols()), (2, 3));
+        assert_eq!(m.nnz(), 3);
+        assert_eq!(dense(&m), vec![vec![0, 5, 0], vec![3, 0, 7]]);
+    }
+
+    #[test]
+    fn build_csr_sorts_column_indices_within_each_row() {
+        // CSR requires ascending column indices per row; the accumulator is an
+        // unordered hash map, so the sort has to happen in build_csr.
+        let acc: AHashMap<(usize, usize), u32> = (0..8).map(|c| ((0, 7 - c), 1u32)).collect();
+
+        let m = build_csr(&acc, 1, 8).unwrap();
+
+        let cols: Vec<usize> = m.col_indices().to_vec();
+        assert_eq!(cols, (0..8).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn build_csr_keeps_empty_rows_and_the_declared_shape() {
+        // Cells with no counts must still occupy a row: obs is the full
+        // sample × barcode product regardless of coverage.
+        let acc: AHashMap<(usize, usize), u32> = [((2, 0), 4)].into_iter().collect();
+
+        let m = build_csr(&acc, 4, 2).unwrap();
+
+        assert_eq!((m.nrows(), m.ncols()), (4, 2));
+        assert_eq!(m.nnz(), 1);
+        assert_eq!(m.row_offsets(), &[0, 0, 0, 1, 1]);
+        assert_eq!(
+            dense(&m),
+            vec![vec![0, 0], vec![0, 0], vec![4, 0], vec![0, 0]]
+        );
+    }
+
+    #[test]
+    fn build_csr_on_an_empty_accumulator_yields_an_all_zero_matrix() {
+        let m = build_csr(&AHashMap::new(), 3, 5).unwrap();
+
+        assert_eq!((m.nrows(), m.ncols()), (3, 5));
+        assert_eq!(m.nnz(), 0);
+    }
+
+    #[test]
+    fn df_i64_col_reads_and_casts_integer_columns() {
+        let df = DataFrame::new(
+            3,
+            vec![
+                Column::new("start".into(), [10i32, 20, 30]),
+                Column::new("name".into(), ["a", "b", "c"]),
+            ],
+        )
+        .unwrap();
+
+        // Cast from i32 to i64 happens transparently.
+        assert_eq!(df_i64_col(&df, "start").unwrap(), vec![10, 20, 30]);
+        assert!(df_i64_col(&df, "missing").is_err());
+    }
+
+    #[test]
+    fn df_i64_col_rejects_null_values() {
+        let df = DataFrame::new(2, vec![Column::new("start".into(), [Some(1i64), None])]).unwrap();
+
+        assert!(df_i64_col(&df, "start").is_err());
+    }
+
+    #[test]
+    fn df_str_col_reads_string_columns_and_rejects_nulls() {
+        let df = DataFrame::new(2, vec![Column::new("name".into(), ["gene1", "gene2"])]).unwrap();
+        assert_eq!(
+            df_str_col(&df, "name").unwrap(),
+            vec!["gene1".to_string(), "gene2".to_string()]
+        );
+
+        let with_null =
+            DataFrame::new(2, vec![Column::new("name".into(), [Some("gene1"), None])]).unwrap();
+        assert!(df_str_col(&with_null, "name").is_err());
+    }
 }

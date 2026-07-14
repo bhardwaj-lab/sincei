@@ -605,25 +605,30 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         "-m",
         "--metagene",
         rich_help_panel=_GTF,
-        help="When either a BED12 or GTF file is used to provide regions, perform the computation on the merged "
-        "exons rather than on the genomic interval defined by the 5-prime and 3-prime most transcript bound "
-        "(columns 2 and 3 of a BED file). If a BED3 or BED6 file is used, then columns 2 and 3 are used as an exon.",
+        help="When a GFF/GTF file is used to provide regions, count reads on the combined exons of a transcript or "
+        "gene rather than on the genomic interval defined by the 5-prime and 3-prime most transcript bound. Exons "
+        "are the records whose column-3 type matches ``--exonID``; what they are grouped into -- one feature per "
+        "transcript (the default) or per gene (``--transcriptIDtag gene_id``) -- is set by ``--transcriptIDtag``. "
+        "Ignored for BED inputs.",
     ),
     "transcript_id": typer.Option(
         None,
         "--transcriptID",
         metavar="STR",
         rich_help_panel=_GTF,
-        help="The column-3 feature type processed as a region (transcript). (Default: ``transcript`` for GTF; "
-        "auto-detected for GFF3 — ``transcript`` for GENCODE-style files, ``mRNA`` for Ensembl/RefSeq.)",
+        help="The column-3 feature type(s) processed as a region (transcript). May be given more than once, e.g. "
+        "``--transcriptID mRNA --transcriptID lnc_RNA``. (Default: every transcript type in the file, regardless of "
+        "biotype. GTF and GENCODE GFF3 type them all ``transcript``; an Ensembl-style GFF3 names them by biotype "
+        "instead -- mRNA, lnc_RNA, snoRNA, etc. -- and those types are read out of the file itself.)",
     ),
     "exon_id": typer.Option(
-        "exon",
+        None,
         "--exonID",
         metavar="STR",
         rich_help_panel=_GTF,
         help="When a GTF/GFF file is used to provide regions, entries with this value as their feature (column 3) "
-        "are treated as exons. CDS would be another common value. NOTE: only used in metagene mode.",
+        'are treated as exons. May be given more than once, e.g. ``--exonID exon --exonID CDS``. "CDS" is another '
+        "common value. NOTE: only used in metagene mode. (Default: ``exon``, which all three flavours agree on.)",
     ),
     "transcript_id_tag": typer.Option(
         None,
@@ -632,6 +637,10 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_GTF,
         help="The column-9 attribute key whose value names each region. For GTF this is stored as a key:value pair "
         "in the last column. Set this to use a different identifier. (Default: ``transcript_id`` for GTF, ``ID`` for "
-        "GFF3.)",
+        "GFF3.)\n\n"
+        "In ``--metagene`` mode this key instead selects what exons are grouped by, and so what one feature is. "
+        "The default groups per transcript (``transcript_id`` for GTF, ``Parent`` for GFF3, both of which every "
+        "flavour carries). Pass ``--transcriptIDtag gene_id`` to group per gene instead -- note that an "
+        "Ensembl-style GFF3 does not carry a gene id on its exons, so grouping one by gene is an error.",
     ),
 }
