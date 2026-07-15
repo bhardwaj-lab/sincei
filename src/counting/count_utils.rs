@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use nalgebra_sparse::CsrMatrix;
 use polars::prelude::*;
 
-use super::region_index::Feature;
+use crate::annotation::region_index::Feature;
 
 /// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
 ///

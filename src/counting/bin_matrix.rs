@@ -8,9 +8,9 @@ use super::bam_io::{BamWorker, read_bam_header};
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::parse_annotation::parse_blacklist_bed;
-use super::region_index::{BinIndex, GenomeIndex, build_bin_index};
 use super::sc_record::{ScRecord, parse_tag};
+use crate::annotation::parse_annotation::parse_blacklist_bed;
+use crate::annotation::region_index::{BinIndex, GenomeIndex, build_bin_index};
 
 /// Count reads from one or more BAM files into a cell × genomic-bin matrix,
 /// then write the result as an AnnData HDF5 file.
@@ -337,7 +337,7 @@ fn blacklisted_bin_indices(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::counting::region_index::{ChromIndex, Interval};
+    use crate::annotation::region_index::{ChromIndex, Interval};
 
     fn blacklist(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
         let intervals = spans

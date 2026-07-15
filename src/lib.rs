@@ -1,3 +1,4 @@
+pub mod annotation;
 mod count_reads;
 pub mod counting;
 mod filter_barcodes;

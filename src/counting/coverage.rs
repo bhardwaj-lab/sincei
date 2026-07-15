@@ -14,9 +14,9 @@ use rayon::prelude::*;
 use super::bam_io::{BamWorker, read_bam_header};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::parse_annotation::parse_blacklist_bed;
-use super::region_index::build_bin_index;
 use super::sc_record::{ScRecord, parse_tag};
+use crate::annotation::parse_annotation::parse_blacklist_bed;
+use crate::annotation::region_index::build_bin_index;
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {

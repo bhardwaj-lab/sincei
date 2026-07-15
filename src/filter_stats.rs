@@ -7,10 +7,10 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use crate::annotation::parse_annotation::parse_blacklist_bed;
+use crate::annotation::region_index::GenomeIndex;
 use crate::counting::bam_io::{BamWorker, read_bam_header};
 use crate::counting::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
-use crate::counting::parse_annotation::parse_blacklist_bed;
-use crate::counting::region_index::GenomeIndex;
 use crate::counting::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 
 #[derive(Default, Clone)]

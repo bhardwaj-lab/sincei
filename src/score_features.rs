@@ -20,9 +20,9 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use crate::annotation::parse_annotation::parse_annotation_files;
+use crate::annotation::region_index::{ChromIndex, Feature, Interval};
 use crate::counting::count_utils::{df_i64_col, df_str_col, read_x_f64};
-use crate::counting::parse_annotation::parse_annotation_files;
-use crate::counting::region_index::{ChromIndex, Feature, Interval};
 
 /// Parse an annotation file (BED, GTF, or GFF3) into [`Feature`]s, reusing the
 /// shared `parse_annotation_files` machinery (and thus the same format
