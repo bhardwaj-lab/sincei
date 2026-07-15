@@ -243,7 +243,7 @@ impl SegmentCost {
 }
 
 /// PELT changepoint detection with the L2 cost above, `min_size = 1`,
-/// `jump = 1` (every split point considered) — the same minimization that
+/// `jump = 1` (every split point considered), the same minimization that
 /// `ruptures.KernelCPD(kernel="linear", min_size=1, jump=1).predict(pen=...)`
 /// solves, for penalty `pen`.
 ///
@@ -532,7 +532,7 @@ fn run_find_vcrs(
 /// per-bin score map, then runs PELT changepoint detection on the score map
 /// once per `penalty` value. Writes the detected segments to `out_file` as
 /// a headerless BED file with columns `chrom, start, end, name, score,
-/// strand`, where `score` is the penalty that produced that row — filter on
+/// strand`, where `score` is the penalty that produced that row, filter on
 /// it to recover one non-overlapping segmentation. Returns `out_file`.
 #[pyfunction(signature = (
     h5ad_path,

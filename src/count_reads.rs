@@ -71,8 +71,8 @@ fn build_record_filter(
 /// AnnData HDF5 file.
 ///
 /// `bam_paths` may contain multiple BAM files; the resulting AnnData will have
-/// one row per (sample × barcode) combination.  Requires a BAI index alongside
-/// each BAM.  `num_threads = 0` uses all available cores.
+/// one row per (sample × barcode) combination. Requires a BAI index alongside
+/// each BAM. `num_threads = 0` uses all available cores.
 #[pyfunction(signature = (
     bam_paths,
     barcodes,
@@ -168,7 +168,7 @@ pub fn count_bins(
         .transpose()
         .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
-    // Build (path, sample_name) pairs — sample name is the file stem.
+    // Build (path, sample_name) pairs. sample name is the file stem.
     let path_sample: Vec<(PathBuf, String)> = bam_paths
         .iter()
         .map(|p| {
@@ -212,8 +212,8 @@ pub fn count_bins(
 /// AnnData HDF5 file.
 ///
 /// `bam_paths` may contain multiple BAM files; the resulting AnnData will have
-/// one row per (sample × barcode) combination.  Requires a BAI index alongside
-/// each BAM.  `num_threads = 0` uses all available cores.
+/// one row per (sample × barcode) combination. Requires a BAI index alongside
+/// each BAM. `num_threads = 0` uses all available cores.
 #[pyfunction(signature = (
     bam_paths,
     annotation_path,

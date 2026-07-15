@@ -14,7 +14,7 @@ use super::region_index::Feature;
 
 /// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
 ///
-/// Bool / string matrices are rejected.  Shared by the downstream commands
+/// Bool / string matrices are rejected. Shared by the downstream commands
 /// (`find_vcrs`, `score_features`) that need a dense-friendly float matrix.
 pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
     let dyn_csr: DynCsrMatrix = adata
@@ -119,7 +119,7 @@ pub(super) fn build_csr(
 ///
 /// Cells (`obs`) are the cartesian product of the input BAM samples and the
 /// barcode whitelist (`obs_names = "{sample}::{barcode}"`), with `sample` and
-/// `barcode` columns.  Features (`var`) carry `chrom`, `start`, `end`, and
+/// `barcode` columns. Features (`var`) carry `chrom`, `start`, `end`, and
 /// `name` columns; `var_names` are the feature names.
 pub(crate) fn write_counts_anndata(
     output_path: &Path,
@@ -130,7 +130,7 @@ pub(crate) fn write_counts_anndata(
     compression: &str,
     compression_level: u8,
 ) -> Result<()> {
-    // Choose the HDF5 dataset compression.  anndata-rs defaults to blosc-zstd,
+    // Choose the HDF5 dataset compression. anndata-rs defaults to blosc-zstd,
     // which standard h5py / scanpy cannot read without an external filter
     // plugin, so only support `none` (anndata's modern default) or gzip
     // (built-in deflate, universally readable).
@@ -164,7 +164,7 @@ pub(crate) fn write_counts_anndata(
         ],
     )?;
 
-    // var: chrom / start / end / name, in feature-index order.
+    // var: chrom, start, end, name, in feature-index order.
     let var_index: Vec<String> = var.iter().map(|v| v.name.clone()).collect();
     let chrom_col: Vec<String> = var.iter().map(|v| v.chrom.clone()).collect();
     let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();

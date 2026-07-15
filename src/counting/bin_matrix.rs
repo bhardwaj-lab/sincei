@@ -15,10 +15,10 @@ use super::sc_record::{ScRecord, parse_tag};
 /// Count reads from one or more BAM files into a cell × genomic-bin matrix,
 /// then write the result as an AnnData HDF5 file.
 ///
-/// `bam_paths` is a list of `(path, sample_name)` pairs.  Bin geometry is
-/// derived from the first BAM's header.  Parallelism is over sub-chromosome
-/// chunks of `chunk_size` bp; each chunk is an independent BAI query.  Reads
-/// are assigned to chunks by `alignment_start` to avoid double-counting — a
+/// `bam_paths` is a list of `(path, sample_name)` pairs. Bin geometry is
+/// derived from the first BAM's header. Parallelism is over sub-chromosome
+/// chunks of `chunk_size` bp; each chunk is an independent BAI query. Reads
+/// are assigned to chunks by `alignment_start` to avoid double-counting. A
 /// read's effective interval can still overlap bins in adjacent chunks.
 pub fn count_bam_bins(
     bam_paths: &[(&Path, &str)],
@@ -129,7 +129,7 @@ pub fn count_bam_bins(
     };
 
     // Count each chunk into its own map, then combine them with a parallel
-    // tree reduction.  The previous design collected all per-chunk maps and
+    // tree reduction. The previous design collected all per-chunk maps and
     // merged them on a single thread, which was ~15% of wall-clock time.
     let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
         work.par_iter()
@@ -197,7 +197,7 @@ pub fn count_bam_bins(
                         };
 
                         // Ownership: a read belongs to the chunk containing its
-                        // alignment_start.  Skip reads owned by a previous chunk.
+                        // alignment_start. Skip reads owned by a previous chunk.
                         if sc_rec.alignment_start < chunk_start {
                             continue;
                         }
@@ -236,7 +236,7 @@ pub fn count_bam_bins(
                         let cell_idx = cell_offset + local_bc_idx;
 
                         // Largest-overlap-wins: assign the read to exactly one
-                        // bin — the one whose [bin_start, bin_start+bin_size)
+                        // bin, the one whose [bin_start, bin_start+bin_size)
                         // interval overlaps the effective read interval the most.
                         // For non-overlapping bins this is equivalent to placing
                         // the read at the center of its effective interval.
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     fn sliding_bins_that_overlap_a_blacklist_region_are_all_excluded() {
         // 100 bp bins every 50 bp on a 300 bp chromosome: bins start at
-        // 0, 50, 100, 150, 200, 250.  A region at [120, 130) is covered by the
+        // 0, 50, 100, 150, 200, 250. A region at [120, 130) is covered by the
         // bins starting at 50 and 100.
         let (index, _) = build_bin_index(&[("chr1".to_string(), 300)], 100, 50);
         let excluded = blacklisted_bin_indices(&index, Some(&blacklist("chr1", &[(120, 130)])));

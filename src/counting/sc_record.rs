@@ -110,8 +110,8 @@ impl<'a> ScRecord<'a> {
             .transpose()
             .context("failed to read mate alignment start")?;
 
-        // Borrow the barcode/UMI bytes directly from the record — no per-read
-        // allocation.  Callers look these up against a byte-keyed whitelist and
+        // Borrow the barcode/UMI bytes directly from the record with no per-read
+        // allocation. Callers look these up against a byte-keyed whitelist and
         // only the duplicate filter ever copies them.
         let barcode = get_tag_bytes(record, bc_tag)?;
 
@@ -126,8 +126,8 @@ impl<'a> ScRecord<'a> {
         };
         let count = count.unwrap_or(1);
 
-        // Sequence handling.  Only materialize a `Vec` when the motif filter
-        // needs the full read sequence (`store_sequence`).  When only GC is
+        // Sequence handling. Only materialize a `Vec` when the motif filter
+        // needs the full read sequence (`store_sequence`). When only GC is
         // required we stream the sequence once and avoid the allocation.
         let (read_sequence, read_length, gc_content) = if opts.store_sequence {
             let seq: Vec<u8> = record.sequence().iter().collect();
@@ -260,7 +260,7 @@ pub fn parse_tag(tag_str: &str) -> Result<Tag> {
 }
 
 /// Borrow a string-valued auxiliary tag as raw bytes, tied to the record's
-/// lifetime.  Returns `None` if the tag is absent or not a string.
+/// lifetime. Returns `None` if the tag is absent or not a string.
 fn get_tag_bytes<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'a [u8]>> {
     match record.data().get(tag) {
         Some(Ok(Value::String(v))) => Ok(Some(v.as_ref())),

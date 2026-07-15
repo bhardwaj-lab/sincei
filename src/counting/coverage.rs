@@ -63,8 +63,8 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
 }
 
 /// Returns the genomic interval corresponding to an offset (or offset range)
-/// within the read.  Offsets are 1-based; negative values index from the read
-/// end.  A single value returns a 1-bp interval; two values return a range.
+/// within the read. Offsets are 1-based; negative values index from the read
+/// end. A single value returns a 1-bp interval; two values return a range.
 ///
 /// Simplified: treats each read as a contiguous block (no CIGAR-block
 /// traversal), which is correct for unspliced data.
@@ -169,7 +169,7 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
             .to_string();
 
         let Some(&bam_idx) = label_to_bam.get(sample.as_str()) else {
-            continue; // sample not in BAM list — skip
+            continue; // sample not in BAM list. Skip
         };
 
         let group_idx = *group_index.entry(group.clone()).or_insert_with(|| {
@@ -199,13 +199,13 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
 /// Compute pseudo-bulk coverage from one or more BAM files grouped by cell
 /// identity, then write one bigWig or bedGraph per group.
 ///
-/// `bam_paths` — list of `(path, sample_label)` pairs; labels must match the
+/// `bam_paths`: list of `(path, sample_label)` pairs; labels must match the
 /// `sample` column in `group_info_path`.
 ///
-/// `group_info_path` — TSV with a header line followed by rows of
+/// `group_info_path`: TSV with a header line followed by rows of
 /// `sample\tbarcode\tgroup`.
 ///
-/// Normalization denominators (CPM / RPKM) are computed from the total reads
+/// Normalization denominators (CPM, RPKM) are computed from the total reads
 /// over all bins, excluding chromosomes in `ignore_for_normalization`.
 /// Chromosomes in `chr_to_skip` are not counted at all and are absent from the
 /// output.
@@ -253,7 +253,7 @@ pub fn run_bulk_coverage(
     // cell_global_idx -> group_idx
     let cell_group: Vec<usize> = parsed.cells.iter().map(|(_, _, g)| *g).collect();
 
-    // (bam_idx, barcode bytes) -> cell_global_idx — keys borrow from parsed.cells.
+    // (bam_idx, barcode bytes) -> cell_global_idx: keys borrow from parsed.cells.
     // Byte-keyed so the per-read lookup never allocates.
     let cell_index: AHashMap<(usize, &[u8]), usize> = parsed
         .cells
@@ -308,7 +308,7 @@ pub fn run_bulk_coverage(
         .map(parse_blacklist_bed)
         .transpose()?;
 
-    // Build chunk work list sorted by descending size.  When a region is
+    // Build chunk work list sorted by descending size. When a region is
     // requested, only emit chunks on its chromosome that overlap it, so a
     // multi-chromosome BAM doesn't enumerate (and later skip) every chunk.
     let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
@@ -507,9 +507,9 @@ pub fn run_bulk_coverage(
 
     // sum of counts per (group, bin)
     let mut group_bin_sum: AHashMap<(usize, usize), f64> = AHashMap::new();
-    // number of cells with ≥1 read in bin, per (group, bin) — needed for Frequency
+    // number of cells with ≥1 read in bin, per (group, bin). Needed for Frequency
     let mut group_bin_n_cells: AHashMap<(usize, usize), usize> = AHashMap::new();
-    // total reads per group (excluding ignored chroms) — needed for CPM/RPKM denominators
+    // total reads per group (excluding ignored chroms). Needed for CPM/RPKM denominators
     let mut group_total: Vec<f64> = vec![0.0; n_groups];
 
     // Build a fast set for ignore_for_normalization
@@ -647,7 +647,7 @@ pub fn run_bulk_coverage(
 ///
 /// Removes the characters that are illegal in filenames on common platforms
 /// (path separators and Windows-reserved punctuation) plus control characters,
-/// then trims trailing spaces and dots (also illegal on Windows).  This covers
+/// then trims trailing spaces and dots (also illegal on Windows). This covers
 /// the subset of `sanitize_filename::sanitize` behavior we rely on for group
 /// labels; Windows-reserved device names (e.g. `CON`) are not special-cased, as
 /// they don't occur in practice for cell-group labels.
@@ -734,7 +734,7 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
 /// `bam_files` and `bam_labels` must be the same length; each label must match
 /// the `sample` column in `group_info`.
 ///
-/// `group_info` — path to a TSV file with a header line and columns:
+/// `group_info` is the path to a TSV file with a header line and columns:
 /// `sample`, `barcode`, `group`.
 ///
 /// Returns the list of output file paths created.

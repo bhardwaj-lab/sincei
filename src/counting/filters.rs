@@ -199,7 +199,7 @@ pub enum DupMethod {
 // Key tuple: (barcode, start, end_or_zero, umi_or_none)
 //
 // The barcode/UMI bytes are copied into the key only here, when a record is
-// actually deduplicated — the hot path borrows them from the record.
+// actually deduplicated. The hot path borrows them from the record.
 //
 // The chromosome is deliberately *not* part of the key: each `DuplicateFilter`
 // lives for exactly one work chunk, and every chunk covers a single
@@ -211,7 +211,7 @@ type DupKey = (Option<Vec<u8>>, usize, usize, Option<Vec<u8>>);
 /// Streaming duplicate filter backed by an in-memory fingerprint set.
 ///
 /// A record is a duplicate if its fingerprint (determined by [`DupMethod`]) has
-/// already been seen.  The first occurrence is kept; subsequent ones are dropped.
+/// already been seen. The first occurrence is kept; subsequent ones are dropped.
 pub struct DuplicateFilter {
     pub method: DupMethod,
     seen: AHashSet<DupKey>,
@@ -249,9 +249,9 @@ impl DuplicateFilter {
 /// corresponding genomic overhang.
 ///
 /// A record passes if **any** of the supplied `(read_motif, ref_motif)` pairs
-/// matches.  For forward reads the read motif is compared to the first N bases
+/// matches. For forward reads the read motif is compared to the first N bases
 /// of the forward read sequence and the reference motif to the genomic bases
-/// immediately upstream of the alignment start.  For reverse reads both windows
+/// immediately upstream of the alignment start. For reverse reads both windows
 /// are mirrored to the 3′ end of the alignment on the reference.
 ///
 /// Requires `ScRecordOptions::store_sequence = true` on the records.
@@ -270,7 +270,7 @@ impl MotifFilter {
     /// Returns `true` if the record passes the motif filter.
     ///
     /// `chrom` is the record's chromosome (known by the caller from the work
-    /// chunk).  If `read_sequence` is `None` on the record (sequence was not
+    /// chunk). If `read_sequence` is `None` on the record (sequence was not
     /// stored), the filter is vacuously passed.
     pub fn passes(&mut self, rec: &ScRecord<'_>, chrom: &str) -> Result<bool> {
         let Some(stored_seq) = &rec.read_sequence else {
@@ -288,10 +288,10 @@ impl MotifFilter {
             }
 
             // Compare the read motif against the 5′-most `r_len` bases of the
-            // forward-strand read.  For forward reads the BAM sequence is
+            // forward-strand read. For forward reads the BAM sequence is
             // already in that orientation; for reverse reads the forward-strand
             // prefix is the reverse-complement of the sequence's `r_len`-base
-            // suffix.  Both are computed without allocating the full sequence.
+            // suffix. Both are computed without allocating the full sequence.
             let read_ok = if rec.is_reverse {
                 stored_seq[seq_len - r_len..]
                     .iter()
@@ -338,7 +338,7 @@ impl MotifFilter {
 /// Returns `true` if the read should be **excluded** based on the RNA strand filter.
 ///
 /// This assumes a dUTP-based paired-end library: "forward" keeps reads from genes
-/// on the forward strand (= read2-forward or read1-with-forward-mate).  Single-end
+/// on the forward strand (= read2-forward or read1-with-forward-mate). Single-end
 /// logic inverts the strand relative to paired-end since there is only one read
 /// per fragment.
 ///

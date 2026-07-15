@@ -11,7 +11,7 @@ use super::params::{CountingParams, parse_region};
 use super::parse_annotation::{build_counting_index, parse_annotation_files, parse_blacklist_bed};
 
 // Maximum number of distinct regions a single read can overlap and still be
-// assigned correctly.  In practice reads are short and features rarely pile up
+// assigned correctly. In practice reads are short and features rarely pile up
 // this densely, so 16 is a safe ceiling.
 const MAX_REGION_HITS: usize = 16;
 use super::sc_record::{ScRecord, parse_tag};
@@ -19,10 +19,10 @@ use super::sc_record::{ScRecord, parse_tag};
 /// Count reads from one or more BAM files into a cell × feature matrix, then
 /// write the result as an AnnData HDF5 file.
 ///
-/// `bam_paths` is a list of `(path, sample_name)` pairs.  Parallelism is over
+/// `bam_paths` is a list of `(path, sample_name)` pairs. Parallelism is over
 /// sub-chromosome chunks of `chunk_size` bp; each chunk is an independent BAI
-/// query.  Reads are assigned to chunks by `alignment_start` to avoid
-/// double-counting — a read's effective interval can still extend into any
+/// query. Reads are assigned to chunks by `alignment_start` to avoid
+/// double-counting. A read's effective interval can still extend into any
 /// feature regardless of chunk boundaries.
 pub fn count_bam_features(
     bam_paths: &[(&Path, &str)],
@@ -202,7 +202,7 @@ pub fn count_bam_features(
                         };
 
                         // Ownership: a read belongs to the chunk containing its
-                        // alignment_start.  Reads that started before this chunk are
+                        // alignment_start. Reads that started before this chunk are
                         // handled by the previous work chunk.
                         if sc_rec.alignment_start < chunk_start {
                             continue;
@@ -242,7 +242,7 @@ pub fn count_bam_features(
                         let cell_idx = cell_offset + local_bc_idx;
 
                         // Largest-overlap-wins: each read contributes to exactly
-                        // one region.  Sub-intervals of the same region (from
+                        // one region. Sub-intervals of the same region (from
                         // blacklist splitting or metagene exons) accumulate their
                         // overlaps before the comparison, so a read spanning two
                         // exons of gene A still counts once for gene A.

@@ -25,10 +25,10 @@ pub struct Interval {
     pub var_idx: usize,
 }
 
-/// Searchable index over all the intervals on a chromosome, as a sorted flat
-/// array.
+/// Searchable index over all the intervals on a ** single chromosome**, as a
+/// sorted flat array.
 ///
-/// Intervals are sorted by `start` at build time.  `max_end[i]` is the
+/// Intervals are sorted by `start` at build time. `max_end[i]` is the
 /// prefix-maximum of `end` over `intervals[0..=i]`, enabling O(log N + k)
 /// overlap queries with early exit (k = number of hits).
 ///
@@ -41,7 +41,7 @@ pub struct ChromIndex {
 }
 
 impl ChromIndex {
-    /// Build from an unsorted interval list.  O(N log N).
+    /// Build from an unsorted interval list. O(N log N).
     pub fn build(mut intervals: Vec<Interval>) -> Self {
         intervals.sort_unstable_by_key(|iv| iv.start);
         let max_end = intervals
@@ -58,22 +58,22 @@ impl ChromIndex {
     /// in descending order of `start`.
     ///
     /// Since the intervals are sorted by `start`, `partition_point` finds the
-    /// first one that begins at or after the query ends.  It, and everything
+    /// first one that begins at or after the query ends. It, and everything
     /// after it, starts too late to overlap, so only the intervals below it are
-    /// candidates.  Those are then walked back-to-front, which lets the scan
+    /// candidates. Those are then walked back-to-front, which lets the scan
     /// stop as soon as it can:
     ///
     /// * `take_while` **ends** the scan at the first interval whose `max_end`
     ///   (the greatest `end` among it and everything before it) is at or before
-    ///   the query's start.  No earlier interval can reach the query either, so
-    ///   there is nothing left to find — this is what keeps a lookup O(log N + k)
-    ///   rather than a walk to index 0.
+    ///   the query's start. No earlier interval can reach the query either, so
+    ///   there is nothing left to find. This keeps a lookup O(log N + k) rather
+    ///   than a walk to index 0.
     /// * `filter` **skips** an individual interval that ends at or before the
-    ///   query's start.  Its neighbours may still overlap (they can be nested
-    ///   inside a longer one), so the scan carries on.
+    ///   query's start. Its neighbours may still overlap (they can be nested
+    ///   inside a longer interval), so the scan carries on.
     ///
-    /// Everything surviving both starts before the query ends and ends after it
-    /// begins, which is exactly a half-open overlap.
+    /// Every interval not filtered out starts before the query ends and ends
+    /// after it begins, a half-open overlap.
     pub fn find(&self, start: usize, end: usize) -> impl Iterator<Item = &Interval> {
         let candidates = self.intervals.partition_point(|iv| iv.start < end);
 
@@ -86,7 +86,7 @@ impl ChromIndex {
             .filter(move |interval| interval.end > start)
     }
 
-    /// Iterate all intervals in start-sorted order.
+    /// Iterate over all intervals in start-sorted order.
     pub fn iter(&self) -> impl Iterator<Item = &Interval> {
         self.intervals.iter()
     }
@@ -100,22 +100,19 @@ impl ChromIndex {
     }
 }
 
-/// Searchable index over the intervals of a **whole genome**: one
+/// Searchable index over the intervals of a **whole genome**, one
 /// [`ChromIndex`] per chromosome, keyed by chromosome name.
 ///
 /// Callers resolve `chrom -> ChromIndex` once per work chunk (each covers a
 /// single chromosome) and then query that index per read.
 ///
-/// `AHashMap` preserves the insertion order of chromosome names, so iteration
-/// order is deterministic (matches the order chromosomes were first seen in the
-/// annotation or BAM header).
+/// `AHashMap` preserves the iteration order of chromosomes.
 pub type GenomeIndex = AHashMap<String, ChromIndex>;
 
-/// Geometry of a uniform-bin tiling of a **whole genome**, covering every
-/// chromosome at once.
+/// Uniform-bin tiling of a **whole genome**, covering every chromosome.
 ///
-/// The alternative to a [`GenomeIndex`], for when the regions are a regular
-/// tiling rather than arbitrary annotation features.  Nothing is searched and no
+/// The bin equivalent of [`GenomeIndex`], for when the regions are a tiling
+/// rather than arbitrary annotation features. Nothing is searched and no
 /// [`Interval`] is stored: a bin's position is arithmetic, so the bin holding a
 /// read is found in O(1) rather than O(log N + k).
 ///
@@ -131,7 +128,7 @@ pub struct BinIndex {
     /// The first element turns a bin's index within its chromosome into its
     /// column in the count matrix.
     pub chrom_bins: AHashMap<String, (usize, usize)>,
-    /// Total bins across all chromosomes — the number of matrix columns.
+    /// Total bins across all chromosomes, the number of matrix columns.
     pub n_bins: usize,
 }
 

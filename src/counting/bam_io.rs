@@ -18,7 +18,7 @@ use super::filters::MotifFilter;
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header text
-/// (see module docs).  Builds an indexed reader so a missing `.bai` is still
+/// (see module docs). Builds an indexed reader so a missing `.bai` is still
 /// reported here rather than later.
 pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
     let mut reader = bam::io::indexed_reader::Builder::default()
@@ -118,7 +118,7 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
 /// Per-worker (per-thread) reusable state for the chunk-parallel counters.
 ///
 /// Rayon's `map_init` hands one `BamWorker` to each thread, which then
-/// processes many chunks.  This amortizes two costs:
+/// processes many chunks. This amortizes two costs:
 ///   * opening the BAM file and parsing its header, and
 ///   * opening the 2bit genome for the motif filter.
 ///

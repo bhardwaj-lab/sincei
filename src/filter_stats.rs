@@ -193,8 +193,8 @@ pub fn run_filter_stats(
                         (0..n_barcodes).map(|_| BarcodeStat::default()).collect();
 
                     // Align to the global sampling grid so that bins are consistent
-                    // across chunks.  The grid starts at 0 on each chromosome with
-                    // step = stride.  First bin whose start falls in [chunk_start,
+                    // across chunks. The grid starts at 0 on each chromosome with
+                    // step = stride. First bin whose start falls in [chunk_start,
                     // chunk_end) is ceil(chunk_start / stride) * stride.
                     let first_bin = if chunk_start == 0 {
                         0

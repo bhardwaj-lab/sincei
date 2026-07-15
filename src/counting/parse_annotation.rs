@@ -61,14 +61,14 @@ fn type_matches(record_type: &[u8], types: &[&str]) -> bool {
 /// Read which column-3 types a GFF3 file uses for its transcripts.
 ///
 /// GTF and GENCODE GFF3 type every transcript as `transcript`, whatever its
-/// biotype.  Ensembl-style GFF3 instead uses Sequence Ontology terms for the
+/// biotype. Ensembl-style GFF3 instead uses Sequence Ontology terms for the
 /// biotypes (`mRNA`, `lnc_RNA`, `snoRNA`, `tRNA`, etc.).
 ///
 /// Ensembl namespaces a transcript's id as `ID=transcript:...`, GENCODE as
 /// `ID=transcript...`, so we can distinguish between them.
 ///
 /// Once we know the style of the GFF3, we can read the transcript types from
-/// the file itself — every column-3 value on a line containing `ID=transcript:`
+/// the file itself. Every column-3 value on a line containing `ID=transcript:`
 /// is a transcript type.
 ///
 /// This is a plain line scan; records are not parsed.
@@ -132,14 +132,14 @@ fn gff_strand_to_char(s: gff::feature::record::Strand) -> char {
 /// What one annotation file parses into, before any index is built.
 ///
 /// The two halves are the [`Interval`] / [`Feature`] split: `intervals` is the
-/// geometry to search (many per feature — the exons of a transcript, or the
+/// geometry to search (many per feature such as the exons of a transcript, or the
 /// pieces a blacklist splits a feature into), and `features` is the ordered list
 /// of matrix columns those intervals point at, via their `var_idx`.
 ///
 /// The intervals are left **unsorted**, per chromosome, rather than built into a
 /// [`GenomeIndex`] here: [`parse_annotation_files`] may merge several files, and
 /// shifting each file's `var_idx` by a running offset means the buckets are
-/// still growing.  Building the [`ChromIndex`] once at the end sorts each
+/// still growing. Building the [`ChromIndex`] once at the end sorts each
 /// chromosome exactly once, rather than sorting per file and re-sorting on merge.
 struct ParsedAnnotation {
     intervals: AHashMap<String, Vec<Interval>>,
@@ -150,7 +150,7 @@ struct ParsedAnnotation {
 ///
 /// Blacklisted regions are only ever *excluded*, never counted, so unlike an
 /// annotation this drops the [`Feature`]s: nothing here becomes a column of the
-/// output matrix.  Counting *into* the regions of a BED file goes through
+/// output matrix. Counting *into* the regions of a BED file goes through
 /// [`parse_annotation_files`] instead.
 pub fn parse_blacklist_bed(path: &Path) -> Result<GenomeIndex> {
     Ok(build_genome_index(parse_bed_file(path)?.intervals))
@@ -158,9 +158,9 @@ pub fn parse_blacklist_bed(path: &Path) -> Result<GenomeIndex> {
 
 /// Parse a BED file.
 ///
-/// Feature names are returned in BED-file order.  The 4th BED column is used
+/// Feature names are returned in BED-file order. The 4th BED column is used
 /// as the feature name when present and non-empty (and not `.`); otherwise
-/// `"chrom:start-end"`.  Lines beginning with `#` are skipped by the noodles
+/// `"chrom:start-end"`. Lines beginning with `#` are skipped by the noodles
 /// parser.
 ///
 /// Uses `bed::io::Reader<3, _>` so extra columns (5+) are silently accepted.
@@ -318,9 +318,9 @@ where
 ///
 /// `feature_types` filters by the feature-type column (e.g. `["gene"]`,
 /// `["exon", "CDS"]`); a record is kept when its type is any of them, and
-/// `None` includes every type.  `name_attr` is the attribute key used as the
+/// `None` includes every type. `name_attr` is the attribute key used as the
 /// feature name (e.g. `"gene_id"`, `"gene_name"`); falls back to
-/// `"chrom:start-end"` when absent.  Coordinates are converted from 1-based
+/// `"chrom:start-end"` when absent. Coordinates are converted from 1-based
 /// inclusive to 0-based half-open.
 fn parse_gtf_file(
     path: &Path,
@@ -336,7 +336,7 @@ fn parse_gtf_file(
 /// `feature_types` filters by the type column (e.g. `["mRNA", "lnc_RNA"]`); a
 /// record is kept when its type is any of them, and `None` includes every type.
 /// `name_attr` is the attribute tag used as the feature name (e.g. `"ID"`,
-/// `"Name"`); falls back to `"chrom:start-end"`.  Coordinates are converted
+/// `"Name"`); falls back to `"chrom:start-end"`. Coordinates are converted
 /// from 1-based inclusive to 0-based half-open.
 fn parse_gff_file(
     path: &Path,
@@ -347,7 +347,7 @@ fn parse_gff_file(
     build_annotation_index(reader.record_bufs(), feature_types, name_attr)
 }
 
-/// Parse one or more annotation files (BED, GTF, GFF3 — any mix) and merge
+/// Parse one or more annotation files (BED, GTF, GFF3, or any mix) and merge
 /// their intervals into a single [`GenomeIndex`].
 ///
 /// Format is detected from each file's extension:
@@ -356,18 +356,18 @@ fn parse_gff_file(
 /// |-----------------------------|--------|-------------------------|---------------------|
 /// | `.gtf`, `.gtf.gz`           | GTF    | `"transcript"`          | `"transcript_id"`   |
 /// | `.gff`, `.gff3`, `.gff3.gz` | GFF3   | detected from the file  | `"ID"`              |
-/// | anything else               | BED    | —                       | —                   |
+/// | anything else               | BED    | -                       | -                   |
 ///
 /// A record becomes a region when its column-3 type is **any** of
-/// `feature_types` — several may be given, which is what lets an Ensembl-style
+/// `feature_types` (several may be given) which is what lets an Ensembl-style
 /// GFF3 contribute all of its transcript biotypes (`mRNA`, `lnc_RNA`, `tRNA`, …)
-/// rather than just one.  `None` reads the types out of the file itself (see
+/// rather than just one. `None` reads the types out of the file itself (see
 /// [`detect_gff_transcript_types`]), so every transcript is kept regardless of
-/// biotype.  In metagene mode `exon_types` plays the same role for exons,
+/// biotype. In metagene mode `exon_types` plays the same role for exons,
 /// defaulting to [`DEFAULT_EXON_TYPES`], and `name_attr` names the *grouping*
 /// attribute instead, defaulting to `"gene_id"` for both formats.
 ///
-/// Feature names are concatenated in file order.  Each file's `val` indices are
+/// Feature names are concatenated in file order. Each file's `val` indices are
 /// shifted by the cumulative feature count so every feature in the combined
 /// index maps to a unique slot in the returned name vector.
 ///
@@ -375,18 +375,18 @@ fn parse_gff_file(
 /// BED files always use the 4th column (or `"chrom:start-end"`) as the name.
 ///
 /// When `metagene = true`, exon intervals are grouped per gene, so that every
-/// exon of a gene shares one `val` (= gene index).  This lets the counting loop
+/// exon of a gene shares one `val` (= gene index). This lets the counting loop
 /// count a read for a gene regardless of how many of its exons it overlaps.
 ///
 /// Exons are grouped **per transcript** by default, which every flavour
 /// supports: a GTF exon names its transcript in [`GTF_TRANSCRIPT_ATTR`], a GFF3
-/// exon in [`GFF_TRANSCRIPT_ATTR`].  Ensembl's `gene:` / `transcript:` id
+/// exon in [`GFF_TRANSCRIPT_ATTR`]. Ensembl's `gene:` / `transcript:` id
 /// prefixes are stripped, so names come out as the bare ids the other formats
 /// use.
 ///
-/// Passing `name_attr` groups on that attribute instead — `Some("gene_id")` for
-/// per-gene features.  That works for GTF and GENCODE GFF3, whose exons carry a
-/// gene id.  An Ensembl-style GFF3 does not: its exons name only their
+/// Passing `name_attr` groups on that attribute instead (`Some("gene_id")` for
+/// per-gene features). That works for GTF and GENCODE GFF3, whose exons carry a
+/// gene id. An Ensembl-style GFF3 does not: its exons name only their
 /// transcript, so grouping it by gene is an error rather than a silently wrong
 /// per-exon result.
 /// Fold one file's [`ParsedAnnotation`] into the running merge.
@@ -424,7 +424,7 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
         let path = path.as_ref();
 
         // Strip any compression suffix so the format is detected from the
-        // underlying extension (e.g. `genes.gtf.gz` -> `genes.gtf`).  The
+        // underlying extension (e.g. `genes.gtf.gz` -> `genes.gtf`). The
         // decompression itself is decided by magic bytes, not by this name.
         let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let stem = [".gz", ".bgz", ".bgzf"]
@@ -439,8 +439,8 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
         //
         // Grouped per transcript by default, which every flavour supports: a GTF
         // exon names its transcript in `transcript_id`, a GFF3 exon in `Parent`.
-        // Naming `name_attr` groups on that attribute instead — `"gene_id"` for
-        // per-gene features, which works for GTF and GENCODE GFF3.  An
+        // Naming `name_attr` groups on that attribute instead: `"gene_id"` for
+        // per-gene features, which works for GTF and GENCODE GFF3. An
         // Ensembl-style GFF3 carries no gene id on its exons at all, so asking
         // it to group by gene is an error rather than a silent per-exon result.
         if metagene && (is_gtf || is_gff) {
@@ -465,7 +465,7 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
 
         // Region types, when the caller named none: GTF always types its
         // transcripts `transcript`, while a GFF3 has to be asked which flavour
-        // it is (see `detect_gff_transcript_types`).  The two formats also
+        // it is (see `detect_gff_transcript_types`). The two formats also
         // differ in how a region names itself: `transcript_id` vs `ID`.
         //
         // `detected` owns the type strings for as long as the borrowed slice
@@ -503,16 +503,16 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
 /// Group exon records by the feature they belong to, so all exons of one
 /// transcript (or gene) share a single region index (`val`).
 ///
-/// This is the metagene parsing path.  The resulting intervals have `val` =
+/// This is the metagene parsing path. The resulting intervals have `val` =
 /// group index (into the returned `Feature` vec) rather than a per-exon index,
 /// so `build_counting_index` (blacklist subtraction) and the counting inner loop
-/// naturally treat all exons of one group as one region.  A group's span runs
+/// naturally treat all exons of one group as one region. A group's span runs
 /// from its first exon's start to its last exon's end.
 ///
-/// Exons are grouped by the value of their `group_attr` attribute, taken
-/// literally — `transcript_id` or `Parent` for per-transcript features,
-/// `gene_id` for per-gene ones.  Ensembl's `gene:` / `transcript:` id prefixes
-/// are stripped, so names come out as the bare ids the other formats use.
+/// Exons are grouped by the value of their `group_attr` attribute,
+/// `transcript_id` or `Parent` for per-transcript features, `gene_id` for
+/// per-gene ones. Ensembl's `gene:` / `transcript:` id prefixes are
+/// stripped, so names come out as the bare ids the other formats use.
 ///
 /// Errors when no exon in the file carries `group_attr`: that annotation simply
 /// cannot be grouped that way (an Ensembl-style GFF3 asked to group by
@@ -599,7 +599,7 @@ where
 ///
 /// Each original interval `[start, end)` with feature-index `val` is replaced
 /// by the sub-intervals that remain after removing any overlapping blacklist
-/// segments.  All sub-intervals inherit the same `val`, so a single
+/// segments. All sub-intervals inherit the same `val`, so a single
 /// `ChromIndex::find` query per read is sufficient to count into the correct
 /// matrix column.
 ///
@@ -630,7 +630,7 @@ pub fn build_counting_index(
 }
 
 /// Return the portions of `[feat_start, feat_end)` not covered by the
-/// blacklist on `chrom`.  Returns the original interval unchanged when there
+/// blacklist on `chrom`. Returns the original interval unchanged when there
 /// is no blacklist or no overlap.
 fn valid_sub_intervals(
     feat_start: usize,
@@ -688,14 +688,14 @@ mod tests {
 
     use tempfile::TempDir;
 
-    // The same mm39 locus in five files: three genes — a lncRNA
-    // (A930006A01Rik), Prim2 and Rab23 — spelled by two annotation projects.
+    // The same mm39 locus in five files: three genes Prim2, Rab23, and the
+    // lncRNA (A930006A01Rik),.
     // The flavours differ in ways the parsers have to absorb:
     //
     //   * GENCODE names chromosomes "chr1" and versions its ids
     //     ("ENSMUSG00000026134.13"); Ensembl uses "1" and bare ids.
     //   * GTF and GENCODE GFF3 type every transcript "transcript", whatever its
-    //     biotype.  Ensembl GFF3 uses the biotype itself: "mRNA" for the coding
+    //     biotype. Ensembl GFF3 uses the biotype itself: "mRNA" for the coding
     //     genes, "lnc_RNA" for the lncRNA.
     //   * Ensembl GFF3 namespaces ids ("gene:ENSMUSG…"), its exons carry no gene
     //     id (only a Parent naming their transcript), and it types the lncRNA's
@@ -727,7 +727,7 @@ mod tests {
         "ENSMUSG00000004768",
     ];
 
-    // Every GTF/GFF here holds 48 transcripts of these 3 genes.  Ensembl GFF3
+    // Every GTF/GFF here holds 48 transcripts of these 3 genes. Ensembl GFF3
     // annotates one exon more for the lncRNA than the other files do.
     const N_TRANSCRIPTS: usize = 48;
 
@@ -832,7 +832,7 @@ mod tests {
     #[test]
     fn a_gff_without_namespaced_ids_is_gencode_style() {
         // GENCODE never writes "ID=transcript:", and types every transcript
-        // "transcript" whatever its biotype — so that is the whole answer.
+        // "transcript" whatever its biotype.
         let types = detect_gff_transcript_types(&data(GFF_GENCODE)).unwrap();
         assert_eq!(types, [GENCODE_TRANSCRIPT_TYPE]);
     }
@@ -876,7 +876,7 @@ mod tests {
     #[test]
     fn the_lncrna_transcript_is_kept_whatever_its_biotype_is_called() {
         // Ensembl types this transcript "lnc_RNA", so a "transcript"-only
-        // default would have dropped it.  It must appear, on the lncRNA locus.
+        // default would have dropped it. It must appear, on the lncRNA locus.
         let ensembl = parse_annotation_files([data(GFF_ENSEMBL)], None, None, None, false)
             .unwrap()
             .1;
@@ -887,8 +887,6 @@ mod tests {
         assert!(!lnc.is_empty());
         assert!(lnc.iter().all(|v| v.chrom == "1" && v.strand == '+'));
 
-        // Narrowing to just the coding type drops it again — which is what an
-        // explicit --transcriptID is for.
         let coding_only =
             parse_annotation_files([data(GFF_ENSEMBL)], Some(&["mRNA"]), None, None, false)
                 .unwrap()
@@ -919,8 +917,7 @@ mod tests {
 
     #[test]
     fn ensembl_types_the_lncrna_gene_record_as_ncrna_gene() {
-        // Asking only for "gene" misses it — the reason the region types are a
-        // set rather than a single string.
+        // Asking only for "gene" misses it.
         let only_gene = parse_gff_file(&data(GFF_ENSEMBL), Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
@@ -1024,7 +1021,7 @@ mod tests {
     #[test]
     fn every_format_agrees_on_where_the_coding_genes_are() {
         // The invariant tying the files together: whatever the flavour, Prim2
-        // and Rab23 come out on identical coordinates.  (The lncRNA is excluded
+        // and Rab23 come out on identical coordinates. (The lncRNA is excluded
         // only because its BED entry covers the transcript, not the gene.)
         let bed = parse_bed_file(&data(BED)).unwrap().features;
         let gencode_gtf = parse_gtf_file(&data(GTF_GENCODE), Some(&["gene"]), "gene_id")
@@ -1114,8 +1111,8 @@ mod tests {
 
     #[test]
     fn metagene_groups_per_transcript_by_default() {
-        // Every flavour names an exon's transcript on the exon itself — GTF in
-        // transcript_id, GFF3 in Parent — so the default grouping works on all
+        // Every flavour names an exon's transcript on the exon itself: GTF in
+        // transcript_id, GFF3 in Parent, so the default grouping works on all
         // four, and gives one feature per transcript.
         for (file, chrom) in [
             (GTF_GENCODE, "chr1"),
@@ -1141,7 +1138,7 @@ mod tests {
 
     #[test]
     fn metagene_groups_per_gene_when_the_gene_attribute_is_named() {
-        // Grouping on gene_id collapses the exons onto the 3 genes.  The
+        // Grouping on gene_id collapses the exons onto the 3 genes. The
         // Ensembl GFF3 is absent here: its exons carry no gene id (see below).
         for (file, chrom, ids) in [
             (GTF_GENCODE, "chr1", GENCODE_IDS),
@@ -1179,7 +1176,7 @@ mod tests {
     #[test]
     fn grouping_an_ensembl_gff_by_gene_is_an_error() {
         // Its exons name only their transcript, so there is no gene id to group
-        // on.  Erroring beats the alternative — one feature per exon, silently.
+        // on.
         let err = parse_annotation_files([data(GFF_ENSEMBL)], None, None, Some("gene_id"), true)
             .err()
             .expect("grouping by gene_id should fail on an Ensembl GFF3");

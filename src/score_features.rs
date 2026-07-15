@@ -1,7 +1,7 @@
 //! Aggregation of binned single-cell chromatin data into feature scores.
 //!
 //! For each feature in a BED/GTF/GFF file, sums the counts of the bins that
-//! overlap it, giving a per-cell score.  Bins that only partly overlap a feature
+//! overlap it, giving a per-cell score. Bins that only partly overlap a feature
 //! are handled according to the overlap policy.
 //!
 //! The output is an AnnData h5ad file (cells × features) whose obs mirrors the
@@ -24,7 +24,7 @@ use crate::counting::count_utils::{df_i64_col, df_str_col, read_x_f64};
 use crate::counting::parse_annotation::parse_annotation_files;
 use crate::counting::region_index::{ChromIndex, Feature, Interval};
 
-/// Parse an annotation file (BED / GTF / GFF3) into [`Feature`]s, reusing the
+/// Parse an annotation file (BED, GTF, or GFF3) into [`Feature`]s, reusing the
 /// shared `parse_annotation_files` machinery (and thus the same format
 /// detection as `scCountReads`).
 ///
@@ -37,7 +37,7 @@ use crate::counting::region_index::{ChromIndex, Feature, Interval};
 /// ignored for BED.
 ///
 /// When `penalty` is `Some`, only features whose name contains `_pen{penalty}`
-/// are kept — for VCR BED files produced by `scFindVCRs` with a range of
+/// are kept, used for VCR BED files produced by `scFindVCRs` with a range of
 /// penalties encoded in the feature name.
 fn parse_annotation_features(
     path: &Path,
@@ -61,12 +61,12 @@ fn parse_annotation_features(
 /// when no overlapping bin carries any signal.
 ///
 /// The score of a cell is the sum of its counts in the bins overlapping the
-/// feature.  `overlap_policy` decides what to do with a bin that only partly
+/// feature. `overlap_policy` decides what to do with a bin that only partly
 /// overlaps it:
 ///
-/// * `"all"` — count the bin in full;
-/// * `"partial"` — count the fraction of the bin that lies inside the feature;
-/// * `"none"` — ignore the bin unless it is wholly inside the feature.
+/// * `"all"`: count the bin in full;
+/// * `"partial"`: count the fraction of the bin that lies inside the feature;
+/// * `"none"`: ignore the bin unless it is wholly inside the feature.
 fn compute_feature_score(
     feat: &Feature,
     bin_chrom_idx: &AHashMap<String, ChromIndex>,
@@ -330,7 +330,7 @@ fn write_output_anndata(
 /// Aggregate binned single-cell chromatin data into per-feature scores.
 ///
 /// Reads `h5ad_path` (an AnnData file produced by `count_bins` or similar),
-/// whose `var` carries `chrom`/`start`/`end` bin coordinates.  For each feature
+/// whose `var` carries `chrom`/`start`/`end` bin coordinates. For each feature
 /// in `features_path` (BED/GTF/GFF), sums the counts of the overlapping bins to
 /// produce a per-cell score, weighting partly-overlapping bins according to
 /// `overlap_policy`.
