@@ -11,4 +11,4 @@ pub mod filters;
 pub mod sc_record;
 
 pub use filters::{DupMethod, DuplicateFilter, MotifFilter, QcFilter, RawRecordFilter};
-pub use sc_record::ScRecord;
+pub use sc_record::{AdjustRead, ScRecord};

@@ -18,7 +18,7 @@ use crate::bam::filters::{
 // assigned correctly. In practice reads are short and features rarely pile up
 // this densely, so 16 is a safe ceiling.
 const MAX_REGION_HITS: usize = 16;
-use crate::bam::sc_record::{ScRecord, parse_tag};
+use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × feature matrix, then
 /// write the result as an AnnData HDF5 file.
@@ -36,6 +36,7 @@ pub fn count_bam_features(
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
     params: &CountingParams,
+    adjust: &AdjustRead,
     record_filter: Option<&RawRecordFilter>,
     qc_filter: Option<&QcFilter>,
     dup_method: Option<DupMethod>,
@@ -242,7 +243,7 @@ pub fn count_bam_features(
                             continue;
                         }
 
-                        let (eff_start, eff_end) = sc_rec.effective_interval(params);
+                        let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
                         let cell_idx = cell_offset + local_bc_idx;
 
                         // Largest-overlap-wins: each read contributes to exactly

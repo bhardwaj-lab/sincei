@@ -18,7 +18,7 @@ use crate::bam::bam_io::{BamWorker, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
-use crate::bam::sc_record::{ScRecord, parse_tag};
+use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {
@@ -38,7 +38,7 @@ pub enum OutputFormat {
 /// How to derive the signal interval from each read.
 #[derive(Clone, Copy, Debug)]
 pub enum ReadMode {
-    /// Standard behavior: apply extend_reads / center_reads from CountingParams.
+    /// Standard behavior: apply extend_reads / center_reads from `AdjustRead`.
     Normal,
     /// MNase / CUT&RUN: use only the 2–3 central bp of the paired-end fragment.
     /// Reads that are not proper-pair forward reads return `None` and are skipped.
@@ -105,11 +105,11 @@ fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, 
 
 fn get_effective_interval(
     rec: &ScRecord,
-    params: &CountingParams,
+    adjust: &AdjustRead,
     mode: ReadMode,
 ) -> Option<(usize, usize)> {
     match mode {
-        ReadMode::Normal => Some(rec.effective_interval(params)),
+        ReadMode::Normal => Some(rec.effective_interval(adjust)),
         ReadMode::MNase => apply_mnase(rec),
         ReadMode::Offset(start, end) => apply_offset(rec, start, end),
     }
@@ -269,12 +269,14 @@ pub fn run_bulk_coverage(
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
 
+    let adjust = AdjustRead {
+        extend_reads,
+        center_reads,
+    };
     let params = CountingParams {
         chr_to_skip: chr_to_skip.to_vec(),
         region: region.map(String::from),
         blacklist_path: blacklist_path.map(|p| p.to_path_buf()),
-        extend_reads,
-        center_reads,
         feature_type: None,
         exon_type: None,
         name_attr: None,
@@ -472,7 +474,7 @@ pub fn run_bulk_coverage(
                         }
 
                         let Some((eff_start, eff_end)) =
-                            get_effective_interval(&sc_rec, &params, read_mode)
+                            get_effective_interval(&sc_rec, &adjust, read_mode)
                         else {
                             continue;
                         };

@@ -5,6 +5,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
+use crate::bam::sc_record::AdjustRead;
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
 
@@ -135,12 +136,14 @@ pub fn count_bins(
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<()> {
+    let adjust = AdjustRead {
+        extend_reads,
+        center_reads,
+    };
     let params = CountingParams {
         chr_to_skip,
         region,
         blacklist_path,
-        extend_reads,
-        center_reads,
         feature_type: None,
         exon_type: None,
         name_attr: None,
@@ -194,6 +197,7 @@ pub fn count_bins(
         umi_tag.as_deref(),
         count_tag.as_deref(),
         &params,
+        &adjust,
         record_filter.as_ref(),
         qc.as_ref(),
         dup,
@@ -282,12 +286,14 @@ pub fn count_features(
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<()> {
+    let adjust = AdjustRead {
+        extend_reads,
+        center_reads,
+    };
     let params = CountingParams {
         chr_to_skip,
         region,
         blacklist_path,
-        extend_reads,
-        center_reads,
         feature_type,
         exon_type,
         name_attr,
@@ -339,6 +345,7 @@ pub fn count_features(
         umi_tag.as_deref(),
         count_tag.as_deref(),
         &params,
+        &adjust,
         record_filter.as_ref(),
         qc.as_ref(),
         dup,

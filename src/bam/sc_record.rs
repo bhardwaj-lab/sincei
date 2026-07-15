@@ -5,13 +5,29 @@ use noodles::sam::alignment::Record as _;
 use noodles::sam::alignment::record::cigar::op::Kind as CigarKind;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
-use crate::counting::params::CountingParams;
-
 /// Controls which optional fields are computed when building an [`ScRecord`].
 pub(crate) struct ScRecordOptions {
     pub(crate) compute_gc: bool,
     pub(crate) compute_aligned_fraction: bool,
     pub(crate) store_sequence: bool,
+}
+
+/// How a read's alignment is turned into the interval it is counted in.
+///
+/// These are read-shaping options — distinct from the counting/annotation
+/// options in `CountingParams` — so they live beside [`ScRecord::effective_interval`],
+/// their only consumer, and keep the `bam` module free of any dependency on
+/// `counting`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AdjustRead {
+    /// Extend each read to this fragment length (bp) before counting.  For a
+    /// properly paired read the observed insert size (TLEN) is used instead,
+    /// up to `4 × extend_reads`; the value applies to single-end or improperly
+    /// paired reads.  `None` leaves the alignment span unchanged.
+    pub extend_reads: Option<usize>,
+    /// After extension, replace the interval with a `read_length`-bp window
+    /// centered on its midpoint.
+    pub center_reads: bool,
 }
 
 /// A parsed, filter-passing BAM record carrying the fields needed for
@@ -199,10 +215,10 @@ impl<'a> ScRecord<'a> {
         }))
     }
 
-    /// Genomic interval to credit this read to, after applying `extend_reads`
-    /// and `center_reads` from `params`.
-    pub(crate) fn effective_interval(&self, params: &CountingParams) -> (usize, usize) {
-        let (start, end) = match params.extend_reads {
+    /// Genomic interval to credit this read to, after applying the extension
+    /// and centering in `adjust`.
+    pub(crate) fn effective_interval(&self, adjust: &AdjustRead) -> (usize, usize) {
+        let (start, end) = match adjust.extend_reads {
             None => (self.alignment_start, self.alignment_end),
             Some(frag_len) => {
                 let max_paired = 4 * frag_len;
@@ -227,7 +243,7 @@ impl<'a> ScRecord<'a> {
             }
         };
 
-        if params.center_reads && self.read_length > 0 {
+        if adjust.center_reads && self.read_length > 0 {
             let center = (start + end) / 2;
             let half = self.read_length / 2;
             let cs = center.saturating_sub(half);
@@ -321,7 +337,6 @@ fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::counting::params::CountingParams;
 
     #[test]
     fn parse_tag_requires_exactly_two_characters() {
@@ -344,38 +359,38 @@ mod tests {
     #[test]
     fn without_extension_the_alignment_span_is_used_verbatim() {
         let rec = test_record(100, 150);
-        assert_eq!(rec.effective_interval(&CountingParams::new()), (100, 150));
+        assert_eq!(rec.effective_interval(&AdjustRead::default()), (100, 150));
     }
 
     #[test]
     fn extend_reads_lengthens_single_end_reads_in_the_read_direction() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             extend_reads: Some(200),
-            ..CountingParams::new()
+            ..Default::default()
         };
 
         // Forward: extend downstream from the start.
         let fwd = test_record(1000, 1050);
-        assert_eq!(fwd.effective_interval(&params), (1000, 1200));
+        assert_eq!(fwd.effective_interval(&adjust), (1000, 1200));
 
         // Reverse: extend upstream from the end.
         let mut rev = test_record(1000, 1050);
         rev.is_reverse = true;
-        assert_eq!(rev.effective_interval(&params), (850, 1050));
+        assert_eq!(rev.effective_interval(&adjust), (850, 1050));
     }
 
     #[test]
     fn extend_reads_prefers_the_observed_insert_size_for_proper_pairs() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             extend_reads: Some(200),
-            ..CountingParams::new()
+            ..Default::default()
         };
 
         // Forward mate: TLEN wins over the requested fragment length.
         let mut fwd = test_record(1000, 1050);
         fwd.is_proper_pair = true;
         fwd.template_length = 300;
-        assert_eq!(fwd.effective_interval(&params), (1000, 1300));
+        assert_eq!(fwd.effective_interval(&adjust), (1000, 1300));
 
         // Reverse mate: the fragment runs from the mate's start to this read's end.
         let mut rev = test_record(1250, 1300);
@@ -383,73 +398,73 @@ mod tests {
         rev.is_reverse = true;
         rev.template_length = -300;
         rev.mate_alignment_start = Some(1000);
-        assert_eq!(rev.effective_interval(&params), (1000, 1300));
+        assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
     }
 
     #[test]
     fn implausible_insert_sizes_fall_back_to_the_requested_length() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             extend_reads: Some(200),
-            ..CountingParams::new()
+            ..Default::default()
         };
 
         // |TLEN| > 4 × extend_reads is treated as a mapping artifact.
         let mut rec = test_record(1000, 1050);
         rec.is_proper_pair = true;
         rec.template_length = 801;
-        assert_eq!(rec.effective_interval(&params), (1000, 1200));
+        assert_eq!(rec.effective_interval(&adjust), (1000, 1200));
 
         // Exactly 4 × extend_reads is still plausible.
         rec.template_length = 800;
-        assert_eq!(rec.effective_interval(&params), (1000, 1800));
+        assert_eq!(rec.effective_interval(&adjust), (1000, 1800));
     }
 
     #[test]
     fn reverse_read_extension_saturates_at_the_chromosome_start() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             extend_reads: Some(200),
-            ..CountingParams::new()
+            ..Default::default()
         };
         let mut rec = test_record(10, 60);
         rec.is_reverse = true;
-        assert_eq!(rec.effective_interval(&params), (0, 60));
+        assert_eq!(rec.effective_interval(&adjust), (0, 60));
     }
 
     #[test]
     fn center_reads_replaces_the_fragment_with_a_read_length_window() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             center_reads: true,
-            ..CountingParams::new()
+            ..Default::default()
         };
 
         // Fragment [100, 300) centered at 200; a 50 bp read spans [175, 225).
         let mut rec = test_record(100, 300);
         rec.read_length = 50;
-        assert_eq!(rec.effective_interval(&params), (175, 225));
+        assert_eq!(rec.effective_interval(&adjust), (175, 225));
     }
 
     #[test]
     fn center_reads_applies_after_extension() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             extend_reads: Some(200),
             center_reads: true,
-            ..CountingParams::new()
+            ..Default::default()
         };
 
         // Extended to [1000, 1200), centered at 1100; a 50 bp read spans [1075, 1125).
         let mut rec = test_record(1000, 1050);
         rec.read_length = 50;
-        assert_eq!(rec.effective_interval(&params), (1075, 1125));
+        assert_eq!(rec.effective_interval(&adjust), (1075, 1125));
     }
 
     #[test]
     fn center_reads_is_a_no_op_for_zero_length_reads() {
-        let params = CountingParams {
+        let adjust = AdjustRead {
             center_reads: true,
-            ..CountingParams::new()
+            ..Default::default()
         };
         let mut rec = test_record(100, 300);
         rec.read_length = 0;
-        assert_eq!(rec.effective_interval(&params), (100, 300));
+        assert_eq!(rec.effective_interval(&adjust), (100, 300));
     }
 }

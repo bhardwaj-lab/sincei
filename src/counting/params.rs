@@ -17,18 +17,6 @@ pub struct CountingParams {
     /// interval overlaps any blacklisted region are discarded.
     pub blacklist_path: Option<PathBuf>,
 
-    /// Extend reads to this fragment length.
-    ///
-    /// For properly paired reads the insert size from TLEN is used instead
-    /// (up to `4 × extend_reads`); the supplied value is only applied to
-    /// single-end or improperly paired reads.
-    pub extend_reads: Option<usize>,
-
-    /// After computing the extended interval, replace it with a window of
-    /// `read_length` bp centered on the fragment midpoint. This can be useful
-    /// to get sharper signal around enriched regions.
-    pub center_reads: bool,
-
     /// For GTF / GFF3 annotation files: the column-3 feature types that define
     /// a counting region. A record is a region when its type is any of them,
     /// so an Ensembl-style GFF3 can contribute several transcript biotypes
@@ -71,8 +59,6 @@ impl CountingParams {
             chr_to_skip: Vec::new(),
             region: None,
             blacklist_path: None,
-            extend_reads: None,
-            center_reads: false,
             feature_type: None,
             exon_type: None,
             name_attr: None,

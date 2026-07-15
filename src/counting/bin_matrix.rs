@@ -12,7 +12,7 @@ use crate::bam::bam_io::{BamWorker, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
-use crate::bam::sc_record::{ScRecord, parse_tag};
+use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × genomic-bin matrix,
 /// then write the result as an AnnData HDF5 file.
@@ -31,6 +31,7 @@ pub fn count_bam_bins(
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
     params: &CountingParams,
+    adjust: &AdjustRead,
     record_filter: Option<&RawRecordFilter>,
     qc_filter: Option<&QcFilter>,
     dup_method: Option<DupMethod>,
@@ -234,7 +235,7 @@ pub fn count_bam_bins(
                             continue;
                         }
 
-                        let (eff_start, eff_end) = sc_rec.effective_interval(params);
+                        let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
                         let cell_idx = cell_offset + local_bc_idx;
 
                         // Largest-overlap-wins: assign the read to exactly one

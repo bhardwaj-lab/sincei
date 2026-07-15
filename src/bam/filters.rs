@@ -376,8 +376,8 @@ fn complement(b: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::bam::sc_record::test_record;
     use super::*;
+    use crate::bam::sc_record::test_record;
 
     // SAM flag bits used below.
     const PAIRED: u16 = 0x1;
