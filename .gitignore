@@ -1,4 +1,8 @@
+# Rust
+Cargo.lock
 /target
+
+# Internal tests
 /tests/count_testdata
 /benchmarks
 
