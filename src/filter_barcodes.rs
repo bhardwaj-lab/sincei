@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use ahash::{AHashMap, AHashSet};
@@ -13,10 +11,10 @@ use rayon::prelude::*;
 use triple_accel::hamming::hamming;
 
 use crate::counting::bam_io::{open_indexed_bam, read_bam_header};
-use crate::counting::region_index::{ChromIndex, GenomeIndex, Interval};
+use crate::counting::parse_annotation::parse_blacklist_bed;
+use crate::counting::region_index::{ChromIndex, GenomeIndex};
 
 type BinsByBarcode = AHashMap<String, AHashSet<(String, usize)>>;
-type BlacklistIndex = GenomeIndex;
 type BarcodeCounts = (Vec<(String, usize)>, Vec<String>);
 
 fn run_filter_barcodes(
@@ -41,7 +39,7 @@ fn run_filter_barcodes(
     let whitelist_is_active = !whitelist.is_empty();
     let whitelist_set: AHashSet<String> = whitelist.iter().cloned().collect();
     let blacklist_index = if let Some(p) = blacklist_file_name {
-        load_blacklist_index(p)?
+        parse_blacklist_bed(p)?
     } else {
         GenomeIndex::new()
     };
@@ -128,7 +126,7 @@ fn run_filter_barcodes(
 
                     let start = aln_start.get().saturating_sub(1);
                     // Ownership: a read belongs to the chunk that contains its
-                    // alignment_start.  The BAI query returns overlapping reads,
+                    // alignment_start. The BAI query returns overlapping reads,
                     // so skip anything that started before this chunk.
                     if start < *chunk_start {
                         continue;
@@ -198,58 +196,6 @@ fn run_filter_barcodes(
     Ok((barcode_counts, selected_barcodes))
 }
 
-fn load_blacklist_index(path: &Path) -> Result<BlacklistIndex> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open blacklist file {}", path.display()))?;
-    let reader = BufReader::new(file);
-    let mut intervals_by_chromosome: AHashMap<String, Vec<Interval>> = AHashMap::new();
-
-    for (line_number, line) in reader.lines().enumerate() {
-        let line =
-            line.with_context(|| format!("failed to read blacklist line {}", line_number + 1))?;
-        let line = line.trim();
-
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let mut fields = line.split('\t');
-        let Some(chromosome) = fields.next() else {
-            continue;
-        };
-        let Some(start) = fields.next() else { continue };
-        let Some(end) = fields.next() else { continue };
-
-        let start = start.parse::<usize>().with_context(|| {
-            format!(
-                "invalid blacklist start position on line {}",
-                line_number + 1
-            )
-        })?;
-        let end = end.parse::<usize>().with_context(|| {
-            format!("invalid blacklist end position on line {}", line_number + 1)
-        })?;
-
-        if end <= start {
-            continue;
-        }
-
-        intervals_by_chromosome
-            .entry(chromosome.to_string())
-            .or_default()
-            .push(Interval {
-                start,
-                end,
-                var_idx: 0,
-            });
-    }
-
-    Ok(intervals_by_chromosome
-        .into_iter()
-        .map(|(chrom, ivs)| (chrom, ChromIndex::build(ivs)))
-        .collect())
-}
-
 fn parse_tag(cell_tag: &str) -> Result<Tag> {
     let bytes = cell_tag.as_bytes();
     if bytes.len() != 2 {
@@ -285,7 +231,7 @@ fn barcode_is_whitelisted(
 }
 
 fn is_blacklisted(
-    blacklist_index: &BlacklistIndex,
+    blacklist_index: &GenomeIndex,
     chromosome: &str,
     start: usize,
     end: usize,
@@ -296,7 +242,7 @@ fn is_blacklisted(
 }
 
 fn blacklist_chrom_index<'a>(
-    blacklist_index: &'a BlacklistIndex,
+    blacklist_index: &'a GenomeIndex,
     chromosome: &str,
 ) -> Option<&'a ChromIndex> {
     blacklist_index
