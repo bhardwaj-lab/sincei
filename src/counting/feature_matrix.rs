@@ -5,12 +5,14 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 
 use super::count_utils::{build_csr, write_counts_anndata};
-use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{
     build_counting_index, parse_annotation_files, parse_blacklist_bed,
 };
 use crate::bam::bam_io::{BamWorker, read_bam_header};
+use crate::bam::filters::{
+    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
+};
 
 // Maximum number of distinct regions a single read can overlap and still be
 // assigned correctly. In practice reads are short and features rarely pile up

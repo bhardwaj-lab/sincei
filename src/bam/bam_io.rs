@@ -12,7 +12,7 @@ use noodles::sam::Header;
 use noodles::sam::header::ReferenceSequences;
 use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
 
-use crate::counting::filters::MotifFilter;
+use super::filters::MotifFilter;
 
 /// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;

@@ -4,7 +4,7 @@ use anyhow::Result;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use crate::counting::filters::{DupMethod, QcFilter, RawRecordFilter};
+use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
 
