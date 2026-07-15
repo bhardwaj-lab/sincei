@@ -12,14 +12,13 @@ use noodles::sam::Header;
 use noodles::sam::header::ReferenceSequences;
 use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
 
-use super::filters::MotifFilter;
+use crate::counting::filters::MotifFilter;
 
-/// Concrete type of a BAI-indexed BAM reader opened from a file path.
+/// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 
-/// Read just the header of a BAM file, tolerating non-compliant SAM header text
-/// (see module docs). Builds an indexed reader so a missing `.bai` is still
-/// reported here rather than later.
+/// Read just the header of a BAM file, tolerating non-compliant SAM header.
+/// Builds an indexed reader so a missing `.bai` is reported as an error.
 pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
     let mut reader = bam::io::indexed_reader::Builder::default()
         .build_from_path(path)
@@ -39,14 +38,11 @@ pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
 /// non-compliant SAM header text.
 ///
 /// noodles validates the SAM header text strictly (per the hts-spec), which
-/// makes it reject some real-world BAMs, notably, 10x Genomics output, whose
+/// makes it reject some real-world BAMs, such as 10x Genomics output, whose
 /// `@HD` line lacks a conforming `VN` version field.
 /// We fall back to reconstructing the header straight from the BAM **binary**
 /// reference dictionary, which is a simple, well-defined block that 10x writes
 /// correctly.
-///
-/// The fallback only triggers when the strict parse fails, so fully compliant
-/// BAMs are read exactly as before (preserving `@RG`/`@PG`/etc.).
 pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
     let mut reader = bam::io::indexed_reader::Builder::default()
         .build_from_path(path)
@@ -115,7 +111,7 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
-/// Per-worker (per-thread) reusable state for the chunk-parallel counters.
+/// Per-worker (per-thread) reusable state for chunk-parallel counters.
 ///
 /// Rayon's `map_init` hands one `BamWorker` to each thread, which then
 /// processes many chunks. This amortizes two costs:

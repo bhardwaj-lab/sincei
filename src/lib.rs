@@ -1,4 +1,5 @@
 pub mod annotation;
+pub mod bam;
 mod count_reads;
 pub mod counting;
 mod filter_barcodes;

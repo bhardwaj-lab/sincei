@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use twobit::TwoBitFile;
 
-use super::sc_record::{ScRecord, ScRecordOptions};
+use crate::bam::sc_record::{ScRecord, ScRecordOptions};
 
 // Raw-record filter
 
@@ -377,7 +377,7 @@ fn complement(b: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::counting::sc_record::test_record;
+    use crate::bam::sc_record::test_record;
 
     // SAM flag bits used below.
     const PAIRED: u16 = 0x1;

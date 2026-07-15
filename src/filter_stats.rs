@@ -9,9 +9,9 @@ use rayon::prelude::*;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
-use crate::counting::bam_io::{BamWorker, read_bam_header};
+use crate::bam::bam_io::{BamWorker, read_bam_header};
+use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 use crate::counting::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
-use crate::counting::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 
 #[derive(Default, Clone)]
 struct BarcodeStat {

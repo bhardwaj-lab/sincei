@@ -5,7 +5,7 @@ use noodles::sam::alignment::Record as _;
 use noodles::sam::alignment::record::cigar::op::Kind as CigarKind;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
-use super::params::CountingParams;
+use crate::counting::params::CountingParams;
 
 /// Controls which optional fields are computed when building an [`ScRecord`].
 pub(crate) struct ScRecordOptions {
@@ -19,7 +19,7 @@ pub(crate) struct ScRecordOptions {
 ///
 /// Coordinates are 0-based half-open `[start, end)`.
 ///
-/// The chromosome is intentionally *not* stored: every caller queries one
+/// The chromosome is intentionally **not** stored: every caller queries one
 /// chromosome at a time, so the chromosome name is already known from the
 /// work chunk and need not be re-derived (and re-allocated) per record.
 pub struct ScRecord<'a> {
@@ -27,10 +27,10 @@ pub struct ScRecord<'a> {
     pub alignment_end: usize,
     /// Whether the read is on the reverse strand.
     pub is_reverse: bool,
-    /// SAM proper-pair flag (FLAG 0x2).
-    pub is_proper_pair: bool,
     /// True if the read is part of a paired-end library (FLAG 0x1).
     pub is_paired: bool,
+    /// SAM proper-pair flag (FLAG 0x2).
+    pub is_proper_pair: bool,
     /// True if this is the first read in the pair (FLAG 0x40).
     pub is_read1: bool,
     /// True if the mate maps to the reverse strand (FLAG 0x20).
@@ -38,7 +38,7 @@ pub struct ScRecord<'a> {
     /// Signed template length (TLEN); 0 for single-end reads.
     pub template_length: i64,
     /// Mate's 0-based alignment start, if available.
-    pub next_alignment_start: Option<usize>,
+    pub mate_alignment_start: Option<usize>,
     /// Number of bases in the read sequence (used by center_reads).
     pub read_length: usize,
     /// Barcode tag bytes, borrowed from the BAM record (no allocation).
@@ -104,7 +104,7 @@ impl<'a> ScRecord<'a> {
         let template_length = record.template_length() as i64;
 
         // Mate position (1-based -> 0-based).
-        let next_alignment_start = record
+        let mate_alignment_start = record
             .mate_alignment_start()
             .map(|res| res.map(|pos| pos.get().saturating_sub(1)))
             .transpose()
@@ -188,7 +188,7 @@ impl<'a> ScRecord<'a> {
             is_read1,
             mate_is_reverse,
             template_length,
-            next_alignment_start,
+            mate_alignment_start,
             read_length,
             barcode,
             umi,
@@ -211,7 +211,7 @@ impl<'a> ScRecord<'a> {
 
                 if use_tlen {
                     if self.is_reverse {
-                        let mate = self.next_alignment_start.unwrap_or(self.alignment_start);
+                        let mate = self.mate_alignment_start.unwrap_or(self.alignment_start);
                         (mate, self.alignment_end)
                     } else {
                         (self.alignment_start, self.alignment_start + tlen_abs)
@@ -285,7 +285,7 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
         is_read1: false,
         mate_is_reverse: false,
         template_length: 0,
-        next_alignment_start: None,
+        mate_alignment_start: None,
         read_length: end - start,
         barcode: None,
         umi: None,
@@ -382,7 +382,7 @@ mod tests {
         rev.is_proper_pair = true;
         rev.is_reverse = true;
         rev.template_length = -300;
-        rev.next_alignment_start = Some(1000);
+        rev.mate_alignment_start = Some(1000);
         assert_eq!(rev.effective_interval(&params), (1000, 1300));
     }
 

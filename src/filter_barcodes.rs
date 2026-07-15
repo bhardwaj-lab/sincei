@@ -12,7 +12,7 @@ use triple_accel::hamming::hamming;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{ChromIndex, GenomeIndex};
-use crate::counting::bam_io::{open_indexed_bam, read_bam_header};
+use crate::bam::bam_io::{open_indexed_bam, read_bam_header};
 
 type BinsByBarcode = AHashMap<String, AHashSet<(String, usize)>>;
 type BarcodeCounts = (Vec<(String, usize)>, Vec<String>);

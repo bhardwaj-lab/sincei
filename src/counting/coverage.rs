@@ -11,12 +11,12 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
-use super::bam_io::{BamWorker, read_bam_header};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
-use super::sc_record::{ScRecord, parse_tag};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::build_bin_index;
+use crate::bam::bam_io::{BamWorker, read_bam_header};
+use crate::bam::sc_record::{ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {

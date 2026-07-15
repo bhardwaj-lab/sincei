@@ -4,19 +4,19 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::bam_io::{BamWorker, read_bam_header};
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::filters::{DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{
     build_counting_index, parse_annotation_files, parse_blacklist_bed,
 };
+use crate::bam::bam_io::{BamWorker, read_bam_header};
 
 // Maximum number of distinct regions a single read can overlap and still be
 // assigned correctly. In practice reads are short and features rarely pile up
 // this densely, so 16 is a safe ceiling.
 const MAX_REGION_HITS: usize = 16;
-use super::sc_record::{ScRecord, parse_tag};
+use crate::bam::sc_record::{ScRecord, parse_tag};
 
 /// Count reads from one or more BAM files into a cell × feature matrix, then
 /// write the result as an AnnData HDF5 file.
