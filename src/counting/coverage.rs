@@ -1,3 +1,14 @@
+//! Pseudo-bulk coverage tracks from grouped single cells.
+//!
+//! Cells are pooled into groups by a group-info TSV, their reads counted into
+//! genomic bins, and each group written out as its own bigWig or bedGraph.
+//!
+//! Unlike the count matrices, a read's signal interval can come from any
+//! [`ReadMode`]: the extended/centered interval, the centre of an MNase
+//! fragment, or a chosen offset within the read. Counts can then be normalized
+//! ([`NormalizeMethod`]) against a denominator summed over the bins, optionally
+//! ignoring some chromosomes.
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write as IoWrite};
@@ -18,6 +29,7 @@ use crate::bam::bam_io::{BamWorker, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
+use crate::bam::fragment_length::resolve_extend_reads;
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
@@ -270,7 +282,7 @@ pub fn run_bulk_coverage(
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
 
     let adjust = AdjustRead {
-        extend_reads,
+        extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,
         center_reads,
     };
     let params = CountingParams {

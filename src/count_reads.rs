@@ -5,6 +5,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
+use crate::bam::fragment_length::resolve_extend_reads;
 use crate::bam::sc_record::AdjustRead;
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
@@ -136,10 +137,6 @@ pub fn count_bins(
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<()> {
-    let adjust = AdjustRead {
-        extend_reads,
-        center_reads,
-    };
     let params = CountingParams {
         chr_to_skip,
         region,
@@ -187,6 +184,12 @@ pub fn count_bins(
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))
         .collect();
+
+    let adjust = AdjustRead {
+        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
+            .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
+        center_reads,
+    };
 
     count_bam_bins(
         &bam_path_refs,
@@ -286,10 +289,6 @@ pub fn count_features(
     num_threads: usize,
     chunk_size: usize,
 ) -> PyResult<()> {
-    let adjust = AdjustRead {
-        extend_reads,
-        center_reads,
-    };
     let params = CountingParams {
         chr_to_skip,
         region,
@@ -336,6 +335,12 @@ pub fn count_features(
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))
         .collect();
+
+    let adjust = AdjustRead {
+        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
+            .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
+        center_reads,
+    };
 
     count_bam_features(
         &bam_path_refs,
