@@ -1,3 +1,15 @@
+//! Genomic regions, and the indexes that find them by position.
+//!
+//! A [`Feature`] is one column of the count matrix; an [`Interval`] is one
+//! stretch to search, pointing back at its feature through `var_idx`. The two
+//! are deliberately not 1:1 — the exons of a transcript, or the pieces a
+//! blacklist cuts a feature into, are several intervals sharing one feature.
+//!
+//! Reads are then assigned by one of two strategies: a [`GenomeIndex`] (one
+//! [`ChromIndex`] per chromosome) searches arbitrary annotation regions in
+//! O(log N + k), while a [`BinIndex`] needs no search at all, because a uniform
+//! tiling puts a read's bin one division away.
+
 use ahash::AHashMap;
 
 /// A genomic feature defined by a chromosome, half-open interval, name, and strand.

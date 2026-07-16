@@ -1,3 +1,14 @@
+//! Abstraction of a single-cell sequencing read for filtering and counting.
+//!
+//! [`ScRecord`] is a raw record parsed once into the fields the filters and
+//! counting loops use: barcode/UMI (borrowed, not copied), coordinates, flags,
+//! and the optional QC values that `ScRecordOptions` switches on. The optional
+//! work is opt-in because this runs on every record in the file.
+//!
+//! [`ScRecord::effective_interval`] then turns an alignment into the interval
+//! the read is credited to, applying the extension and centering in
+//! [`AdjustRead`].
+
 use anyhow::{Context, Result};
 use noodles::bam;
 use noodles::sam::Header;
@@ -12,20 +23,14 @@ pub(crate) struct ScRecordOptions {
     pub(crate) store_sequence: bool,
 }
 
-/// How a read's alignment is turned into the interval it is counted in.
-///
-/// These are read-shaping options — distinct from the counting/annotation
-/// options in `CountingParams` — so they live beside [`ScRecord::effective_interval`],
-/// their only consumer, and keep the `bam` module free of any dependency on
-/// `counting`.
+/// How a read's position can be adjusted.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AdjustRead {
-    /// Extend each read to this fragment length (bp) before counting.  For a
-    /// properly paired read the observed insert size (TLEN) is used instead,
-    /// up to `4 × extend_reads`; the value applies to single-end or improperly
-    /// paired reads.  `None` leaves the alignment span unchanged.
+    /// Extend each read to this fragment length (bp).  For a properly paired
+    /// read the observed insert size (TLEN) is used, up to `4 × extend_reads`.
+    /// `None` leaves the alignment span unchanged.
     pub extend_reads: Option<usize>,
-    /// After extension, replace the interval with a `read_length`-bp window
+    /// After extension, replace the interval with a `read_length` window
     /// centered on its midpoint.
     pub center_reads: bool,
 }
@@ -233,12 +238,19 @@ impl<'a> ScRecord<'a> {
                         (self.alignment_start, self.alignment_start + tlen_abs)
                     }
                 } else if self.is_reverse {
+                    // Extend leftward to `frag_len`, but never shrink a read that
+                    // already spans more than that (min keeps the original start).
                     (
-                        self.alignment_end.saturating_sub(frag_len),
+                        self.alignment_start
+                            .min(self.alignment_end.saturating_sub(frag_len)),
                         self.alignment_end,
                     )
                 } else {
-                    (self.alignment_start, self.alignment_start + frag_len)
+                    // Extend rightward, without shrinking a longer read.
+                    (
+                        self.alignment_start,
+                        self.alignment_end.max(self.alignment_start + frag_len),
+                    )
                 }
             }
         };
@@ -377,6 +389,26 @@ mod tests {
         let mut rev = test_record(1000, 1050);
         rev.is_reverse = true;
         assert_eq!(rev.effective_interval(&adjust), (850, 1050));
+    }
+
+    #[test]
+    fn extend_reads_never_shrinks_a_read_longer_than_the_fragment() {
+        // A read already longer than the requested fragment is left unchanged,
+        // not truncated to `frag_len` — matching "reads that already exceed the
+        // fragment length are not extended".
+        let adjust = AdjustRead {
+            extend_reads: Some(200),
+            ..Default::default()
+        };
+
+        // Forward span 300 > 200: keep [1000, 1300), not [1000, 1200).
+        let fwd = test_record(1000, 1300);
+        assert_eq!(fwd.effective_interval(&adjust), (1000, 1300));
+
+        // Reverse span 300 > 200: keep [1000, 1300), not [1100, 1300).
+        let mut rev = test_record(1000, 1300);
+        rev.is_reverse = true;
+        assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
     }
 
     #[test]

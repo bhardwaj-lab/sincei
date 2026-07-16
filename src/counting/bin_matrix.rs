@@ -1,3 +1,13 @@
+//! Counts reads into a cell × genomic-bin matrix.
+//!
+//! Bin geometry is taken from the first BAM's header, so no annotation file is
+//! involved. Work is parallel over sub-chromosome chunks, each an independent
+//! BAI query.
+//!
+//! A read is credited to exactly one bin — the one its effective interval
+//! overlaps most — and is owned by the chunk holding its alignment start, so a
+//! read whose interval spills into the next chunk is still counted once.
+
 use std::path::Path;
 
 use ahash::{AHashMap, AHashSet};

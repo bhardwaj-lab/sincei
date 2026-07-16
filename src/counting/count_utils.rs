@@ -1,3 +1,12 @@
+//! Builds the count matrix, and moves it in and out of AnnData.
+//!
+//! `build_csr` turns the counting loops' sparse (cell, feature) accumulator
+//! into a CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
+//! tables naming its cells and regions.
+//!
+//! The readers (`read_x_f64` and the column helpers) go the other way, for the
+//! downstream commands that take a sincei matrix back in.
+
 use std::path::Path;
 
 use ahash::AHashMap;

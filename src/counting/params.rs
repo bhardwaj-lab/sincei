@@ -1,3 +1,13 @@
+//! Options shared by the counting entry points.
+//!
+//! [`CountingParams`] carries *what and where* to count: the chromosomes to
+//! skip, an optional region, a blacklist, and how to select features from an
+//! annotation file.
+//!
+//! How a *read* becomes an interval is deliberately not here — that is
+//! `crate::bam::sc_record::AdjustRead`, which keeps the `bam` module free of any
+//! dependency on this one.
+
 use std::path::PathBuf;
 
 /// Options that are common to all BAM counting functions.

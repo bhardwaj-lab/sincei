@@ -1,3 +1,14 @@
+//! Counts reads into a cell × annotation-feature matrix.
+//!
+//! Regions come from a BED/GTF/GFF3 file. Work is parallel over sub-chromosome
+//! chunks, each an independent BAI query, with reads owned by the chunk holding
+//! their alignment start so none is counted twice.
+//!
+//! A read is credited to exactly one feature: the overlaps of a feature's
+//! sub-intervals — metagene exons, or the pieces left by blacklist subtraction
+//! — are summed first, and the feature with the largest total wins. So a read
+//! spanning two exons of one gene counts once for that gene.
+
 use ahash::{AHashMap, AHashSet};
 use std::path::Path;
 

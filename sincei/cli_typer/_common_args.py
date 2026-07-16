@@ -515,11 +515,14 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
         "--extendReads",
         metavar="INT",
         rich_help_panel=_READ,
-        help="Extend reads to the given fragment size (in bases). If omitted, reads are not extended.\n\n"
+        help="Extend reads to a fragment size (in bases). Pass a value to use it directly, or pass the flag with no "
+        "value (``--extendReads``) to estimate the fragment size from the data (the median template length of properly "
+        "paired reads; errors on single-end data). If omitted, reads are not extended.\n\n"
         "*NOTE*: generally NOT recommended for spliced-read data such as RNA-seq, as it would extend reads over "
         "skipped regions.\n\n*Single-end*: the value is the final fragment length; reads that already exceed it are "
-        "not extended.\n\n*Paired-end*: reads with mates are extended to match the fragment size defined by the two "
-        "read mates.",
+        "left unchanged.\n\n*Paired-end*: reads with mates are extended to match the fragment size defined by the two "
+        "read mates (mates that map too far apart, >4x the fragment size, or to different chromosomes are treated as "
+        "single-end).",
     ),
     "center_reads": typer.Option(
         False,

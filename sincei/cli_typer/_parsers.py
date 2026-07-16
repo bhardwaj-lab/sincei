@@ -135,6 +135,9 @@ def preprocess_args() -> None:
     This is fine for sincei since the commands only use options.
     """
 
+    # `--extendReads` may be given with no value (meaning "estimate from data").
+    _EXTEND_READS_FLAGS = {"-e", "--extendReads"}
+
     # Collect the leading command path (everything up to the first option).
     final_cmd: list[str] = []
     for arg in sys.argv:
@@ -154,6 +157,12 @@ def preprocess_args() -> None:
             if len(opt_values) >= 1:
                 for opt_value in opt_values:
                     final_cmd.extend([arg, opt_value])
+            elif arg in _EXTEND_READS_FLAGS:
+                # A bare --extendReads (no value) means "estimate the fragment
+                # length from the data". Typer cannot express an option with an
+                # optional value, so we pass a "0" that the Rust backend
+                # interprets as "estimate".
+                final_cmd.extend([arg, "0"])
             else:
                 final_cmd.append(arg)
 

@@ -1,3 +1,14 @@
+//! Open BAM files, and reuse readers across work chunks.
+//!
+//! Every reader here is BAI-indexed: the counting loops query one chromosome
+//! chunk at a time rather than streaming whole files. `BamWorker` holds a
+//! reader (and motif filter) per rayon thread, so a chunk does not pay to
+//! reopen the file it was handed.
+//!
+//! Header reading falls back to the BAM binary reference dictionary when the
+//! SAM header text does not satisfy noodles' strict parsing (like 10x Genomics
+//! BAM files).
+
 use std::ffi::CStr;
 use std::fs::File;
 use std::io::{self, Read};

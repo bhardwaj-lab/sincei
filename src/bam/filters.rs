@@ -1,3 +1,15 @@
+//! Filter BAM records to be counted.
+//!
+//! The filters are split by how much of a record they need, so the counting
+//! loop can reject a read as cheaply as possible:
+//! [`RawRecordFilter`] sees only a raw record's flags and mapping quality,
+//! before any tag parsing, while [`QcFilter`], [`DuplicateFilter`] and
+//! [`MotifFilter`] work on a parsed [`ScRecord`].
+//!
+//! `derive_record_opts` reports which optional fields (GC content, aligned
+//! fraction, read sequence) the active filters actually need, so none of them
+//! are computed for a run that does not require them.
+
 use ahash::AHashSet;
 use std::fs::File;
 use std::io::BufReader;
@@ -7,8 +19,6 @@ use anyhow::Result;
 use twobit::TwoBitFile;
 
 use super::sc_record::{ScRecord, ScRecordOptions};
-
-// Raw-record filter
 
 /// Cheap per-record filter evaluated directly on a raw BAM record's flags and
 /// mapping quality, before any tag parsing or [`ScRecord`] construction.
@@ -73,8 +83,6 @@ impl Default for RawRecordFilter {
         Self::new()
     }
 }
-
-// QC filter
 
 /// Per-record quality-control filter.
 ///
@@ -181,8 +189,6 @@ pub(crate) fn derive_record_opts(qc: Option<&QcFilter>, has_motif: bool) -> ScRe
     }
 }
 
-// Duplicate filter
-
 /// Strategy for identifying duplicate reads.
 #[derive(Clone, Copy, Debug)]
 pub enum DupMethod {
@@ -226,7 +232,7 @@ impl DuplicateFilter {
     }
 
     /// Returns `true` if the record is the **first** occurrence of its fingerprint
-    /// and should be kept; `false` if it is a duplicate and should be dropped.
+    /// and `false` if it is a duplicate.
     pub fn passes(&mut self, rec: &ScRecord<'_>) -> bool {
         let barcode = || rec.barcode.map(<[u8]>::to_vec);
         let umi = || rec.umi.map(<[u8]>::to_vec);
@@ -243,13 +249,11 @@ impl DuplicateFilter {
     }
 }
 
-// Motif filter
-
 /// Filter that checks for a nucleotide motif at the 5′ end of the read and the
 /// corresponding genomic overhang.
 ///
 /// A record passes if **any** of the supplied `(read_motif, ref_motif)` pairs
-/// matches. For forward reads the read motif is compared to the first N bases
+/// match it. For forward reads the read motif is compared to the first N bases
 /// of the forward read sequence and the reference motif to the genomic bases
 /// immediately upstream of the alignment start. For reverse reads both windows
 /// are mirrored to the 3′ end of the alignment on the reference.
