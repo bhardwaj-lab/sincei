@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "sincei"
 description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
 readme = "README.md"
-requires-python = ">=3.10, <3.15"
+requires-python = ">=3.10, <3.13"
 dynamic = ["version"]
 license = {file = "LICENSE.txt"}
 authors = [
@@ -33,12 +33,13 @@ dependencies = [
     "umap-learn",
     "polars",
     "igraph",
+    "click",
     "typer",
     # for debug logging (referenced from the issue template)
     "session-info",
     "torch",
     "mctorch-lib",
-    # "gensim", # broken in python 3.14
+    "gensim",
     "ruptures",
     "tqdm",
     ]
