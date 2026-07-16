@@ -12,7 +12,7 @@ You can install rust via [rustup](http://rust-lang.org/tools/install/):
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-We can download _python_ and _maturin_ from conda. First, create a new conda environment, then
+Download _python_ and _maturin_ from conda. First, create a new conda environment, then
 clone this git repository, and lastly compile the program using maturin.
 
 ```bash
