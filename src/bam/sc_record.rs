@@ -91,7 +91,7 @@ impl<'a> ScRecord<'a> {
     ) -> Result<Option<Self>> {
         let flags = record.flags();
 
-        if flags.is_unmapped() || flags.is_secondary() || flags.is_supplementary() {
+        if flags.is_unmapped() {
             return Ok(None);
         }
 
