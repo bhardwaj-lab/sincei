@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import typer
 
 from sincei import _sincei as internal
@@ -19,9 +21,10 @@ from ._common_args import (
 )
 
 DESCRIPTION = (
-    "Filter cell barcodes from BAM file (for droplet-based single-cell seq).\n\n"
+    "Filter cell barcodes from a BAM file (for droplet-based single-cell seq).\n\n"
     "``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a list. You can"
     "optionally filter these barcodes by matching them to a whitelist or based on total counts."
+    "This tool expects single experiment BAM files, not merged files."
 )
 
 
@@ -133,16 +136,25 @@ def main(
         num_threads=number_of_processors,
     )
 
-    # Match scFilterBarcodes.py: a TSV with a leading (unnamed) index column plus
-    # `barcode`, `count` (number of non-zero bins the barcode was seen in), and
-    # `selected` (True when count >= --minCount).  All detected barcodes are
-    # listed, sorted by descending count for a knee-plot-friendly ordering.
+    # A TSV of every detected barcode, sorted by descending count for a
+    # knee-plot-friendly ordering: `count` is the number of non-zero bins the
+    # barcode was seen in, `selected` is True when count >= min_count, and
+    # `count_log10` and `count_rank` are the knee-plot axes.
+    #
+    # Two barcodes with the same count share the same rank, and the next rank is
+    # incremented by the number of barcodes with that count.
     barcode_counts.sort(key=lambda bc: (-bc[1], bc[0]))
+    rank_of_count: dict[int, int] = {}
+    for position, (_, count) in enumerate(barcode_counts):
+        rank_of_count.setdefault(count, position + 1)
+
     with open(out_file, "w") as out:
-        out.write("\tbarcode\tcount\tselected\n")
-        for i, (barcode, count) in enumerate(barcode_counts):
+        out.write("barcode\tcount\tselected\tcount_log10\tcount_rank\n")
+        for barcode, count in barcode_counts:
             selected = count >= min_count
-            out.write(f"{i}\t{barcode}\t{count}\t{selected}\n")
+            # The backend only reports barcodes it saw, so count >= 1 and
+            # log10 is always defined.
+            out.write(f"{barcode}\t{count}\t{selected}\t{math.log10(count)}\t{rank_of_count[count]}\n")
 
     if rank_plot:
         from sincei.plotting._barcode_rank import plot_barcode_rank

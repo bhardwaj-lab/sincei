@@ -98,7 +98,7 @@ fn run_filter_barcodes(
                     let record = result.context("failed to read BAM record")?;
 
                     let flags = record.flags();
-                    if flags.is_unmapped() || flags.is_secondary() || flags.is_supplementary() {
+                    if flags.is_unmapped() {
                         continue;
                     }
 
@@ -156,12 +156,12 @@ fn run_filter_barcodes(
                         continue;
                     }
 
-                    let first_bin = start / bin_size;
-                    let last_bin = (end - 1) / bin_size;
-                    let bin_set = local_bins.entry(barcode).or_default();
-                    for bin_idx in first_bin..=last_bin {
-                        bin_set.insert((chrom.clone(), bin_idx));
-                    }
+                    // A read counts once, in the bin holding its start.
+                    let bin_idx = start / bin_size;
+                    local_bins
+                        .entry(barcode)
+                        .or_default()
+                        .insert((chrom.clone(), bin_idx));
                 }
 
                 Ok(local_bins)
