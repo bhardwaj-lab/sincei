@@ -20,19 +20,19 @@ from ._common_args import (
 
 # Column order produced by the Rust `filter_stats` backend (BarcodeStat::to_vec).
 _STAT_COLUMNS = [
-    "total",
-    "filtered",
-    "blacklisted",
-    "low_mapq",
-    "missing_flags",
-    "excluded_flags",
-    "internal_dupes",
-    "external_dupes",
-    "singletons",
-    "wrong_strand",
-    "wrong_motif",
-    "wrong_gc",
-    "low_aligned_fraction",
+    "Total_sampled",
+    "Filtered",
+    "Blacklisted",
+    "Low_MAPQ",
+    "Missing_Flags",
+    "Excluded_Flags",
+    "Internal_Duplicates",
+    "Marked_Duplicates",
+    "Singletons",
+    "Wrong_strand",
+    "Wrong_motif",
+    "Unwanted_GC_content",
+    "Low_aligned_fraction",
 ]
 
 
@@ -56,7 +56,7 @@ DESCRIPTION = (
     "``scFilterStats`` estimates the number of reads that would be filtered given a set of criteria"
     "and prints it to the terminal. Furthermore, it tracks the number of singleton reads."
     "The following metrics will always be tracked regardless of what you specify (the order output also matches this):\n"
-    "* Total reads (including unmapped)\n"
+    "* Total sampleed reads (including unmapped)\n"
     "* Mapped reads\n"
     "* Reads in blacklisted regions (--blackListFileName)\n\n"
     "The following metrics are estimated according to the --binSize and --distanceBetweenBins parameters:\n"
@@ -88,8 +88,8 @@ def main(
     barcodes: str = INPUT_OUTPUT_OPTS["barcodes"],
     out_file: str = INPUT_OUTPUT_OPTS["out_file"],
     cell_tag: str = BAM_OPTS["cell_tag"],
-    bin_size: int = override(BAM_OPTS["bin_size"], default=100000),
-    distance_between_bins: int | None = override(BAM_OPTS["distance_between_bins"], default=1000000),
+    bin_size: int = override(BAM_OPTS["bin_size"], default=100_000),
+    distance_between_bins: int | None = override(BAM_OPTS["distance_between_bins"], default=1_000_000),
     duplicate_filter: DuplicateFilter | None = FILTER_OPTS["duplicate_filter"],
     motif_filter: list[str] = FILTER_OPTS["motif_filter"],
     genome_2bit: str | None = FILTER_OPTS["genome_2bit"],
@@ -136,13 +136,14 @@ def main(
     )
 
     # The backend processes one BAM at a time; aggregate the per-sample rows
-    # into a single TSV with a leading `sample` column.
+    # into a single TSV keyed by `Cell_ID` (`{sample}::{barcode}`, the same
+    # identifier the counting tools use for AnnData's obs_names).
     with open(out_file, "w") as out:
-        out.write("\t".join(["sample", "barcode", *_STAT_COLUMNS]) + "\n")
+        out.write("\t".join(["Cell_ID", *_STAT_COLUMNS]) + "\n")
         for bam, label in zip(bam_files, sample_labels):
             result_barcodes, stat_rows = internal.filter_stats(bam, **kwargs)
             for barcode, row in zip(result_barcodes, stat_rows):
-                out.write("\t".join([label, barcode, *_format_row(row)]) + "\n")
+                out.write("\t".join([f"{label}::{barcode}", *_format_row(row)]) + "\n")
 
     return 0
 
