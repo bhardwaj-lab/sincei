@@ -89,6 +89,36 @@ def _norm(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()).rstrip("\n")
 
 
+# The exact output contract. Spelled out here rather than derived from the code,
+# so that changing the tool's columns fails this test instead of silently
+# rewriting every snapshot.
+EXPECTED_HEADER = (
+    "Cell_ID\tTotal_sampled\tFiltered\tBlacklisted\tLow_MAPQ\tMissing_Flags\tExcluded_Flags\t"
+    "Internal_Duplicates\tMarked_Duplicates\tSingletons\tWrong_strand\tWrong_motif\t"
+    "Unwanted_GC_content\tLow_aligned_fraction"
+)
+
+
+def test_header_is_exact(tmp_path: Path) -> None:
+    text = run_tool(_args("baseline"), str(tmp_path / "header.tsv"))
+    assert text.splitlines()[0] == EXPECTED_HEADER
+
+
+def test_cell_id_joins_sample_and_barcode(tmp_path: Path) -> None:
+    """Cell_ID is `{sample}::{barcode}`, one column, not a sample/barcode pair."""
+    text = run_tool(["-l", "mysample", *SAMPLING], str(tmp_path / "cell_id.tsv"))
+    header, *rows = text.splitlines()
+
+    assert header.split("\t")[0] == "Cell_ID"
+    barcodes = [line.strip() for line in Path(BARCODES).read_text().splitlines() if line.strip()]
+    cell_ids = [row.split("\t")[0] for row in rows]
+    assert cell_ids == [f"mysample::{bc}" for bc in barcodes]
+
+    # One Cell_ID column + 13 stat columns, on the header and every row alike.
+    assert len(header.split("\t")) == 14
+    assert all(len(row.split("\t")) == 14 for row in rows)
+
+
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
 def test_snapshot(name: str, tmp_path: Path) -> None:
     snap = SNAP_DIR / f"{name}.tsv"

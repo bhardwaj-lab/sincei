@@ -1,9 +1,9 @@
-	barcode	count	selected
-0	ACGGTAAT	1	False
-1	ATATAACT	1	False
-2	CGTGGTAA	1	False
-3	GCGAGCAT	1	False
-4	GCGCTGAC	1	False
-5	GGAGTCAT	1	False
-6	GTCAAGCA	1	False
-7	TAGACTTG	1	False
+barcode	count	selected	count_log10	count_rank
+ACGGTAAT	1	False	0.0	1
+ATATAACT	1	False	0.0	1
+CGTGGTAA	1	False	0.0	1
+GCGAGCAT	1	False	0.0	1
+GCGCTGAC	1	False	0.0	1
+GGAGTCAT	1	False	0.0	1
+GTCAAGCA	1	False	0.0	1
+TAGACTTG	1	False	0.0	1
