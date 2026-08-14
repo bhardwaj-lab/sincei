@@ -74,7 +74,9 @@ def main(
         help='The output file name to plot the ranked counts per barcode (similar to the "knee plot", but counts are '
         "the number of non-zero bins in this case).",
     ),
-    min_mapping_quality: int | None = override(READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE),
+    min_mapping_quality: int | None = override(
+        READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE
+    ),
     # BAM options
     cell_tag: str = BAM_OPTS["cell_tag"],
     group_tag: str = BAM_OPTS["group_tag"],
@@ -83,7 +85,9 @@ def main(
     blacklist: list[str] = BAM_OPTS["blacklist"],
     chr_to_skip: list[str] = BAM_OPTS["chr_to_skip"],
     bin_size: int = override(BAM_OPTS["bin_size"], default=100000),
-    distance_between_bins: int | None = override(BAM_OPTS["distance_between_bins"], default=None),
+    distance_between_bins: int | None = override(
+        BAM_OPTS["distance_between_bins"], default=None
+    ),
     # Filter options
     duplicate_filter: DuplicateFilter | None = FILTER_OPTS["duplicate_filter"],
     motif_filter: list[str] = FILTER_OPTS["motif_filter"],
@@ -123,13 +127,12 @@ def main(
         center_reads=center_reads,
     )
 
-    barcode_counts, _selected_barcodes = internal.filter_barcodes(
+    barcode_counts = internal.filter_barcodes(
         bam_file,
         whitelist=backend.read_barcodes(whitelist) if whitelist else None,
         blacklist_file_name=backend.first_blacklist(blacklist),
         cell_tag=cell_tag,
         min_hamming_dist=min_hamming_dist,
-        min_count=min_count,
         min_mapping_quality=min_mapping_quality,
         bin_size=bin_size,
         chr_to_skip=chr_to_skip or [],
@@ -143,7 +146,6 @@ def main(
     #
     # Two barcodes with the same count share the same rank, and the next rank is
     # incremented by the number of barcodes with that count.
-    barcode_counts.sort(key=lambda bc: (-bc[1], bc[0]))
     rank_of_count: dict[int, int] = {}
     for position, (_, count) in enumerate(barcode_counts):
         rank_of_count.setdefault(count, position + 1)
@@ -154,7 +156,9 @@ def main(
             selected = count >= min_count
             # The backend only reports barcodes it saw, so count >= 1 and
             # log10 is always defined.
-            out.write(f"{barcode}\t{count}\t{selected}\t{math.log10(count)}\t{rank_of_count[count]}\n")
+            out.write(
+                f"{barcode}\t{count}\t{selected}\t{math.log10(count)}\t{rank_of_count[count]}\n"
+            )
 
     if rank_plot:
         from sincei.plotting._barcode_rank import plot_barcode_rank
