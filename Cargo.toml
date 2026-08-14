@@ -82,3 +82,9 @@ tempfile = { version = "3" }
 # jemalloc for faster memory allocation on non-MSVC platforms (e.g. Linux, macOS)
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "0.7", features = ["disable_initial_exec_tls"] }
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+panic = 'unwind'
