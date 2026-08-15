@@ -93,6 +93,7 @@ fn sparse_band_corr(cols: &[(&[usize], &[f64])], n: usize, k: usize) -> Vec<Vec<
 }
 
 /// Dot product of two columns given as sorted `(row_index, value)` pairs.
+#[inline]
 fn sparse_dot(rows_a: &[usize], vals_a: &[f64], rows_b: &[usize], vals_b: &[f64]) -> f64 {
     let (mut i, mut j) = (0, 0);
     let mut sum = 0.0;
@@ -229,6 +230,7 @@ impl SegmentCost {
         }
     }
 
+    #[inline]
     fn cost(&self, a: usize, b: usize) -> f64 {
         let len = (b - a) as f64;
         let mut total = 0.0;

@@ -244,9 +244,9 @@ enum WhitelistMatcher<'a> {
 ///
 /// Two equal-length strings at Hamming distance `<= d` must agree on at least
 /// one of `d + 1` disjoint blocks, because `d` substitutions cannot touch every
-/// block. Indexing each entry under all of its blocks therefore yields a
-/// candidate set that provably contains every true match, and the exact
-/// `hamming` check then runs on those candidates alone.
+/// block. Indexing each entry under all of its blocks yields a candidate set
+/// that contains every true match, and the exact `hamming` check then runs on
+/// those candidates alone.
 ///
 /// Entries are bucketed by length as well, since only equal-length entries are
 /// comparable and the block boundaries depend on the length.
@@ -443,8 +443,7 @@ mod tests {
         entries.iter().map(|s| s.to_string()).collect()
     }
 
-    /// What the pigeonhole index replaced: a scan of the whole whitelist.
-    fn brute_force(whitelist: &[String], barcode: &[u8], max_dist: usize) -> bool {
+    fn brute_force_match(whitelist: &[String], barcode: &[u8], max_dist: usize) -> bool {
         whitelist.iter().any(|entry| {
             entry.len() == barcode.len()
                 && hamming(barcode, entry.as_bytes()) as usize <= max_dist
@@ -464,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn fuzzy_matcher_accepts_within_the_distance_and_rejects_beyond_it() {
+    fn fuzzy_matcher_accepts_within_distance_and_rejects_beyond_it() {
         let whitelist = wl(&["AAAACCCC", "GGGGTTTT"]);
         let matcher = WhitelistMatcher::build(&whitelist, 1);
 
@@ -487,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn fuzzy_matcher_agrees_with_a_whole_whitelist_scan() {
+    fn fuzzy_matcher_agrees_with_whole_whitelist_scan() {
         // The index is an optimization, so its answers must be identical to the
         // scan it replaced for every query, not merely similar.
         let bases = [b'A', b'C', b'G', b'T'];
@@ -511,7 +510,7 @@ mod tests {
                             let query = [a, b, c, d];
                             assert_eq!(
                                 matcher.matches(&query),
-                                brute_force(&whitelist, &query, max_dist),
+                                brute_force_match(&whitelist, &query, max_dist),
                                 "disagreement at {:?} with max_dist {}",
                                 std::str::from_utf8(&query).unwrap(),
                                 max_dist

@@ -268,6 +268,7 @@ impl<'a> ScRecord<'a> {
 
 /// GC fraction of a sequence in `[0, 1]`, or `None` for an empty sequence.
 /// Counts uppercase `G`/`C` only (BAM sequences are upper-cased on decode).
+#[inline]
 fn gc_fraction(seq: &[u8]) -> Option<f32> {
     if seq.is_empty() {
         return None;

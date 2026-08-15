@@ -48,6 +48,7 @@ impl RawRecordFilter {
     }
 
     /// Returns `true` if the record passes all active thresholds.
+    #[inline]
     pub fn passes(&self, flags: u16, mapq: Option<u8>) -> bool {
         if let Some(min_q) = self.min_mapq {
             match mapq {
@@ -347,6 +348,7 @@ impl MotifFilter {
 /// per fragment.
 ///
 /// `flags` is the raw SAM flag field (u16 little-endian bit pattern).
+#[inline]
 pub fn rna_strand_filter(flags: u16, strand: &str) -> bool {
     let paired = flags & 0x1 != 0;
     if paired {
@@ -368,6 +370,7 @@ pub fn rna_strand_filter(flags: u16, strand: &str) -> bool {
     }
 }
 
+#[inline]
 fn complement(b: u8) -> u8 {
     match b.to_ascii_uppercase() {
         b'A' => b'T',
