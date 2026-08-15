@@ -114,23 +114,40 @@ multi_line_output = 3
 profile = "black"
 skip_glob = ["docs/*"]
 
-[tool.black]
-line-length = 120
-target-version = ['py312']
-include = '\.pyi?$'
-exclude = '''
-(
-  /(
-      \.eggs
-    | \.git
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | buck-out
-    | build
-    | dist
-  )/
-)
-'''
+[tool.ruff]
+src = [ "src" ]
+format.preview = true
+format.docstring-code-format = true
+lint.select = [
+    "ANN",  # Annotations
+    "B",    # Likely bugs and design issues
+    "BLE",  # Blind except
+    "C4",   # Comprehensions
+    "E",    # Error detected by Pycodestyle
+    "EM",   # Traceback-friendly error messages
+    "F",    # Errors detected by Pyflakes
+    "I",    # isort
+    "ICN",  # Follow import conventions
+    "ISC",  # Implicit string concatenation
+    "PERF", # Performance
+    "PIE",  # Syntax simplifications
+    "PL",   # Pylint
+    "PT",   # Pytest conventions
+    "PTH",  # Pathlib instead of os.path
+    "PYI",  # Typing
+    "RUF",  # Unused noqa
+    "SIM",  # Code simplifications
+    "TC",   # manage type checking blocks
+    "TID",  # Banned imports
+    "UP",   # pyupgrade
+    "W",    # Warning detected by Pycodestyle
+]
+
+lint.ignore = [
+    "FBT", # Boolean positional arguments
+    "PLR2004", # Magic numbers
+    "PLR0913", # Too many arguments
+    "PLR0912", # Too many branches
+    "PLR0915", # Too many statements
+    "PLR0917", # Too many positional arguments
+]
