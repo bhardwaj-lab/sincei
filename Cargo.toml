@@ -43,10 +43,10 @@ anyhow = { version = "1.0" }
 
 # Parallel iterator adapters for easy multi-threaded processing
 rayon = { version = "1.11" }
-tokio = { version = "1.52", features = ["rt"] }
+tokio = { version = "1.53", features = ["rt"] }
 
 # BAM/SAM parsing
-noodles = { version = "0.112", features = ["bam", "sam", "bgzf", "bed", "gff", "gtf", "core"] }
+noodles = { version = "0.115", features = ["bam", "sam", "bgzf", "bed", "gff", "gtf", "core"] }
 
 # gzip/BGZF decompression for annotation files (BED/GTF/GFF3)
 flate2 = { version = "1" }
@@ -65,7 +65,7 @@ anndata = { version = "0.7" }
 anndata-hdf5 = { version = "0.5" }
 
 # Byte strings
-bstr = { version = "1.12" }
+bstr = { version = "1.13" }
 
 # Fast non-cryptographic hasher
 ahash = { version = "0.8" }
