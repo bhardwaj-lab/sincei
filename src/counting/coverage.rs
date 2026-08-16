@@ -24,7 +24,7 @@ use rayon::prelude::*;
 
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::build_bin_index;
+use crate::annotation::region_index::build_bigwig_index;
 use crate::bam::bam_io::{BamWorker, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -69,8 +69,7 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
     if !rec.is_proper_pair || rec.is_reverse || tlen <= 1 {
         return None;
     }
-    // Python: fragment_start = read.pos + read.tlen / 2 - 1
-    // Integer tlen/2 matches Python 3 float division here because both round down.
+
     let frag_start = rec.alignment_start + tlen / 2 - 1;
     let frag_end = frag_start + if tlen.is_multiple_of(2) { 2 } else { 3 };
     Some((frag_start, frag_end))
@@ -316,7 +315,7 @@ pub fn run_bulk_coverage(
             .collect()
     };
 
-    let (bin_index, _feature_names) = build_bin_index(&chrom_sizes, bin_size, step_size);
+    let bin_index = build_bigwig_index(&chrom_sizes, bin_size, step_size);
 
     let blacklist = params
         .blacklist_path
@@ -370,8 +369,11 @@ pub fn run_bulk_coverage(
         _ => None,
     };
 
-    // Parallel phase: accumulate per-(cell_idx, bin_idx) counts.
-    let partial_accumulators: Vec<AHashMap<(usize, usize), u32>> = pool.install(|| {
+    // Parallel phase: accumulate per-(cell_idx, bin_idx) counts, then combine
+    // the per-chunk maps with a parallel tree reduction. Collecting them all and
+    // merging on one thread instead cost ~15% of wall-clock time in the bin
+    // counter (see `bin_matrix.rs`), and held every partial map in memory at once.
+    let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
         work.par_iter()
             .map_init(
                 BamWorker::new,
@@ -508,52 +510,67 @@ pub fn run_bulk_coverage(
                     Ok(local_acc)
                 },
             )
-            .collect::<Result<Vec<_>>>()
+            .reduce(
+                || Ok(AHashMap::new()),
+                |a, b| {
+                    let (a, b) = (a?, b?);
+                    // Drain the smaller map into the larger. Merging costs one
+                    // hash lookup per entry moved, so moving the shorter side
+                    // does strictly less work.
+                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+                    for (key, val) in drain {
+                        *keep.entry(key).or_insert(0) += val;
+                    }
+                    Ok(keep)
+                },
+            )
     })?;
-
-    // Sequential merge.
-    let mut global_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
-    for partial in partial_accumulators {
-        for ((cell, bin), val) in partial {
-            *global_acc.entry((cell, bin)).or_insert(0) += val;
-        }
-    }
 
     // Aggregate per (group, bin)
 
-    // sum of counts per (group, bin)
-    let mut group_bin_sum: AHashMap<(usize, usize), f64> = AHashMap::new();
-    // number of cells with ≥1 read in bin, per (group, bin). Needed for Frequency
-    let mut group_bin_n_cells: AHashMap<(usize, usize), usize> = AHashMap::new();
+    let n_bins = bin_index.n_bins;
+
+    // Sum of counts per (group, bin), as a dense row per group indexed
+    // `group_idx * n_bins + bin_idx`.
+    //
+    // A pseudo-bulk track pools many cells, so most bins carry signal and a hash
+    // map buys nothing for the sparsity. It costs, though: an entry keyed by
+    // `(usize, usize)` spends 16 bytes on the key and a control byte on top of
+    // the 8-byte value, against 8 bytes flat here. Dense is both the faster and
+    // the smaller representation at this density.
+    let mut group_bin_sum: Vec<f64> = vec![0.0; n_groups * n_bins];
+
+    // Cells with >=1 read in a bin, per (group, bin). Only `Frequency` reads
+    // this, so it stays unallocated for every other normalization.
+    let mut group_bin_n_cells: Option<Vec<u32>> =
+        matches!(normalize_using, NormalizeMethod::Frequency)
+            .then(|| vec![0u32; n_groups * n_bins]);
+
     // total reads per group (excluding ignored chroms). Needed for CPM/RPKM denominators
     let mut group_total: Vec<f64> = vec![0.0; n_groups];
 
-    // Build a fast set for ignore_for_normalization
-    let ignore_set: std::collections::HashSet<&str> = ignore_for_normalization
+    // Bin ranges of the chromosomes left out of the normalization denominator.
+    // Whether a bin is ignored varies only by chromosome, so this is a short
+    // list of half-open ranges to scan.
+    // A chromosome that is not in the index (it was skipped entirely) simply
+    // contributes no range.
+    let ignored_bin_ranges: Vec<(usize, usize)> = ignore_for_normalization
         .iter()
-        .map(String::as_str)
-        .collect();
-
-    // For each bin, know its chromosome so we can apply ignore_for_normalization.
-    // Build bin_idx -> chrom mapping lazily from chrom_sizes + bin_index.
-    let bin_to_chrom: AHashMap<usize, &str> = chrom_sizes
-        .iter()
-        .filter_map(|(chrom, _)| {
-            bin_index.chrom_bins.get(chrom).map(|&(offset, n_bins)| {
-                (offset..offset + n_bins).map(move |bin_idx| (bin_idx, chrom.as_str()))
-            })
-        })
-        .flatten()
+        .filter_map(|chrom| bin_index.chrom_bins.get(chrom.as_str()))
+        .map(|&(offset, n_bins)| (offset, offset + n_bins))
         .collect();
 
     for (&(cell_idx, bin_idx), &count) in &global_acc {
         let group_idx = cell_group[cell_idx];
-        *group_bin_sum.entry((group_idx, bin_idx)).or_insert(0.0) += count as f64;
-        *group_bin_n_cells.entry((group_idx, bin_idx)).or_insert(0) += 1;
+        let slot = group_idx * n_bins + bin_idx;
+        group_bin_sum[slot] += count as f64;
+        if let Some(n_cells) = group_bin_n_cells.as_mut() {
+            n_cells[slot] += 1;
+        }
         // Exclude ignored chroms from normalization denominator.
-        let is_ignored = bin_to_chrom
-            .get(&bin_idx)
-            .is_some_and(|c| ignore_set.contains(c));
+        let is_ignored = ignored_bin_ranges
+            .iter()
+            .any(|&(start, end)| bin_idx >= start && bin_idx < end);
         if !is_ignored {
             group_total[group_idx] += count as f64;
         }
@@ -566,93 +583,99 @@ pub fn run_bulk_coverage(
         OutputFormat::BedGraph => "bedgraph",
     };
 
-    let mut output_files: Vec<PathBuf> = Vec::with_capacity(n_groups);
+    let output_files: Vec<PathBuf> = pool.install(|| {
+        (0..n_groups)
+            .into_par_iter()
+            .map(|group_idx| -> Result<PathBuf> {
+                let group_name = &parsed.groups[group_idx];
+                let output_path = PathBuf::from(format!(
+                    "{}.{}.{}",
+                    output_prefix,
+                    sanitize_group_name(group_name),
+                    ext
+                ));
 
-    // Sanitize group name for use as a file component.
-    let safe_name = |s: &str| sanitize_group_name(s);
+                let total_reads = group_total[group_idx];
+                let n_cells_in_group = parsed.n_cells_per_group[group_idx] as f64;
+                // Start of this group's dense row.
+                let group_base = group_idx * n_bins;
 
-    for group_idx in 0..n_groups {
-        let group_name = &parsed.groups[group_idx];
-        let output_path = PathBuf::from(format!(
-            "{}.{}.{}",
-            output_prefix,
-            safe_name(group_name),
-            ext
-        ));
+                // Build sorted (chrom, Value) list by iterating bins in
+                // chromosome order.
+                let mut values: Vec<(String, Value)> = Vec::new();
 
-        let total_reads = group_total[group_idx];
-        let n_cells_in_group = parsed.n_cells_per_group[group_idx] as f64;
+                for (chrom_name, chrom_len) in &chrom_sizes {
+                    let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name)
+                    else {
+                        continue;
+                    };
 
-        // Build sorted (chrom, Value) list by iterating bins in chromosome order.
-        let mut values: Vec<(String, Value)> = Vec::new();
+                    for local_bin in 0..n_chrom_bins {
+                        let bin_idx = offset + local_bin;
 
-        for (chrom_name, chrom_len) in &chrom_sizes {
-            let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else {
-                continue;
-            };
-
-            for local_bin in 0..n_chrom_bins {
-                let bin_idx = offset + local_bin;
-
-                let raw_sum = match group_bin_sum.get(&(group_idx, bin_idx)) {
-                    Some(&s) if s > 0.0 => s,
-                    _ => continue,
-                };
-
-                let normalized = match normalize_using {
-                    NormalizeMethod::None => raw_sum * scale_factor,
-                    NormalizeMethod::Cpm => {
-                        if total_reads > 0.0 {
-                            raw_sum / total_reads * 1e6 * scale_factor
-                        } else {
-                            0.0
+                        let raw_sum = group_bin_sum[group_base + bin_idx];
+                        if raw_sum <= 0.0 {
+                            continue;
                         }
-                    }
-                    NormalizeMethod::Rpkm => {
-                        if total_reads > 0.0 {
-                            raw_sum / (total_reads * bin_size as f64 / 1e9) * scale_factor
-                        } else {
-                            0.0
-                        }
-                    }
-                    NormalizeMethod::Mean => raw_sum / n_cells_in_group * scale_factor,
-                    NormalizeMethod::Frequency => {
-                        let n_cells_with = group_bin_n_cells
-                            .get(&(group_idx, bin_idx))
-                            .copied()
-                            .unwrap_or(0) as f64;
-                        n_cells_with / n_cells_in_group * scale_factor
-                    }
-                };
 
-                if normalized == 0.0 {
-                    continue;
+                        let normalized = match normalize_using {
+                            NormalizeMethod::None => raw_sum * scale_factor,
+                            NormalizeMethod::Cpm => {
+                                if total_reads > 0.0 {
+                                    raw_sum / total_reads * 1e6 * scale_factor
+                                } else {
+                                    0.0
+                                }
+                            }
+                            NormalizeMethod::Rpkm => {
+                                if total_reads > 0.0 {
+                                    raw_sum / (total_reads * bin_size as f64 / 1e9) * scale_factor
+                                } else {
+                                    0.0
+                                }
+                            }
+                            NormalizeMethod::Mean => raw_sum / n_cells_in_group * scale_factor,
+                            NormalizeMethod::Frequency => {
+                                // Allocated exactly when this arm is reachable.
+                                let n_cells_with = group_bin_n_cells
+                                    .as_ref()
+                                    .expect("Frequency normalization tracks per-bin cell counts")
+                                    [group_base + bin_idx]
+                                    as f64;
+                                n_cells_with / n_cells_in_group * scale_factor
+                            }
+                        };
+
+                        if normalized == 0.0 {
+                            continue;
+                        }
+
+                        let start = (local_bin * step_size) as u32;
+                        let end = ((local_bin * step_size + bin_size).min(*chrom_len)) as u32;
+                        values.push((
+                            chrom_name.clone(),
+                            Value {
+                                start,
+                                end,
+                                value: normalized as f32,
+                            },
+                        ));
+                    }
                 }
 
-                let start = (local_bin * step_size) as u32;
-                let end = ((local_bin * step_size + bin_size).min(*chrom_len)) as u32;
-                values.push((
-                    chrom_name.clone(),
-                    Value {
-                        start,
-                        end,
-                        value: normalized as f32,
-                    },
-                ));
-            }
-        }
+                match out_format {
+                    OutputFormat::BigWig => {
+                        write_bigwig(&output_path, &chrom_sizes, values)?;
+                    }
+                    OutputFormat::BedGraph => {
+                        write_bedgraph(&output_path, &values)?;
+                    }
+                }
 
-        match out_format {
-            OutputFormat::BigWig => {
-                write_bigwig(&output_path, &chrom_sizes, values)?;
-            }
-            OutputFormat::BedGraph => {
-                write_bedgraph(&output_path, &values)?;
-            }
-        }
-
-        output_files.push(output_path);
-    }
+                Ok(output_path)
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
 
     Ok(output_files)
 }

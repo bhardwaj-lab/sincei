@@ -144,26 +144,67 @@ pub struct BinIndex {
     pub n_bins: usize,
 }
 
-/// Tile each chromosome into bins and return a [`BinIndex`] together with
-/// ordered feature names (`"chrom:start-end"`).
+/// Tile each chromosome into bins, without naming them.
 ///
-/// The last bin's `end` is clamped to the chromosome size.
+/// A bin's position is arithmetic, so the tiling needs nothing per bin beyond
+/// the count: chromosome `c` holds `ceil(chrom_size / step_size)` bins, since a
+/// bin starts every `step_size` bp for as long as that start is inside the
+/// chromosome.
+///
+/// Use this wherever the bins are only ever counted into and written out by
+/// coordinate — coverage tracks, for one. [`build_bin_index`] additionally
+/// materializes a [`Feature`] per bin, which only the count matrices need for
+/// their `var` table, and which at a 100 bp bin size means tens of millions of
+/// allocated names.
+///
 /// Chromosomes with size 0 are skipped.
-pub fn build_bin_index(
+pub fn build_bigwig_index(
     chrom_sizes: &[(String, usize)],
     bin_size: usize,
     step_size: usize,
-) -> (BinIndex, Vec<Feature>) {
-    let mut var: Vec<Feature> = Vec::new();
+) -> BinIndex {
     let mut chrom_bins: AHashMap<String, (usize, usize)> = AHashMap::new();
+    let mut n_bins = 0usize;
 
     for (chrom, chrom_size) in chrom_sizes {
         let chrom_size = *chrom_size;
         if chrom_size == 0 {
             continue;
         }
-        let first_idx = var.len();
-        let mut n_bins = 0usize;
+        let chrom_n_bins = chrom_size.div_ceil(step_size);
+        chrom_bins.insert(chrom.clone(), (n_bins, chrom_n_bins));
+        n_bins += chrom_n_bins;
+    }
+
+    BinIndex {
+        bin_size,
+        step_size,
+        chrom_bins,
+        n_bins,
+    }
+}
+
+/// Tile each chromosome into bins and return a [`BinIndex`] together with one
+/// [`Feature`] per bin, named `"chrom:start-end"`.
+///
+/// The last bin's `end` is clamped to the chromosome size.
+/// Chromosomes with size 0 are skipped.
+///
+/// The tiling itself comes from [`build_bigwig_index`], so the two cannot
+/// disagree on how many bins a chromosome has.
+pub fn build_bin_index(
+    chrom_sizes: &[(String, usize)],
+    bin_size: usize,
+    step_size: usize,
+) -> (BinIndex, Vec<Feature>) {
+    let index = build_bigwig_index(chrom_sizes, bin_size, step_size);
+    let mut var: Vec<Feature> = Vec::with_capacity(index.n_bins);
+
+    for (chrom, chrom_size) in chrom_sizes {
+        let chrom_size = *chrom_size;
+        if chrom_size == 0 {
+            continue;
+        }
         let mut bin_start = 0;
         while bin_start < chrom_size {
             let bin_end = (bin_start + bin_size).min(chrom_size);
@@ -174,24 +215,11 @@ pub fn build_bin_index(
                 name: format!("{}:{}-{}", chrom, bin_start, bin_end),
                 strand: '*',
             });
-            n_bins += 1;
             bin_start += step_size;
-        }
-        if n_bins > 0 {
-            chrom_bins.insert(chrom.clone(), (first_idx, n_bins));
         }
     }
 
-    let n_bins = var.len();
-    (
-        BinIndex {
-            bin_size,
-            step_size,
-            chrom_bins,
-            n_bins,
-        },
-        var,
-    )
+    (index, var)
 }
 
 #[cfg(test)]
@@ -261,6 +289,31 @@ mod tests {
         let idx = ChromIndex::build(vec![iv(100, 200, 0), iv(100, 200, 1), iv(100, 150, 2)]);
         assert_eq!(hits(&idx, 120, 130), vec![0, 1, 2]);
         assert_eq!(hits(&idx, 160, 170), vec![0, 1]);
+    }
+
+    #[test]
+    fn the_name_free_index_tiles_exactly_like_the_named_one() {
+        // `build_bigwig_index` derives the bin count arithmetically while
+        // `build_bin_index` walks the tiling, so they have to be checked against
+        // each other: a disagreement would silently shift every bin's column.
+        let chrom_sizes = vec![
+            ("chr1".to_string(), 250),
+            ("chrEmpty".to_string(), 0),
+            ("chr2".to_string(), 100),
+            ("chrShort".to_string(), 30),
+        ];
+
+        for (bin_size, step_size) in [(100, 100), (50, 25), (100, 50), (1, 1), (1000, 1000)] {
+            let bare = build_bigwig_index(&chrom_sizes, bin_size, step_size);
+            let (named, var) = build_bin_index(&chrom_sizes, bin_size, step_size);
+
+            assert_eq!(bare.n_bins, named.n_bins, "bin/step {bin_size}/{step_size}");
+            assert_eq!(bare.n_bins, var.len(), "bin/step {bin_size}/{step_size}");
+            assert_eq!(
+                bare.chrom_bins, named.chrom_bins,
+                "bin/step {bin_size}/{step_size}"
+            );
+        }
     }
 
     #[test]
