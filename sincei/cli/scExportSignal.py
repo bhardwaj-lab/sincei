@@ -1,76 +1,67 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
 import argparse
 import sys
-import logging
 
 from . import ParserCommon
+from . import _parsers as backend
 
-DESCRIPTION = """
-``scExportSignal`` export AnnData to other formats.
-"""
+DESCRIPTION = "Export .h5ad objects to other formats."
 
-USAGE = "scExportSignal -i INPUT.h5ad -f FORMAT -o OUTPUT"
-
-
-def parse_arguments(args: list[str] | None = None) -> argparse.ArgumentParser:
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["h5adfile", "outFile", "region"], requiredOpts=["input", "outFilePrefix", "region"]
-    )
-    other_args = ParserCommon.otherOptions()
-
-    parser = argparse.ArgumentParser(
-        prog="scExportSignal",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[io_args, get_args(), other_args],
-        description=DESCRIPTION,
-        usage=USAGE,
-        add_help=False,
-    )
-
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    args = parser.parse_args(args)
-
-    return args
+USAGE = "scExportSignal -i counts.h5ad --outFileFormat mtx -o export"
 
 
-def get_args() -> argparse.ArgumentParser:
+_EXPORT = "Export options"
+
+
+def export_options() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-
-    group = parser.add_argument_group("Export Options")
-
+    group = parser.add_argument_group(_EXPORT)
     group.add_argument(
         "--outFileFormat",
-        type=str,
-        default="h5ad",
-        choices=["bm", "mtx", "loom"],
-        help="Output file format for `scExportSignal`. "
-        '"bm" refers to the BedGraphMatrix format, useful for single-cell data visualization '
-        "with pyGenomeTracks. It stores data in dense format, so we recommend choosing a "
-        "region to export instead of the whole dataset. "
-        '"mtx" refers to the MatrixMarket sparse-matrix format. The output in this case would '
-        "be <prefix>.counts.mtx, along with <prefix>.rownames.txt and <prefix>.colnames.txt"
-        '"loom" refers to the loom file format, an hddf5-based legacy format for single-cell '
-        "genomics data.",
+        dest="outFileFormat",
+        metavar="FORMAT",
+        choices=ParserCommon.EXPORT_FORMATS,
         required=True,
+        help="Output file format.\n\n"
+        "bm: BedGraphMatrix format, useful for single-cell visualization with "
+        "pyGenomeTracks; stores data densely, so prefer exporting a region rather than "
+        "the whole dataset.\n\n"
+        "mtx: MatrixMarket sparse format (<prefix>.counts.mtx plus "
+        "<prefix>.rownames.txt and <prefix>.colnames.txt).\n\n"
+        "loom: loom hdf5-based legacy format for single-cell genomics data.",
     )
-
     return parser
 
 
-def main(args: list[str] | None = None) -> int:
-    args = parse_arguments().parse_args(args)
+def parse_arguments() -> argparse.ArgumentParser:
+    return ParserCommon.build_parser(
+        DESCRIPTION,
+        USAGE,
+        [
+            ParserCommon.input_output_options(["h5ad_file", "out_prefix", "region"]),
+            export_options(),
+            ParserCommon.other_options(),
+        ],
+    )
 
-    for arg in args.__dict__:
-        logging.debug(f"{arg}: {args.__dict__[arg]}")
 
+def main(argv: list[str] | None = None) -> int:
+    parser = parse_arguments()
+    if argv is None and len(sys.argv) == 1:
+        parser.print_help()
+        return 0
+    args = parser.parse_args(argv)
+
+    backend.log_parameters(
+        input=args.input,
+        out_file=args.outFilePrefix,
+        out_file_format=args.outFileFormat,
+        region=args.region,
+        number_of_processors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
     return 0
 
 

@@ -1,53 +1,54 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
-import argparse
 import sys
-import logging
+from typing import TYPE_CHECKING
 
 from . import ParserCommon
+from . import _parsers as backend
 
-DESCRIPTION = """
-``scCombineMods`` combines multiple count matrices (output of scCountReads) of different data
-modalities (e.g. gene expression, chromatin accessibility, histone modifications) into one.
-The result is a .h5mu (MuData) file containing each of the data modalities provided.
-*NOTE*: it doesn't perform any 'batch effect correction' or 'integration' of data from different
-technologies, which requires more sophisticated methods.
-"""
+if TYPE_CHECKING:
+    import argparse
 
-USAGE = "scCombineMods -i modality1.h5ad modality2.h5ad -o combined.h5mu"
+DESCRIPTION = (
+    "Merge AnnData files from different modalities into a MuData "
+    "object.\n\n``scCombineMods`` combines multiple count matrices (output of "
+    "scCountReads) of different data modalities (e.g. gene expression, "
+    "chromatin accessibility, histone modifications) into one. The result is "
+    "a .h5mu (MuData) file containing each of the data modalities "
+    "provided.\n*NOTE*: this does not perform any 'batch effect correction' "
+    "or 'integration' of data from different technologies."
+)
+
+USAGE = "scCombineMods -i rna.h5ad atac.h5ad -l RNA ATAC -o combined.h5mu"
 
 
-def parse_arguments(args: list[str] | None = None) -> argparse.ArgumentParser:
-    io_args = ParserCommon.inputOutputOptions(
-        opts=["h5adfiles", "labels", "outFile"], requiredOpts=["h5adfiles", "labels", "outFile"]
+def parse_arguments() -> argparse.ArgumentParser:
+    return ParserCommon.build_parser(
+        DESCRIPTION,
+        USAGE,
+        [
+            ParserCommon.input_output_options(["h5ad_files", "out_file"]),
+            ParserCommon.bam_options(["labels"], defaults={"labels_required": True}),
+            ParserCommon.other_options(),
+        ],
     )
-    other_args = ParserCommon.otherOptions()
 
-    parser = argparse.ArgumentParser(
-        parents=[io_args, other_args],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=DESCRIPTION,
-        usage=USAGE,
-        add_help=False,
-    )
 
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
+def main(argv: list[str] | None = None) -> int:
+    parser = parse_arguments()
+    if argv is None and len(sys.argv) == 1:
         parser.print_help()
-        sys.exit(0)
+        return 0
+    args = parser.parse_args(argv)
 
-    return parser
-
-
-def main(args: list[str] | None = None) -> int:
-    args = parse_arguments().parse_args(args)
-
-    for arg in args.__dict__:
-        logging.debug(f"{arg}: {args.__dict__[arg]}")
-
+    backend.log_parameters(
+        input=args.input,
+        labels=args.labels,
+        out_file=args.outFile,
+        number_of_processors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
     return 0
 
 

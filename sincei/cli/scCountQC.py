@@ -1,119 +1,132 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
 import argparse
 import sys
-import logging
 
 from . import ParserCommon
+from . import _parsers as backend
 
-# from sincei import _sincei
+DESCRIPTION = (
+    "Perform quality control and filter cells and regions from a "
+    "cell-by-feature matrix.\n\n``scCountQC`` calculates multiple quality "
+    "controls metrics on the input .h5ad file (output of scCountReads) and "
+    "(optionally) filters the input file based on "
+    "filterCellArgs/filterRegionArgs. The output is either an updated .h5ad "
+    "object (if filtering is requested) or the filtering metrics "
+    "(--outMetrics)."
+)
 
-DESCRIPTTION = """
-``scCountQC`` calculates multiple quality controls metrics on the input .h5ad file (output of scCountReads) and
-(optionally) filters the input file based on filterCellArgs/filterRegionArgs. The output is either an updated .h5ad
-object (if filtering is requested) or the filtering metrics (--outMetrics).
-"""
-
-USAGE = "scCountQC -i cellCounts.h5ad -o cellCounts.filtered.h5ad -om qc_metrics.tsv"
-
-
-def parse_arguments(args: list[str] | None = None) -> argparse.ArgumentParser:
-    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"])
-    other_args = ParserCommon.otherOptions()
-    parser = argparse.ArgumentParser(
-        parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=DESCRIPTTION,
-        usage=USAGE,
-        add_help=False,
-    )
-
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    return parser
+USAGE = "scCountQC -i counts.h5ad -o filtered.h5ad"
 
 
-def get_args() -> argparse.ArgumentParser:
+_QC = "QC options"
+
+
+def qc_options() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-
-    general = parser.add_argument_group("Filtering arguments")
-    general.add_argument(
+    group = parser.add_argument_group(_QC)
+    group.add_argument(
         "-d",
         "--describe",
         action="store_true",
         help="Print a list of cell and region metrics available for QC/filtering.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "-om",
         "--outMetrics",
-        type=str,
-        help="Prefix of the output file with calculated QC metrics. If given, the cell metrics are printed in "
-        "<prefix>.cell.tsv and region metrics as <prefix>.region.tsv",
+        dest="outMetrics",
+        default=None,
+        help="Prefix of the output file with calculated QC metrics. If given, the "
+        "cell metrics are printed in <prefix>.cell.tsv and region metrics as "
+        "<prefix>.region.tsv.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "-fc",
         "--filterCellArgs",
-        type=str,
-        help='List of arguments to filter cells. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue, maxvalue; ...." '
-        "where arg_name is the QC metric for cells present in the input h5ad file. In order to view all available "
-        'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
-        "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
+        dest="filterCellArgs",
+        default=None,
+        help='List of arguments to filter cells. The format is "arg_name: minvalue, '
+        'maxvalue; arg_name: minvalue, maxvalue; ...." where arg_name is a cell QC '
+        'metric present in the input h5ad file. Run with "--describe" to view all '
+        "available metrics. The two values are used as lower and upper bounds to "
+        "filter cells.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "-fr",
         "--filterRegionArgs",
-        type=str,
-        help='List of arguments to filter regions. The format is "arg_name: minvalue, maxvalue; arg_name: minvalue; ...." '
-        "where arg_name is the QC metric for regions present in the input h5ad file. In order to view all available "
-        'cell filtering metrics, run scCountFilter with "--describe". The two arguments are supplied (minvalue, maxvalue) '
-        "they are used as lower and upper bounds to filter cells. Make sure they are float/integer numbers.",
-    )
-
-    general.add_argument(
-        "-rb",
-        "--region_blacklist",
-        help="A BED or GTF file containing regions that should be excluded from all analyses. "
-        "Regions in the anndata object that overlap with blacklisted regions will be removed.",
-        metavar="BED",
-        nargs="+",
-    )
-
-    general.add_argument(
-        "-cb",
-        "--cell_blacklist",
+        dest="filterRegionArgs",
         default=None,
-        type=argparse.FileType("r"),
-        help="A list of barcodes to be excluded for the clustering. The barcodes "
+        help='List of arguments to filter regions. The format is "arg_name: minvalue, '
+        'maxvalue; arg_name: minvalue; ...." where arg_name is a region QC metric '
+        'present in the input h5ad file. Run with "--describe" to view all available '
+        "metrics. The two values are used as lower and upper bounds to filter regions.",
+    )
+    group.add_argument(
+        "-rb",
+        "--regionBlacklist",
+        dest="regionBlacklist",
+        metavar="BED",
+        action="extend",
+        nargs="+",
+        default=None,
+        help="A BED or GTF file containing regions that should be excluded from all "
+        "analyses. Regions in the anndata object that overlap with blacklisted regions "
+        "will be removed.",
+    )
+    group.add_argument(
+        "-cb",
+        "--cellBlacklist",
+        dest="cellBlacklist",
+        default=None,
+        help="A list of barcodes to be excluded from the clustering. The barcodes "
         "(along with sample labels) must be present in the input object.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "-chb",
-        "--chrom_blacklist",
-        default=None,
-        help="A space separated list of chromosomes to exclude. eg. chrM chrUn",
-        metavar="CHR1",
+        "--chromBlacklist",
+        dest="chromBlacklist",
+        metavar="CHR",
+        action="extend",
         nargs="+",
+        default=None,
+        help="A space separated list of chromosomes to exclude, e.g. chrM chrUn.",
     )
-
     return parser
 
 
-def main(args: list[str] | None = None) -> int:
-    args = parse_arguments().parse_args(args)
+def parse_arguments() -> argparse.ArgumentParser:
+    return ParserCommon.build_parser(
+        DESCRIPTION,
+        USAGE,
+        [
+            ParserCommon.input_output_options(["h5ad_file", "out_file"]),
+            qc_options(),
+            ParserCommon.other_options(),
+        ],
+    )
 
-    for arg in args.__dict__:
-        logging.debug(f"{arg}: {args.__dict__[arg]}")
 
+def main(argv: list[str] | None = None) -> int:
+    parser = parse_arguments()
+    if argv is None and len(sys.argv) == 1:
+        parser.print_help()
+        return 0
+    args = parser.parse_args(argv)
+
+    backend.log_parameters(
+        input=args.input,
+        out_file=args.outFile,
+        describe=args.describe,
+        out_metrics=args.outMetrics,
+        filter_cell_args=args.filterCellArgs,
+        filter_region_args=args.filterRegionArgs,
+        region_blacklist=args.regionBlacklist,
+        cell_blacklist=args.cellBlacklist,
+        chrom_blacklist=args.chromBlacklist,
+        number_of_processors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
     return 0
 
 

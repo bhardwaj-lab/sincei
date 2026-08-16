@@ -1,87 +1,93 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
 import argparse
 import sys
-import logging
 
 from . import ParserCommon
+from . import _parsers as backend
 
-DESCRIPTION = """
-``scClusterCells`` clusters cells based on the dimensionality reduction in the input h5ad file.
-The result is an updated h5ad object, and (optionally) a plot and a .tsv file with UMAP coordinates
-and corresponding cluster id for each cell.
-"""
+DESCRIPTION = (
+    "Cluster cells from a cell-by-feature matrix using the Leiden "
+    "algorithm.\n\n``scClusterCells`` clusters cells based on the "
+    "dimensionality reduction in the input h5ad file. The result is an "
+    "updated h5ad object, and (optionally) a plot and a .tsv file with UMAP "
+    "coordinates and corresponding cluster id for each cell."
+)
 
-USAGE = "scClusterCells -i cellCounts.h5ad -o clustered.h5ad -op umap.png"
-
-
-def parse_arguments(args: list[str] | None = None) -> argparse.ArgumentParser:
-    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile", "outFile"], requiredOpts=["outFile"])
-    plot_args = ParserCommon.plotOptions()
-    other_args = ParserCommon.otherOptions()
-
-    parser = argparse.ArgumentParser(
-        parents=[io_args, get_args(), plot_args, other_args],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=DESCRIPTION,
-        usage=USAGE,
-        add_help=False,
-    )
-
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    return parser
+USAGE = "scClusterCells -i reduced.h5ad -o clustered.h5ad"
 
 
-def get_args() -> argparse.ArgumentParser:
+_CLUSTERING = "Clustering options"
+
+
+def clustering_options() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-
-    general = parser.add_argument_group("Clustering Options")
-    general.add_argument(
-        "-op",
+    group = parser.add_argument_group(_CLUSTERING)
+    group.add_argument(
+        "-ou",
         "--outFileUMAP",
-        metavar="STR",
-        type=str,
-        required=False,
-        help="The output plot file (for UMAP). If you specify this option, a 4-column .tsv file with the same prefix"
-        "is also created with the cell IDs, raw UMAP coordinates (UMAP1 and UMAP2) and Leiden cluster number.",
+        dest="outFileUMAP",
+        default=None,
+        help="The output plot file (for UMAP). If specified, a 4-column .tsv file with "
+        "the same prefix is also created with the cell IDs, raw UMAP coordinates "
+        "(UMAP1 and UMAP2) and Leiden cluster number.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "-cr",
         "--clusterResolution",
-        metavar="FLOAT",
-        default=1.0,
+        dest="clusterResolution",
         type=float,
-        help="Resolution parameter for Leiden clustering. Values lower than 1.0 would result in less clusters, "
-        "while higher values lead to splitting of clusters. In most cases, the optimum value would be between "
-        "0.8 and 1.2. (Default: %(default)s)",
+        default=1.0,
+        help="Resolution parameter for Leiden clustering. Values lower than 1.0 result "
+        "in fewer clusters, while higher values lead to splitting of clusters. In most "
+        "cases the optimum is between 0.8 and 1.2.",
     )
-
-    general.add_argument(
+    group.add_argument(
         "--dimRed",
-        metavar="STR",
-        type=str,
-        help="Dimensionality reduction modality to perform Leiden clustering on. If not given, the program searches "
-        "in the ``.obsm`` field of the input h5ad for the output of ``scReduceDims`` in order of preference: "
-        "LSA, LDA, logPCA, glmPCA.",
+        dest="dimRed",
+        metavar="METHOD",
+        choices=ParserCommon.DIM_RED_METHODS,
+        default=None,
+        help="Dimensionality reduction modality to perform Leiden clustering on. If "
+        "not given, the program searches the ``.obsm`` field of the input h5ad for the "
+        "output of ``scReduceDims`` in order of preference: LSA, LDA, logPCA, glmPCA.",
     )
-
     return parser
 
 
-def main(args: list[str] | None = None) -> int:
-    args = parse_arguments().parse_args(args)
+def parse_arguments() -> argparse.ArgumentParser:
+    return ParserCommon.build_parser(
+        DESCRIPTION,
+        USAGE,
+        [
+            ParserCommon.input_output_options(["h5ad_file", "out_file"]),
+            clustering_options(),
+            ParserCommon.plot_options(),
+            ParserCommon.other_options(),
+        ],
+    )
 
-    for arg in args.__dict__:
-        logging.debug(f"{arg}: {args.__dict__[arg]}")
 
+def main(argv: list[str] | None = None) -> int:
+    parser = parse_arguments()
+    if argv is None and len(sys.argv) == 1:
+        parser.print_help()
+        return 0
+    args = parser.parse_args(argv)
+
+    backend.log_parameters(
+        input=args.input,
+        out_file=args.outFile,
+        out_file_umap=args.outFileUMAP,
+        cluster_resolution=args.clusterResolution,
+        dim_red=args.dimRed,
+        plot_width=args.plotWidth,
+        plot_height=args.plotHeight,
+        plot_file_format=args.plotFileFormat,
+        number_of_processors=args.numberOfProcessors,
+        verbose=args.verbose,
+    )
     return 0
 
 
