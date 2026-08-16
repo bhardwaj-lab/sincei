@@ -155,6 +155,7 @@ def main(
     ] = None,
     # BAM options
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
@@ -218,7 +219,7 @@ def main(
             bin_size=bin_size,
             step_size=step_size,
             bc_tag=cell_tag,
-            umi_tag=None,
+            umi_tag=backend.umi_tag_if_used(umi_tag, duplicate_filter),
             region=region,
             min_mapq=min_mapping_quality,
             sam_flag_include=sam_flag_include,

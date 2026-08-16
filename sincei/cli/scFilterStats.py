@@ -97,6 +97,7 @@ def main(
     barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
     out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100_000,
     distance_between_bins: Annotated[
         int | None, BAM_OPTS["distance_between_bins"]
@@ -136,7 +137,7 @@ def main(
     kwargs = {
         "barcodes": barcode_list,
         "bc_tag": cell_tag,
-        "umi_tag": None,
+        "umi_tag": backend.umi_tag_if_used(umi_tag, duplicate_filter),
         "bin_size": bin_size,
         "distance_between_bins": distance_between_bins or 0,
         "min_mapq": min_mapping_quality,

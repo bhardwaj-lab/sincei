@@ -32,6 +32,19 @@ def dup_method(value: DuplicateFilter | None) -> str | None:
     return _DUP_METHOD_MAP[value.value] if value is not None else None
 
 
+def umi_tag_if_used(tag: str | None, duplicate_filter: DuplicateFilter | None) -> str | None:
+    """The UMI tag to ask the backend for, or ``None`` when nothing reads it.
+
+    Only the UMI-aware duplicate filters look at a record's UMI. Requesting the
+    tag anyway would make every read pay a scan of its auxiliary-tag block for a
+    value that is then discarded, on every command whether or not it
+    deduplicates at all.
+    """
+    if tag is None or duplicate_filter is None:
+        return None
+    return tag if "umi" in duplicate_filter.value else None
+
+
 def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None:
     """Parse ``["A,TA", ...]`` into ``[("A", "TA"), ...]`` (read, reference)."""
     if not motifs:

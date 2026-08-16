@@ -367,6 +367,17 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_BAM,
         help="Name of the BAM tag from which to extract barcodes.",
     ),
+    "umi_tag": typer.Option(
+        "-ut",
+        "--umiTag",
+        metavar="XX",
+        rich_help_panel=_BAM,
+        help=(
+            "Name of the BAM tag holding the UMI, used by ``--duplicateFilter`` "
+            "([bold yellow]start_bc_umi[/bold yellow] and "
+            "[bold yellow]start_end_bc_umi[/bold yellow]). "
+        ),
+    ),
     "group_tag": typer.Option(
         "-gt",
         "--groupTag",
