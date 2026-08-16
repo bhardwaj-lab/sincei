@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 
 from ._common_args import OTHER_OPTS, preprocess_args, version_string
@@ -58,8 +60,8 @@ app.add_typer(scExportSignal_app, name="scExportSignal")
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    version: bool = OTHER_OPTS["version"],
-    help: bool = OTHER_OPTS["help"],
+    version: Annotated[bool, OTHER_OPTS["version"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())

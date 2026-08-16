@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -8,6 +10,7 @@ from sincei import _sincei as internal
 
 from . import _parsers as backend
 from ._common_args import (
+    AVAILABLE_PROCESSORS,
     BAM_OPTS,
     FILTER_OPTS,
     INPUT_OUTPUT_OPTS,
@@ -22,9 +25,10 @@ from ._common_args import (
 
 DESCRIPTION = (
     "Filter cell barcodes from a BAM file (for droplet-based single-cell seq).\n\n"
-    "``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a list. You can"
-    "optionally filter these barcodes by matching them to a whitelist or based on total counts."
-    "This tool expects single experiment BAM files, not merged files."
+    "``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a "
+    "list. You can optionally filter these barcodes by matching them to a whitelist or "
+    "based on total counts. This tool expects single experiment BAM files, not merged "
+    "files."
 )
 
 
@@ -42,68 +46,92 @@ _BARCODE = "Barcode options "
 @app.callback(invoke_without_command=True)
 def main(
     # Input / Output options
-    bam_file: str = INPUT_OUTPUT_OPTS["bam_file"],
-    whitelist: str | None = INPUT_OUTPUT_OPTS["whitelist"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
-    region: str | None = INPUT_OUTPUT_OPTS["region"],
+    bam_file: Annotated[str, INPUT_OUTPUT_OPTS["bam_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    whitelist: Annotated[str | None, INPUT_OUTPUT_OPTS["whitelist"]] = None,
+    region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     # Barcode options
-    min_hamming_dist: int = typer.Option(
-        0,
-        "-d",
-        "--minHammingDist",
-        metavar="INT",
-        rich_help_panel=_BARCODE,
-        help="Minimum hamming distance to match the barcode in whitelist. Note that increasing the hamming distance "
-        "really slows down the barcode detection process.",
-    ),
-    min_count: int = typer.Option(
-        0,
-        "-mc",
-        "--minCount",
-        metavar="INT",
-        rich_help_panel=_BARCODE,
-        help="Minimum number of bins with non-zero counts in order to report a barcode. Note that this number ranges "
-        "from 0 to genome size / bin size.",
-    ),
-    rank_plot: str = typer.Option(
-        None,
-        "-rp",
-        "--rankPlot",
-        metavar="STR",
-        rich_help_panel=_BARCODE,
-        help='The output file name to plot the ranked counts per barcode (similar to the "knee plot", but counts are '
-        "the number of non-zero bins in this case).",
-    ),
-    min_mapping_quality: int | None = override(
-        READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE
-    ),
+    min_hamming_dist: Annotated[
+        int,
+        typer.Option(
+            "-d",
+            "--minHammingDist",
+            metavar="INT",
+            rich_help_panel=_BARCODE,
+            help=(
+                "Minimum hamming distance to match the barcode in whitelist. Note that "
+                "increasing the hamming distance really slows down the barcode "
+                "detection process."
+            ),
+        ),
+    ] = 0,
+    min_count: Annotated[
+        int,
+        typer.Option(
+            "-mc",
+            "--minCount",
+            metavar="INT",
+            rich_help_panel=_BARCODE,
+            help=(
+                "Minimum number of bins with non-zero counts in order to report a "
+                "barcode. Note that this number ranges from 0 to genome size / bin "
+                "size."
+            ),
+        ),
+    ] = 0,
+    rank_plot: Annotated[
+        str | None,
+        typer.Option(
+            "-rp",
+            "--rankPlot",
+            metavar="STR",
+            rich_help_panel=_BARCODE,
+            help=(
+                "The output file name to plot the ranked counts per barcode (similar "
+                'to the "knee plot", but counts are the number of non-zero bins in '
+                "this case)."
+            ),
+        ),
+    ] = None,
+    min_mapping_quality: Annotated[
+        int | None,
+        override(READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE),
+    ] = None,
     # BAM options
-    cell_tag: str = BAM_OPTS["cell_tag"],
-    group_tag: str = BAM_OPTS["group_tag"],
-    labels: list[str] = BAM_OPTS["labels"],
-    smart_labels: bool = BAM_OPTS["smart_labels"],
-    blacklist: list[str] = BAM_OPTS["blacklist"],
-    chr_to_skip: list[str] = BAM_OPTS["chr_to_skip"],
-    bin_size: int = override(BAM_OPTS["bin_size"], default=100000),
-    distance_between_bins: int | None = override(
-        BAM_OPTS["distance_between_bins"], default=None
-    ),
+    cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
+    labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
+    smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
+    blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
+    chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
+    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100000,
+    distance_between_bins: Annotated[
+        int | None, BAM_OPTS["distance_between_bins"]
+    ] = None,
     # Filter options
-    duplicate_filter: DuplicateFilter | None = FILTER_OPTS["duplicate_filter"],
-    motif_filter: list[str] = FILTER_OPTS["motif_filter"],
-    genome_2bit: str | None = FILTER_OPTS["genome_2bit"],
-    gc_content_filter: str | None = FILTER_OPTS["gc_content_filter"],
-    min_aligned_fraction: float | None = FILTER_OPTS["min_aligned_fraction"],
+    duplicate_filter: Annotated[
+        DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
+    ] = None,
+    motif_filter: Annotated[list[str] | None, FILTER_OPTS["motif_filter"]] = None,
+    genome_2bit: Annotated[str | None, FILTER_OPTS["genome_2bit"]] = None,
+    gc_content_filter: Annotated[str | None, FILTER_OPTS["gc_content_filter"]] = None,
+    min_aligned_fraction: Annotated[
+        float | None, FILTER_OPTS["min_aligned_fraction"]
+    ] = None,
     # Read options
-    min_fragment_length: int = READ_OPTS["min_fragment_length"],
-    max_fragment_length: int = READ_OPTS["max_fragment_length"],
-    filter_rna_strand: FilterRNAStrand | None = READ_OPTS["filter_rna_strand"],
-    extend_reads: int | None = READ_OPTS["extend_reads"],
-    center_reads: bool = READ_OPTS["center_reads"],
+    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
+    ] = None,
+    extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
+    center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     # Other options
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     if verbose:
         log_parameters(bam_file=bam_file, whitelist=whitelist, out_file=out_file)
@@ -150,18 +178,21 @@ def main(
     for position, (_, count) in enumerate(barcode_counts):
         rank_of_count.setdefault(count, position + 1)
 
-    with open(out_file, "w") as out:
+    with Path(out_file).open("w") as out:
         out.write("barcode\tcount\tselected\tcount_log10\tcount_rank\n")
         for barcode, count in barcode_counts:
             selected = count >= min_count
             # The backend only reports barcodes it saw, so count >= 1 and
             # log10 is always defined.
             out.write(
-                f"{barcode}\t{count}\t{selected}\t{math.log10(count)}\t{rank_of_count[count]}\n"
+                f"{barcode}\t{count}\t{selected}\t{math.log10(count)}\t"
+                f"{rank_of_count[count]}\n"
             )
 
     if rank_plot:
-        from sincei.plotting._barcode_rank import plot_barcode_rank
+        # Imported lazily: it pulls in matplotlib, which would otherwise be paid
+        # for on every invocation of this command.
+        from sincei.plotting._barcode_rank import plot_barcode_rank  # noqa: PLC0415
 
         plot_barcode_rank(barcode_counts, rank_plot, min_count=min_count or None)
 

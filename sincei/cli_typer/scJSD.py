@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 
 from ._common_args import (
+    AVAILABLE_PROCESSORS,
     BAM_OPTS,
     FILTER_OPTS,
     INPUT_OUTPUT_OPTS,
@@ -15,9 +18,10 @@ from ._common_args import (
 
 DESCRIPTION = (
     "Compare read coverages on sampled regions using the Jensen-Shannon distance.\n\n"
-    "``scJSD`` samples regions in the genome from BAM files and compares the cumulative read coverages"
-    "for each cell on those regions to a synthetic cell with poisson distributed reads using the Jensen-Shannon"
-    "distance. Cells with high enrichment of signals show a higher JSD compared to cells whose signal is"
+    "``scJSD`` samples regions in the genome from BAM files and compares the "
+    "cumulative read coverages for each cell on those regions to a synthetic cell with "
+    "poisson distributed reads using the Jensen-Shannon distance. Cells with high "
+    "enrichment of signals show a higher JSD compared to cells whose signal is"
     "homogeneously distributed."
 )
 
@@ -30,44 +34,61 @@ app = typer.Typer(
     context_settings={"help_option_names": []},
 )
 
+_SAMPLING = "Sampling options"
+
 
 @app.callback(invoke_without_command=True)
 def main(
-    bam_files: list[str] = INPUT_OUTPUT_OPTS["bam_files"],
-    barcodes: str = INPUT_OUTPUT_OPTS["barcodes"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
-    cell_tag: str = BAM_OPTS["cell_tag"],
-    group_tag: str = BAM_OPTS["group_tag"],
-    labels: list[str] = BAM_OPTS["labels"],
-    smart_labels: bool = BAM_OPTS["smart_labels"],
-    blacklist: list[str] = BAM_OPTS["blacklist"],
-    chr_to_skip: list[str] = BAM_OPTS["chr_to_skip"],
-    bin_size: int = BAM_OPTS["bin_size"],
-    duplicate_filter: DuplicateFilter | None = FILTER_OPTS["duplicate_filter"],
-    min_mapping_quality: int | None = READ_OPTS["min_mapping_quality"],
-    sam_flag_include: int | None = READ_OPTS["sam_flag_include"],
-    sam_flag_exclude: int | None = READ_OPTS["sam_flag_exclude"],
-    min_fragment_length: int = READ_OPTS["min_fragment_length"],
-    max_fragment_length: int = READ_OPTS["max_fragment_length"],
-    min_aligned_fraction: float | None = FILTER_OPTS["min_aligned_fraction"],
-    number_of_samples: int = typer.Option(
-        100000,
-        "-n",
-        "--numberOfSamples",
-        rich_help_panel="Sampling options",
-        help="The number of bins that are sampled from the genome, for which the overlapping number of reads is "
-        "computed.",
-    ),
-    skip_zeros: bool = typer.Option(
-        False,
-        "--skipZeros",
-        rich_help_panel="Sampling options",
-        help="If set, regions with zero overlapping reads for *all* given BAM files are ignored. This results in a "
-        "reduced number of read counts compared to --numberOfSamples.",
-    ),
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
+    barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
+    labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
+    smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
+    blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
+    chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
+    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 10000,
+    duplicate_filter: Annotated[
+        DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
+    ] = None,
+    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
+    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
+    min_aligned_fraction: Annotated[
+        float | None, FILTER_OPTS["min_aligned_fraction"]
+    ] = None,
+    number_of_samples: Annotated[
+        int,
+        typer.Option(
+            "-n",
+            "--numberOfSamples",
+            rich_help_panel=_SAMPLING,
+            help=(
+                "The number of bins that are sampled from the genome, for which the "
+                "overlapping number of reads is computed."
+            ),
+        ),
+    ] = 100000,
+    skip_zeros: Annotated[
+        bool,
+        typer.Option(
+            "--skipZeros",
+            rich_help_panel=_SAMPLING,
+            help=(
+                "If set, regions with zero overlapping reads for *all* given BAM files "
+                "are ignored. This results in a reduced number of read counts compared "
+                "to --numberOfSamples."
+            ),
+        ),
+    ] = False,
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     log_parameters(
         bam_files=bam_files,

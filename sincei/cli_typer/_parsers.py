@@ -10,8 +10,8 @@ checks, plus the small amount of app plumbing shared by every command
 from __future__ import annotations
 
 import logging
-import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,12 +19,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# CLI duplicate-filter choice (enum ``.value``) -> Rust `dup_method` string.
-# Keyed by the string value rather than the enum member so this module needs no
-# runtime import of ``_common_args`` (which would create an import cycle).
 _DUP_METHOD_MAP: dict[str, str] = {
     "start_bc": "barcode_start",
-    "start_umi": "barcode_umi_start",
+    "start_bc_umi": "barcode_umi_start",
     "start_end_bc": "barcode_start_end",
     "start_end_bc_umi": "barcode_umi_start_end",
 }
@@ -43,7 +40,8 @@ def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None
     for entry in motifs:
         parts = entry.split(",")
         if len(parts) != 2:
-            raise ValueError(f"--motif-filter expects 'read_motif,ref_motif' (got {entry!r})")
+            msg = f"--motif-filter expects 'read_motif,ref_motif' (got {entry!r})"
+            raise ValueError(msg)
         parsed.append((parts[0].strip(), parts[1].strip()))
     return parsed
 
@@ -54,7 +52,8 @@ def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
         return None, None
     parts = value.split(",")
     if len(parts) != 2:
-        raise ValueError(f"--gc-content-filter expects '<low>,<high>' (got {value!r})")
+        msg = f"--gc-content-filter expects '<low>,<high>' (got {value!r})"
+        raise ValueError(msg)
     return float(parts[0]), float(parts[1])
 
 
@@ -68,19 +67,17 @@ def first_blacklist(blacklist: list[str] | None) -> str | None:
     if not blacklist:
         return None
     if len(blacklist) > 1:
-        logger.warning("Multiple blacklist files provided; only the first (%s) is used.", blacklist[0])
+        logger.warning(
+            "Multiple blacklist files provided; only the first (%s) is used.",
+            blacklist[0],
+        )
     return blacklist[0]
 
 
 def read_barcodes(path: str) -> list[str]:
     """Read a single-column barcode/whitelist file into a list of barcodes."""
-    with open(path) as handle:
+    with Path(path).open() as handle:
         return [line.strip() for line in handle if line.strip()]
-
-
-def file_stem(path: str) -> str:
-    """Basename without its extension (the backend's default sample label)."""
-    return os.path.splitext(os.path.basename(path))[0]
 
 
 def resolve_labels(
@@ -95,18 +92,22 @@ def resolve_labels(
     """
     if labels:
         if len(labels) != len(bam_files):
-            raise ValueError(
-                f"--labels count ({len(labels)}) does not match the number of BAM files ({len(bam_files)})."
+            msg = (
+                f"--labels count ({len(labels)}) does not match the number of BAM "
+                f"files ({len(bam_files)})."
             )
+            raise ValueError(msg)
         return list(labels)
-    return [file_stem(b) for b in bam_files]
+    return [Path(b).stem for b in bam_files]
 
 
 def warn_unsupported(**options: object) -> None:
     """Emit a warning for any CLI option that the backend does not yet honor."""
     for name, value in options.items():
         if value:
-            logger.warning("Option %r is not supported by this command and will be ignored.", name)
+            logger.warning(
+                "Option %r is not supported by this command and will be ignored.", name
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -124,15 +125,15 @@ def preprocess_args() -> None:
     Typer does not support whitespace-separated multi-value options, so we
     preprocess ``sys.argv`` so that::
 
-        app some_command --filters f1 f2 f3 --environments e1 e2
+        app some_command --filters f1 f2 f3 --envs e1 e2
 
     becomes::
 
-        app some_command --filters f1 --filters f2 --filters f3 --environments e1 --environments e2
+        app some_command --filters f1 --filters f2 --filters f3 --envs e1 --envs e2
 
     //!\\ DOWNSIDE: options must always come after positional arguments. //!\\
     //!\\ DOWNSIDE: options must either take one value or repeated values. //!\\
-    This is fine for sincei since the commands only use options.
+    This is fine for sincei since all commands only use options.
     """
 
     # `--extendReads` may be given with no value (meaning "estimate from data").

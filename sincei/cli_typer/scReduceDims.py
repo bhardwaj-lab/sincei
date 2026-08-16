@@ -1,19 +1,32 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 
-from ._common_args import INPUT_OUTPUT_OPTS, OTHER_OPTS, GLMPCAFamily, log_parameters, override, preprocess_args
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    GLMPCAFamily,
+    log_parameters,
+    override,
+    preprocess_args,
+)
 
 DESCRIPTION = (
-    "Perform dimensionality reduction and UMAP projection on a cell-by-feature matrix.\n\n"
-    "``scReduceDims`` performs dimensionality reduction on the input count matrix (output of scCountReads)"
-    "and 2D projection (UMAP) of the cells. The result is an updated h5ad object with the dimensionality"
-    "reduction results and UMAP coordinates in the ``.obsm`` field.\n\n"
+    "Perform dimensionality reduction and UMAP projection on a cell-by-feature "
+    "matrix.\n\n"
+    "``scReduceDims`` performs dimensionality reduction on the input count matrix "
+    "(output of scCountReads) and 2D projection (UMAP) of the cells. The result is an "
+    "updated h5ad object with the dimensionality reduction results and UMAP "
+    "coordinates in the ``.obsm`` field.\n\n"
     "``scReduceDims`` provides the following dimensionality reduction methods:\n"
     "* LSA: Latent Semantic Analysis.\n"
     "* LDA: Latent Dirichlet Allocation.\n"
     "* logPCA: Principal Component Analysis preceded by a logarithm transform.\n"
-    "* glmPCA: generalized PCA, with an exponential family distribution such as Poisson, Bernoulli, etc."
+    "* glmPCA: generalized PCA, with an exponential family distribution such as "
+    "Poisson, Bernoulli, etc."
 )
 
 
@@ -60,42 +73,52 @@ app.add_typer(logpca_app, name="logPCA")
 app.add_typer(glmpca_app, name="glmPCA")
 
 _REDUCTION = "Dimensionality reduction options"
+_LDA = "LDA options"
+_GLMPCA = "glmPCA options"
 
 # Options shared by the dimensionality-reduction subcommands.
 N_COMPS = typer.Option(
-    20,
     "-n",
     "--nComps",
     rich_help_panel=_REDUCTION,
-    help="Number of principal components or topics to reduce the dimensionality to. Use a higher number for samples "
-    "with more expected heterogeneity.",
+    help=(
+        "Number of principal components or topics to reduce the dimensionality to. "
+        "Use a higher number for samples with more expected heterogeneity."
+    ),
 )
 N_NEIGHBORS = typer.Option(
-    30,
     "-nk",
     "--nNeighbors",
     rich_help_panel=_REDUCTION,
-    help="Number of nearest neighbours to consider for UMAP. Choose this considering the total number of cells and "
-    "the expected number of clusters; smaller numbers lead to more fragmented clusters.",
+    help=(
+        "Number of nearest neighbours to consider for UMAP. Choose this considering "
+        "the total number of cells and the expected number of clusters; smaller "
+        "numbers lead to more fragmented clusters."
+    ),
 )
 BINARIZE = typer.Option(
-    False,
     "--binarize",
     rich_help_panel=_REDUCTION,
     help="Binarize the counts per region before dimensionality reduction.",
 )
 OUT_FILE_TRAINED_MODEL = typer.Option(
-    None,
     "-om",
     "--outFileTrainedModel",
     rich_help_panel=_REDUCTION,
-    help="The output file for the trained model. The saved model can be used later to embed/compare new cells to the "
-    "existing cluster of cells.",
+    help=(
+        "The output file for the trained model. The saved model can be used later to "
+        "embed/compare new cells to the existing cluster of cells."
+    ),
 )
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, help: bool = override(OTHER_OPTS["help"], rich_help_panel="Options")) -> int:
+def main(
+    ctx: typer.Context,
+    help: Annotated[
+        bool, override(OTHER_OPTS["help"], rich_help_panel="Options")
+    ] = False,
+) -> int:
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
@@ -109,17 +132,19 @@ def _common(**parameters: object) -> None:
 @lsa_app.callback(invoke_without_command=True)
 def lsa(
     # Input / Output options
-    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     # Dimensionality reduction options
-    n_comps: int = N_COMPS,
-    n_neighbors: int = N_NEIGHBORS,
-    binarize: bool = BINARIZE,
-    out_file_trained_model: str = OUT_FILE_TRAINED_MODEL,
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    binarize: Annotated[bool, BINARIZE] = False,
+    out_file_trained_model: Annotated[str | None, OUT_FILE_TRAINED_MODEL] = None,
     # Other options
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     _common(
         input=input,
@@ -136,49 +161,64 @@ def lsa(
 @lda_app.callback(invoke_without_command=True)
 def lda(
     # Input / Output options
-    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     # Dimensionality reduction options
-    n_comps: int = N_COMPS,
-    n_neighbors: int = N_NEIGHBORS,
-    binarize: bool = BINARIZE,
-    out_file_trained_model: str = OUT_FILE_TRAINED_MODEL,
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    binarize: Annotated[bool, BINARIZE] = False,
+    out_file_trained_model: Annotated[str | None, OUT_FILE_TRAINED_MODEL] = None,
     # LDA options
-    n_passes: int = typer.Option(
-        5,
-        "--nPasses",
-        rich_help_panel="LDA options",
-        help="Number of passes through the corpus for LDA model fitting.",
-    ),
-    n_iterations: int = typer.Option(
-        50,
-        "--nIterations",
-        rich_help_panel="LDA options",
-        help="Number of iterations per pass for LDA model fitting.",
-    ),
-    alpha: float = typer.Option(
-        1.0,
-        "--alpha",
-        rich_help_panel="LDA options",
-        help="Prior to initialize cell-topic vectors.",
-    ),
-    eta: float = typer.Option(
-        0.1,
-        "--eta",
-        rich_help_panel="LDA options",
-        help="Prior to initialize feature-topic vectors.",
-    ),
-    gamma_threshold: float = typer.Option(
-        None,
-        "--gammaThreshold",
-        rich_help_panel="LDA options",
-        help="Minimum change in the topic matrix to stop the LDA model fitting. If not given, the model is fit for "
-        "the number of passes and iterations specified above.",
-    ),
+    n_passes: Annotated[
+        int,
+        typer.Option(
+            "--nPasses",
+            rich_help_panel=_LDA,
+            help="Number of passes through the corpus for LDA model fitting.",
+        ),
+    ] = 5,
+    n_iterations: Annotated[
+        int,
+        typer.Option(
+            "--nIterations",
+            rich_help_panel=_LDA,
+            help="Number of iterations per pass for LDA model fitting.",
+        ),
+    ] = 50,
+    alpha: Annotated[
+        float,
+        typer.Option(
+            "--alpha",
+            rich_help_panel=_LDA,
+            help="Prior to initialize cell-topic vectors.",
+        ),
+    ] = 1.0,
+    eta: Annotated[
+        float,
+        typer.Option(
+            "--eta",
+            rich_help_panel=_LDA,
+            help="Prior to initialize feature-topic vectors.",
+        ),
+    ] = 0.1,
+    gamma_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--gammaThreshold",
+            rich_help_panel=_LDA,
+            help=(
+                "Minimum change in the topic matrix to stop the LDA model fitting. If "
+                "not given, the model is fit for the number of passes and iterations "
+                "specified above."
+            ),
+        ),
+    ] = None,
     # Other options
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     _common(
         input=input,
@@ -203,15 +243,17 @@ def lda(
 @logpca_app.callback(invoke_without_command=True)
 def logpca(
     # Input / Output options
-    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     # Dimensionality reduction options
-    n_comps: int = N_COMPS,
-    n_neighbors: int = N_NEIGHBORS,
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
     # Other options
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     _common(
         input=input,
@@ -227,26 +269,34 @@ def logpca(
 @glmpca_app.callback(invoke_without_command=True)
 def glmpca(
     # Input / Output options
-    input: str = INPUT_OUTPUT_OPTS["h5ad_file"],
-    out_file: str = INPUT_OUTPUT_OPTS["out_file"],
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     # Dimensionality reduction options
-    n_comps: int = N_COMPS,
-    n_neighbors: int = N_NEIGHBORS,
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
     # glmPCA options
-    glmpca_family: GLMPCAFamily = typer.Option(
-        GLMPCAFamily.poisson,
-        "-gf",
-        "--glmPCAfamily",
-        metavar="FAMILY",
-        rich_help_panel="glmPCA options",
-        help="The choice of exponential family distribution to use for the glmPCA method.\n\n"
-        "One of: [bold yellow]poisson[/bold yellow], [bold yellow]nb[/bold yellow], "
-        "[bold yellow]mult[/bold yellow], [bold yellow]bern[/bold yellow].",
-    ),
+    glmpca_family: Annotated[
+        GLMPCAFamily,
+        typer.Option(
+            "-gf",
+            "--glmPCAfamily",
+            metavar="FAMILY",
+            rich_help_panel=_GLMPCA,
+            help=(
+                "The choice of exponential family distribution to use for the glmPCA "
+                "method.\n\n"
+                "One of: [bold yellow]poisson[/bold yellow], "
+                "[bold yellow]nb[/bold yellow], [bold yellow]mult[/bold yellow], "
+                "[bold yellow]bern[/bold yellow]."
+            ),
+        ),
+    ] = GLMPCAFamily.poisson,
     # Other options
-    number_of_processors: str = OTHER_OPTS["number_of_processors"],
-    verbose: bool = OTHER_OPTS["verbose"],
-    help: bool = OTHER_OPTS["help"],
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
     _common(
         input=input,
