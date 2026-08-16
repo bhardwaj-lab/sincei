@@ -1,114 +1,125 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
+from typing import Annotated
 
-from . import ParserCommon
-from . import _parsers as backend
+import typer
 
-DESCRIPTION = (
-    "Compare read coverages on sampled regions using the Jensen-Shannon "
-    "distance.\n\n``scJSD`` samples regions in the genome from BAM files and "
-    "compares the cumulative read coverages for each cell on those regions to "
-    "a synthetic cell with poisson distributed reads using the Jensen-Shannon "
-    "distance. Cells with high enrichment of signals show a higher JSD "
-    "compared to cells whose signal is homogeneously distributed."
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    BAM_OPTS,
+    FILTER_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    READ_OPTS,
+    DuplicateFilter,
+    log_parameters,
+    preprocess_args,
 )
 
-USAGE = "scJSD -b sample.bam -bc barcodes.txt -o jsd.tsv"
+DESCRIPTION = (
+    "Compare read coverages on sampled regions using the Jensen-Shannon distance.\n\n"
+    "``scJSD`` samples regions in the genome from BAM files and compares the "
+    "cumulative read coverages for each cell on those regions to a synthetic cell with "
+    "poisson distributed reads using the Jensen-Shannon distance. Cells with high "
+    "enrichment of signals show a higher JSD compared to cells whose signal is"
+    "homogeneously distributed."
+)
 
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
 _SAMPLING = "Sampling options"
 
 
-def sampling_options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_SAMPLING)
-    group.add_argument(
-        "-n",
-        "--numberOfSamples",
-        dest="numberOfSamples",
-        type=int,
-        default=100000,
-        help="The number of bins that are sampled from the genome, for which the "
-        "overlapping number of reads is computed.",
-    )
-    group.add_argument(
-        "--skipZeros",
-        dest="skipZeros",
-        action="store_true",
-        help="If set, regions with zero overlapping reads for *all* given BAM files "
-        "are ignored. This results in a reduced number of read counts compared to "
-        "--numberOfSamples.",
-    )
-    return parser
-
-
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options(["bam_files", "barcodes", "out_file"]),
-            ParserCommon.bam_options(
-                [
-                    "cell_tag",
-                    "group_tag",
-                    "labels",
-                    "smart_labels",
-                    "blacklist",
-                    "chr_to_skip",
-                    "bin_size",
-                ],
-                defaults={"bin_size": 10000},
+@app.callback(invoke_without_command=True)
+def main(
+    bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
+    barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
+    labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
+    smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
+    blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
+    chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
+    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 10000,
+    duplicate_filter: Annotated[
+        DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
+    ] = None,
+    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
+    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
+    min_aligned_fraction: Annotated[
+        float | None, FILTER_OPTS["min_aligned_fraction"]
+    ] = None,
+    number_of_samples: Annotated[
+        int,
+        typer.Option(
+            "-n",
+            "--numberOfSamples",
+            rich_help_panel=_SAMPLING,
+            help=(
+                "The number of bins that are sampled from the genome, for which the "
+                "overlapping number of reads is computed."
             ),
-            ParserCommon.filter_options(["duplicate_filter", "min_aligned_fraction"]),
-            ParserCommon.read_options([
-                "min_mapping_quality",
-                "sam_flag_include",
-                "sam_flag_exclude",
-                "min_fragment_length",
-                "max_fragment_length",
-            ]),
-            sampling_options(),
-            ParserCommon.other_options(),
-        ],
-    )
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    backend.log_parameters(
-        bam_files=args.bamfiles,
-        barcodes=args.barcodes,
-        out_file=args.outFile,
-        cell_tag=args.cellTag,
-        group_tag=args.groupTag,
-        labels=args.labels,
-        smart_labels=args.smartLabels,
-        blacklist=args.blacklist,
-        chr_to_skip=args.chrToSkip,
-        bin_size=args.binSize,
-        duplicate_filter=args.duplicateFilter,
-        min_mapping_quality=args.minMappingQuality,
-        sam_flag_include=args.samFlagInclude,
-        sam_flag_exclude=args.samFlagExclude,
-        min_fragment_length=args.minFragmentLength,
-        max_fragment_length=args.maxFragmentLength,
-        min_aligned_fraction=args.minAlignedFraction,
-        number_of_samples=args.numberOfSamples,
-        skip_zeros=args.skipZeros,
-        number_of_processors=args.numberOfProcessors,
-        verbose=args.verbose,
+        ),
+    ] = 100000,
+    skip_zeros: Annotated[
+        bool,
+        typer.Option(
+            "--skipZeros",
+            rich_help_panel=_SAMPLING,
+            help=(
+                "If set, regions with zero overlapping reads for *all* given BAM files "
+                "are ignored. This results in a reduced number of read counts compared "
+                "to --numberOfSamples."
+            ),
+        ),
+    ] = False,
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    log_parameters(
+        bam_files=bam_files,
+        barcodes=barcodes,
+        out_file=out_file,
+        cell_tag=cell_tag,
+        group_tag=group_tag,
+        labels=labels,
+        smart_labels=smart_labels,
+        blacklist=blacklist,
+        chr_to_skip=chr_to_skip,
+        bin_size=bin_size,
+        duplicate_filter=duplicate_filter,
+        min_mapping_quality=min_mapping_quality,
+        sam_flag_include=sam_flag_include,
+        sam_flag_exclude=sam_flag_exclude,
+        min_fragment_length=min_fragment_length,
+        max_fragment_length=max_fragment_length,
+        min_aligned_fraction=min_aligned_fraction,
+        number_of_samples=number_of_samples,
+        skip_zeros=skip_zeros,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
     )
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

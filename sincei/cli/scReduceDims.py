@@ -1,11 +1,18 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
+from typing import Annotated
 
-from . import ParserCommon
-from . import _parsers as backend
+import typer
+
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    GLMPCAFamily,
+    log_parameters,
+    override,
+    preprocess_args,
+)
 
 DESCRIPTION = (
     "Perform dimensionality reduction and UMAP projection on a cell-by-feature "
@@ -22,191 +29,291 @@ DESCRIPTION = (
     "Poisson, Bernoulli, etc."
 )
 
-USAGE = "scReduceDims {LSA,LDA,logPCA,glmPCA} -i counts.h5ad -o reduced.h5ad"
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
+
+lsa_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help="Use Latent Semantic Analysis (LSA).",
+    context_settings={"help_option_names": []},
+)
+lda_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help="Use Latent Dirichlet Allocation (LDA).",
+    context_settings={"help_option_names": []},
+)
+logpca_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help="Use log transform + PCA.",
+    context_settings={"help_option_names": []},
+)
+glmpca_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help="Use generalized PCA.",
+    context_settings={"help_option_names": []},
+)
+
+app.add_typer(lsa_app, name="LSA")
+app.add_typer(lda_app, name="LDA")
+app.add_typer(logpca_app, name="logPCA")
+app.add_typer(glmpca_app, name="glmPCA")
 
 _REDUCTION = "Dimensionality reduction options"
 _LDA = "LDA options"
 _GLMPCA = "glmPCA options"
 
-
-def reduction_options(binarize: bool) -> argparse.ArgumentParser:
-    """Options shared by the dimensionality-reduction subcommands.
-
-    ``binarize`` selects the two options that only LSA and LDA carry.
-    """
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_REDUCTION)
-
-    group.add_argument(
-        "-n",
-        "--nComps",
-        dest="nComps",
-        type=int,
-        default=20,
-        help="Number of principal components or topics to reduce the dimensionality "
-        "to. Use a higher number for samples with more expected heterogeneity.",
-    )
-    group.add_argument(
-        "-nk",
-        "--nNeighbors",
-        dest="nNeighbors",
-        type=int,
-        default=30,
-        help="Number of nearest neighbours to consider for UMAP. Choose this "
-        "considering the total number of cells and the expected number of clusters; "
-        "smaller numbers lead to more fragmented clusters.",
-    )
-    if binarize:
-        group.add_argument(
-            "--binarize",
-            action="store_true",
-            help="Binarize the counts per region before dimensionality reduction.",
-        )
-        group.add_argument(
-            "-om",
-            "--outFileTrainedModel",
-            dest="outFileTrainedModel",
-            default=None,
-            help="The output file for the trained model. The saved model can be used "
-            "later to embed/compare new cells to the existing cluster of cells.",
-        )
-    return parser
+# Options shared by the dimensionality-reduction subcommands.
+N_COMPS = typer.Option(
+    "-n",
+    "--nComps",
+    rich_help_panel=_REDUCTION,
+    help=(
+        "Number of principal components or topics to reduce the dimensionality to. "
+        "Use a higher number for samples with more expected heterogeneity."
+    ),
+)
+N_NEIGHBORS = typer.Option(
+    "-nk",
+    "--nNeighbors",
+    rich_help_panel=_REDUCTION,
+    help=(
+        "Number of nearest neighbours to consider for UMAP. Choose this considering "
+        "the total number of cells and the expected number of clusters; smaller "
+        "numbers lead to more fragmented clusters."
+    ),
+)
+BINARIZE = typer.Option(
+    "--binarize",
+    rich_help_panel=_REDUCTION,
+    help="Binarize the counts per region before dimensionality reduction.",
+)
+OUT_FILE_TRAINED_MODEL = typer.Option(
+    "-om",
+    "--outFileTrainedModel",
+    rich_help_panel=_REDUCTION,
+    help=(
+        "The output file for the trained model. The saved model can be used later to "
+        "embed/compare new cells to the existing cluster of cells."
+    ),
+)
 
 
-def lda_options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_LDA)
-
-    group.add_argument(
-        "--nPasses",
-        dest="nPasses",
-        type=int,
-        default=5,
-        help="Number of passes through the corpus for LDA model fitting.",
-    )
-    group.add_argument(
-        "--nIterations",
-        dest="nIterations",
-        type=int,
-        default=50,
-        help="Number of iterations per pass for LDA model fitting.",
-    )
-    group.add_argument(
-        "--alpha",
-        type=float,
-        default=1.0,
-        help="Prior to initialize cell-topic vectors.",
-    )
-    group.add_argument(
-        "--eta",
-        type=float,
-        default=0.1,
-        help="Prior to initialize feature-topic vectors.",
-    )
-    group.add_argument(
-        "--gammaThreshold",
-        dest="gammaThreshold",
-        type=float,
-        default=None,
-        help="Minimum change in the topic matrix to stop the LDA model fitting. If not "
-        "given, the model is fit for the number of passes and iterations specified "
-        "above.",
-    )
-    return parser
-
-
-def glmpca_options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_GLMPCA)
-
-    group.add_argument(
-        "-gf",
-        "--glmPCAfamily",
-        dest="glmPCAfamily",
-        metavar="FAMILY",
-        choices=ParserCommon.GLMPCA_FAMILIES,
-        default="poisson",
-        help="The choice of exponential family distribution to use for the glmPCA "
-        "method.",
-    )
-    return parser
-
-
-_SUBCOMMANDS = {
-    "LSA": ("Use Latent Semantic Analysis (LSA).", True, []),
-    "LDA": ("Use Latent Dirichlet Allocation (LDA).", True, [lda_options]),
-    "logPCA": ("Use log transform + PCA.", False, []),
-    "glmPCA": ("Use generalized PCA.", False, [glmpca_options]),
-}
-
-
-def parse_arguments() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=DESCRIPTION,
-        usage=USAGE,
-        add_help=False,
-    )
-    parser.add_argument(
-        "-h", "--help", action="help", help="Show this message and exit."
-    )
-    subparsers = parser.add_subparsers(dest="method", metavar="{LSA,LDA,logPCA,glmPCA}")
-
-    for name, (help_text, binarize, extra) in _SUBCOMMANDS.items():
-        sub = subparsers.add_parser(
-            name,
-            parents=[
-                ParserCommon.input_output_options(["h5ad_file", "out_file"]),
-                reduction_options(binarize),
-                *(factory() for factory in extra),
-                ParserCommon.other_options(),
-            ],
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=help_text,
-            help=help_text,
-            add_help=False,
-            conflict_handler="resolve",
-        )
-        sub.set_defaults(method=name)
-
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-    if not getattr(args, "method", None):
-        parser.print_help()
-        return 0
-
-    backend.log_parameters(
-        input=args.input,
-        out_file=args.outFile,
-        n_comps=args.nComps,
-        n_neighbors=args.nNeighbors,
-        number_of_processors=args.numberOfProcessors,
-        verbose=args.verbose,
-    )
-    if args.method in ("LSA", "LDA"):
-        backend.log_parameters(
-            binarize=args.binarize,
-            out_file_trained_model=args.outFileTrainedModel,
-        )
-    if args.method == "LDA":
-        backend.log_parameters(
-            n_passes=args.nPasses,
-            n_iterations=args.nIterations,
-            alpha=args.alpha,
-            eta=args.eta,
-            gamma_threshold=args.gammaThreshold,
-        )
-    if args.method == "glmPCA":
-        backend.log_parameters(glmpca_family=args.glmPCAfamily)
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    help: Annotated[
+        bool, override(OTHER_OPTS["help"], rich_help_panel="Options")
+    ] = False,
+) -> int:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
     return 0
 
 
+def _common(**parameters: object) -> None:
+    log_parameters(**parameters)
+
+
+@lsa_app.callback(invoke_without_command=True)
+def lsa(
+    # Input / Output options
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    # Dimensionality reduction options
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    binarize: Annotated[bool, BINARIZE] = False,
+    out_file_trained_model: Annotated[str | None, OUT_FILE_TRAINED_MODEL] = None,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    _common(
+        input=input,
+        out_file=out_file,
+        n_comps=n_comps,
+        n_neighbors=n_neighbors,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
+    )
+    log_parameters(binarize=binarize, out_file_trained_model=out_file_trained_model)
+    return 0
+
+
+@lda_app.callback(invoke_without_command=True)
+def lda(
+    # Input / Output options
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    # Dimensionality reduction options
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    binarize: Annotated[bool, BINARIZE] = False,
+    out_file_trained_model: Annotated[str | None, OUT_FILE_TRAINED_MODEL] = None,
+    # LDA options
+    n_passes: Annotated[
+        int,
+        typer.Option(
+            "--nPasses",
+            rich_help_panel=_LDA,
+            help="Number of passes through the corpus for LDA model fitting.",
+        ),
+    ] = 5,
+    n_iterations: Annotated[
+        int,
+        typer.Option(
+            "--nIterations",
+            rich_help_panel=_LDA,
+            help="Number of iterations per pass for LDA model fitting.",
+        ),
+    ] = 50,
+    alpha: Annotated[
+        float,
+        typer.Option(
+            "--alpha",
+            rich_help_panel=_LDA,
+            help="Prior to initialize cell-topic vectors.",
+        ),
+    ] = 1.0,
+    eta: Annotated[
+        float,
+        typer.Option(
+            "--eta",
+            rich_help_panel=_LDA,
+            help="Prior to initialize feature-topic vectors.",
+        ),
+    ] = 0.1,
+    gamma_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--gammaThreshold",
+            rich_help_panel=_LDA,
+            help=(
+                "Minimum change in the topic matrix to stop the LDA model fitting. If "
+                "not given, the model is fit for the number of passes and iterations "
+                "specified above."
+            ),
+        ),
+    ] = None,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    _common(
+        input=input,
+        out_file=out_file,
+        n_comps=n_comps,
+        n_neighbors=n_neighbors,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
+    )
+    log_parameters(
+        binarize=binarize,
+        out_file_trained_model=out_file_trained_model,
+        n_passes=n_passes,
+        n_iterations=n_iterations,
+        alpha=alpha,
+        eta=eta,
+        gamma_threshold=gamma_threshold,
+    )
+    return 0
+
+
+@logpca_app.callback(invoke_without_command=True)
+def logpca(
+    # Input / Output options
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    # Dimensionality reduction options
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    _common(
+        input=input,
+        out_file=out_file,
+        n_comps=n_comps,
+        n_neighbors=n_neighbors,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
+    )
+    return 0
+
+
+@glmpca_app.callback(invoke_without_command=True)
+def glmpca(
+    # Input / Output options
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    # Dimensionality reduction options
+    n_comps: Annotated[int, N_COMPS] = 20,
+    n_neighbors: Annotated[int, N_NEIGHBORS] = 30,
+    # glmPCA options
+    glmpca_family: Annotated[
+        GLMPCAFamily,
+        typer.Option(
+            "-gf",
+            "--glmPCAfamily",
+            metavar="FAMILY",
+            rich_help_panel=_GLMPCA,
+            help=(
+                "The choice of exponential family distribution to use for the glmPCA "
+                "method.\n\n"
+                "One of: [bold yellow]poisson[/bold yellow], "
+                "[bold yellow]nb[/bold yellow], [bold yellow]mult[/bold yellow], "
+                "[bold yellow]bern[/bold yellow]."
+            ),
+        ),
+    ] = GLMPCAFamily.poisson,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    _common(
+        input=input,
+        out_file=out_file,
+        n_comps=n_comps,
+        n_neighbors=n_neighbors,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
+    )
+    log_parameters(glmpca_family=glmpca_family)
+    return 0
+
+
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

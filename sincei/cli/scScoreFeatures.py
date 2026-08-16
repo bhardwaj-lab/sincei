@@ -1,13 +1,20 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
+from typing import Annotated
+
+import typer
 
 from sincei import _sincei as internal
 
-from . import ParserCommon
-from . import _parsers as backend
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    GTF_GFF_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    OverlapPolicy,
+    log_parameters,
+    preprocess_args,
+)
 
 DESCRIPTION = (
     "Aggregate a binned chromatin count matrix into per-feature scores.\n\n"
@@ -17,98 +24,105 @@ DESCRIPTION = (
     "scFindVCRs)."
 )
 
-USAGE = "scScoreFeatures -i counts.h5ad --features genes.gtf -o scores.h5ad"
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": []},
+)
 
 _SCORING = "Scoring options"
 
 
-def scoring_options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_SCORING)
-
-    group.add_argument(
-        "--features",
-        metavar=".bed/.gtf/.gff",
-        required=True,
-        help="Path to the BED, GTF or GFF file containing the features to score.",
-    )
-    group.add_argument(
-        "-op",
-        "--overlapPolicy",
-        dest="overlapPolicy",
-        metavar="POLICY",
-        choices=ParserCommon.OVERLAP_POLICIES,
-        default="partial",
-        help="How to treat a bin in the .h5ad input that only partially overlaps a "
-        "region in --features.\n\n"
-        "partial: count the fraction of the bin lying inside the region; "
-        "all: count the whole bin; "
-        "none: ignore the bin unless it lies wholly inside the region.",
-    )
-    group.add_argument(
-        "-pen",
-        "--penalty",
-        dest="penalty",
-        type=float,
-        default=None,
-        help="Penalty value to determine which VCRs to score. Used only when the input "
-        "is a BED file created with ``scFindVCRs`` with a range of penalties (stored "
-        "in the 5th column).",
-    )
-    return parser
-
-
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options(["h5ad_file", "out_file"]),
-            scoring_options(),
-            ParserCommon.gtf_gff_options(
-                ["transcript_id", "exon_id", "transcript_id_tag", "metagene"],
-                metagene_flags=("-m", "--metagene"),
+@app.command(help=DESCRIPTION)
+def main(
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    features: Annotated[
+        str,
+        typer.Option(
+            "--features",
+            metavar=".bed/.gtf/.gff",
+            rich_help_panel=_SCORING,
+            help="Path to the BED, GTF or GFF file containing the features to score.",
+        ),
+    ],
+    overlap_policy: Annotated[
+        OverlapPolicy,
+        typer.Option(
+            "-op",
+            "--overlapPolicy",
+            metavar="POLICY",
+            rich_help_panel=_SCORING,
+            help=(
+                "How to treat a bin in the .h5ad input that only partially overlaps a "
+                "region in --features.\n\n"
+                "[bold yellow]partial[/bold yellow]: count the fraction of the bin "
+                "lying inside the region; "
+                "[bold yellow]all[/bold yellow]: count the whole bin; "
+                "[bold yellow]none[/bold yellow]: ignore the bin unless it lies wholly "
+                "inside the region."
             ),
-            ParserCommon.other_options(),
-        ],
-    )
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    if args.verbose:
-        backend.log_parameters(
-            input=args.input,
-            out_file=args.outFile,
-            features=args.features,
-            overlap_policy=args.overlapPolicy,
-            penalty=args.penalty,
-            feature_type=args.transcriptID,
-            exon_id=args.exonID,
-            name_attr=args.transcriptIDtag,
-            metagene=args.metagene,
-            number_of_processors=args.numberOfProcessors,
+        ),
+    ] = OverlapPolicy.partial,
+    penalty: Annotated[
+        float | None,
+        typer.Option(
+            "-pen",
+            "--penalty",
+            rich_help_panel=_SCORING,
+            help=(
+                "Penalty value to determine which VCRs to score. Used only when the "
+                "input is a BED file created with ``scFindVCRs`` with a range of "
+                "penalties (stored in the 5th column)."
+            ),
+        ),
+    ] = None,
+    # GTF/GFF options; only affect GTF/GFF inputs, ignored for BED.
+    feature_type: Annotated[list[str] | None, GTF_GFF_OPTS["transcript_id"]] = None,
+    exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,
+    name_attr: Annotated[str | None, GTF_GFF_OPTS["transcript_id_tag"]] = None,
+    metagene: Annotated[bool, GTF_GFF_OPTS["metagene"]] = False,
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    if verbose:
+        log_parameters(
+            input=input,
+            out_file=out_file,
+            features=features,
+            overlap_policy=overlap_policy,
+            penalty=penalty,
+            feature_type=feature_type,
+            exon_id=exon_id,
+            name_attr=name_attr,
+            metagene=metagene,
+            number_of_processors=number_of_processors,
         )
     result_path = internal.score_features(
-        args.input,
-        args.features,
-        args.outFile,
-        overlap_policy=args.overlapPolicy,
-        penalty=args.penalty,
-        feature_type=args.transcriptID,
-        exon_type=args.exonID,
-        name_attr=args.transcriptIDtag,
-        metagene=args.metagene,
-        num_threads=args.numberOfProcessors,
+        input,
+        features,
+        out_file,
+        overlap_policy=overlap_policy.value,
+        penalty=penalty,
+        feature_type=feature_type,
+        exon_type=exon_id,
+        name_attr=name_attr,
+        metagene=metagene,
+        num_threads=number_of_processors,
     )
-    print(result_path)
+    typer.echo(result_path)
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

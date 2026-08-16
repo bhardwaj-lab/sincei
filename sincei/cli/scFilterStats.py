@@ -1,17 +1,27 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
+
+import typer
 
 from sincei import _sincei as internal
 
-from . import ParserCommon
 from . import _parsers as backend
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    BAM_OPTS,
+    FILTER_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    READ_OPTS,
+    DuplicateFilter,
+    FilterRNAStrand,
+    log_parameters,
+    preprocess_args,
+)
 
 if TYPE_CHECKING:
-    import argparse
     from collections.abc import Sequence
 
 # Column order produced by the Rust `filter_stats` backend (BarcodeStat::to_vec).
@@ -53,9 +63,9 @@ DESCRIPTION = (
     "set of criteria and prints it to the terminal. Furthermore, it tracks the number "
     "of singleton reads. The following metrics will always be tracked regardless of "
     "what you specify (the order output also matches this):\n"
-    "* Total sampleed reads (including unmapped)\n"
+    "* Total sampled reads (including unmapped)\n"
     "* Mapped reads\n"
-    "* Reads in blacklisted regions (--blacklist)\n\n"
+    "* Reads in blacklisted regions (--blackListFileName)\n\n"
     "The following metrics are estimated according to the --binSize and "
     "--distanceBetweenBins parameters:\n"
     "* Estimated mapped reads filtered (the total number of mapped reads filtered for "
@@ -71,88 +81,85 @@ DESCRIPTION = (
     "are sampled from bins of size --binSize spaced --distanceBetweenBins apart."
 )
 
-USAGE = "scFilterStats -b sample.bam -bc barcodes.txt -o stats.tsv"
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
 
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options(["bam_files", "barcodes", "out_file"]),
-            ParserCommon.bam_options(
-                [
-                    "cell_tag",
-                    "bin_size",
-                    "distance_between_bins",
-                    "labels",
-                    "smart_labels",
-                    "blacklist",
-                    "chr_to_skip",
-                ],
-                defaults={"bin_size": 100_000, "distance_between_bins": 1_000_000},
-            ),
-            ParserCommon.filter_options([
-                "duplicate_filter",
-                "motif_filter",
-                "genome_2bit",
-                "gc_content_filter",
-                "min_aligned_fraction",
-            ]),
-            ParserCommon.read_options([
-                "min_mapping_quality",
-                "sam_flag_include",
-                "sam_flag_exclude",
-                "filter_rna_strand",
-            ]),
-            ParserCommon.other_options(),
-        ],
-    )
+@app.callback(invoke_without_command=True)
+def main(
+    bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
+    barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100_000,
+    distance_between_bins: Annotated[
+        int | None, BAM_OPTS["distance_between_bins"]
+    ] = 1_000_000,
+    duplicate_filter: Annotated[
+        DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
+    ] = None,
+    motif_filter: Annotated[list[str] | None, FILTER_OPTS["motif_filter"]] = None,
+    genome_2bit: Annotated[str | None, FILTER_OPTS["genome_2bit"]] = None,
+    gc_content_filter: Annotated[str | None, FILTER_OPTS["gc_content_filter"]] = None,
+    min_aligned_fraction: Annotated[
+        float | None, FILTER_OPTS["min_aligned_fraction"]
+    ] = None,
+    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
+    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
+    ] = None,
+    labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
+    smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
+    blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
+    chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    if verbose:
+        log_parameters(bam_files=bam_files, barcodes=barcodes, out_file=out_file)
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    if args.verbose:
-        backend.log_parameters(
-            bam_files=args.bamfiles, barcodes=args.barcodes, out_file=args.outFile
-        )
-
-    min_gc, max_gc = backend.parse_gc_content(args.GCcontentFilter)
-    barcode_list = backend.read_barcodes(args.barcodes)
-    sample_labels = backend.resolve_labels(args.bamfiles, args.labels, args.smartLabels)
+    min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
+    barcode_list = backend.read_barcodes(barcodes)
+    sample_labels = backend.resolve_labels(bam_files, labels, smart_labels)
 
     kwargs = {
         "barcodes": barcode_list,
-        "bc_tag": args.cellTag,
+        "bc_tag": cell_tag,
         "umi_tag": None,
-        "bin_size": args.binSize,
-        "distance_between_bins": args.distanceBetweenBins or 0,
-        "min_mapq": args.minMappingQuality,
-        "sam_flag_include": args.samFlagInclude,
-        "sam_flag_exclude": args.samFlagExclude,
-        "filter_rna_strand": args.filterRNAstrand,
-        "chr_to_skip": args.chrToSkip or [],
-        "blacklist_path": backend.first_blacklist(args.blacklist),
-        "dup_method": backend.dup_method(args.duplicateFilter),
-        "genome_2bit": args.genome2bit,
-        "motif_filter": backend.parse_motif_filter(args.motifFilter),
+        "bin_size": bin_size,
+        "distance_between_bins": distance_between_bins or 0,
+        "min_mapq": min_mapping_quality,
+        "sam_flag_include": sam_flag_include,
+        "sam_flag_exclude": sam_flag_exclude,
+        "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
+        "chr_to_skip": chr_to_skip or [],
+        "blacklist_path": backend.first_blacklist(blacklist),
+        "dup_method": backend.dup_method(duplicate_filter),
+        "genome_2bit": genome_2bit,
+        "motif_filter": backend.parse_motif_filter(motif_filter),
         "min_gc": min_gc,
         "max_gc": max_gc,
-        "min_aligned_fraction": args.minAlignedFraction,
-        "num_threads": args.numberOfProcessors,
+        "min_aligned_fraction": min_aligned_fraction,
+        "num_threads": number_of_processors,
     }
 
     # The backend processes one BAM at a time; aggregate the per-sample rows
     # into a single TSV keyed by `Cell_ID` (`{sample}::{barcode}`, the same
     # identifier the counting tools use for AnnData's obs_names).
-    with Path(args.outFile).open("w") as out:
+    with Path(out_file).open("w") as out:
         out.write("\t".join(["Cell_ID", *_STAT_COLUMNS]) + "\n")
-        for bam, label in zip(args.bamfiles, sample_labels, strict=True):
+        for bam, label in zip(bam_files, sample_labels, strict=True):
             result_barcodes, stat_rows = internal.filter_stats(bam, **kwargs)
             out.writelines(
                 "\t".join([f"{label}::{barcode}", *_format_row(row)]) + "\n"
@@ -162,5 +169,10 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

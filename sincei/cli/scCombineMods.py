@@ -1,56 +1,65 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from . import ParserCommon
-from . import _parsers as backend
+import typer
 
-if TYPE_CHECKING:
-    import argparse
-
-DESCRIPTION = (
-    "Merge AnnData files from different modalities into a MuData "
-    "object.\n\n``scCombineMods`` combines multiple count matrices (output of "
-    "scCountReads) of different data modalities (e.g. gene expression, "
-    "chromatin accessibility, histone modifications) into one. The result is "
-    "a .h5mu (MuData) file containing each of the data modalities "
-    "provided.\n*NOTE*: this does not perform any 'batch effect correction' "
-    "or 'integration' of data from different technologies."
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    BAM_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    log_parameters,
+    preprocess_args,
 )
 
-USAGE = "scCombineMods -i rna.h5ad atac.h5ad -l RNA ATAC -o combined.h5mu"
+DESCRIPTION = (
+    "Merge AnnData files from different modalities into a MuData object.\n\n"
+    "``scCombineMods`` combines multiple count matrices (output of scCountReads) of "
+    "different data modalities (e.g. gene expression, chromatin accessibility, "
+    "histone modifications) into one. The result is a .h5mu (MuData) file containing "
+    "each of the data modalities provided.\n"
+    "*NOTE*: this does not perform any 'batch effect correction' or 'integration' of "
+    "data from different technologies."
+)
 
 
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options(["h5ad_files", "out_file"]),
-            ParserCommon.bam_options(["labels"], defaults={"labels_required": True}),
-            ParserCommon.other_options(),
-        ],
-    )
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    backend.log_parameters(
-        input=args.input,
-        labels=args.labels,
-        out_file=args.outFile,
-        number_of_processors=args.numberOfProcessors,
-        verbose=args.verbose,
+@app.callback(invoke_without_command=True)
+def main(
+    # Input / Output options
+    input: Annotated[list[str], INPUT_OUTPUT_OPTS["h5ad_files"]],
+    labels: Annotated[list[str], BAM_OPTS["labels"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    log_parameters(
+        input=input,
+        labels=labels,
+        out_file=out_file,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
     )
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

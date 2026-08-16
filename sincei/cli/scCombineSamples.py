@@ -1,58 +1,72 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from . import ParserCommon
-from . import _parsers as backend
+import typer
 
-if TYPE_CHECKING:
-    import argparse
-
-DESCRIPTION = (
-    "Concatenate/merge AnnData files from different "
-    "samples.\n\n``scCombineSamples`` combines multiple count matrices "
-    "(output of scCountReads) into one. Only features present in all matrices "
-    "will be kept. The result is a .h5ad (AnnData) file containing the "
-    "combined count matrix.\n*NOTE*: it doesn't perform any 'batch effect "
-    "correction' or 'integration' of data from different technologies."
+from ._common_args import (
+    _IO,
+    AVAILABLE_PROCESSORS,
+    BAM_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    log_parameters,
+    override,
+    preprocess_args,
 )
 
-USAGE = "scCombineSamples -i a.h5ad b.h5ad -o combined.h5ad"
+DESCRIPTION = (
+    "Concatenate/merge AnnData files from different samples.\n\n"
+    "``scCombineSamples`` combines multiple count matrices (output of scCountReads) "
+    "into one. Only features present in all matrices will be kept. The result is a "
+    ".h5ad (AnnData) file containing the combined count matrix.\n"
+    "*NOTE*: it doesn't perform any 'batch effect correction' or 'integration' of "
+    "data from different technologies."
+)
 
 
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options(["h5ad_files", "out_file"]),
-            ParserCommon.bam_options(
-                ["labels", "smart_labels"], panel="Input / Output options"
-            ),
-            ParserCommon.other_options(),
-        ],
-    )
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    backend.log_parameters(
-        input=args.input,
-        labels=args.labels,
-        out_file=args.outFile,
-        smart_labels=args.smartLabels,
-        number_of_processors=args.numberOfProcessors,
-        verbose=args.verbose,
+@app.callback(invoke_without_command=True)
+def main(
+    # Input / Output options
+    input: Annotated[list[str], INPUT_OUTPUT_OPTS["h5ad_files"]],
+    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    labels: Annotated[
+        list[str] | None, override(BAM_OPTS["labels"], rich_help_panel=_IO)
+    ] = None,
+    smart_labels: Annotated[
+        bool, override(BAM_OPTS["smart_labels"], rich_help_panel=_IO)
+    ] = False,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    log_parameters(
+        input=input,
+        labels=labels,
+        out_file=out_file,
+        smart_labels=smart_labels,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
     )
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

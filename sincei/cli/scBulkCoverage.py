@@ -1,220 +1,258 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
+from typing import Annotated
+
+import typer
 
 from sincei import _sincei as internal
 
-from . import ParserCommon
 from . import _parsers as backend
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    BAM_OPTS,
+    FILTER_OPTS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    READ_OPTS,
+    DuplicateFilter,
+    FilterRNAStrand,
+    NormalizeUsing,
+    OutFileFormat,
+    log_parameters,
+    preprocess_args,
+)
 
 DESCRIPTION = (
     "Get pseudo-bulk coverage per group using a cell->group mapping (output of "
     "scClusterCells).\n\n"
     "``scBulkCoverage`` takes alignments of reads or fragments as input (BAM files), "
     "along with cell grouping information, such as barcode -> batch, or barcode -> "
-    "cluster, as tsv file, and generates a coverage track (bigWig or bedGraph) per "
+    "cluster, as tsv file, and generates a  coverage track (bigWig or bedGraph) per "
     "group as output. The coverage is calculated as the number of reads/fragments per "
-    "bin, where bins are short consecutive counting windows of a defined size. It is "
+    "bin, where bins are short consecutive counting windows of a defined  size. It is "
     "possible to extended/change the length of the reads to better reflect the actual "
     "fragment length. ``scBulkCoverage`` offers normalization per cluster using "
     "different methods."
 )
 
-USAGE = "scBulkCoverage -b sample.bam -gi groupinfo.tsv -o coverage"
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
 _COVERAGE = "Coverage options"
 
 
-def coverage_options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
-    group = parser.add_argument_group(_COVERAGE)
-
-    group.add_argument(
-        "-of",
-        "--outFileFormat",
-        dest="outFileFormat",
-        metavar="FORMAT",
-        choices=ParserCommon.OUT_FILE_FORMATS,
-        default="bigwig",
-        help="Output file type.",
-    )
-    group.add_argument(
-        "-n",
-        "--normalizeUsing",
-        dest="normalizeUsing",
-        metavar="METHOD",
-        choices=ParserCommon.NORMALIZE_USING,
-        default="CPM",
-        help="How to normalize the pseudo-bulk counts.\n\n"
-        "CPM: normalize each bin to counts per million mapped reads in that group.\n\n"
-        "RPKM: reads per kilobase per million mapped reads in that group.\n\n"
-        "Frequency: binarize coverage per bin and normalize to total cells per "
-        "group.\n\n"
-        "Mean: get mean signal per bin across cells in each group.\n\n"
-        "None: simply return the sum of coverage per group.",
-    )
-    group.add_argument(
-        "-ig",
-        "--ignoreForNormalization",
-        dest="ignoreForNormalization",
-        metavar="CHR",
-        action="extend",
-        nargs="+",
-        default=None,
-        help="Chromosomes to skip while calculating normalization factors.",
-    )
-    group.add_argument(
-        "-nr",
-        "--normalizeByReference",
-        dest="normalizeByReference",
-        default=None,
-        help="NOT IMPLEMENTED: Normalize each group of cells by a reference group "
-        "(which must be present in the --groupInfo file). Note that the "
-        "--normalizeUsing method is applied beforehand.",
-    )
-    group.add_argument(
-        "--scaleFactor",
-        dest="scaleFactor",
-        type=float,
-        default=1.0,
-        help="The computed scaling factor (or 1, if not applicable) will be multiplied "
-        "by this.",
-    )
-    group.add_argument(
-        "--mnase",
-        action="store_true",
-        help="Determine nucleosome positions from MNase-seq/CUTnRUN data. Only 3 "
-        "nucleotides at the center of each fragment are counted. Only fragment lengths "
-        "between 130 - 200 bp are considered to avoid dinucleosomes or other "
-        "artifacts. *NOTE*: Requires paired-end data. A bin size of 1 is recommended.",
-    )
-    group.add_argument(
-        "--offset",
-        action="extend",
-        nargs="+",
-        type=int,
-        default=None,
-        help="Uses this offset inside of each read as the signal. This is useful in "
-        "cases like RiboSeq or GROseq. Negative values indicate offsets from the end "
-        "of each read. A value of 1 indicates the first base of the alignment; -1 is "
-        "the last base. An offset of 0 is not permitted. If two values are specified, "
-        "they define a range of positions.",
-    )
-    return parser
-
-
-def parse_arguments() -> argparse.ArgumentParser:
-    return ParserCommon.build_parser(
-        DESCRIPTION,
-        USAGE,
-        [
-            ParserCommon.input_output_options([
-                "bam_files",
-                "group_info",
-                "out_prefix",
-                "region",
-            ]),
-            coverage_options(),
-            ParserCommon.bam_options(
-                [
-                    "cell_tag",
-                    "group_tag",
-                    "labels",
-                    "smart_labels",
-                    "blacklist",
-                    "chr_to_skip",
-                    "bin_size",
-                    "distance_between_bins",
-                ],
-                defaults={"bin_size": 100, "distance_between_bins": None},
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    # Input / Output options
+    bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
+    group_info: Annotated[str, INPUT_OUTPUT_OPTS["group_info"]],
+    out_prefix: Annotated[str, INPUT_OUTPUT_OPTS["out_prefix"]],
+    # Coverage options
+    out_file_format: Annotated[
+        OutFileFormat,
+        typer.Option(
+            "-of",
+            "--outFileFormat",
+            metavar="FORMAT",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "Output file type.\n\n"
+                "One of: [bold yellow]bigwig[/bold yellow], "
+                "[bold yellow]bedgraph[/bold yellow]."
             ),
-            ParserCommon.filter_options([
-                "duplicate_filter",
-                "motif_filter",
-                "genome_2bit",
-                "gc_content_filter",
-                "min_aligned_fraction",
-            ]),
-            ParserCommon.read_options([
-                "min_mapping_quality",
-                "sam_flag_include",
-                "sam_flag_exclude",
-                "min_fragment_length",
-                "max_fragment_length",
-                "filter_rna_strand",
-                "extend_reads",
-                "center_reads",
-            ]),
-            ParserCommon.other_options(),
-        ],
-    )
+        ),
+    ] = OutFileFormat.bigwig,
+    normalize_using: Annotated[
+        NormalizeUsing,
+        typer.Option(
+            "-n",
+            "--normalizeUsing",
+            metavar="METHOD",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "How to normalize the pseudo-bulk counts.\n\n"
+                "[bold yellow]CPM[/bold yellow]: normalize each bin to counts per "
+                "million mapped reads in that group.\n\n"
+                "[bold yellow]RPKM[/bold yellow]: reads per kilobase per million "
+                "mapped reads in that group.\n\n"
+                "[bold yellow]Frequency[/bold yellow]: binarize coverage per bin and "
+                "normalize to total cells per group.\n\n"
+                "[bold yellow]Mean[/bold yellow]: get mean signal per bin across cells "
+                "in each group.\n\n"
+                "[bold yellow]None[/bold yellow]: simply return the sum of coverage "
+                "per group."
+            ),
+        ),
+    ] = NormalizeUsing.cpm,
+    ignore_for_normalization: Annotated[
+        list[str] | None,
+        typer.Option(
+            "-ig",
+            "--ignoreForNormalization",
+            metavar="CHR",
+            rich_help_panel=_COVERAGE,
+            help="Chromosomes to skip while calculating normalization factors.",
+        ),
+    ] = None,
+    normalize_by_reference: Annotated[
+        str | None,
+        typer.Option(
+            "-nr",
+            "--normalizeByReference",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "NOT IMPLEMENTED: Normalize each group of cells by a reference group "
+                "(which must be present in the --group-info file). Note that the "
+                "--normalizeUsing method is applied beforehand."
+            ),
+        ),
+    ] = None,
+    scale_factor: Annotated[
+        float,
+        typer.Option(
+            "--scaleFactor",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "The computed scaling factor (or 1, if not applicable) will be "
+                "multiplied by this."
+            ),
+        ),
+    ] = 1.0,
+    mnase: Annotated[
+        bool,
+        typer.Option(
+            "--mnase",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "Determine nucleosome positions from MNase-seq/CUTnRUN data. Only 3 "
+                "nucleotides at the center of each fragment are counted. Only fragment "
+                "lengths between 130-200 bp are considered to avoid dinucleosomes or "
+                "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 is "
+                "recommended."
+            ),
+        ),
+    ] = False,
+    offset: Annotated[
+        list[int] | None,
+        typer.Option(
+            "--offset",
+            rich_help_panel=_COVERAGE,
+            help=(
+                "Uses this offset inside of each read as the signal. This is useful in "
+                "cases like RiboSeq or GROseq. Negative values indicate offsets from "
+                "the end of each read. A value of 1 indicates the first base of the "
+                "alignment; -1 is the last base. An offset of 0 is not permitted. If "
+                "two values are specified, they define a range of positions."
+            ),
+        ),
+    ] = None,
+    # BAM options
+    cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
+    group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
+    labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
+    smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
+    region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
+    blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
+    chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
+    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100,
+    distance_between_bins: Annotated[
+        int | None, BAM_OPTS["distance_between_bins"]
+    ] = None,
+    # Filter options
+    duplicate_filter: Annotated[
+        DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
+    ] = None,
+    motif_filter: Annotated[list[str] | None, FILTER_OPTS["motif_filter"]] = None,
+    genome_2bit: Annotated[str | None, FILTER_OPTS["genome_2bit"]] = None,
+    gc_content_filter: Annotated[str | None, FILTER_OPTS["gc_content_filter"]] = None,
+    min_aligned_fraction: Annotated[
+        float | None, FILTER_OPTS["min_aligned_fraction"]
+    ] = None,
+    # Read options
+    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
+    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
+    ] = None,
+    extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
+    center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
+    # Other options
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    if ctx.invoked_subcommand is None:
+        if verbose:
+            log_parameters(
+                bam_files=bam_files, group_info=group_info, out_prefix=out_prefix
+            )
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = parse_arguments()
-    if argv is None and len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-    args = parser.parse_args(argv)
-
-    if args.verbose:
-        backend.log_parameters(
-            bam_files=args.bamfiles,
-            group_info=args.groupInfo,
-            out_prefix=args.outFilePrefix,
+        # Options exposed for parity but not honored by the coverage backend.
+        backend.warn_unsupported(
+            normalize_by_reference=normalize_by_reference,
+            group_tag=group_tag,
         )
 
-    # Options exposed for parity but not honored by the coverage backend.
-    backend.warn_unsupported(
-        normalize_by_reference=args.normalizeByReference,
-        group_tag=args.groupTag,
-    )
+        min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
+        bam_labels = backend.resolve_labels(bam_files, labels, smart_labels)
+        # stepSize = binSize + gap; a zero gap yields contiguous bins.
+        step_size = bin_size + (distance_between_bins or 0)
 
-    min_gc, max_gc = backend.parse_gc_content(args.GCcontentFilter)
-    bam_labels = backend.resolve_labels(args.bamfiles, args.labels, args.smartLabels)
-    # stepSize = binSize + gap; a zero gap yields contiguous bins.
-    step_size = args.binSize + (args.distanceBetweenBins or 0)
-
-    output_files = internal.bulk_coverage(
-        args.bamfiles,
-        bam_labels,
-        args.groupInfo,
-        args.outFilePrefix,
-        bin_size=args.binSize,
-        step_size=step_size,
-        bc_tag=args.cellTag,
-        umi_tag=None,
-        region=args.region,
-        min_mapq=args.minMappingQuality,
-        sam_flag_include=args.samFlagInclude,
-        sam_flag_exclude=args.samFlagExclude,
-        chr_to_skip=args.chrToSkip or [],
-        ignore_for_normalization=args.ignoreForNormalization or [],
-        blacklist_path=backend.first_blacklist(args.blacklist),
-        extend_reads=args.extendReads,
-        center_reads=args.centerReads,
-        dup_method=backend.dup_method(args.duplicateFilter),
-        genome_2bit=args.genome2bit,
-        motif_filter=backend.parse_motif_filter(args.motifFilter),
-        min_gc=min_gc,
-        max_gc=max_gc,
-        min_aligned_fraction=args.minAlignedFraction,
-        min_fragment_length=backend.optional_length(args.minFragmentLength),
-        max_fragment_length=backend.optional_length(args.maxFragmentLength),
-        normalize_using=args.normalizeUsing,
-        scale_factor=args.scaleFactor,
-        out_format=args.outFileFormat,
-        mnase=args.mnase,
-        offset=args.offset or None,
-        filter_rna_strand=args.filterRNAstrand,
-        num_threads=args.numberOfProcessors,
-    )
-    for path in output_files:
-        print(path)
+        output_files = internal.bulk_coverage(
+            bam_files,
+            bam_labels,
+            group_info,
+            out_prefix,
+            bin_size=bin_size,
+            step_size=step_size,
+            bc_tag=cell_tag,
+            umi_tag=None,
+            region=region,
+            min_mapq=min_mapping_quality,
+            sam_flag_include=sam_flag_include,
+            sam_flag_exclude=sam_flag_exclude,
+            chr_to_skip=chr_to_skip or [],
+            ignore_for_normalization=ignore_for_normalization or [],
+            blacklist_path=backend.first_blacklist(blacklist),
+            extend_reads=extend_reads,
+            center_reads=center_reads,
+            dup_method=backend.dup_method(duplicate_filter),
+            genome_2bit=genome_2bit,
+            motif_filter=backend.parse_motif_filter(motif_filter),
+            min_gc=min_gc,
+            max_gc=max_gc,
+            min_aligned_fraction=min_aligned_fraction,
+            min_fragment_length=backend.optional_length(min_fragment_length),
+            max_fragment_length=backend.optional_length(max_fragment_length),
+            normalize_using=normalize_using.value,
+            scale_factor=scale_factor,
+            out_format=out_file_format.value,
+            mnase=mnase,
+            offset=offset or None,
+            filter_rna_strand=filter_rna_strand.value if filter_rna_strand else None,
+            num_threads=number_of_processors,
+        )
+        for path in output_files:
+            typer.echo(path)
     return 0
 
 
+def cli() -> None:
+    preprocess_args()
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

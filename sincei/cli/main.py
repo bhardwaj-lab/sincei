@@ -1,133 +1,78 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
-from importlib import import_module
+from typing import Annotated
 
-from sincei import _sincei as internal
+import typer
 
-# The order here is the order the subcommands appear in the help message.
-_TOOLS = [
-    (
-        "scFilterBarcodes",
-        "Filter cell barcodes from a BAM file (for droplet-based single-cell seq).",
-    ),
-    (
-        "scFilterStats",
-        "Produce per-cell statistics after filtering reads by user-defined criteria.",
-    ),
-    (
-        "scJSD",
-        "Compare read coverages on sampled regions using the Jensen-Shannon distance.",
-    ),
-    (
-        "scCountReads",
-        "Counts reads for each cell barcode on genomic bins or user-defined features.",
-    ),
-    (
-        "scCountQC",
-        (
-            "Perform quality control and filter cells and regions from a "
-            "cell-by-feature matrix."
-        ),
-    ),
-    (
-        "scFindVCRs",
-        "Call variable chromatin regions (VCRs) from binned chromatin data.",
-    ),
-    (
-        "scReduceDims",
-        (
-            "Perform dimensionality reduction and UMAP projection on a "
-            "cell-by-feature matrix."
-        ),
-    ),
-    (
-        "scClusterCells",
-        "Cluster cells from a cell-by-feature matrix using the Leiden algorithm.",
-    ),
-    (
-        "scScoreFeatures",
-        "Aggregate a binned chromatin count matrix into per-feature scores.",
-    ),
-    ("scCombineSamples", "Concatenate/merge AnnData files from different samples."),
-    (
-        "scCombineMods",
-        "Merge AnnData files from different modalities into a MuData object.",
-    ),
-    ("scPlotRegion", "Plot pseudo-bulk and per cell coverage for a genomic region."),
-    (
-        "scBulkCoverage",
-        (
-            "Get pseudo-bulk coverage per group using a cell->group mapping "
-            "(output of scClusterCells)."
-        ),
-    ),
-    ("scExportSignal", "Export .h5ad objects to other formats."),
-]
+from ._common_args import OTHER_OPTS, preprocess_args, version_string
+
+# Import subcommand apps to register them with the main app.
+from .scBulkCoverage import app as scBulkCoverage_app
+from .scClusterCells import app as scClusterCells_app
+from .scCombineMods import app as scCombineMods_app
+from .scCombineSamples import app as scCombineSamples_app
+from .scCountQC import app as scCountQC_app
+from .scCountReads import app as scCountReads_app
+from .scExportSignal import app as scExportSignal_app
+from .scFilterBarcodes import app as scFilterBarcodes_app
+from .scFilterStats import app as scFilterStats_app
+from .scFindVCRs import app as scFindVCRs_app
+from .scJSD import app as scJSD_app
+from .scPlotRegion import app as scPlotRegion_app
+from .scReduceDims import app as scReduceDims_app
+from .scScoreFeatures import app as scScoreFeatures_app
 
 DESCRIPTION = f"""
 sincei is a suite of command-line tools to explore single-cell genomics data.
 Every tool name begins with the prefix `sc` followed by <tool_name>, such as:
     scBulkCoverage -b reads.bam -g groupinfo.txt -o coverage
 
-    sincei {internal.version()}
+    sincei {version_string()}
 """
 
-USAGE = "sincei <tool_name> [options]"
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
+
+# Register subcommand apps.
+# The order of subcommands in the help message follows the order of registration.
+app.add_typer(scFilterBarcodes_app, name="scFilterBarcodes")
+app.add_typer(scFilterStats_app, name="scFilterStats")
+app.add_typer(scJSD_app, name="scJSD")
+app.add_typer(scCountReads_app, name="scCountReads")
+app.add_typer(scCountQC_app, name="scCountQC")
+app.add_typer(scFindVCRs_app, name="scFindVCRs")
+app.add_typer(scReduceDims_app, name="scReduceDims")
+app.add_typer(scClusterCells_app, name="scClusterCells")
+app.add_typer(scScoreFeatures_app, name="scScoreFeatures")
+app.add_typer(scCombineSamples_app, name="scCombineSamples")
+app.add_typer(scCombineMods_app, name="scCombineMods")
+app.add_typer(scPlotRegion_app, name="scPlotRegion")
+app.add_typer(scBulkCoverage_app, name="scBulkCoverage")
+app.add_typer(scExportSignal_app, name="scExportSignal")
 
 
-def parse_arguments() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=DESCRIPTION,
-        usage=USAGE,
-        add_help=False,
-    )
-    parser.add_argument(
-        "-h", "--help", action="help", help="Show this message and exit."
-    )
-    parser.add_argument(
-        "-V",
-        "--version",
-        action="version",
-        version=f"sincei {internal.version()}",
-        help="Print the program version and exit.",
-    )
-    subparsers = parser.add_subparsers(dest="tool", metavar="<tool_name>")
-    for name, summary in _TOOLS:
-        subparsers.add_parser(name, help=summary, add_help=False)
-    return parser
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    version: Annotated[bool, OTHER_OPTS["version"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+    return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Dispatch to a subcommand's own ``main``.
-
-    The subcommand modules are imported lazily so that ``sincei <tool> --help``
-    only pays for the tool it is about to run, and ``sincei --help`` pays for
-    none of them.  ``ParserCommon`` is imported eagerly and is what the root
-    help needs.
-    """
-    argv = list(sys.argv[1:] if argv is None else argv)
-    parser = parse_arguments()
-
-    if not argv or argv[0] in ("-h", "--help"):
-        parser.print_help()
-        return 0
-    if argv[0] in ("-V", "--version"):
-        parser.parse_args(argv)
-        return 0
-
-    known = {name for name, _ in _TOOLS}
-    if argv[0] not in known:
-        parser.parse_args(argv)  # argparse reports the unknown subcommand
-        return 2
-
-    module = import_module(f"sincei.cli.{argv[0]}")
-    sys.argv = [argv[0], *argv[1:]]
-    return module.main(argv[1:] or None)
+def cli() -> None:
+    preprocess_args()
+    app()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    cli()

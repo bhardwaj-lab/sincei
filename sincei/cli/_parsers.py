@@ -1,34 +1,35 @@
-"""Parsers and shared plumbing between the argparse CLI and the Rust backend.
+"""Parsers and shared plumbing for the typer CLI and the Rust (`_sincei`) backend.
 
-The CLI exposes user-friendly option shapes (choice strings, ``"low,high"``
-strings, barcode/whitelist files) whereas the Rust functions take plain scalars
-and lists.  This module centralizes those conversions and input checks.
-
-This is the argparse frontend's own copy: it deliberately does not import from
-``sincei.cli_typer``, because that package's ``__init__`` pulls in typer.
+The CLI exposes user-friendly option shapes (choice enums, ``"low,high"``
+strings, barcode/whitelist files) whereas the Rust functions take plain
+scalars and lists.  This module centralizes those conversions and input
+checks, plus the small amount of app plumbing shared by every command
+(``preprocess_args`` and ``log_parameters``).
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._common_args import DuplicateFilter
 
 logger = logging.getLogger(__name__)
 
-# CLI duplicate-filter choice -> Rust `dup_method` string.
-DUPLICATE_FILTER_CHOICES = ["start_bc", "start_umi", "start_end_bc", "start_end_bc_umi"]
-
 _DUP_METHOD_MAP: dict[str, str] = {
     "start_bc": "barcode_start",
-    "start_umi": "barcode_umi_start",
+    "start_bc_umi": "barcode_umi_start",
     "start_end_bc": "barcode_start_end",
     "start_end_bc_umi": "barcode_umi_start_end",
 }
 
 
-def dup_method(value: str | None) -> str | None:
+def dup_method(value: DuplicateFilter | None) -> str | None:
     """Map the CLI duplicate-filter choice to the backend's method string."""
-    return _DUP_METHOD_MAP[value] if value is not None else None
+    return _DUP_METHOD_MAP[value.value] if value is not None else None
 
 
 def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None:
@@ -39,7 +40,7 @@ def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None
     for entry in motifs:
         parts = entry.split(",")
         if len(parts) != 2:
-            msg = f"--motifFilter expects 'read_motif,ref_motif' (got {entry!r})"
+            msg = f"--motif-filter expects 'read_motif,ref_motif' (got {entry!r})"
             raise ValueError(msg)
         parsed.append((parts[0].strip(), parts[1].strip()))
     return parsed
@@ -51,7 +52,7 @@ def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
         return None, None
     parts = value.split(",")
     if len(parts) != 2:
-        msg = f"--GCcontentFilter expects '<low>,<high>' (got {value!r})"
+        msg = f"--gc-content-filter expects '<low>,<high>' (got {value!r})"
         raise ValueError(msg)
     return float(parts[0]), float(parts[1])
 
@@ -87,13 +88,13 @@ def resolve_labels(
     """Resolve the per-BAM sample labels used to match the group-info file.
 
     Priority: explicit ``--labels`` (must match the BAM count), then
-    ``--smartLabels`` / default, both of which use the file stem.
+    ``--smart-labels`` / default, both of which use the file stem.
     """
     if labels:
         if len(labels) != len(bam_files):
             msg = (
-                f"--labels count ({len(labels)}) does not match the number of "
-                f"BAM files ({len(bam_files)})."
+                f"--labels count ({len(labels)}) does not match the number of BAM "
+                f"files ({len(bam_files)})."
             )
             raise ValueError(msg)
         return list(labels)
@@ -109,7 +110,61 @@ def warn_unsupported(**options: object) -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# App plumbing shared by every command
+# ---------------------------------------------------------------------------
 def log_parameters(**parameters: object) -> None:
     """Log each ``name: value`` parameter at INFO level (used under ``--verbose``)."""
     for name, value in parameters.items():
         logging.info("%s: %s", name, value)
+
+
+def preprocess_args() -> None:
+    """Expand whitespace-separated multi-value options into repeated options.
+
+    Typer does not support whitespace-separated multi-value options, so we
+    preprocess ``sys.argv`` so that::
+
+        app some_command --filters f1 f2 f3 --envs e1 e2
+
+    becomes::
+
+        app some_command --filters f1 --filters f2 --filters f3 --envs e1 --envs e2
+
+    //!\\ DOWNSIDE: options must always come after positional arguments. //!\\
+    //!\\ DOWNSIDE: options must either take one value or repeated values. //!\\
+    This is fine for sincei since all commands only use options.
+    """
+
+    # `--extendReads` may be given with no value (meaning "estimate from data").
+    _EXTEND_READS_FLAGS = {"-e", "--extendReads"}
+
+    # Collect the leading command path (everything up to the first option).
+    final_cmd: list[str] = []
+    for arg in sys.argv:
+        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+            break
+        final_cmd.append(arg)
+
+    # Expand each option so every value gets its own flag.
+    for idx, arg in enumerate(sys.argv):
+        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+            opt_values: list[str] = []
+            for value in sys.argv[idx + 1 :]:
+                if any(value.startswith(prefix) for prefix in ("-", "--")):
+                    break
+                opt_values.append(value)
+
+            if len(opt_values) >= 1:
+                for opt_value in opt_values:
+                    final_cmd.extend([arg, opt_value])
+            elif arg in _EXTEND_READS_FLAGS:
+                # A bare --extendReads (no value) means "estimate the fragment
+                # length from the data". Typer cannot express an option with an
+                # optional value, so we pass a "0" that the Rust backend
+                # interprets as "estimate".
+                final_cmd.extend([arg, "0"])
+            else:
+                final_cmd.append(arg)
+
+    sys.argv = final_cmd
