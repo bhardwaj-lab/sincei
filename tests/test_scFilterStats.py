@@ -110,7 +110,9 @@ def test_cell_id_joins_sample_and_barcode(tmp_path: Path) -> None:
     header, *rows = text.splitlines()
 
     assert header.split("\t")[0] == "Cell_ID"
-    barcodes = [line.strip() for line in Path(BARCODES).read_text().splitlines() if line.strip()]
+    barcodes = [
+        line.strip() for line in Path(BARCODES).read_text().splitlines() if line.strip()
+    ]
     cell_ids = [row.split("\t")[0] for row in rows]
     assert cell_ids == [f"mysample::{bc}" for bc in barcodes]
 
@@ -123,9 +125,13 @@ def test_cell_id_joins_sample_and_barcode(tmp_path: Path) -> None:
 def test_snapshot(name: str, tmp_path: Path) -> None:
     snap = SNAP_DIR / f"{name}.tsv"
     if not snap.exists():
-        pytest.skip(f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)")
+        pytest.skip(
+            f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)"
+        )
     got = run_tool(_args(name), str(tmp_path / f"{name}.tsv"))
-    assert _norm(got) == _norm(snap.read_text()), f"output for '{name}' differs from snapshot"
+    assert _norm(got) == _norm(snap.read_text()), (
+        f"output for '{name}' differs from snapshot"
+    )
 
 
 def _generate() -> None:

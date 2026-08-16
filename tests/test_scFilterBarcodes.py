@@ -74,9 +74,13 @@ def _norm(text: str) -> str:
 def test_snapshot(name: str, tmp_path: Path) -> None:
     snap = SNAP_DIR / f"{name}.tsv"
     if not snap.exists():
-        pytest.skip(f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)")
+        pytest.skip(
+            f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)"
+        )
     got = run_tool(SCENARIOS[name], str(tmp_path / f"{name}.tsv"))
-    assert _norm(got) == _norm(snap.read_text()), f"output for '{name}' differs from snapshot"
+    assert _norm(got) == _norm(snap.read_text()), (
+        f"output for '{name}' differs from snapshot"
+    )
 
 
 def test_rank_plot_writes_png(tmp_path: Path) -> None:
