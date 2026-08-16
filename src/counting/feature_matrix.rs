@@ -292,11 +292,15 @@ pub fn count_bam_features(
             .reduce(
                 || Ok(AHashMap::new()),
                 |a, b| {
-                    let mut a = a?;
-                    for (key, val) in b? {
-                        *a.entry(key).or_insert(0) += val;
+                    let (a, b) = (a?, b?);
+                    // Drain the smaller map into the larger. Merging costs one
+                    // hash lookup per entry moved, so moving the shorter side
+                    // does strictly less work.
+                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+                    for (key, val) in drain {
+                        *keep.entry(key).or_insert(0) += val;
                     }
-                    Ok(a)
+                    Ok(keep)
                 },
             )
     })?;

@@ -142,8 +142,7 @@ pub fn count_bam_bins(
     };
 
     // Count each chunk into its own map, then combine them with a parallel
-    // tree reduction. The previous design collected all per-chunk maps and
-    // merged them on a single thread, which was ~15% of wall-clock time.
+    // tree reduction.
     let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
         work.par_iter()
             .map_init(
@@ -289,11 +288,15 @@ pub fn count_bam_bins(
             .reduce(
                 || Ok(AHashMap::new()),
                 |a, b| {
-                    let mut a = a?;
-                    for (key, val) in b? {
-                        *a.entry(key).or_insert(0) += val;
+                    let (a, b) = (a?, b?);
+                    // Drain the smaller map into the larger. Merging costs one
+                    // hash lookup per entry moved, so moving the shorter side
+                    // does strictly less work.
+                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+                    for (key, val) in drain {
+                        *keep.entry(key).or_insert(0) += val;
                     }
-                    Ok(a)
+                    Ok(keep)
                 },
             )
     })?;
