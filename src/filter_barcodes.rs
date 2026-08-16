@@ -12,7 +12,7 @@ use triple_accel::hamming::hamming;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{ChromIndex, GenomeIndex};
-use crate::bam::bam_io::{BamWorker, read_bam_header};
+use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
 
 /// A map of barcodes stored as bytes in a `Vec<u8>` (directly read from the BAM
 /// record) to the bins is was detected in, stored as their index.
@@ -52,6 +52,7 @@ fn run_filter_barcodes(
     };
 
     let tag = parse_tag(cell_tag)?;
+    ensure_barcode_tags_present(&[bamfile], tag, None)?;
 
     let header = read_bam_header(bamfile)?;
 

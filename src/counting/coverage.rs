@@ -25,7 +25,7 @@ use rayon::prelude::*;
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::build_bigwig_index;
-use crate::bam::bam_io::{BamWorker, read_bam_header};
+use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
@@ -279,6 +279,8 @@ pub fn run_bulk_coverage(
     let record_opts = derive_record_opts(qc_filter, has_motif);
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
+    let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
+    ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
 
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,

@@ -20,6 +20,7 @@ use bstr::BString;
 use noodles::bam;
 use noodles::bgzf;
 use noodles::sam::Header;
+use noodles::sam::alignment::record::data::field::Tag;
 use noodles::sam::header::ReferenceSequences;
 use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
 
@@ -27,6 +28,62 @@ use super::filters::MotifFilter;
 
 /// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
+
+/// Records inspected when checking that the BAM tags a run depends on are present.
+///
+/// Large enough that a tag used by the file will certainly appear, small enough
+/// to be unnoticeable next to the run it guards.
+const TAG_SAMPLE_READS: usize = 100_000;
+
+/// Check the barcode tag, and the UMI tag when one was asked for, on every BAM.
+pub(crate) fn ensure_barcode_tags_present(
+    bam_paths: &[&Path],
+    bc_tag: Tag,
+    umi_tag: Option<Tag>,
+) -> Result<()> {
+    for path in bam_paths {
+        ensure_tag_present(path, "--cellTag", bc_tag)?;
+        if let Some(umi) = umi_tag {
+            ensure_tag_present(path, "--umiTag", umi)?;
+        }
+    }
+    Ok(())
+}
+
+/// Fail when `tag` is on none of the first [`TAG_SAMPLE_READS`] records.
+fn ensure_tag_present(path: &Path, option: &str, tag: Tag) -> Result<()> {
+    let mut reader = bam::io::reader::Builder
+        .build_from_path(path)
+        .with_context(|| format!("failed to open BAM: {}", path.display()))?;
+    // The record iterator starts past the header, so it has to be consumed even
+    // though nothing here depends on it.
+    reader
+        .read_header()
+        .with_context(|| format!("failed to read BAM header: {}", path.display()))?;
+
+    for result in reader.records().take(TAG_SAMPLE_READS) {
+        let record = result.with_context(|| format!("failed to read {}", path.display()))?;
+        for field in record.data().iter() {
+            let (seen, _) = field.with_context(|| format!("failed to read {}", path.display()))?;
+            if seen == tag {
+                return Ok(());
+            }
+        }
+    }
+
+    // Reaching here means the BAM held no such tag, because the records carry
+    // other tags, carry none at all, or because there are no records.
+    let name: &[u8; 2] = tag.as_ref();
+    anyhow::bail!(
+        "{} has no {} tag (from {}) in its first {} records.\n\
+         Check which tag the BAM uses, e.g. with `samtools view {} | head -1`",
+        path.display(),
+        String::from_utf8_lossy(name),
+        option,
+        TAG_SAMPLE_READS,
+        path.display()
+    )
+}
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header.
 /// Builds an indexed reader so a missing `.bai` is reported as an error.
