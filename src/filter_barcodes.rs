@@ -446,8 +446,7 @@ mod tests {
 
     fn brute_force_match(whitelist: &[String], barcode: &[u8], max_dist: usize) -> bool {
         whitelist.iter().any(|entry| {
-            entry.len() == barcode.len()
-                && hamming(barcode, entry.as_bytes()) as usize <= max_dist
+            entry.len() == barcode.len() && hamming(barcode, entry.as_bytes()) as usize <= max_dist
         })
     }
 

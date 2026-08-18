@@ -607,8 +607,7 @@ pub fn run_bulk_coverage(
                 let mut values: Vec<(String, Value)> = Vec::new();
 
                 for (chrom_name, chrom_len) in &chrom_sizes {
-                    let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name)
-                    else {
+                    let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else {
                         continue;
                     };
 
