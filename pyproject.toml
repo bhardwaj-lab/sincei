@@ -115,7 +115,13 @@ profile = "black"
 skip_glob = ["docs/*"]
 
 [tool.ruff]
-src = [ "src" ]
+src = ["."]
+include = [
+    "sincei/**/*.py",
+    "tests/**/*.py",
+    "pyproject.toml",
+]
+
 format.preview = true
 format.docstring-code-format = true
 lint.select = [
