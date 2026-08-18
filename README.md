@@ -24,6 +24,6 @@ pip install -e .
 
 To update the extension, pull the changes from the repo and recompile it:
 ```bash
-giut pull
+git pull
 maturin build --release
 ```
