@@ -32,7 +32,9 @@ def dup_method(value: DuplicateFilter | None) -> str | None:
     return _DUP_METHOD_MAP[value.value] if value is not None else None
 
 
-def umi_tag_if_used(tag: str | None, duplicate_filter: DuplicateFilter | None) -> str | None:
+def umi_tag_if_used(
+    tag: str | None, duplicate_filter: DuplicateFilter | None
+) -> str | None:
     """The UMI tag to ask the backend for, or ``None`` when nothing reads it.
 
     Only the UMI-aware duplicate filters look at a record's UMI. Requesting the
