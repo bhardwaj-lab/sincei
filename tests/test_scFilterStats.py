@@ -51,7 +51,7 @@ SCENARIOS: dict[str, tuple[list[str], bool]] = {
     "distance_between_bins": (["-bs", "2000", "--distanceBetweenBins", "1000"], True),
     "dup_start_bc": (["--duplicateFilter", "start_bc"], False),
     "dup_start_end_bc": (["--duplicateFilter", "start_end_bc"], False),
-    "dup_umi": (["--duplicateFilter", "start_umi"], False),
+    "dup_umi": (["--duplicateFilter", "start_bc_umi"], False),
     "gc_content": (["-gc", "0.2,0.8"], False),
     "min_aligned_fraction": (["--minAlignedFraction", "0.5"], False),
     "min_mapping_quality": (["-mq", "20"], False),
