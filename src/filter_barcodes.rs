@@ -251,21 +251,23 @@ enum WhitelistMatcher<'a> {
 ///
 /// Entries are bucketed by length as well, since only equal-length entries are
 /// comparable and the block boundaries depend on the length.
+/// `(length, block position) -> block bytes -> entry indices`.
+///
+/// Nested rather than keyed by one `(usize, usize, &[u8])` tuple so a lookup
+/// can borrow the block straight out of the barcode.
+type BlockBuckets<'a> = AHashMap<(usize, usize), AHashMap<&'a [u8], Vec<u32>>>;
+
 struct FuzzyWhitelist<'a> {
     max_dist: usize,
     n_blocks: usize,
     entries: &'a [String],
-    /// `(length, block position) -> block bytes -> entry indices`.
-    ///
-    /// Nested rather than keyed by one `(usize, usize, &[u8])` tuple so a
-    /// lookup can borrow the block straight out of the barcode.
-    buckets: AHashMap<(usize, usize), AHashMap<&'a [u8], Vec<u32>>>,
+    buckets: BlockBuckets<'a>,
 }
 
 impl<'a> FuzzyWhitelist<'a> {
     fn build(entries: &'a [String], max_dist: usize) -> Self {
         let n_blocks = max_dist + 1;
-        let mut buckets: AHashMap<(usize, usize), AHashMap<&'a [u8], Vec<u32>>> = AHashMap::new();
+        let mut buckets: BlockBuckets<'a> = AHashMap::new();
 
         for (idx, entry) in entries.iter().enumerate() {
             let bytes = entry.as_bytes();
@@ -489,7 +491,7 @@ mod tests {
     fn fuzzy_matcher_agrees_with_whole_whitelist_scan() {
         // The index is an optimization, so its answers must be identical to the
         // scan it replaced for every query, not merely similar.
-        let bases = [b'A', b'C', b'G', b'T'];
+        let bases = *b"ACGT";
         let whitelist: Vec<String> = (0..256u32)
             .map(|i| {
                 (0..4)
@@ -502,7 +504,7 @@ mod tests {
             let matcher = WhitelistMatcher::build(&whitelist, max_dist);
             // Every 4-mer over a 5-letter alphabet, so queries include the
             // off-alphabet 'N' the index must still handle.
-            let alphabet = [b'A', b'C', b'G', b'T', b'N'];
+            let alphabet = *b"ACGTN";
             for a in alphabet {
                 for b in alphabet {
                     for c in alphabet {

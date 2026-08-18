@@ -481,7 +481,6 @@ mod tests {
         let adjust = AdjustRead {
             extend_reads: Some(200),
             center_reads: true,
-            ..Default::default()
         };
 
         // Extended to [1000, 1200), centered at 1100; a 50 bp read spans [1075, 1125).

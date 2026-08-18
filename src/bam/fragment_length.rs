@@ -176,7 +176,7 @@ fn median(mut values: Vec<usize>) -> Option<usize> {
     values.sort_unstable();
     let mid = values.len() / 2;
     Some(if values.len().is_multiple_of(2) {
-        (values[mid - 1] + values[mid] + 1) / 2
+        (values[mid - 1] + values[mid]).div_ceil(2)
     } else {
         values[mid]
     })
@@ -257,9 +257,7 @@ mod tests {
     fn estimating_without_any_bam_errors_rather_than_dividing_by_zero() {
         // The counting functions only reject an empty BAM list *after* resolving
         // the extension, so this path is reachable and must not panic.
-        let err = estimate_fragment_length(&[])
-            .err()
-            .expect("estimating with no BAMs should fail");
+        let err = estimate_fragment_length(&[]).expect_err("estimating with no BAMs should fail");
         assert!(format!("{err:#}").contains("without a BAM file"));
     }
 
