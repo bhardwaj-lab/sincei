@@ -30,7 +30,7 @@ crate-type = ["cdylib"]
 # PyO3 for Python interoperability.
 #
 # Extension module is skipped so the Python interpreter can be loaded dynamically at runtime.
-pyo3 = { version = "0.27", features = ["anyhow"] }
+pyo3 = { version = "0.27", features = ["extension-module", "anyhow"] }
 
 # Dataframes
 polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
