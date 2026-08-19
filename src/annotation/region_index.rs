@@ -142,6 +142,19 @@ pub struct BinIndex {
     pub chrom_bins: AHashMap<String, (usize, usize)>,
     /// Total bins across all chromosomes, the number of matrix columns.
     pub n_bins: usize,
+    /// `chrom -> first tiled base`. Zero for every chromosome unless a region
+    /// restricted the tiling to a window, in which case bin `b` of that
+    /// chromosome starts at `window_start + b * step_size` rather than at
+    /// `b * step_size`.
+    pub chrom_window_start: AHashMap<String, usize>,
+}
+
+impl BinIndex {
+    /// First tiled base on `chrom`. Zero unless a region restricted the tiling,
+    /// so callers can add it unconditionally.
+    pub fn window_start(&self, chrom: &str) -> usize {
+        self.chrom_window_start.get(chrom).copied().unwrap_or(0)
+    }
 }
 
 /// Tile each chromosome into bins, without naming them.
@@ -163,16 +176,45 @@ pub fn build_bigwig_index(
     bin_size: usize,
     step_size: usize,
 ) -> BinIndex {
+    build_bigwig_index_in_window(&whole_chromosomes(chrom_sizes), bin_size, step_size)
+}
+
+/// Turn chromosome sizes into windows spanning each whole chromosome, so the
+/// unrestricted tiling is the windowed tiling with nothing cut away.
+fn whole_chromosomes(chrom_sizes: &[(String, usize)]) -> Vec<(String, usize, usize)> {
+    chrom_sizes
+        .iter()
+        .map(|(chrom, size)| (chrom.clone(), 0, *size))
+        .collect()
+}
+
+/// Tile a window of each chromosome into bins, without naming them.
+///
+/// `windows` holds `(chrom, window_start, window_end)` in 0-based half-open
+/// coordinates, already clamped to the chromosome. Bins start at `window_start`
+/// and step by `step_size` for as long as that start is inside the window, so
+/// the window rather than the chromosome is the universe being tiled: a run
+/// restricted to a region gets bins for that region only.
+///
+/// [`build_bigwig_index`] is this function with every window covering a whole
+/// chromosome. Empty windows (`end <= start`) are skipped, as size-0
+/// chromosomes are there.
+pub fn build_bigwig_index_in_window(
+    windows: &[(String, usize, usize)],
+    bin_size: usize,
+    step_size: usize,
+) -> BinIndex {
     let mut chrom_bins: AHashMap<String, (usize, usize)> = AHashMap::new();
+    let mut chrom_window_start: AHashMap<String, usize> = AHashMap::new();
     let mut n_bins = 0usize;
 
-    for (chrom, chrom_size) in chrom_sizes {
-        let chrom_size = *chrom_size;
-        if chrom_size == 0 {
+    for (chrom, window_start, window_end) in windows {
+        let Some(span) = window_end.checked_sub(*window_start).filter(|s| *s > 0) else {
             continue;
-        }
-        let chrom_n_bins = chrom_size.div_ceil(step_size);
+        };
+        let chrom_n_bins = span.div_ceil(step_size);
         chrom_bins.insert(chrom.clone(), (n_bins, chrom_n_bins));
+        chrom_window_start.insert(chrom.clone(), *window_start);
         n_bins += chrom_n_bins;
     }
 
@@ -181,6 +223,7 @@ pub fn build_bigwig_index(
         step_size,
         chrom_bins,
         n_bins,
+        chrom_window_start,
     }
 }
 
@@ -197,17 +240,30 @@ pub fn build_bin_index(
     bin_size: usize,
     step_size: usize,
 ) -> (BinIndex, Vec<Feature>) {
-    let index = build_bigwig_index(chrom_sizes, bin_size, step_size);
+    build_bin_index_in_window(&whole_chromosomes(chrom_sizes), bin_size, step_size)
+}
+
+/// Tile a window of each chromosome into bins and return a [`BinIndex`] with one
+/// [`Feature`] per bin, named `"chrom:start-end"`.
+///
+/// The windowed counterpart of [`build_bin_index`]: `windows` is interpreted as
+/// in [`build_bigwig_index_in_window`], and the last bin's `end` is clamped to
+/// the window end rather than to the chromosome size.
+pub fn build_bin_index_in_window(
+    windows: &[(String, usize, usize)],
+    bin_size: usize,
+    step_size: usize,
+) -> (BinIndex, Vec<Feature>) {
+    let index = build_bigwig_index_in_window(windows, bin_size, step_size);
     let mut var: Vec<Feature> = Vec::with_capacity(index.n_bins);
 
-    for (chrom, chrom_size) in chrom_sizes {
-        let chrom_size = *chrom_size;
-        if chrom_size == 0 {
+    for (chrom, window_start, window_end) in windows {
+        if window_end <= window_start {
             continue;
         }
-        let mut bin_start = 0;
-        while bin_start < chrom_size {
-            let bin_end = (bin_start + bin_size).min(chrom_size);
+        let mut bin_start = *window_start;
+        while bin_start < *window_end {
+            let bin_end = (bin_start + bin_size).min(*window_end);
             var.push(Feature {
                 chrom: chrom.clone(),
                 start: bin_start,

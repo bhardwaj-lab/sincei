@@ -17,7 +17,9 @@ use rayon::prelude::*;
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::{BinIndex, GenomeIndex, build_bin_index};
+use crate::annotation::region_index::{
+    BinIndex, GenomeIndex, build_bin_index, build_bin_index_in_window,
+};
 use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -88,13 +90,40 @@ pub fn count_bam_bins(
             .iter()
             .filter(|(name, _)| {
                 let bytes: &[u8] = name.as_ref();
-                !skip_set.contains(bytes)
+                if skip_set.contains(bytes) {
+                    return false;
+                }
+                // A region confines the output to its own chromosome, so the
+                // other chromosomes contribute no bins at all.
+                match &region_filter {
+                    Some((region_chrom, _, _)) => bytes == region_chrom.as_bytes(),
+                    None => true,
+                }
             })
             .map(|(name, seq)| (name.to_string(), seq.length().get()))
             .collect()
     };
 
-    let (bin_index, var_meta) = build_bin_index(&chrom_sizes, bin_size, step_size);
+    // What to tile on each chromosome: the whole thing, or just the region.
+    // `parse_region` leaves an open end as usize::MAX, so clamp to the length.
+    let windows: Vec<(String, usize, usize)> = chrom_sizes
+        .iter()
+        .map(|(chrom, chrom_len)| match &region_filter {
+            Some((_, region_start, region_end)) => (
+                chrom.clone(),
+                (*region_start).min(*chrom_len),
+                (*region_end).min(*chrom_len),
+            ),
+            None => (chrom.clone(), 0, *chrom_len),
+        })
+        .collect();
+
+    let (bin_index, var_meta) = match &region_filter {
+        // No region: tile whole chromosomes, exactly as before.
+        None => build_bin_index(&chrom_sizes, bin_size, step_size),
+        // A region: tile only that window, so `var` holds the region's bins.
+        Some(_) => build_bin_index_in_window(&windows, bin_size, step_size),
+    };
     let n_features = var_meta.len();
 
     let blacklist = params
@@ -111,16 +140,18 @@ pub fn count_bam_bins(
         .iter()
         .enumerate()
         .flat_map(|(bam_idx, &(bam_path, _))| {
-            chrom_sizes.iter().flat_map(move |(chrom, chrom_len)| {
-                (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                    (
-                        bam_idx,
-                        bam_path,
-                        chrom.clone(),
-                        start,
-                        (start + chunk_size).min(*chrom_len),
-                    )
-                })
+            windows.iter().flat_map(move |(chrom, win_start, win_end)| {
+                (*win_start..*win_end)
+                    .step_by(chunk_size)
+                    .map(move |start| {
+                        (
+                            bam_idx,
+                            bam_path,
+                            chrom.clone(),
+                            start,
+                            (start + chunk_size).min(*win_end),
+                        )
+                    })
             })
         })
         .collect();
@@ -160,6 +191,9 @@ pub fn count_bam_bins(
                     else {
                         return Ok(AHashMap::new());
                     };
+                    // Bin 0 of this chromosome starts here: 0 unless a region
+                    // restricted the tiling to a window.
+                    let window_start = bin_index.window_start(chrom.as_str());
 
                     // Hoisted region filter: if a region was requested on a
                     // different chromosome, the whole chunk is skipped.
@@ -254,19 +288,27 @@ pub fn count_bam_bins(
                         // interval overlaps the effective read interval the most.
                         // For non-overlapping bins this is equivalent to placing
                         // the read at the center of its effective interval.
-                        if eff_end > 0 && n_bins > 0 {
-                            let last_bin = ((eff_end - 1) / step_size).min(n_bins - 1);
-                            let first_bin = if eff_start + 1 > bin_size {
-                                (eff_start - bin_size + step_size) / step_size
+                        // Bin indices are relative to the window origin. A read
+                        // that ends before the window has nothing to fall in; one
+                        // that starts after it produces an empty bin range.
+                        let rel_start = eff_start.saturating_sub(window_start);
+                        let rel_end = eff_end.saturating_sub(window_start);
+
+                        if rel_end > 0 && n_bins > 0 {
+                            let last_bin = ((rel_end - 1) / step_size).min(n_bins - 1);
+                            let first_bin = if rel_start + 1 > bin_size {
+                                (rel_start - bin_size + step_size) / step_size
                             } else {
                                 0
                             };
                             let mut best_bin = first_bin;
                             let mut best_overlap = 0usize;
                             for bin in first_bin..=last_bin {
-                                let bin_start = bin * step_size;
+                                let bin_start = window_start + bin * step_size;
                                 let bin_end = bin_start + bin_size;
-                                let overlap = eff_end.min(bin_end) - eff_start.max(bin_start);
+                                let overlap = eff_end
+                                    .min(bin_end)
+                                    .saturating_sub(eff_start.max(bin_start));
                                 if overlap > best_overlap {
                                     best_overlap = overlap;
                                     best_bin = bin;
@@ -334,13 +376,17 @@ fn blacklisted_bin_indices(
         let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom) else {
             continue;
         };
+        let window_start = bin_index.window_start(chrom);
         for bl_iv in bl_chrom_idx.iter() {
-            if bl_iv.end == 0 {
+            // Measured from the window origin, like the read intervals are.
+            let bl_start = bl_iv.start.saturating_sub(window_start);
+            let bl_end = bl_iv.end.saturating_sub(window_start);
+            if bl_end == 0 {
                 continue;
             }
-            let last_bl_bin = ((bl_iv.end - 1) / step_size).min(n_bins - 1);
-            let first_bl_bin = if bl_iv.start + 1 > bin_size {
-                (bl_iv.start - bin_size + step_size) / step_size
+            let last_bl_bin = ((bl_end - 1) / step_size).min(n_bins - 1);
+            let first_bl_bin = if bl_start + 1 > bin_size {
+                (bl_start - bin_size + step_size) / step_size
             } else {
                 0
             };
@@ -521,8 +567,21 @@ mod tests {
         assert!(adata.n_vars() > 0, "expected at least one bin");
     }
 
+    /// Column sums keyed by bin name, so two runs with different bin layouts
+    /// can still be compared bin for bin.
+    fn column_sums(path: &Path) -> std::collections::BTreeMap<String, f64> {
+        let adata = AnnData::<H5>::open(H5::open(path).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+        let x = super::super::count_utils::read_x_f64(&adata).unwrap();
+        let mut sums = std::collections::BTreeMap::new();
+        for (_, col, &v) in x.triplet_iter() {
+            *sums.entry(names[col].clone()).or_insert(0.0) += v;
+        }
+        sums
+    }
+
     #[test]
-    fn restricting_to_a_region_keeps_the_bin_geometry_but_counts_fewer_reads() {
+    fn restricting_to_a_region_tiles_only_that_region() {
         let barcodes = test_barcodes();
         let dir = TempDir::new().unwrap();
 
@@ -537,41 +596,161 @@ mod tests {
         )
         .unwrap();
 
-        // The test BAM's reads sit around 65.97 Mb, so this window holds none.
-        let region_params = CountingParams {
-            region: Some("5:1-100000".to_string()),
-            ..CountingParams::default()
-        };
         let region = dir.path().join("region.h5ad");
         count_into(
             &region,
             100_000,
             100_000,
             &barcodes,
-            &region_params,
+            &CountingParams {
+                region: Some("5:1-100000".to_string()),
+                ..CountingParams::default()
+            },
             1_000_000,
         )
         .unwrap();
 
         let open = |p: &Path| AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
-        let total = |p: &Path| -> f64 {
-            super::super::count_utils::read_x_f64(&open(p))
-                .unwrap()
-                .triplet_iter()
-                .map(|(_, _, &v)| v)
-                .sum()
-        };
+        let n_whole = open(&whole).n_vars();
+        let n_region = open(&region).n_vars();
 
-        // `region` filters reads, not the bin layout: the var axis still spans
-        // the whole chromosome, so both runs are the same width.
-        assert_eq!(open(&region).n_vars(), open(&whole).n_vars());
+        // One 100 kb bin for the window, against the whole chromosome before.
+        assert_eq!(n_region, 1, "expected a single bin for a 100 kb window");
+        assert!(n_region < n_whole, "{n_region} is not fewer than {n_whole}");
+    }
 
-        let whole_total = total(&whole);
-        assert!(whole_total > 0.0, "the unrestricted run counted nothing");
-        assert!(
-            total(&region) < whole_total,
-            "restricting to an empty window did not reduce the counts"
-        );
+    #[test]
+    fn a_region_that_does_not_start_at_zero_tiles_from_its_own_start() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("offset.h5ad");
+
+        // 65,900,000..66,000,000 in 10 kb bins: ten bins, the first starting at
+        // the region start rather than at the chromosome start.
+        count_into(
+            &out,
+            10_000,
+            10_000,
+            &test_barcodes(),
+            &CountingParams {
+                region: Some("5:65900001-66000000".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+
+        assert_eq!(names.len(), 10, "{names:?}");
+        assert_eq!(names[0], "5:65900000-65910000");
+        assert_eq!(names[9], "5:65990000-66000000");
+    }
+
+    #[test]
+    fn a_read_lands_in_the_same_genomic_bin_with_or_without_a_region() {
+        // The window shifts every bin index; if the offset arithmetic were
+        // wrong, reads would be credited to a different genomic interval.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let whole = dir.path().join("whole.h5ad");
+        count_into(
+            &whole,
+            10_000,
+            10_000,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+
+        let region = dir.path().join("region.h5ad");
+        count_into(
+            &region,
+            10_000,
+            10_000,
+            &barcodes,
+            &CountingParams {
+                region: Some("5:65900001-66000000".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let whole_sums = column_sums(&whole);
+        let region_sums = column_sums(&region);
+
+        assert!(!region_sums.is_empty(), "the region counted nothing");
+        for (bin_name, region_count) in &region_sums {
+            let whole_count = whole_sums.get(bin_name).copied().unwrap_or(0.0);
+            assert_eq!(
+                *region_count, whole_count,
+                "bin {bin_name} counted {region_count} inside the region but {whole_count} without it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_region_narrower_than_one_bin_still_produces_a_bin() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("narrow.h5ad");
+
+        count_into(
+            &out,
+            10_000,
+            10_000,
+            &test_barcodes(),
+            &CountingParams {
+                region: Some("5:65970001-65971000".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+        // The last bin is clamped to the window end, not to the bin size.
+        assert_eq!(names, vec!["5:65970000-65971000"]);
+    }
+
+    #[test]
+    fn a_bare_chromosome_region_still_tiles_the_whole_chromosome() {
+        // parse_region leaves an open end as usize::MAX; it must be clamped to
+        // the chromosome length rather than overflowing the bin count.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let whole = dir.path().join("whole.h5ad");
+        count_into(
+            &whole,
+            100_000,
+            100_000,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+
+        let bare = dir.path().join("bare.h5ad");
+        count_into(
+            &bare,
+            100_000,
+            100_000,
+            &barcodes,
+            &CountingParams {
+                region: Some("5".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let open = |p: &Path| AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
+        assert_eq!(open(&bare).n_vars(), open(&whole).n_vars());
+        assert_eq!(column_sums(&bare), column_sums(&whole));
     }
 
     #[test]

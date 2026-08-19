@@ -24,7 +24,7 @@ use rayon::prelude::*;
 
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::build_bigwig_index;
+use crate::annotation::region_index::{build_bigwig_index, build_bigwig_index_in_window};
 use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -311,13 +311,39 @@ pub fn run_bulk_coverage(
             .iter()
             .filter(|(name, _)| {
                 let bytes: &[u8] = name.as_ref();
-                !skip_set.contains(bytes)
+                if skip_set.contains(bytes) {
+                    return false;
+                }
+                // A region confines the output to its own chromosome.
+                match &region_filter {
+                    Some((region_chrom, _, _)) => bytes == region_chrom.as_bytes(),
+                    None => true,
+                }
             })
             .map(|(name, seq)| (name.to_string(), seq.length().get()))
             .collect()
     };
 
-    let bin_index = build_bigwig_index(&chrom_sizes, bin_size, step_size);
+    // What to tile on each chromosome: the whole thing, or just the region.
+    // `parse_region` leaves an open end as usize::MAX, so clamp to the length.
+    let windows: Vec<(String, usize, usize)> = chrom_sizes
+        .iter()
+        .map(|(chrom, chrom_len)| match &region_filter {
+            Some((_, region_start, region_end)) => (
+                chrom.clone(),
+                (*region_start).min(*chrom_len),
+                (*region_end).min(*chrom_len),
+            ),
+            None => (chrom.clone(), 0, *chrom_len),
+        })
+        .collect();
+
+    let bin_index = match &region_filter {
+        // No region: tile whole chromosomes, exactly as before.
+        None => build_bigwig_index(&chrom_sizes, bin_size, step_size),
+        // A region: tile only that window, so the track covers the region.
+        Some(_) => build_bigwig_index_in_window(&windows, bin_size, step_size),
+    };
 
     let blacklist = params
         .blacklist_path
@@ -332,16 +358,18 @@ pub fn run_bulk_coverage(
         .iter()
         .enumerate()
         .flat_map(|(bam_idx, &(bam_path, _))| {
-            chrom_sizes.iter().flat_map(move |(chrom, chrom_len)| {
-                (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                    (
-                        bam_idx,
-                        bam_path,
-                        chrom.clone(),
-                        start,
-                        (start + chunk_size).min(*chrom_len),
-                    )
-                })
+            windows.iter().flat_map(move |(chrom, win_start, win_end)| {
+                (*win_start..*win_end)
+                    .step_by(chunk_size)
+                    .map(move |start| {
+                        (
+                            bam_idx,
+                            bam_path,
+                            chrom.clone(),
+                            start,
+                            (start + chunk_size).min(*win_end),
+                        )
+                    })
             })
         })
         .filter(
@@ -391,6 +419,9 @@ pub fn run_bulk_coverage(
                     else {
                         return Ok(AHashMap::new());
                     };
+                    // Bin 0 of this chromosome starts here: 0 unless a region
+                    // restricted the tiling to a window.
+                    let window_start = bin_index.window_start(chrom.as_str());
 
                     // Hoisted region filter: a region on a different chromosome
                     // skips the whole chunk; otherwise carry its bounds.
@@ -495,10 +526,15 @@ pub fn run_bulk_coverage(
                             continue;
                         };
 
-                        if eff_end > 0 && n_bins > 0 {
-                            let last_bin = ((eff_end - 1) / step_size).min(n_bins - 1);
-                            let first_bin = if eff_start + 1 > bin_size {
-                                (eff_start - bin_size + step_size) / step_size
+                        // Bin indices are relative to the window origin. A read
+                        // ending before the window has no bin to fall in.
+                        let rel_start = eff_start.saturating_sub(window_start);
+                        let rel_end = eff_end.saturating_sub(window_start);
+
+                        if rel_end > 0 && n_bins > 0 {
+                            let last_bin = ((rel_end - 1) / step_size).min(n_bins - 1);
+                            let first_bin = if rel_start + 1 > bin_size {
+                                (rel_start - bin_size + step_size) / step_size
                             } else {
                                 0
                             };
@@ -606,7 +642,7 @@ pub fn run_bulk_coverage(
                 // chromosome order.
                 let mut values: Vec<(String, Value)> = Vec::new();
 
-                for (chrom_name, chrom_len) in &chrom_sizes {
+                for (chrom_name, win_start, win_end) in &windows {
                     let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else {
                         continue;
                     };
@@ -651,8 +687,9 @@ pub fn run_bulk_coverage(
                             continue;
                         }
 
-                        let start = (local_bin * step_size) as u32;
-                        let end = ((local_bin * step_size + bin_size).min(*chrom_len)) as u32;
+                        let start = (win_start + local_bin * step_size) as u32;
+                        let end =
+                            ((win_start + local_bin * step_size + bin_size).min(*win_end)) as u32;
                         values.push((
                             chrom_name.clone(),
                             Value {
@@ -1743,5 +1780,129 @@ mod tests {
         .to_string();
 
         assert!(err.contains("at least one BAM"), "{err}");
+    }
+
+    // Region-restricted tiling
+
+    /// Coverage keyed by genomic interval, so runs with different bin layouts
+    /// can be compared interval for interval.
+    fn signal_by_interval(path: &Path) -> std::collections::BTreeMap<(u32, u32), f64> {
+        bedgraph_rows(path)
+            .into_iter()
+            .map(|(_, start, end, value)| ((start, end), value))
+            .collect()
+    }
+
+    #[test]
+    fn a_region_confines_the_track_to_its_own_window() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        // The reads sit around 65.97 Mb; tile just the 100 kb around them.
+        let files = run_coverage(
+            &prefix,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            Some("5:65900001-66000000"),
+            ReadMode::Normal,
+            10_000,
+            10_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let mut saw_signal = false;
+        for file in &files {
+            for (chrom, start, end, _) in bedgraph_rows(file) {
+                saw_signal = true;
+                assert_eq!(chrom, "5");
+                assert!(
+                    start >= 65_900_000 && end <= 66_000_000,
+                    "interval {start}-{end} escaped the requested window"
+                );
+            }
+        }
+        assert!(saw_signal, "the window should contain the test reads");
+    }
+
+    #[test]
+    fn a_read_lands_at_the_same_coordinates_with_or_without_a_region() {
+        // Windowing shifts every bin index. If the offset arithmetic were
+        // wrong, the same read would be written at a different coordinate.
+        let dir = TempDir::new().unwrap();
+
+        let whole = dir.path().join("whole");
+        run_coverage(
+            &whole,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Normal,
+            10_000,
+            10_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let region = dir.path().join("region");
+        run_coverage(
+            &region,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            Some("5:65900001-66000000"),
+            ReadMode::Normal,
+            10_000,
+            10_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let whole_signal = signal_by_interval(&dir.path().join("whole.i2_pool.bedgraph"));
+        let region_signal = signal_by_interval(&dir.path().join("region.i2_pool.bedgraph"));
+
+        assert!(!region_signal.is_empty(), "the region carried no signal");
+        for (interval, value) in &region_signal {
+            let expected = whole_signal.get(interval).copied().unwrap_or(0.0);
+            assert!(
+                (value - expected).abs() < 1e-6,
+                "interval {interval:?} held {value} inside the region but {expected} without it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_chromosome_region_covers_the_whole_chromosome() {
+        // `parse_region` leaves an open end as usize::MAX; clamping it to the
+        // chromosome length must give back the unrestricted track.
+        let dir = TempDir::new().unwrap();
+
+        let whole = dir.path().join("whole");
+        run_default(&whole).unwrap();
+
+        let bare = dir.path().join("bare");
+        run_coverage(
+            &bare,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            Some("5"),
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(
+            signal_by_interval(&dir.path().join("bare.i2_pool.bedgraph")),
+            signal_by_interval(&dir.path().join("whole.i2_pool.bedgraph"))
+        );
     }
 }
