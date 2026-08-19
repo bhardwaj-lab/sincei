@@ -22,7 +22,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
     "License :: OSI Approved :: MIT License",
 ]
 
@@ -101,8 +100,16 @@ strip = true
 bindings = "pyo3"
 features = ["pyo3/extension-module"]
 
+[tool.coverage.run]
+source = ["sincei"]
+parallel = true
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]
+
 [tool.pytest.ini_options]
-testpaths = ["sincei/test"]
+testpaths = ["tests"]
 xfail_strict = true
 addopts = [
     "--import-mode=importlib",  # allow using test files with same name
