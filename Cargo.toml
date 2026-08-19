@@ -28,9 +28,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # PyO3 for Python interoperability.
-#
-# Extension module is skipped so the Python interpreter can be loaded dynamically at runtime.
-pyo3 = { version = "0.27", features = ["extension-module", "anyhow"] }
+pyo3 = { version = "0.27", features = ["extension-module", "abi3-py310", "anyhow"] }
 
 # Dataframes
 polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
@@ -69,11 +67,6 @@ bstr = { version = "1.13" }
 
 # Fast non-cryptographic hasher
 ahash = { version = "0.8" }
-
-[build-dependencies]
-# Locates the active interpreter's lib dir, so test binaries linking libpython
-# can find it at run time (see build.rs)
-pyo3-build-config = { version = "0.27" }
 
 [dev-dependencies]
 # Temporary files/directories for parser tests
