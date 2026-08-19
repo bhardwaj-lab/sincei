@@ -998,3 +998,750 @@ pub fn bulk_coverage(
     )
     .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bam::sc_record::test_record;
+    use tempfile::TempDir;
+
+    // Read-mode helpers: MNase
+
+    #[test]
+    fn mnase_takes_the_two_central_bases_of_an_even_fragment() {
+        let mut rec = test_record(1000, 1050);
+        rec.is_proper_pair = true;
+        rec.template_length = 200;
+        // Centre is 1000 + 200/2 - 1; an even fragment yields 2 bp.
+        assert_eq!(apply_mnase(&rec), Some((1099, 1101)));
+    }
+
+    #[test]
+    fn mnase_takes_three_bases_when_the_fragment_length_is_odd() {
+        let mut rec = test_record(1000, 1050);
+        rec.is_proper_pair = true;
+        rec.template_length = 201;
+        assert_eq!(apply_mnase(&rec), Some((1099, 1102)));
+    }
+
+    #[test]
+    fn mnase_uses_the_absolute_template_length() {
+        let mut fwd = test_record(1000, 1050);
+        fwd.is_proper_pair = true;
+        fwd.template_length = 200;
+
+        let mut negative = test_record(1000, 1050);
+        negative.is_proper_pair = true;
+        negative.template_length = -200;
+
+        assert_eq!(apply_mnase(&fwd), apply_mnase(&negative));
+    }
+
+    #[test]
+    fn mnase_skips_anything_that_is_not_a_forward_proper_pair() {
+        let mut unpaired = test_record(1000, 1050);
+        unpaired.template_length = 200;
+        assert_eq!(apply_mnase(&unpaired), None);
+
+        let mut reverse = test_record(1000, 1050);
+        reverse.is_proper_pair = true;
+        reverse.is_reverse = true;
+        reverse.template_length = 200;
+        assert_eq!(apply_mnase(&reverse), None);
+
+        // A fragment of one base or less has no centre to take.
+        let mut degenerate = test_record(1000, 1050);
+        degenerate.is_proper_pair = true;
+        degenerate.template_length = 1;
+        assert_eq!(apply_mnase(&degenerate), None);
+    }
+
+    // Read-mode helpers: offset
+
+    #[test]
+    fn a_positive_offset_is_one_based_from_the_read_start() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 1, None), Some((1000, 1001)));
+        assert_eq!(apply_offset(&rec, 10, None), Some((1009, 1010)));
+    }
+
+    #[test]
+    fn a_negative_offset_counts_back_from_the_read_end() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, -1, None), Some((1049, 1050)));
+        assert_eq!(apply_offset(&rec, -50, None), Some((1000, 1001)));
+    }
+
+    #[test]
+    fn two_offsets_give_the_range_between_them() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 1, Some(5)), Some((1000, 1005)));
+        assert_eq!(apply_offset(&rec, 3, Some(-1)), Some((1002, 1050)));
+    }
+
+    #[test]
+    fn on_a_reverse_read_the_offset_is_measured_from_the_alignment_end() {
+        let mut rec = test_record(1000, 1050);
+        rec.is_reverse = true;
+        // The first base of the read is the last base in genomic order.
+        assert_eq!(apply_offset(&rec, 1, None), Some((1049, 1050)));
+        assert_eq!(apply_offset(&rec, 1, Some(5)), Some((1045, 1050)));
+    }
+
+    #[test]
+    fn offsets_outside_the_read_are_rejected() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 51, None), None, "past the read end");
+        assert_eq!(apply_offset(&rec, 5, Some(2)), None, "end before start");
+
+        let empty = test_record(1000, 1000);
+        assert_eq!(apply_offset(&empty, 1, None), None, "zero-length read");
+    }
+
+    #[test]
+    fn a_range_that_runs_past_the_read_end_is_clamped_to_it() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 48, Some(100)), Some((1047, 1050)));
+    }
+
+    // Read-mode dispatch
+
+    #[test]
+    fn the_read_mode_selects_which_interval_rule_applies() {
+        let mut rec = test_record(1000, 1050);
+        rec.is_proper_pair = true;
+        rec.template_length = 200;
+        let adjust = AdjustRead::default();
+
+        assert_eq!(
+            get_effective_interval(&rec, &adjust, ReadMode::Normal),
+            Some((1000, 1050))
+        );
+        assert_eq!(
+            get_effective_interval(&rec, &adjust, ReadMode::MNase),
+            Some((1099, 1101))
+        );
+        assert_eq!(
+            get_effective_interval(&rec, &adjust, ReadMode::Offset(1, None)),
+            Some((1000, 1001))
+        );
+    }
+
+    #[test]
+    fn a_read_the_mode_cannot_place_yields_no_interval() {
+        let rec = test_record(1000, 1050);
+        // Not a proper pair, so MNase has no fragment to centre on.
+        let interval = get_effective_interval(&rec, &AdjustRead::default(), ReadMode::MNase);
+        assert_eq!(interval, None);
+    }
+
+    // Group-name sanitizing
+
+    #[test]
+    fn sanitizing_removes_path_and_wildcard_characters() {
+        assert_eq!(sanitize_group_name("T cells/CD8"), "T cellsCD8");
+        assert_eq!(sanitize_group_name("a\\b:c*d?e\"f<g>h|i"), "abcdefghi");
+    }
+
+    #[test]
+    fn sanitizing_drops_control_characters_and_trailing_dots_and_spaces() {
+        assert_eq!(sanitize_group_name("group\tone"), "groupone");
+        assert_eq!(sanitize_group_name("cluster1..  "), "cluster1");
+    }
+
+    #[test]
+    fn sanitizing_keeps_interior_dots_and_spaces() {
+        assert_eq!(sanitize_group_name("cluster 1.2"), "cluster 1.2");
+    }
+
+    // Enum parsing
+
+    #[test]
+    fn every_documented_normalize_method_parses() {
+        assert!(matches!(
+            parse_normalize_method("CPM").unwrap(),
+            NormalizeMethod::Cpm
+        ));
+        assert!(matches!(
+            parse_normalize_method("RPKM").unwrap(),
+            NormalizeMethod::Rpkm
+        ));
+        assert!(matches!(
+            parse_normalize_method("Frequency").unwrap(),
+            NormalizeMethod::Frequency
+        ));
+        assert!(matches!(
+            parse_normalize_method("Mean").unwrap(),
+            NormalizeMethod::Mean
+        ));
+        assert!(matches!(
+            parse_normalize_method("None").unwrap(),
+            NormalizeMethod::None
+        ));
+    }
+
+    #[test]
+    fn an_unknown_normalize_method_names_the_valid_ones() {
+        // The match is case-sensitive, so the lowercase spelling is an error.
+        let err = parse_normalize_method("cpm").unwrap_err().to_string();
+        assert!(err.contains("CPM"), "{err}");
+        assert!(err.contains("RPKM"), "{err}");
+    }
+
+    #[test]
+    fn every_documented_dup_method_parses() {
+        assert!(matches!(
+            parse_dup_method("barcode_start").unwrap(),
+            DupMethod::BarcodeStart
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_start_end").unwrap(),
+            DupMethod::BarcodeStartEnd
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_umi_start").unwrap(),
+            DupMethod::BarcodeUmiStart
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_umi_start_end").unwrap(),
+            DupMethod::BarcodeUmiStartEnd
+        ));
+    }
+
+    #[test]
+    fn an_unknown_dup_method_names_the_valid_ones() {
+        let err = parse_dup_method("start_umi").unwrap_err().to_string();
+        assert!(err.contains("barcode_umi_start"), "{err}");
+    }
+
+    // Group-info parsing
+
+    fn write_group_info(dir: &TempDir, body: &str) -> PathBuf {
+        let path = dir.path().join("groups.tsv");
+        let mut file = File::create(&path).unwrap();
+        file.write_all(body.as_bytes()).unwrap();
+        path
+    }
+
+    #[test]
+    fn group_info_skips_the_header_and_numbers_groups_in_first_seen_order() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(
+            &dir,
+            "sample\tbarcode\tgroup\ns1\tAAA\tB\ns1\tCCC\tA\ns2\tGGG\tB\n",
+        );
+
+        let parsed = parse_group_info(&path, &["s1", "s2"]).unwrap();
+
+        assert_eq!(parsed.groups, vec!["B", "A"]);
+        assert_eq!(parsed.n_cells_per_group, vec![2, 1]);
+        assert_eq!(
+            parsed.cells,
+            vec![
+                (0, "AAA".to_string(), 0),
+                (0, "CCC".to_string(), 1),
+                (1, "GGG".to_string(), 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn group_info_ignores_blank_lines_comments_and_unknown_samples() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(
+            &dir,
+            "sample\tbarcode\tgroup\n\n# a comment\ns1\tAAA\tA\nabsent\tTTT\tA\n",
+        );
+
+        let parsed = parse_group_info(&path, &["s1"]).unwrap();
+
+        assert_eq!(parsed.groups, vec!["A"]);
+        assert_eq!(parsed.n_cells_per_group, vec![1]);
+        assert_eq!(parsed.cells, vec![(0, "AAA".to_string(), 0)]);
+    }
+
+    #[test]
+    fn group_info_trims_whitespace_around_every_field() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(&dir, "sample\tbarcode\tgroup\ns1 \t AAA \t A \n");
+
+        let parsed = parse_group_info(&path, &["s1"]).unwrap();
+
+        assert_eq!(parsed.groups, vec!["A"]);
+        assert_eq!(parsed.cells, vec![(0, "AAA".to_string(), 0)]);
+    }
+
+    #[test]
+    fn a_missing_group_info_file_is_reported_with_its_path() {
+        // ParsedGroups is not Debug, so unwrap_err() is not available here.
+        let err = match parse_group_info(Path::new("/nonexistent/groups.tsv"), &["s1"]) {
+            Ok(_) => panic!("expected an error for a missing file"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains("group info file"), "{err}");
+    }
+
+    // bedGraph writing
+
+    #[test]
+    fn bedgraph_writes_a_track_line_then_one_row_per_interval() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("out.bedgraph");
+        let values = vec![
+            (
+                "chr1".to_string(),
+                Value {
+                    start: 0,
+                    end: 10,
+                    value: 1.5,
+                },
+            ),
+            (
+                "chr2".to_string(),
+                Value {
+                    start: 10,
+                    end: 20,
+                    value: 0.0,
+                },
+            ),
+        ];
+
+        write_bedgraph(&path, &values).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines,
+            ["track type=bedGraph", "chr1\t0\t10\t1.5", "chr2\t10\t20\t0"]
+        );
+    }
+
+    // Pseudo-bulk coverage, end to end
+
+    /// `test_group_info.tsv` puts each of the 8 cells of `test_i1.bam` in a
+    /// group of its own and pools all 7 cells of `test_i2.bam` into `i2_pool`,
+    /// so a run produces 9 groups. `GCGAGCAT` occurs in both BAMs and must be
+    /// treated as two different cells.
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    const N_GROUPS: usize = 9;
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_coverage(
+        prefix: &Path,
+        labels: (&str, &str),
+        format: OutputFormat,
+        normalize: NormalizeMethod,
+        scale_factor: f64,
+        region: Option<&str>,
+        mode: ReadMode,
+        bin_size: usize,
+        step_size: usize,
+        chunk_size: usize,
+    ) -> Result<Vec<PathBuf>> {
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+        run_bulk_coverage(
+            &[(i1.as_path(), labels.0), (i2.as_path(), labels.1)],
+            &testdata().join("test_group_info.tsv"),
+            prefix.to_str().unwrap(),
+            bin_size,
+            step_size,
+            "BC",
+            None,
+            region,
+            &[],
+            &[],
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            normalize,
+            scale_factor,
+            format,
+            mode,
+            1,
+            chunk_size,
+        )
+    }
+
+    /// The defaults every test below starts from: bedGraph, unnormalized.
+    fn run_default(prefix: &Path) -> Result<Vec<PathBuf>> {
+        run_coverage(
+            prefix,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+    }
+
+    /// bedGraph rows, without the leading track line.
+    fn bedgraph_rows(path: &Path) -> Vec<(String, u32, u32, f64)> {
+        std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .skip(1)
+            .map(|line| {
+                let f: Vec<&str> = line.split('\t').collect();
+                (
+                    f[0].to_string(),
+                    f[1].parse().unwrap(),
+                    f[2].parse().unwrap(),
+                    f[3].parse().unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_output_file_is_written_per_group() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let files = run_default(&prefix).unwrap();
+
+        assert_eq!(files.len(), N_GROUPS);
+        for file in &files {
+            assert!(file.exists(), "{} was not written", file.display());
+        }
+    }
+
+    #[test]
+    fn each_output_is_named_after_its_group() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let files = run_default(&prefix).unwrap();
+        let names: Vec<String> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        // The 8 singleton groups of test_i1 plus the one pooled group of test_i2.
+        assert!(
+            names.contains(&"cov.i2_pool.bedgraph".to_string()),
+            "{names:?}"
+        );
+        for bc in ["ACGGTAAT", "ATATAACT", "GCGAGCAT", "TAGACTTG"] {
+            assert!(
+                names.contains(&format!("cov.i1_{bc}.bedgraph")),
+                "missing i1_{bc} in {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_barcode_present_in_both_bams_is_two_separate_cells() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let files = run_default(&prefix).unwrap();
+        let names: Vec<String> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        // GCGAGCAT is in both BAMs: once as its own test_i1 group, once inside
+        // the pooled test_i2 group. It must not collapse into one cell.
+        assert!(names.contains(&"cov.i1_GCGAGCAT.bedgraph".to_string()));
+        assert!(names.contains(&"cov.i2_pool.bedgraph".to_string()));
+        assert_eq!(files.len(), N_GROUPS);
+    }
+
+    #[test]
+    fn every_output_is_a_bedgraph_with_a_track_line() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        for file in run_default(&prefix).unwrap() {
+            let text = std::fs::read_to_string(&file).unwrap();
+            let first = text.lines().next().unwrap();
+            assert_eq!(first, "track type=bedGraph", "in {}", file.display());
+
+            for (chrom, start, end, _) in bedgraph_rows(&file) {
+                assert_eq!(chrom, "5", "the test BAMs only hold chromosome 5");
+                assert!(end > start, "empty interval {start}-{end}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_pooled_group_covers_at_least_as_much_as_one_of_its_own_cells() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+        run_default(&prefix).unwrap();
+
+        // i2_pool holds all 7 test_i2 cells, so its signal cannot be less than
+        // the single test_i1 cell that shares a barcode with one of them.
+        let pooled: f64 = bedgraph_rows(&dir.path().join("cov.i2_pool.bedgraph"))
+            .iter()
+            .map(|(_, _, _, v)| v)
+            .sum();
+        assert!(pooled > 0.0, "the pooled group counted nothing");
+    }
+
+    #[test]
+    fn bigwig_output_is_written_with_the_bw_extension() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let files = run_coverage(
+            &prefix,
+            ("test_i1", "test_i2"),
+            OutputFormat::BigWig,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(files.len(), N_GROUPS);
+        for file in &files {
+            assert_eq!(file.extension().unwrap(), "bw");
+            assert!(file.metadata().unwrap().len() > 0, "empty bigWig");
+        }
+    }
+
+    #[test]
+    fn a_scale_factor_multiplies_the_values_but_keeps_the_intervals() {
+        let dir = TempDir::new().unwrap();
+
+        let plain = dir.path().join("plain");
+        run_coverage(
+            &plain,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let scaled = dir.path().join("scaled");
+        run_coverage(
+            &scaled,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            10.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let a = bedgraph_rows(&dir.path().join("plain.i2_pool.bedgraph"));
+        let b = bedgraph_rows(&dir.path().join("scaled.i2_pool.bedgraph"));
+        assert_eq!(a.len(), b.len(), "scaling changed the interval layout");
+
+        for ((c1, s1, e1, v1), (c2, s2, e2, v2)) in a.iter().zip(b.iter()) {
+            assert_eq!((c1, s1, e1), (c2, s2, e2));
+            assert!((v2 - v1 * 10.0).abs() < 1e-3, "{v1} scaled to {v2}");
+        }
+    }
+
+    #[test]
+    fn cpm_normalization_changes_the_values_but_keeps_the_intervals() {
+        let dir = TempDir::new().unwrap();
+
+        let raw = dir.path().join("raw");
+        run_default(&raw).unwrap();
+
+        let cpm = dir.path().join("cpm");
+        run_coverage(
+            &cpm,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::Cpm,
+            1.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        let a = bedgraph_rows(&dir.path().join("raw.i2_pool.bedgraph"));
+        let b = bedgraph_rows(&dir.path().join("cpm.i2_pool.bedgraph"));
+
+        assert_eq!(a.len(), b.len());
+        let intervals = |rows: &[(String, u32, u32, f64)]| -> Vec<(String, u32, u32)> {
+            rows.iter()
+                .map(|(c, s, e, _)| (c.clone(), *s, *e))
+                .collect()
+        };
+        assert_eq!(intervals(&a), intervals(&b));
+        assert_ne!(
+            a.iter().map(|r| r.3).collect::<Vec<_>>(),
+            b.iter().map(|r| r.3).collect::<Vec<_>>(),
+            "CPM left the values unchanged"
+        );
+    }
+
+    #[test]
+    fn an_offset_read_mode_still_produces_every_group() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let files = run_coverage(
+            &prefix,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Offset(1, None),
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(files.len(), N_GROUPS);
+    }
+
+    #[test]
+    fn restricting_to_an_empty_window_leaves_no_intervals() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        // The reads sit around 65.97 Mb, so this window holds none of them.
+        let files = run_coverage(
+            &prefix,
+            ("test_i1", "test_i2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            Some("5:1-100000"),
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(
+            files.len(),
+            N_GROUPS,
+            "a group with no signal still gets a file"
+        );
+        let total: f64 = files
+            .iter()
+            .flat_map(|f| bedgraph_rows(f))
+            .map(|(_, _, _, v)| v)
+            .sum();
+        assert_eq!(total, 0.0, "an empty window should carry no signal");
+    }
+
+    // Argument validation
+
+    #[test]
+    fn labels_that_match_no_group_info_row_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let err = run_coverage(
+            &prefix,
+            ("other1", "other2"),
+            OutputFormat::BedGraph,
+            NormalizeMethod::None,
+            1.0,
+            None,
+            ReadMode::Normal,
+            100_000,
+            100_000,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("no cells matched"), "{err}");
+    }
+
+    #[test]
+    fn zero_sized_bins_steps_and_chunks_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let run = |bin, step, chunk| {
+            run_coverage(
+                &prefix,
+                ("test_i1", "test_i2"),
+                OutputFormat::BedGraph,
+                NormalizeMethod::None,
+                1.0,
+                None,
+                ReadMode::Normal,
+                bin,
+                step,
+                chunk,
+            )
+            .unwrap_err()
+            .to_string()
+        };
+
+        assert!(run(0, 100, 1_000).contains("bin_size"));
+        assert!(run(100, 0, 1_000).contains("step_size"));
+        assert!(run(100, 100, 0).contains("chunk_size"));
+    }
+
+    #[test]
+    fn running_with_no_bam_files_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let prefix = dir.path().join("cov");
+
+        let err = run_bulk_coverage(
+            &[],
+            &testdata().join("test_group_info.tsv"),
+            prefix.to_str().unwrap(),
+            100_000,
+            100_000,
+            "BC",
+            None,
+            None,
+            &[],
+            &[],
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            NormalizeMethod::None,
+            1.0,
+            OutputFormat::BedGraph,
+            ReadMode::Normal,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("at least one BAM"), "{err}");
+    }
+}

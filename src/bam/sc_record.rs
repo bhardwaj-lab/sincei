@@ -499,4 +499,200 @@ mod tests {
         rec.read_length = 0;
         assert_eq!(rec.effective_interval(&adjust), (100, 300));
     }
+
+    // Parsing real BAM records
+
+    /// The first records of `test_i1.bam`. Its reads carry `BC` (barcode),
+    /// `RX` (UMI) and `NM` (an integer edit distance, reused here as a stand-in
+    /// for a numeric count tag).
+    fn read_test_bam(n: usize) -> (Header, Vec<bam::Record>) {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata/test_i1.bam");
+        let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
+        let header = reader.read_header().unwrap();
+        let records = reader.records().take(n).map(|r| r.unwrap()).collect();
+        (header, records)
+    }
+
+    fn plain_opts() -> ScRecordOptions {
+        ScRecordOptions {
+            compute_gc: false,
+            compute_aligned_fraction: false,
+            store_sequence: false,
+        }
+    }
+
+    #[test]
+    fn a_mapped_record_parses_into_coordinates_and_a_barcode() {
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &plain_opts())
+            .unwrap()
+            .expect("the first record of the test BAM is mapped");
+
+        assert!(
+            rec.alignment_end > rec.alignment_start,
+            "half-open interval"
+        );
+        assert_eq!(rec.barcode, Some(b"ATATAACT".as_slice()));
+        assert_eq!(rec.umi, None, "no UMI tag was requested");
+        assert_eq!(rec.count, 1, "no count tag means one read");
+        assert!(rec.read_length > 0);
+
+        // Nothing optional was switched on.
+        assert_eq!(rec.gc_content, None);
+        assert_eq!(rec.aligned_fraction, None);
+        assert_eq!(rec.read_sequence, None);
+    }
+
+    #[test]
+    fn the_umi_is_read_only_when_a_umi_tag_is_asked_for() {
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+        let rx = Tag::new(b'R', b'X');
+
+        let rec =
+            ScRecord::from_bam_record(&records[0], &header, &bc, Some(&rx), None, &plain_opts())
+                .unwrap()
+                .unwrap();
+        assert_eq!(rec.umi, Some(b"AGC".as_slice()));
+    }
+
+    #[test]
+    fn a_tag_the_record_lacks_leaves_the_field_empty_rather_than_failing() {
+        let (header, records) = read_test_bam(1);
+        let absent = Tag::new(b'Z', b'Z');
+
+        let rec =
+            ScRecord::from_bam_record(&records[0], &header, &absent, None, None, &plain_opts())
+                .unwrap()
+                .unwrap();
+        assert_eq!(rec.barcode, None);
+    }
+
+    #[test]
+    fn gc_content_is_computed_without_keeping_the_sequence() {
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+        let opts = ScRecordOptions {
+            compute_gc: true,
+            compute_aligned_fraction: false,
+            store_sequence: false,
+        };
+
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+            .unwrap()
+            .unwrap();
+
+        let gc = rec.gc_content.expect("gc was requested");
+        assert!((0.0..=1.0).contains(&gc), "gc out of range: {gc}");
+        assert_eq!(rec.read_sequence, None, "the sequence was not asked for");
+    }
+
+    #[test]
+    fn storing_the_sequence_yields_one_base_per_read_position() {
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+        let opts = ScRecordOptions {
+            compute_gc: true,
+            compute_aligned_fraction: false,
+            store_sequence: true,
+        };
+
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+            .unwrap()
+            .unwrap();
+
+        let seq = rec
+            .read_sequence
+            .as_ref()
+            .expect("the sequence was requested");
+        assert_eq!(seq.len(), rec.read_length);
+        assert!(
+            rec.gc_content.is_some(),
+            "gc is derived from the stored sequence"
+        );
+    }
+
+    #[test]
+    fn the_aligned_fraction_is_matches_over_the_read_consuming_length() {
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+        let opts = ScRecordOptions {
+            compute_gc: false,
+            compute_aligned_fraction: true,
+            store_sequence: false,
+        };
+
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+            .unwrap()
+            .unwrap();
+
+        let fraction = rec
+            .aligned_fraction
+            .expect("the aligned fraction was requested");
+        assert!((0.0..=1.0).contains(&fraction), "out of range: {fraction}");
+    }
+
+    #[test]
+    fn every_record_in_the_test_file_either_parses_or_is_filtered_out() {
+        let (header, records) = read_test_bam(200);
+        let bc = Tag::new(b'B', b'C');
+        assert!(!records.is_empty());
+
+        for record in &records {
+            // Never an Err: the file is well formed, so each record is either
+            // a usable ScRecord or a deliberate skip.
+            let parsed =
+                ScRecord::from_bam_record(record, &header, &bc, None, None, &plain_opts()).unwrap();
+            if let Some(rec) = parsed {
+                assert!(rec.alignment_end > rec.alignment_start);
+            }
+        }
+    }
+
+    // Auxiliary tag helpers
+
+    #[test]
+    fn string_tags_are_borrowed_and_other_types_are_ignored() {
+        let (_header, records) = read_test_bam(1);
+        let record = &records[0];
+
+        assert_eq!(
+            get_tag_bytes(record, &Tag::new(b'B', b'C')).unwrap(),
+            Some(b"ATATAACT".as_slice())
+        );
+        // NM is an integer, so it is not a byte string.
+        assert_eq!(get_tag_bytes(record, &Tag::new(b'N', b'M')).unwrap(), None);
+        // A tag the record does not carry at all.
+        assert_eq!(get_tag_bytes(record, &Tag::new(b'Z', b'Z')).unwrap(), None);
+    }
+
+    #[test]
+    fn an_integer_count_tag_is_read_as_a_number() {
+        let (_header, records) = read_test_bam(1);
+        // NM:i:1 on the first record of the test file.
+        let count = get_count_tag(&records[0], &Tag::new(b'N', b'M')).unwrap();
+        assert_eq!(count, Some(1));
+    }
+
+    #[test]
+    fn a_count_tag_that_is_not_a_number_is_an_error_naming_the_value() {
+        let (_header, records) = read_test_bam(1);
+        // BC holds a barcode, which cannot be parsed as a count.
+        let err = get_count_tag(&records[0], &Tag::new(b'B', b'C'))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("count tag"), "{err}");
+    }
+
+    #[test]
+    fn a_missing_count_tag_is_absent_rather_than_an_error() {
+        let (_header, records) = read_test_bam(1);
+        assert_eq!(
+            get_count_tag(&records[0], &Tag::new(b'Z', b'Z')).unwrap(),
+            None
+        );
+    }
 }

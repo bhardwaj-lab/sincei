@@ -204,6 +204,8 @@ pub(crate) fn write_counts_anndata(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `H5::open` comes from this trait, which the module itself does not need.
+    use anndata::Backend;
 
     /// Dense view of a CSR matrix, for readable assertions.
     fn dense(m: &CsrMatrix<u32>) -> Vec<Vec<u32>> {
@@ -298,5 +300,158 @@ mod tests {
         let with_null =
             DataFrame::new(2, vec![Column::new("name".into(), [Some("gene1"), None])]).unwrap();
         assert!(df_str_col(&with_null, "name").is_err());
+    }
+
+    // AnnData round trip
+
+    fn feature(chrom: &str, start: usize, end: usize) -> Feature {
+        Feature {
+            chrom: chrom.to_string(),
+            start,
+            end,
+            name: format!("{chrom}:{start}-{end}"),
+            strand: '*',
+        }
+    }
+
+    fn read_back(path: &Path) -> CsrMatrix<f64> {
+        let store = H5::open(path).unwrap();
+        let adata = AnnData::<H5>::open(store).unwrap();
+        read_x_f64(&adata).unwrap()
+    }
+
+    #[test]
+    fn a_written_matrix_reads_back_with_the_same_values() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("counts.h5ad");
+
+        let acc: AHashMap<(usize, usize), u32> = [((0, 0), 1), ((0, 2), 5), ((1, 1), 3)]
+            .into_iter()
+            .collect();
+        let matrix = build_csr(&acc, 2, 3).unwrap();
+
+        let bam = Path::new("/does/not/need/to/exist/s1.bam");
+        let var = vec![
+            feature("chr1", 0, 100),
+            feature("chr1", 100, 200),
+            feature("chr2", 0, 100),
+        ];
+        let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
+
+        write_counts_anndata(&path, matrix, &[(bam, "s1")], &barcodes, &var, "none", 0).unwrap();
+        assert!(path.exists(), "the h5ad file was not created");
+
+        // X comes back as f64 whatever it was stored as.
+        let x = read_back(&path);
+        assert_eq!((x.nrows(), x.ncols()), (2, 3));
+        let mut got = vec![vec![0.0f64; 3]; 2];
+        for (r, c, &v) in x.triplet_iter() {
+            got[r][c] = v;
+        }
+        assert_eq!(got, vec![vec![1.0, 0.0, 5.0], vec![0.0, 3.0, 0.0]]);
+    }
+
+    #[test]
+    fn obs_rows_are_one_per_sample_and_barcode_in_matrix_order() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("counts.h5ad");
+
+        // Two samples x two barcodes = four rows, samples varying slowest.
+        let matrix = build_csr(&AHashMap::new(), 4, 1).unwrap();
+        let one = Path::new("/tmp/one.bam");
+        let two = Path::new("/tmp/two.bam");
+        let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
+
+        write_counts_anndata(
+            &path,
+            matrix,
+            &[(one, "s1"), (two, "s2")],
+            &barcodes,
+            &[feature("chr1", 0, 100)],
+            "none",
+            0,
+        )
+        .unwrap();
+
+        let store = H5::open(&path).unwrap();
+        let adata = AnnData::<H5>::open(store).unwrap();
+        assert_eq!(
+            adata.obs_names().into_vec(),
+            vec!["s1::AAA", "s1::CCC", "s2::AAA", "s2::CCC"]
+        );
+        assert_eq!(adata.var_names().into_vec(), vec!["chr1:0-100"]);
+    }
+
+    #[test]
+    fn the_var_table_keeps_the_feature_coordinates() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("counts.h5ad");
+
+        let var = vec![feature("chr1", 0, 100), feature("chr2", 500, 750)];
+        let matrix = build_csr(&AHashMap::new(), 1, 2).unwrap();
+
+        write_counts_anndata(
+            &path,
+            matrix,
+            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["AAA".to_string()],
+            &var,
+            "none",
+            0,
+        )
+        .unwrap();
+
+        let store = H5::open(&path).unwrap();
+        let adata = AnnData::<H5>::open(store).unwrap();
+        let var_df = adata.read_var().unwrap();
+
+        assert_eq!(df_str_col(&var_df, "chrom").unwrap(), vec!["chr1", "chr2"]);
+        assert_eq!(df_i64_col(&var_df, "start").unwrap(), vec![0, 500]);
+        assert_eq!(df_i64_col(&var_df, "end").unwrap(), vec![100, 750]);
+    }
+
+    #[test]
+    fn gzip_is_accepted_and_produces_a_readable_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("gzipped.h5ad");
+
+        let acc: AHashMap<(usize, usize), u32> = [((0, 0), 42)].into_iter().collect();
+        let matrix = build_csr(&acc, 1, 1).unwrap();
+
+        write_counts_anndata(
+            &path,
+            matrix,
+            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["AAA".to_string()],
+            &[feature("chr1", 0, 100)],
+            "gzip",
+            6,
+        )
+        .unwrap();
+
+        let x = read_back(&path);
+        assert_eq!(x.get_entry(0, 0).map(|e| e.into_value()), Some(42.0));
+    }
+
+    #[test]
+    fn an_unsupported_compression_is_rejected_by_name() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("nope.h5ad");
+
+        // blosc-zstd is anndata-rs's own default but h5py cannot read it.
+        let err = write_counts_anndata(
+            &path,
+            build_csr(&AHashMap::new(), 1, 1).unwrap(),
+            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["AAA".to_string()],
+            &[feature("chr1", 0, 100)],
+            "blosc",
+            0,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("blosc"), "{err}");
+        assert!(err.contains("gzip"), "{err}");
     }
 }

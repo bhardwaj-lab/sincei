@@ -233,3 +233,160 @@ impl<'a> BamWorker<'a> {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    /// `test_i1.bam` is a coordinate-sorted, BAI-indexed slice of chromosome 5.
+    /// Its reads carry the barcode in `BC` and the UMI in `RX`.
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn test_bam() -> PathBuf {
+        testdata().join("test_i1.bam")
+    }
+
+    fn tag(a: u8, b: u8) -> Tag {
+        Tag::new(a, b)
+    }
+
+    // Header reading
+
+    #[test]
+    fn the_header_carries_the_reference_sequences() {
+        let header = read_bam_header(&test_bam()).unwrap();
+        let refs = header.reference_sequences();
+
+        assert!(!refs.is_empty(), "expected at least one reference sequence");
+        let (name, seq) = refs.get_index(0).unwrap();
+        assert_eq!(name.as_slice(), b"5");
+        assert_eq!(usize::from(seq.length()), 151_834_684);
+    }
+
+    #[test]
+    fn a_missing_bam_is_reported_with_its_path() {
+        let err = read_bam_header(Path::new("/nonexistent/reads.bam"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("/nonexistent/reads.bam"), "{err}");
+    }
+
+    #[test]
+    fn a_bam_without_its_index_is_rejected_and_says_so() {
+        // The fallback path must not hide a missing .bai: copy the BAM alone.
+        let dir = TempDir::new().unwrap();
+        let unindexed = dir.path().join("no_index.bam");
+        std::fs::copy(test_bam(), &unindexed).unwrap();
+
+        let err = read_bam_header(&unindexed).unwrap_err().to_string();
+        assert!(err.contains(".bai"), "{err}");
+    }
+
+    // The binary-dictionary fallback
+
+    #[test]
+    fn the_binary_dictionary_reconstructs_the_same_references_as_the_header_text() {
+        // 10x BAMs fail noodles' strict SAM header parsing, so the dictionary is
+        // read instead. On a compliant BAM both routes must agree.
+        let from_text = read_bam_header(&test_bam()).unwrap();
+        let from_dict = read_header_from_binary_dict(&test_bam()).unwrap();
+
+        let text_refs = from_text.reference_sequences();
+        let dict_refs = from_dict.reference_sequences();
+        assert_eq!(text_refs.len(), dict_refs.len());
+
+        for (name, seq) in text_refs {
+            let other = dict_refs
+                .get(name)
+                .unwrap_or_else(|| panic!("reference {name:?} missing from the binary dictionary"));
+            assert_eq!(seq.length(), other.length());
+        }
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_bam_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let not_bam = dir.path().join("plain.txt");
+        std::fs::write(&not_bam, b"this is not a BAM file").unwrap();
+
+        assert!(read_header_from_binary_dict(&not_bam).is_err());
+    }
+
+    // Tag checking
+
+    #[test]
+    fn the_tags_the_file_uses_are_accepted() {
+        let bam = test_bam();
+        let paths = [bam.as_path()];
+
+        ensure_barcode_tags_present(&paths, tag(b'B', b'C'), None).unwrap();
+        ensure_barcode_tags_present(&paths, tag(b'B', b'C'), Some(tag(b'R', b'X'))).unwrap();
+    }
+
+    #[test]
+    fn a_barcode_tag_the_file_does_not_use_is_reported_with_advice() {
+        let bam = test_bam();
+        let err = ensure_barcode_tags_present(&[bam.as_path()], tag(b'Z', b'Z'), None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("ZZ"), "{err}");
+        assert!(err.contains("--cellTag"), "{err}");
+        assert!(err.contains("samtools view"), "{err}");
+    }
+
+    #[test]
+    fn a_missing_umi_tag_is_blamed_on_the_umi_option_not_the_cell_option() {
+        let bam = test_bam();
+        let err =
+            ensure_barcode_tags_present(&[bam.as_path()], tag(b'B', b'C'), Some(tag(b'Z', b'Z')))
+                .unwrap_err()
+                .to_string();
+
+        assert!(err.contains("--umiTag"), "{err}");
+    }
+
+    // Indexed reader and per-thread worker
+
+    #[test]
+    fn an_indexed_reader_comes_back_with_its_header() {
+        let (_reader, header) = open_indexed_bam(&test_bam()).unwrap();
+        assert!(!header.reference_sequences().is_empty());
+    }
+
+    #[test]
+    fn a_worker_reuses_its_reader_across_calls_for_the_same_path() {
+        let bam = test_bam();
+        let mut worker = BamWorker::new();
+
+        let first_len = {
+            let (_reader, header, motif) = worker.prepare(&bam, None).unwrap();
+            assert!(motif.is_none(), "no motif filter was asked for");
+            header.reference_sequences().len()
+        };
+
+        // Second call for the same path must not reopen, and must agree.
+        let (_reader, header, _motif) = worker.prepare(&bam, None).unwrap();
+        assert_eq!(header.reference_sequences().len(), first_len);
+    }
+
+    #[test]
+    fn a_fresh_worker_holds_nothing_until_it_is_prepared() {
+        let worker = BamWorker::new();
+        assert!(worker.path.is_none());
+        assert!(worker.reader.is_none());
+        assert!(worker.header.is_none());
+        assert!(worker.motif.is_none());
+    }
+
+    #[test]
+    fn preparing_a_worker_on_a_missing_bam_fails() {
+        let mut worker = BamWorker::new();
+        let missing = Path::new("/nonexistent/reads.bam");
+        assert!(worker.prepare(missing, None).is_err());
+    }
+}

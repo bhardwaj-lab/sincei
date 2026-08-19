@@ -444,4 +444,301 @@ mod tests {
         let excluded = blacklisted_bin_indices(&index, Some(&blacklist("chr1", &[(120, 130)])));
         assert_eq!(sorted(excluded), vec![1, 2]);
     }
+
+    // Counting a real BAM end to end
+
+    use anndata::{AnnData, AnnDataOp, Backend};
+    use anndata_hdf5::H5;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn test_barcodes() -> Vec<String> {
+        std::fs::read_to_string(testdata().join("test_barcodes.txt"))
+            .unwrap()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    /// `count_bam_bins` with everything optional switched off.
+    #[allow(clippy::too_many_arguments)]
+    fn count_into(
+        out: &Path,
+        bin_size: usize,
+        step_size: usize,
+        barcodes: &[String],
+        params: &CountingParams,
+        chunk_size: usize,
+    ) -> Result<()> {
+        let bam = testdata().join("test_i1.bam");
+        count_bam_bins(
+            &[(bam.as_path(), "s1")],
+            bin_size,
+            step_size,
+            barcodes,
+            "BC",
+            None,
+            None,
+            params,
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            chunk_size,
+        )
+    }
+
+    #[test]
+    fn counting_bins_writes_one_matrix_row_per_cell_and_one_column_per_bin() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("bins.h5ad");
+        let barcodes = test_barcodes();
+
+        count_into(
+            &out,
+            100_000,
+            100_000,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+
+        assert!(out.exists(), "no output file was written");
+        let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+        assert_eq!(adata.n_obs(), barcodes.len());
+        assert!(adata.n_vars() > 0, "expected at least one bin");
+    }
+
+    #[test]
+    fn restricting_to_a_region_keeps_the_bin_geometry_but_counts_fewer_reads() {
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let whole = dir.path().join("whole.h5ad");
+        count_into(
+            &whole,
+            100_000,
+            100_000,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+
+        // The test BAM's reads sit around 65.97 Mb, so this window holds none.
+        let region_params = CountingParams {
+            region: Some("5:1-100000".to_string()),
+            ..CountingParams::default()
+        };
+        let region = dir.path().join("region.h5ad");
+        count_into(
+            &region,
+            100_000,
+            100_000,
+            &barcodes,
+            &region_params,
+            1_000_000,
+        )
+        .unwrap();
+
+        let open = |p: &Path| AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
+        let total = |p: &Path| -> f64 {
+            super::super::count_utils::read_x_f64(&open(p))
+                .unwrap()
+                .triplet_iter()
+                .map(|(_, _, &v)| v)
+                .sum()
+        };
+
+        // `region` filters reads, not the bin layout: the var axis still spans
+        // the whole chromosome, so both runs are the same width.
+        assert_eq!(open(&region).n_vars(), open(&whole).n_vars());
+
+        let whole_total = total(&whole);
+        assert!(whole_total > 0.0, "the unrestricted run counted nothing");
+        assert!(
+            total(&region) < whole_total,
+            "restricting to an empty window did not reduce the counts"
+        );
+    }
+
+    #[test]
+    fn skipping_the_only_chromosome_leaves_no_bins_to_count() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("skipped.h5ad");
+        let params = CountingParams {
+            chr_to_skip: vec!["5".to_string()],
+            ..CountingParams::default()
+        };
+
+        // The test BAM has only chromosome 5, so skipping it removes everything.
+        let result = count_into(&out, 100_000, 100_000, &test_barcodes(), &params, 1_000_000);
+        match result {
+            Ok(()) => {
+                let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+                assert_eq!(adata.n_vars(), 0);
+            }
+            // Refusing outright is also a defensible answer for an empty genome.
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(!msg.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn a_smaller_chunk_size_does_not_change_the_result() {
+        // Chunking is a parallelism detail: reads are owned by the chunk holding
+        // their alignment start, so the totals must not depend on chunk size.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let big = dir.path().join("big.h5ad");
+        count_into(
+            &big,
+            50_000,
+            50_000,
+            &barcodes,
+            &CountingParams::default(),
+            10_000_000,
+        )
+        .unwrap();
+
+        let small = dir.path().join("small.h5ad");
+        count_into(
+            &small,
+            50_000,
+            50_000,
+            &barcodes,
+            &CountingParams::default(),
+            250_000,
+        )
+        .unwrap();
+
+        let sum = |p: &Path| -> f64 {
+            let adata = AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
+            super::super::count_utils::read_x_f64(&adata)
+                .unwrap()
+                .triplet_iter()
+                .map(|(_, _, &v)| v)
+                .sum()
+        };
+        assert_eq!(sum(&big), sum(&small));
+    }
+
+    // Argument validation
+
+    #[test]
+    fn zero_sized_bins_and_steps_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let barcodes = test_barcodes();
+        let params = CountingParams::default();
+
+        let err = count_into(&out, 0, 100, &barcodes, &params, 1_000)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("bin_size"), "{err}");
+
+        let err = count_into(&out, 100, 0, &barcodes, &params, 1_000)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("step_size"), "{err}");
+    }
+
+    #[test]
+    fn a_zero_chunk_size_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let err = count_into(
+            &out,
+            100,
+            100,
+            &test_barcodes(),
+            &CountingParams::default(),
+            0,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("chunk_size"), "{err}");
+    }
+
+    #[test]
+    fn counting_with_no_bam_files_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let err = count_bam_bins(
+            &[],
+            100,
+            100,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("at least one BAM"), "{err}");
+    }
+
+    #[test]
+    fn a_barcode_tag_the_bam_does_not_carry_is_rejected_before_any_counting() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let bam = testdata().join("test_i1.bam");
+
+        let err = count_bam_bins(
+            &[(bam.as_path(), "s1")],
+            100_000,
+            100_000,
+            &test_barcodes(),
+            "ZZ",
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("ZZ"), "{err}");
+        assert!(
+            !out.exists(),
+            "nothing should be written when the tag is wrong"
+        );
+    }
 }

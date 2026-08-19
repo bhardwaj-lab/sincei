@@ -320,3 +320,258 @@ pub fn count_bam_features(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anndata::{AnnData, AnnDataOp, Backend};
+    use anndata_hdf5::H5;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn test_barcodes() -> Vec<String> {
+        std::fs::read_to_string(testdata().join("test_barcodes.txt"))
+            .unwrap()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    /// `count_bam_features` against `Chrna9.gtf`, everything optional off.
+    fn count_into(out: &Path, annotation: &Path, params: &CountingParams) -> Result<()> {
+        let bam = testdata().join("test_i1.bam");
+        count_bam_features(
+            &[(bam.as_path(), "s1")],
+            annotation,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            params,
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    fn open(path: &Path) -> AnnData<H5> {
+        AnnData::<H5>::open(H5::open(path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn counting_features_gives_one_row_per_cell_and_one_column_per_feature() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams::default(),
+        )
+        .unwrap();
+
+        assert!(out.exists(), "no output file was written");
+        let adata = open(&out);
+        assert_eq!(adata.n_obs(), test_barcodes().len());
+        assert!(
+            adata.n_vars() > 0,
+            "the GTF should yield at least one feature"
+        );
+    }
+
+    #[test]
+    fn a_bed_annotation_is_accepted_as_well_as_a_gtf() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("bed.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9_regions.bed"),
+            &CountingParams::default(),
+        )
+        .unwrap();
+
+        assert!(open(&out).n_vars() > 0);
+    }
+
+    #[test]
+    fn metagene_mode_collapses_transcripts_onto_their_genes() {
+        let dir = TempDir::new().unwrap();
+        let gtf = testdata().join("Chrna9.gtf");
+
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+
+        let metagene_params = CountingParams {
+            metagene: true,
+            ..CountingParams::default()
+        };
+        let per_gene = dir.path().join("genes.h5ad");
+        count_into(&per_gene, &gtf, &metagene_params).unwrap();
+
+        // One gene can have many transcripts, never the other way round.
+        assert!(
+            open(&per_gene).n_vars() <= open(&per_transcript).n_vars(),
+            "metagene mode produced more columns than transcript mode"
+        );
+    }
+
+    #[test]
+    fn metagene_counting_is_exonic_so_it_never_exceeds_whole_transcript_counting() {
+        let dir = TempDir::new().unwrap();
+        let gtf = testdata().join("Chrna9.gtf");
+
+        let per_gene = dir.path().join("genes.h5ad");
+        count_into(
+            &per_gene,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+
+        let total = |p: &Path| -> f64 {
+            super::super::count_utils::read_x_f64(&open(p))
+                .unwrap()
+                .triplet_iter()
+                .map(|(_, _, &v)| v)
+                .sum()
+        };
+
+        let gene_total = total(&per_gene);
+        let transcript_total = total(&per_transcript);
+
+        assert!(gene_total > 0.0, "nothing was counted against the exons");
+        // A transcript feature spans its introns too, so an intronic read is
+        // counted there but has no exon to fall in under metagene grouping.
+        assert!(
+            gene_total <= transcript_total,
+            "exonic total {gene_total} exceeded whole-transcript total {transcript_total}"
+        );
+    }
+
+    // Argument validation
+
+    #[test]
+    fn a_missing_annotation_file_is_reported() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let missing = dir.path().join("no_such.gtf");
+
+        assert!(count_into(&out, &missing, &CountingParams::default()).is_err());
+    }
+
+    #[test]
+    fn counting_with_no_bam_files_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+
+        let err = count_bam_features(
+            &[],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("at least one BAM"), "{err}");
+    }
+
+    #[test]
+    fn a_zero_chunk_size_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let bam = testdata().join("test_i1.bam");
+
+        let err = count_bam_features(
+            &[(bam.as_path(), "s1")],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            0,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("chunk_size"), "{err}");
+    }
+
+    #[test]
+    fn a_barcode_tag_the_bam_does_not_carry_is_rejected_before_any_counting() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let bam = testdata().join("test_i1.bam");
+
+        let err = count_bam_features(
+            &[(bam.as_path(), "s1")],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "ZZ",
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("ZZ"), "{err}");
+        assert!(!out.exists());
+    }
+}
