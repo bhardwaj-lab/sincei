@@ -119,6 +119,43 @@ def resolve_labels(
     return [Path(b).stem for b in bam_files]
 
 
+def require_single_bam_for_group_tag(
+    bam_files: list[str],
+    group_tag: str | None,
+) -> None:
+    """Reject more than one input BAM when ``--groupTag`` is set.
+
+    A merged BAM carries each read's sample of origin in a tag, which is the
+    only reason the option exists; several files would mean two competing
+    notions of what a sample is.  The tools that accept ``--groupTag`` all need
+    this, so it lives here rather than being restated in each.
+    """
+    if group_tag is not None and len(bam_files) > 1:
+        msg = (
+            f"--groupTag expects a single merged BAM, but {len(bam_files)} were "
+            f"given. Merge them first, e.g. `samtools merge -r`."
+        )
+        raise typer.BadParameter(msg)
+
+
+def warn_labels_ignored_under_group_tag(
+    labels: list[str] | None,
+    use_smart_labels: bool,
+) -> None:
+    """Warn that the label options have nothing to name under ``--groupTag``."""
+    given = [
+        flag
+        for flag, passed in (("--labels", labels), ("--smartLabels", use_smart_labels))
+        if passed
+    ]
+    if given:
+        logger.warning(
+            "%s ignored: with --groupTag the sample names come from the BAM's "
+            "@RG read groups, not from the input file names.",
+            " and ".join(given),
+        )
+
+
 def warn_unsupported(**options: object) -> None:
     """Emit a warning for any CLI option that the backend does not yet honor."""
     for name, value in options.items():

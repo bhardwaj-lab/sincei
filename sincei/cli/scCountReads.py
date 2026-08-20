@@ -169,20 +169,13 @@ def _count_reads(
     if verbose:
         log_parameters(mode=mode, bam_files=bam_files, out_file=out_file)
 
-    # A merged BAM carries its samples in a read tag rather than in separate
-    # files, so the barcode alone no longer identifies a cell.
-    if group_tag is not None and len(bam_files) > 1:
-        msg = (
-            f"--groupTag expects a single merged BAM, but {len(bam_files)} were "
-            f"given. Merge them first, e.g. `samtools merge -r`."
-        )
-        raise typer.BadParameter(msg)
+    backend.require_single_bam_for_group_tag(bam_files, group_tag)
 
     # Row labels: the file stem by default (which is also what --smartLabels
     # asks for), or --labels when given. Under --groupTag they come from the
     # BAM's @RG IDs instead, so anything passed here would be ignored.
     if group_tag is not None:
-        backend.warn_unsupported(labels=labels, smart_labels=smart_labels)
+        backend.warn_labels_ignored_under_group_tag(labels, smart_labels)
         sample_labels: list[str] = []
     else:
         sample_labels = backend.resolve_labels(bam_files, labels, smart_labels)

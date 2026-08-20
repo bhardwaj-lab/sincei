@@ -392,7 +392,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_BAM,
         help=(
             "Name of the BAM tag holding each read's sample of origin, for a BAM "
-            "merged from several samples (usually ``RG``).\n\n"
+            "merged from several samples (usually ``RG`` or ``SM``).\n\n"
             "In a merged file a cell barcode may no longer be unique, since the "
             "same barcode in two source samples is two different cells. This tag, "
             "together with ``--cellTag``, is what identifies a cell.\n\n"

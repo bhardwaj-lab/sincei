@@ -187,17 +187,16 @@ def main(
                 bam_files=bam_files, group_info=group_info, out_prefix=out_prefix
             )
 
-        # A merged BAM carries its samples in a read tag rather than in separate
-        # files, so the group-info `sample` column names @RG IDs, not labels.
-        if group_tag is not None and len(bam_files) > 1:
-            msg = (
-                f"--groupTag expects a single merged BAM, but {len(bam_files)} "
-                f"were given. Merge them first, e.g. `samtools merge -r`."
-            )
-            raise typer.BadParameter(msg)
+        backend.require_single_bam_for_group_tag(bam_files, group_tag)
 
         min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
-        bam_labels = backend.resolve_labels(bam_files, labels, smart_labels)
+        if group_tag is not None:
+            backend.warn_labels_ignored_under_group_tag(labels, smart_labels)
+            # Placeholder only: with --groupTag the group-info file is
+            # matched against the BAM's @RG IDs, not against these.
+            bam_labels = backend.resolve_labels(bam_files, None, False)
+        else:
+            bam_labels = backend.resolve_labels(bam_files, labels, smart_labels)
         # stepSize = binSize + gap; a zero gap yields contiguous bins.
         step_size = bin_size + (distance_between_bins or 0)
 
