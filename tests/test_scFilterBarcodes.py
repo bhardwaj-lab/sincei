@@ -21,8 +21,9 @@ Known limits of this fixture, so the gaps are not mistaken for coverage:
   output for the same reason.
 * ``--motifFilter`` / ``--genome2bit`` need a 2bit genome that is not in
   ``testdata/``.
-* 14 further flags are exposed for parity but routed through
-  ``backend.warn_unsupported``; they are ignored by the backend.
+The tool's flags now match the original sincei's exactly. Options the backend
+does not honour used to be accepted and warned about; they have been removed
+rather than kept as no-ops.
 
 Run the tests::
 
