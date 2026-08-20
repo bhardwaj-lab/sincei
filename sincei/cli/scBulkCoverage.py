@@ -101,19 +101,6 @@ def main(
             help="Chromosomes to skip while calculating normalization factors.",
         ),
     ] = None,
-    normalize_by_reference: Annotated[
-        str | None,
-        typer.Option(
-            "-nr",
-            "--normalizeByReference",
-            rich_help_panel=_COVERAGE,
-            help=(
-                "NOT IMPLEMENTED: Normalize each group of cells by a reference group "
-                "(which must be present in the --group-info file). Note that the "
-                "--normalizeUsing method is applied beforehand."
-            ),
-        ),
-    ] = None,
     scale_factor: Annotated[
         float,
         typer.Option(
@@ -199,11 +186,6 @@ def main(
             log_parameters(
                 bam_files=bam_files, group_info=group_info, out_prefix=out_prefix
             )
-
-        # Options exposed for parity but not honored by the coverage backend.
-        backend.warn_unsupported(
-            normalize_by_reference=normalize_by_reference,
-        )
 
         # A merged BAM carries its samples in a read tag rather than in separate
         # files, so the group-info `sample` column names @RG IDs, not labels.
