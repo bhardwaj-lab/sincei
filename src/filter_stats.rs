@@ -123,6 +123,7 @@ pub fn run_filter_stats(
         compute_gc: min_gc.is_some() || max_gc.is_some(),
         compute_aligned_fraction: min_aligned_fraction.is_some(),
         store_sequence: motifs.is_some(),
+        compute_covered_span: dup_method.is_some(),
     };
 
     let blacklist: Option<GenomeIndex> = blacklist_path.map(parse_blacklist_bed).transpose()?;

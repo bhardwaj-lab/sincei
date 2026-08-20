@@ -20,7 +20,10 @@ use noodles::sam::alignment::record::data::field::{Tag, Value};
 pub(crate) struct ScRecordOptions {
     pub(crate) compute_gc: bool,
     pub(crate) compute_aligned_fraction: bool,
+    /// Needed by the motif filter.
     pub(crate) store_sequence: bool,
+    /// Needed by the duplicate filter to size a fragment when TLEN is 0.
+    pub(crate) compute_covered_span: bool,
 }
 
 /// How a read's position can be adjusted.
@@ -60,6 +63,15 @@ pub struct ScRecord<'a> {
     pub template_length: i64,
     /// Mate's 0-based alignment start, if available.
     pub mate_alignment_start: Option<usize>,
+    /// Reference bases the alignment covers, counting M/D/=/X but **not**
+    /// skipped (N) regions. This is the span a single-end read contributes as a
+    /// fragment.
+    pub covered_span: Option<usize>,
+    /// Reference this read aligns to.
+    pub reference_id: Option<usize>,
+    /// Reference the mate aligns to. Differs from `reference_id` for a chimeric
+    /// pair, which the duplicate filter has to treat as a distinct fragment.
+    pub mate_reference_id: Option<usize>,
     /// Number of bases in the read sequence (used by center_reads).
     pub read_length: usize,
     /// Barcode tag bytes, borrowed from the BAM record (no allocation).
@@ -131,6 +143,15 @@ impl<'a> ScRecord<'a> {
             .transpose()
             .context("failed to read mate alignment start")?;
 
+        let reference_id = record
+            .reference_sequence_id()
+            .transpose()
+            .context("failed to read reference sequence id")?;
+        let mate_reference_id = record
+            .mate_reference_sequence_id()
+            .transpose()
+            .context("failed to read mate reference sequence id")?;
+
         // Borrow the barcode/UMI bytes directly from the record with no per-read
         // allocation. Callers look these up against a byte-keyed whitelist and
         // only the duplicate filter ever copies them.
@@ -178,6 +199,28 @@ impl<'a> ScRecord<'a> {
             (None, record.sequence().len(), None)
         };
 
+        // Reference span excluding skips, for the duplicate filter's fragment
+        // sizing. Deliberately not `alignment_end - alignment_start`: that
+        // counts N, so a spliced read would look as long as its intron.
+        let covered_span = if opts.compute_covered_span {
+            let mut span = 0usize;
+            for result in record.cigar().iter() {
+                let op = result.context("failed to decode CIGAR op")?;
+                if matches!(
+                    op.kind(),
+                    CigarKind::Match
+                        | CigarKind::Deletion
+                        | CigarKind::SequenceMatch
+                        | CigarKind::SequenceMismatch
+                ) {
+                    span += op.len();
+                }
+            }
+            Some(span)
+        } else {
+            None
+        };
+
         // Aligned fraction: M operations / read-consuming length.
         let aligned_fraction = if opts.compute_aligned_fraction {
             let mut match_len: usize = 0;
@@ -210,6 +253,9 @@ impl<'a> ScRecord<'a> {
             mate_is_reverse,
             template_length,
             mate_alignment_start,
+            covered_span,
+            reference_id,
+            mate_reference_id,
             read_length,
             barcode,
             umi,
@@ -315,6 +361,9 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
         mate_is_reverse: false,
         template_length: 0,
         mate_alignment_start: None,
+        covered_span: None,
+        reference_id: None,
+        mate_reference_id: None,
         read_length: end - start,
         barcode: None,
         umi: None,
@@ -519,6 +568,7 @@ mod tests {
             compute_gc: false,
             compute_aligned_fraction: false,
             store_sequence: false,
+            compute_covered_span: false,
         }
     }
 
@@ -579,6 +629,7 @@ mod tests {
             compute_gc: true,
             compute_aligned_fraction: false,
             store_sequence: false,
+            compute_covered_span: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
@@ -598,6 +649,7 @@ mod tests {
             compute_gc: true,
             compute_aligned_fraction: false,
             store_sequence: true,
+            compute_covered_span: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
@@ -623,6 +675,7 @@ mod tests {
             compute_gc: false,
             compute_aligned_fraction: true,
             store_sequence: false,
+            compute_covered_span: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)

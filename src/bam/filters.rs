@@ -182,11 +182,16 @@ impl QcFilter {
 
 /// Derive the [`ScRecordOptions`] needed to evaluate `qc` and, when
 /// `has_motif` is set, the motif filter (which needs the raw read sequence).
-pub(crate) fn derive_record_opts(qc: Option<&QcFilter>, has_motif: bool) -> ScRecordOptions {
+pub(crate) fn derive_record_opts(
+    qc: Option<&QcFilter>,
+    has_motif: bool,
+    dedup: bool,
+) -> ScRecordOptions {
     ScRecordOptions {
         compute_gc: qc.is_some_and(|f| f.needs_gc()),
         compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
         store_sequence: has_motif,
+        compute_covered_span: dedup,
     }
 }
 
@@ -203,17 +208,68 @@ pub enum DupMethod {
     BarcodeUmiStartEnd,
 }
 
-// Key tuple: (barcode, start, end_or_zero, umi_or_none)
+// Key tuple: (barcode, umi, fragment_start, fragment_end, mate_reference, strand)
+//
+// Deduplication is per *fragment*, not per read: two reads that begin at the
+// same base can belong to different templates, so the key is built from TLEN
+// and the mate position rather than from this read's own alignment span.
+//
+// `fragment_start` and `fragment_end` are `Option` because the start-only
+// methods key on the 5' end alone (the fragment start for a forward read,
+// the fragment end for a reverse one) leaving the other side out of the key.
 //
 // The barcode/UMI bytes are copied into the key only here, when a record is
 // actually deduplicated. The hot path borrows them from the record.
 //
-// The chromosome is deliberately *not* part of the key: each `DuplicateFilter`
-// lives for exactly one work chunk, and every chunk covers a single
-// chromosome, so the chromosome is constant for the filter's whole lifetime.
-// Reads sharing an alignment start always land in the same chunk, so
-// duplicates are never split across filters.
-type DupKey = (Option<Vec<u8>>, usize, usize, Option<Vec<u8>>);
+// This read's own chromosome is deliberately *not* part of the key: each
+// `DuplicateFilter` lives for exactly one work chunk, and every chunk covers a
+// single chromosome, so it is constant for the filter's whole lifetime. Reads
+// sharing an alignment start always land in the same chunk, so duplicates are
+// never split across filters. The *mate's* reference does vary, and is keyed.
+type DupKey = (
+    Option<Vec<u8>>,
+    Option<Vec<u8>>,
+    Option<usize>,
+    Option<usize>,
+    Option<usize>,
+    bool,
+);
+
+/// Signed observed template length, matching the reference implementation's
+/// `getTLen(read, notAbs=True)`: TLEN when it is set, and otherwise the read's
+/// own span on the reference, so single-end reads still describe a fragment.
+fn signed_template_length(rec: &ScRecord<'_>) -> i64 {
+    if rec.template_length != 0 {
+        rec.template_length
+    } else {
+        // The reference bases actually covered, so a spliced read describes its
+        // exons rather than its whole genomic footprint. `covered_span` is
+        // always populated when a duplicate filter is in use, because
+        // `derive_record_opts` requests it; the fallback only guards misuse.
+        rec.covered_span
+            .unwrap_or_else(|| rec.alignment_end.saturating_sub(rec.alignment_start)) as i64
+    }
+}
+
+/// The fragment `[start, end)` this read belongs to.
+///
+/// A negative TLEN means this read is the rightmost of the pair, so the
+/// fragment begins at the mate and runs back to here.
+///
+/// The mate position is therefore always present when TLEN is negative: the
+/// spec sets TLEN to 0 for a single-segment template or when the placement is
+/// unknown, so a negative value implies a mapped mate. The fallback below is
+/// only reached on a malformed record, where any stable key will do.
+fn fragment_span(rec: &ScRecord<'_>) -> (usize, usize) {
+    let tlen = signed_template_length(rec);
+    if tlen >= 0 {
+        let start = rec.alignment_start;
+        (start, start + tlen as usize)
+    } else {
+        let start = rec.mate_alignment_start.unwrap_or(rec.alignment_start);
+        (start, start + tlen.unsigned_abs() as usize)
+    }
+}
 
 /// Streaming duplicate filter backed by an in-memory fingerprint set.
 ///
@@ -222,6 +278,9 @@ type DupKey = (Option<Vec<u8>>, usize, usize, Option<Vec<u8>>);
 pub struct DuplicateFilter {
     pub method: DupMethod,
     seen: AHashSet<DupKey>,
+    /// Alignment start of the previous record, which bounds the comparison
+    /// window (see `passes`).
+    window_start: Option<usize>,
 }
 
 impl DuplicateFilter {
@@ -229,22 +288,65 @@ impl DuplicateFilter {
         Self {
             method,
             seen: AHashSet::new(),
+            window_start: None,
         }
     }
 
     /// Returns `true` if the record is the **first** occurrence of its fingerprint
     /// and `false` if it is a duplicate.
     pub fn passes(&mut self, rec: &ScRecord<'_>) -> bool {
-        let barcode = || rec.barcode.map(<[u8]>::to_vec);
-        let umi = || rec.umi.map(<[u8]>::to_vec);
-        let key: DupKey = match self.method {
-            DupMethod::BarcodeStart => (barcode(), rec.alignment_start, 0, None),
-            DupMethod::BarcodeStartEnd => (barcode(), rec.alignment_start, rec.alignment_end, None),
-            DupMethod::BarcodeUmiStart => (barcode(), rec.alignment_start, 0, umi()),
-            DupMethod::BarcodeUmiStartEnd => {
-                (barcode(), rec.alignment_start, rec.alignment_end, umi())
+        // Reads are only ever compared against others starting at the very same
+        // base: the window resets whenever the alignment start moves on.  Two
+        // reads at different starts are never duplicates of each other, however
+        // alike their fragments, so nothing is inferred about their origin.
+        // Input is coordinate-sorted, so a start is visited exactly once.
+        if self.window_start != Some(rec.alignment_start) {
+            self.seen.clear();
+            self.window_start = Some(rec.alignment_start);
+        }
+
+        let uses_end = matches!(
+            self.method,
+            DupMethod::BarcodeStartEnd | DupMethod::BarcodeUmiStartEnd
+        );
+        let uses_umi = matches!(
+            self.method,
+            DupMethod::BarcodeUmiStart | DupMethod::BarcodeUmiStartEnd
+        );
+
+        let (fragment_start, fragment_end) = fragment_span(rec);
+
+        let (start, end, mate_reference) = if uses_end {
+            // A chimeric pair spans two references, so it has no fragment end
+            // to speak of; the mate's start stands in for one.
+            let end = if rec.mate_reference_id == rec.reference_id {
+                Some(fragment_end)
+            } else {
+                rec.mate_alignment_start
+            };
+            (Some(fragment_start), end, rec.mate_reference_id)
+        } else {
+            // Key on the 5' end only, so a read and its mate are not mistaken
+            // for one another.
+            if rec.is_reverse {
+                (None, Some(fragment_end), rec.reference_id)
+            } else {
+                (Some(fragment_start), None, rec.reference_id)
             }
         };
+
+        let key: DupKey = (
+            rec.barcode.map(<[u8]>::to_vec),
+            if uses_umi {
+                rec.umi.map(<[u8]>::to_vec)
+            } else {
+                None
+            },
+            start,
+            end,
+            mate_reference,
+            rec.is_reverse,
+        );
         // insert returns true when a new key is inserted.
         self.seen.insert(key)
     }
@@ -577,7 +679,7 @@ mod tests {
 
     #[test]
     fn record_options_are_derived_from_the_active_filters() {
-        let none = derive_record_opts(None, false);
+        let none = derive_record_opts(None, false, false);
         assert!(!none.compute_gc);
         assert!(!none.compute_aligned_fraction);
         assert!(!none.store_sequence);
@@ -586,7 +688,7 @@ mod tests {
             max_gc: Some(0.6),
             ..QcFilter::new()
         };
-        let opts = derive_record_opts(Some(&gc_only), false);
+        let opts = derive_record_opts(Some(&gc_only), false, false);
         assert!(opts.compute_gc);
         assert!(!opts.compute_aligned_fraction);
 
@@ -594,7 +696,7 @@ mod tests {
             min_aligned_fraction: Some(0.5),
             ..QcFilter::new()
         };
-        let opts = derive_record_opts(Some(&af_only), true);
+        let opts = derive_record_opts(Some(&af_only), true, false);
         assert!(!opts.compute_gc);
         assert!(opts.compute_aligned_fraction);
         // The motif filter is the only consumer of the stored sequence.
@@ -659,6 +761,161 @@ mod tests {
         assert!(f.passes(&test_record(100, 200)));
         assert!(!f.passes(&test_record(100, 200)));
         assert!(f.passes(&test_record(300, 400)));
+    }
+
+    // Fragment-aware deduplication
+
+    #[test]
+    fn two_reads_sharing_a_start_but_not_a_fragment_are_not_duplicates() {
+        // Taken from tests/testdata/test_i1.bam: both ATATAACT reads align at
+        // 65966812 with 61M, so their read spans are identical, but one has
+        // TLEN 0 and the other TLEN -612. They are different templates.
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        let mut lone = dup_record(b"AAA", b"U1", 65_966_811, 65_966_872);
+        lone.is_reverse = true;
+        lone.template_length = 0;
+
+        let mut paired = dup_record(b"AAA", b"U1", 65_966_811, 65_966_872);
+        paired.is_reverse = true;
+        paired.template_length = -612;
+        paired.mate_alignment_start = Some(65_966_260);
+
+        assert!(f.passes(&lone));
+        assert!(
+            f.passes(&paired),
+            "reads from different fragments must not deduplicate against each other"
+        );
+    }
+
+    #[test]
+    fn a_forward_and_a_reverse_read_at_one_position_stay_distinct() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStart);
+
+        let forward = dup_record(b"AAA", b"U1", 100, 200);
+        let mut reverse = dup_record(b"AAA", b"U1", 100, 200);
+        reverse.is_reverse = true;
+
+        assert!(f.passes(&forward));
+        assert!(f.passes(&reverse), "strand is part of the fingerprint");
+    }
+
+    #[test]
+    fn reads_at_different_starts_are_never_duplicates() {
+        // The GTCAAGCA pair in tests/testdata/test_i1.bam: same barcode, same
+        // mate, same TLEN, ends flush -- but starts 4 bp apart because of 5'
+        // trimming.  Nothing is inferred from that similarity; a differing
+        // start is enough to keep both.
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStart);
+
+        let mut first = dup_record(b"AAA", b"U1", 65_977_534, 65_977_596);
+        first.is_reverse = true;
+        first.template_length = -270;
+        first.mate_alignment_start = Some(65_977_326);
+
+        let mut second = dup_record(b"AAA", b"U1", 65_977_538, 65_977_596);
+        second.is_reverse = true;
+        second.template_length = -270;
+        second.mate_alignment_start = Some(65_977_326);
+
+        assert!(f.passes(&first));
+        assert!(
+            f.passes(&second),
+            "a differing alignment start is never a duplicate"
+        );
+    }
+
+    #[test]
+    fn a_spliced_read_is_sized_by_its_exons_not_its_intron() {
+        // A read like 50M1000N50M covers 100 reference bases across a 1100 bp
+        // footprint.  `alignment_end - alignment_start` would say 1100 and
+        // swallow the intron; the fragment is the 100 bases actually covered.
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        let mut spliced = dup_record(b"AAA", b"U1", 1_000, 2_100);
+        spliced.template_length = 0;
+        spliced.covered_span = Some(100);
+
+        // A second read covering the same 100 bases from the same start is a
+        // duplicate, however its intron is placed.
+        let mut other_intron = dup_record(b"AAA", b"U1", 1_000, 3_500);
+        other_intron.template_length = 0;
+        other_intron.covered_span = Some(100);
+
+        assert!(f.passes(&spliced));
+        assert!(
+            !f.passes(&other_intron),
+            "the intron must not enter the fragment size"
+        );
+    }
+
+    #[test]
+    fn a_spliced_read_is_distinct_from_an_unspliced_one_of_the_same_footprint() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        let mut spliced = dup_record(b"AAA", b"U1", 1_000, 2_100);
+        spliced.template_length = 0;
+        spliced.covered_span = Some(100);
+
+        let mut contiguous = dup_record(b"AAA", b"U1", 1_000, 2_100);
+        contiguous.template_length = 0;
+        contiguous.covered_span = Some(1_100);
+
+        assert!(f.passes(&spliced));
+        assert!(
+            f.passes(&contiguous),
+            "different covered spans, different fragments"
+        );
+    }
+
+    #[test]
+    fn the_comparison_window_spans_only_one_alignment_start() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStart);
+        let here = dup_record(b"AAA", b"U1", 100, 200);
+
+        assert!(f.passes(&here));
+        assert!(!f.passes(&here), "same start and same key is a duplicate");
+
+        // Moving to a new start clears the window ...
+        assert!(f.passes(&dup_record(b"AAA", b"U1", 300, 400)));
+        // ... so the earlier fingerprint is no longer remembered.
+        assert!(f.passes(&here));
+    }
+
+    #[test]
+    fn a_chimeric_pair_is_kept_apart_from_a_normal_one() {
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        let mut normal = dup_record(b"AAA", b"U1", 100, 200);
+        normal.reference_id = Some(0);
+        normal.mate_reference_id = Some(0);
+
+        let mut chimeric = dup_record(b"AAA", b"U1", 100, 200);
+        chimeric.reference_id = Some(0);
+        chimeric.mate_reference_id = Some(1);
+        chimeric.mate_alignment_start = Some(5_000);
+
+        assert!(f.passes(&normal));
+        assert!(
+            f.passes(&chimeric),
+            "a mate on another reference is another fragment"
+        );
+    }
+
+    #[test]
+    fn a_read_without_a_template_length_uses_its_own_span_as_the_fragment() {
+        // TLEN 0 means single-end, so the fragment is the read's own span.
+        let mut f = DuplicateFilter::new(DupMethod::BarcodeStartEnd);
+
+        let implied = dup_record(b"AAA", b"U1", 100, 200);
+        let mut stated = dup_record(b"AAA", b"U1", 100, 200);
+        stated.template_length = 100;
+
+        assert!(f.passes(&implied));
+        assert!(
+            !f.passes(&stated),
+            "an explicit TLEN of 100 describes the same fragment"
+        );
     }
 
     #[test]

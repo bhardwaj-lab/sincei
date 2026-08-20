@@ -276,7 +276,7 @@ pub fn run_bulk_coverage(
         .collect();
 
     let has_motif = genome_path.is_some() && motifs.is_some();
-    let record_opts = derive_record_opts(qc_filter, has_motif);
+    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some());
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
