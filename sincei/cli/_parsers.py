@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import typer
+
 if TYPE_CHECKING:
     from ._common_args import DuplicateFilter
 
@@ -109,9 +111,10 @@ def resolve_labels(
         if len(labels) != len(bam_files):
             msg = (
                 f"--labels count ({len(labels)}) does not match the number of BAM "
-                f"files ({len(bam_files)})."
+                f"files ({len(bam_files)}). Give one label per BAM, or omit "
+                f"--labels to use the file names."
             )
-            raise ValueError(msg)
+            raise typer.BadParameter(msg)
         return list(labels)
     return [Path(b).stem for b in bam_files]
 

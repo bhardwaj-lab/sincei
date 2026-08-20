@@ -10,6 +10,37 @@ use crate::bam::sc_record::AdjustRead;
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
 
+/// Pair each BAM with the sample name its matrix rows are labelled by.
+///
+/// An empty `labels` means derive the name from the file stem, which is what
+/// both the default and `--smartLabels` ask for. Otherwise the supplied labels
+/// are used verbatim, one per BAM.
+fn sample_names(bam_paths: &[PathBuf], labels: Vec<String>) -> Result<Vec<(PathBuf, String)>> {
+    if labels.is_empty() {
+        return Ok(bam_paths
+            .iter()
+            .map(|p| {
+                let stem = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                (p.clone(), stem)
+            })
+            .collect());
+    }
+
+    // The CLI checks this too; repeated here so the backend cannot be driven
+    // into a mislabelled matrix by a direct call.
+    anyhow::ensure!(
+        labels.len() == bam_paths.len(),
+        "got {} labels for {} BAM files; there must be one label per file",
+        labels.len(),
+        bam_paths.len()
+    );
+    Ok(bam_paths.iter().cloned().zip(labels).collect())
+}
+
 fn parse_dup_method(s: &str) -> Result<DupMethod> {
     match s {
         "barcode_start" => Ok(DupMethod::BarcodeStart),
@@ -82,6 +113,7 @@ fn build_record_filter(
     bin_size = 10_000,
     step_size = 10_000,
     bc_tag = "CB",
+    labels = vec![],
     umi_tag = None,
     count_tag = None,
     group_tag = None,
@@ -114,6 +146,7 @@ pub fn count_bins(
     bin_size: usize,
     step_size: usize,
     bc_tag: &str,
+    labels: Vec<String>,
     umi_tag: Option<String>,
     count_tag: Option<String>,
     group_tag: Option<String>,
@@ -170,18 +203,8 @@ pub fn count_bins(
         .transpose()
         .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
-    // Build (path, sample_name) pairs. sample name is the file stem.
-    let path_sample: Vec<(PathBuf, String)> = bam_paths
-        .iter()
-        .map(|p| {
-            let stem = p
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            (p.clone(), stem)
-        })
-        .collect();
+    let path_sample: Vec<(PathBuf, String)> =
+        sample_names(&bam_paths, labels).map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
     let bam_path_refs: Vec<(&std::path::Path, &str)> = path_sample
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))
@@ -230,6 +253,7 @@ pub fn count_bins(
     barcodes,
     output_path,
     bc_tag = "CB",
+    labels = vec![],
     umi_tag = None,
     count_tag = None,
     group_tag = None,
@@ -265,6 +289,7 @@ pub fn count_features(
     barcodes: Vec<String>,
     output_path: PathBuf,
     bc_tag: &str,
+    labels: Vec<String>,
     umi_tag: Option<String>,
     count_tag: Option<String>,
     group_tag: Option<String>,
@@ -325,17 +350,8 @@ pub fn count_features(
         .transpose()
         .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
 
-    let path_sample: Vec<(PathBuf, String)> = bam_paths
-        .iter()
-        .map(|p| {
-            let stem = p
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            (p.clone(), stem)
-        })
-        .collect();
+    let path_sample: Vec<(PathBuf, String)> =
+        sample_names(&bam_paths, labels).map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
     let bam_path_refs: Vec<(&std::path::Path, &str)> = path_sample
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))

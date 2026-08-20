@@ -178,16 +178,20 @@ def _count_reads(
         )
         raise typer.BadParameter(msg)
 
-    # Options accepted by the CLI for parity with deepTools but not (yet) implemented
-    backend.warn_unsupported(
-        labels=labels,
-        smart_labels=smart_labels,
-    )
+    # Row labels: the file stem by default (which is also what --smartLabels
+    # asks for), or --labels when given. Under --groupTag they come from the
+    # BAM's @RG IDs instead, so anything passed here would be ignored.
+    if group_tag is not None:
+        backend.warn_unsupported(labels=labels, smart_labels=smart_labels)
+        sample_labels: list[str] = []
+    else:
+        sample_labels = backend.resolve_labels(bam_files, labels, smart_labels)
 
     min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
 
     shared = {
         "barcodes": backend.read_barcodes(barcodes),
+        "labels": sample_labels,
         "output_path": out_file,
         "bc_tag": cell_tag,
         "umi_tag": backend.umi_tag_if_used(umi_tag, duplicate_filter),
