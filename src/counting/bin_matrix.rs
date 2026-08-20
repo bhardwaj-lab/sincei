@@ -4,8 +4,8 @@
 //! involved. Work is parallel over sub-chromosome chunks, each an independent
 //! BAI query.
 //!
-//! A read is credited to exactly one bin — the one its effective interval
-//! overlaps most — and is owned by the chunk holding its alignment start, so a
+//! A read is credited to exactly one bin (the one its effective interval
+//! overlaps most) and is owned by the chunk holding its alignment start, so a
 //! read whose interval spills into the next chunk is still counted once.
 
 use std::path::Path;
@@ -20,7 +20,9 @@ use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{
     BinIndex, GenomeIndex, build_bin_index, build_bin_index_in_window,
 };
-use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
@@ -42,6 +44,7 @@ pub fn count_bam_bins(
     bc_tag: &str,
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
+    group_tag: Option<&str>,
     params: &CountingParams,
     adjust: &AdjustRead,
     record_filter: Option<&RawRecordFilter>,
@@ -67,6 +70,7 @@ pub fn count_bam_bins(
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
     let count_tag_parsed = count_tag.map(parse_tag).transpose()?;
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let region_filter = params.region.as_deref().map(parse_region).transpose()?;
 
     let n_barcodes = barcodes.len();
@@ -76,7 +80,38 @@ pub fn count_bam_bins(
         .enumerate()
         .map(|(i, bc)| (bc.as_bytes(), i))
         .collect();
-    let n_cells = bam_paths.len() * n_barcodes;
+
+    // With --groupTag the sample axis comes from the reads' group tag rather
+    // than from their BAM of origin, so exactly one input is allowed and the
+    // row space is the header's @RG IDs x barcodes.
+    let group_ids: Option<Vec<Vec<u8>>> = if group_tag.is_some() {
+        anyhow::ensure!(
+            bam_paths.len() == 1,
+            "--groupTag expects a single merged BAM, but {} were given",
+            bam_paths.len()
+        );
+        let (path, _) = bam_paths[0];
+        Some(read_group_ids(&read_bam_header(path)?, path)?)
+    } else {
+        None
+    };
+    let group_index: AHashMap<&[u8], usize> = group_ids
+        .iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, id)| (id.as_slice(), i))
+        .collect();
+
+    // Row labels, and hence the row count: group IDs when grouping, otherwise
+    // one block per input BAM.
+    let sample_labels: Vec<String> = match &group_ids {
+        Some(ids) => ids
+            .iter()
+            .map(|id| String::from_utf8_lossy(id).into_owned())
+            .collect(),
+        None => bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
+    };
+    let n_cells = sample_labels.len() * n_barcodes;
 
     // Chromosomes to skip, as a byte-slice set so membership tests over the
     // header don't allocate a `String` per reference sequence.
@@ -219,6 +254,9 @@ pub fn count_bam_bins(
                     let mut dup_filter: Option<DuplicateFilter> =
                         dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    // Without --groupTag the sample is fixed for the whole chunk, so
+                    // the row offset is hoisted; with it the sample varies per read
+                    // and the offset is resolved below.
                     let cell_offset = bam_idx * n_barcodes;
 
                     for result in query.records() {
@@ -238,6 +276,7 @@ pub fn count_bam_bins(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             count_tag_parsed.as_ref(),
+                            group_tag_parsed.as_ref(),
                             &record_opts,
                         )?
                         else {
@@ -281,7 +320,21 @@ pub fn count_bam_bins(
                         }
 
                         let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
-                        let cell_idx = cell_offset + local_bc_idx;
+                        // Under --groupTag the read's own group tag picks the row
+                        // block, so two reads sharing a barcode but coming from
+                        // different source samples stay separate cells.
+                        let cell_idx = if group_tag_parsed.is_some() {
+                            let Some(group) = sc_rec.group else {
+                                continue;
+                            };
+                            let Some(&group_idx) = group_index.get(group) else {
+                                warn_unknown_group(group);
+                                continue;
+                            };
+                            group_idx * n_barcodes + local_bc_idx
+                        } else {
+                            cell_offset + local_bc_idx
+                        };
 
                         // Largest-overlap-wins: assign the read to exactly one
                         // bin, the one whose [bin_start, bin_start+bin_size)
@@ -350,7 +403,7 @@ pub fn count_bam_bins(
     write_counts_anndata(
         output_path,
         matrix,
-        bam_paths,
+        &sample_labels,
         barcodes,
         &var_meta,
         compression,
@@ -528,6 +581,7 @@ mod tests {
             step_size,
             barcodes,
             "BC",
+            None,
             None,
             None,
             params,
@@ -866,6 +920,7 @@ mod tests {
             "BC",
             None,
             None,
+            None,
             &CountingParams::default(),
             &AdjustRead::default(),
             None,
@@ -898,6 +953,7 @@ mod tests {
             "ZZ",
             None,
             None,
+            None,
             &CountingParams::default(),
             &AdjustRead::default(),
             None,
@@ -919,5 +975,160 @@ mod tests {
             !out.exists(),
             "nothing should be written when the tag is wrong"
         );
+    }
+
+    // --groupTag: recovering per-sample identity from a merged BAM
+
+    fn merged_bam() -> PathBuf {
+        testdata().join("test_i1_i2.bam")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn count_grouped(out: &Path, bam: &Path, group_tag: Option<&str>) -> Result<()> {
+        count_bam_bins(
+            &[(bam, "merged")],
+            100_000,
+            100_000,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            group_tag,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    #[test]
+    fn a_merged_bam_counted_by_group_matches_counting_its_sources_separately() {
+        // The whole point of --groupTag: one merged file must give the same
+        // matrix as the two files it was made from.
+        let dir = TempDir::new().unwrap();
+
+        let separate = dir.path().join("separate.h5ad");
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+        count_bam_bins(
+            &[(i1.as_path(), "test_i1"), (i2.as_path(), "test_i2")],
+            100_000,
+            100_000,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &separate,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        let grouped = dir.path().join("grouped.h5ad");
+        count_grouped(&grouped, &merged_bam(), Some("RG")).unwrap();
+
+        let open = |p: &Path| AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
+        assert_eq!(
+            open(&grouped).obs_names().into_vec(),
+            open(&separate).obs_names().into_vec()
+        );
+
+        let total = |p: &Path| -> f64 {
+            super::super::count_utils::read_x_f64(&open(p))
+                .unwrap()
+                .triplet_iter()
+                .map(|(_, _, &v)| v)
+                .sum()
+        };
+        assert_eq!(total(&grouped), total(&separate));
+    }
+
+    #[test]
+    fn without_a_group_tag_a_shared_barcode_collapses_two_cells_into_one() {
+        // GCGAGCAT occurs in both source samples. Counted per-barcode the two
+        // cells merge; counted per-group they stay apart. This is the failure
+        // --groupTag exists to prevent.
+        let dir = TempDir::new().unwrap();
+
+        let flat = dir.path().join("flat.h5ad");
+        count_grouped(&flat, &merged_bam(), None).unwrap();
+        let grouped = dir.path().join("grouped.h5ad");
+        count_grouped(&grouped, &merged_bam(), Some("RG")).unwrap();
+
+        let open = |p: &Path| AnnData::<H5>::open(H5::open(p).unwrap()).unwrap();
+        let rows = |p: &Path| open(p).obs_names().into_vec();
+
+        let flat_rows = rows(&flat);
+        let grouped_rows = rows(&grouped);
+        assert_eq!(flat_rows.len(), test_barcodes().len());
+        assert_eq!(grouped_rows.len(), 2 * test_barcodes().len());
+
+        // One row for the shared barcode without grouping, two with it.
+        let shared = |rs: &[String]| rs.iter().filter(|r| r.ends_with("GCGAGCAT")).count();
+        assert_eq!(shared(&flat_rows), 1);
+        assert_eq!(shared(&grouped_rows), 2);
+    }
+
+    #[test]
+    fn a_group_tag_with_several_bams_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+
+        let err = count_bam_bins(
+            &[(i1.as_path(), "a"), (i2.as_path(), "b")],
+            100_000,
+            100_000,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            Some("RG"),
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("single merged BAM"), "{err}");
+    }
+
+    #[test]
+    fn a_group_tag_on_a_bam_without_read_groups_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let err = count_grouped(&out, &testdata().join("test_i1.bam"), Some("RG"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no @RG"), "{err}");
     }
 }

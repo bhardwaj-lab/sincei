@@ -14,15 +14,17 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::num::NonZeroUsize;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
+use ahash::AHashSet;
 use anyhow::{Context, Result};
 use bstr::BString;
 use noodles::bam;
 use noodles::bgzf;
 use noodles::sam::Header;
 use noodles::sam::alignment::record::data::field::Tag;
-use noodles::sam::header::ReferenceSequences;
-use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
+use noodles::sam::header::record::value::{Map, map::ReadGroup, map::ReferenceSequence};
+use noodles::sam::header::{ReadGroups, ReferenceSequences};
 
 use super::filters::MotifFilter;
 
@@ -52,22 +54,37 @@ pub(crate) fn ensure_barcode_tags_present(
 
 /// Fail when `tag` is on none of the first [`TAG_SAMPLE_READS`] records.
 fn ensure_tag_present(path: &Path, option: &str, tag: Tag) -> Result<()> {
-    let mut reader = bam::io::reader::Builder
-        .build_from_path(path)
-        .with_context(|| format!("failed to open BAM: {}", path.display()))?;
-    // The record iterator starts past the header, so it has to be consumed even
-    // though nothing here depends on it.
-    reader
-        .read_header()
-        .with_context(|| format!("failed to read BAM header: {}", path.display()))?;
+    // Goes through `open_indexed_bam` rather than a plain reader so a BAM with a
+    // non-compliant SAM header still gets checked; otherwise this would reject
+    // every file the binary-dictionary fallback exists to support.
+    let (mut reader, header) = open_indexed_bam(path)?;
 
-    for result in reader.records().take(TAG_SAMPLE_READS) {
-        let record = result.with_context(|| format!("failed to read {}", path.display()))?;
-        for field in record.data().iter() {
-            let (seen, _) = field.with_context(|| format!("failed to read {}", path.display()))?;
-            if seen == tag {
-                return Ok(());
+    let mut seen = 0usize;
+    for name in header.reference_sequences().keys() {
+        let region: noodles::core::Region = String::from_utf8_lossy(name.as_ref())
+            .parse()
+            .with_context(|| format!("failed to build a query for reference {name:?}"))?;
+        let Ok(query) = reader.query(&header, &region) else {
+            continue;
+        };
+
+        for result in query.records() {
+            let record = result.with_context(|| format!("failed to read {}", path.display()))?;
+            for field in record.data().iter() {
+                let (found, _) =
+                    field.with_context(|| format!("failed to read {}", path.display()))?;
+                if found == tag {
+                    return Ok(());
+                }
             }
+
+            seen += 1;
+            if seen >= TAG_SAMPLE_READS {
+                break;
+            }
+        }
+        if seen >= TAG_SAMPLE_READS {
+            break;
         }
     }
 
@@ -83,6 +100,53 @@ fn ensure_tag_present(path: &Path, option: &str, tag: Tag) -> Result<()> {
         TAG_SAMPLE_READS,
         path.display()
     )
+}
+
+/// The `@RG` IDs a BAM declares, in header order.
+///
+/// This is the group axis for `--groupTag`: a merged BAM records which source
+/// file each read came from, and the header lists the possible values. Reading
+/// them here means the row space is known before a single record is parsed, so
+/// the chunk-parallel counting loop needs only a read-only lookup.
+///
+/// Errors when the BAM declares none, because that is indistinguishable from an
+/// un-merged file and counting one of those per-barcode would silently merge
+/// cells that share a barcode across samples.
+pub(crate) fn read_group_ids(header: &Header, path: &Path) -> Result<Vec<Vec<u8>>> {
+    let ids: Vec<Vec<u8>> = header.read_groups().keys().map(|id| id.to_vec()).collect();
+
+    anyhow::ensure!(
+        !ids.is_empty(),
+        "{} declares no @RG read groups, so --groupTag cannot tell its samples \
+         apart.\nMerge the inputs with read groups, e.g. `samtools merge -r`",
+        path.display()
+    );
+    Ok(ids)
+}
+
+/// Warn once per unrecognised group value, then stay quiet.
+///
+/// A read whose group tag is not among the BAM's `@RG` IDs is skipped. That is
+/// worth saying, because it means data is being dropped -- but a merged file
+/// with an unexpected group would otherwise emit the message on every record,
+/// so each distinct value is reported exactly once.
+pub(crate) fn warn_unknown_group(group: &[u8]) {
+    static SEEN: OnceLock<Mutex<AHashSet<Vec<u8>>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(AHashSet::new()));
+
+    let mut seen = match seen.lock() {
+        Ok(guard) => guard,
+        // A poisoned lock only means some other thread panicked while warning;
+        // losing the dedup is better than propagating that here.
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if seen.insert(group.to_vec()) {
+        eprintln!(
+            "warning: read group {:?} is not declared in the BAM header; \
+             those reads are being skipped",
+            String::from_utf8_lossy(group)
+        );
+    }
 }
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header.
@@ -127,12 +191,15 @@ pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
     Ok((reader, header))
 }
 
-/// Reconstruct a [`Header`] from the BAM binary reference dictionary, skipping
-/// the SAM header text entirely.
+/// Reconstruct a [`Header`] from the BAM binary reference dictionary, rather
+/// than from the SAM header text.
 ///
 /// BAM header layout (after BGZF decompression):
 /// `magic[4] "BAM\1"`, `l_text: u32`, `text[l_text]`, `n_ref: u32`, then per
 /// reference: `l_name: u32`, `name[l_name]` (NUL-terminated), `l_ref: u32`.
+///
+/// The header text is still read, but only to recover `@RG` records (see
+/// [`read_groups_from_text`]); everything else comes from the binary dictionary.
 fn read_header_from_binary_dict(path: &Path) -> Result<Header> {
     let file =
         File::open(path).with_context(|| format!("failed to open BAM: {}", path.display()))?;
@@ -144,10 +211,15 @@ fn read_header_from_binary_dict(path: &Path) -> Result<Header> {
         .context("failed to read BAM magic number")?;
     anyhow::ensure!(&magic == b"BAM\x01", "not a BAM file: {}", path.display());
 
-    // Skip the (non-compliant) SAM header text.
-    let l_text = u64::from(read_u32(&mut reader)?);
-    io::copy(&mut reader.by_ref().take(l_text), &mut io::sink())
-        .context("failed to skip BAM header text")?;
+    // Read (rather than skip) the non-compliant SAM header text: the strict
+    // parser generally rejects the @HD line, so the @RG records are generally
+    // recoverable.
+    let l_text = read_u32(&mut reader)? as usize;
+    let mut text = vec![0u8; l_text];
+    reader
+        .read_exact(&mut text)
+        .context("failed to read BAM header text")?;
+    let read_groups = read_groups_from_text(&text)?;
 
     let n_ref = read_u32(&mut reader)?;
     let mut reference_sequences = ReferenceSequences::with_capacity(n_ref as usize);
@@ -170,7 +242,37 @@ fn read_header_from_binary_dict(path: &Path) -> Result<Header> {
 
     let mut header = Header::default();
     *header.reference_sequences_mut() = reference_sequences;
+    *header.read_groups_mut() = read_groups;
     Ok(header)
+}
+
+/// Recover `@RG` records from raw SAM header text.
+///
+/// Order is first-seen, so the group index built from this is deterministic.
+fn read_groups_from_text(text: &[u8]) -> Result<ReadGroups> {
+    let mut read_groups = ReadGroups::new();
+
+    for line in text.split(|&b| b == b'\n') {
+        let Some(fields) = line.strip_prefix(b"@RG\t") else {
+            continue;
+        };
+        let Some(id) = fields
+            .split(|&b| b == b'\t')
+            .find_map(|field| field.strip_prefix(b"ID:"))
+        else {
+            continue;
+        };
+        // Tolerate CRLF line endings.
+        let id: BString = id.strip_suffix(b"\r").unwrap_or(id).into();
+
+        anyhow::ensure!(
+            !read_groups.contains_key(&id),
+            "duplicate read group ID in BAM header: {id}"
+        );
+        read_groups.insert(id, Map::<ReadGroup>::default());
+    }
+
+    Ok(read_groups)
 }
 
 fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
@@ -388,5 +490,82 @@ mod tests {
         let mut worker = BamWorker::new();
         let missing = Path::new("/nonexistent/reads.bam");
         assert!(worker.prepare(missing, None).is_err());
+    }
+
+    // Read groups
+
+    fn merged_bam() -> PathBuf {
+        testdata().join("test_i1_i2.bam")
+    }
+
+    #[test]
+    fn a_merged_bam_declares_its_source_samples() {
+        let header = read_bam_header(&merged_bam()).unwrap();
+        let ids = read_group_ids(&header, &merged_bam()).unwrap();
+        assert_eq!(ids, vec![b"test_i1".to_vec(), b"test_i2".to_vec()]);
+    }
+
+    #[test]
+    fn a_bam_without_read_groups_is_rejected_with_advice() {
+        // test_i1.bam is a single sample, so it declares no @RG.
+        let header = read_bam_header(&test_bam()).unwrap();
+        let err = read_group_ids(&header, &test_bam())
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("no @RG"), "{err}");
+        assert!(err.contains("samtools merge -r"), "{err}");
+    }
+
+    #[test]
+    fn read_groups_survive_a_header_the_strict_parser_rejects() {
+        // test_i1_i2_badheader.bam has an @HD line with no VN field, so noodles
+        // refuses the header text and the binary-dictionary path runs. The @RG
+        // lines are intact, and must still come through.
+        let bad = testdata().join("test_i1_i2_badheader.bam");
+        let recovered = read_group_ids(&read_bam_header(&bad).unwrap(), &bad).unwrap();
+        let clean =
+            read_group_ids(&read_bam_header(&merged_bam()).unwrap(), &merged_bam()).unwrap();
+
+        assert_eq!(recovered, clean);
+    }
+
+    // Parsing @RG out of raw header text
+
+    #[test]
+    fn ids_are_taken_in_first_seen_order() {
+        let text = b"@HD\tVN:1.6\n@RG\tID:b\tSM:two\n@SQ\tSN:1\tLN:10\n@RG\tID:a\n";
+        let groups = read_groups_from_text(text).unwrap();
+        let ids: Vec<&[u8]> = groups.keys().map(|k| k.as_ref()).collect();
+        assert_eq!(ids, vec![b"b".as_slice(), b"a".as_slice()]);
+    }
+
+    #[test]
+    fn records_without_an_id_field_are_skipped() {
+        let text = b"@RG\tSM:nameless\n@RG\tID:real\n";
+        let groups = read_groups_from_text(text).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert!(groups.contains_key(b"real".as_slice()));
+    }
+
+    #[test]
+    fn a_header_with_no_read_groups_yields_none() {
+        let text = b"@HD\tVN:1.6\n@SQ\tSN:1\tLN:10\n";
+        assert!(read_groups_from_text(text).unwrap().is_empty());
+    }
+
+    #[test]
+    fn carriage_returns_are_not_part_of_the_id() {
+        let text = b"@RG\tID:windows\r\n";
+        let groups = read_groups_from_text(text).unwrap();
+        assert!(groups.contains_key(b"windows".as_slice()), "{groups:?}");
+    }
+
+    #[test]
+    fn a_duplicate_read_group_id_is_rejected() {
+        // Two groups sharing an ID would silently merge two samples into one row.
+        let text = b"@RG\tID:same\n@RG\tID:same\n";
+        let err = read_groups_from_text(text).unwrap_err().to_string();
+        assert!(err.contains("duplicate read group"), "{err}");
     }
 }

@@ -21,7 +21,7 @@ Known limits of this fixture, so the gaps are not mistaken for coverage:
   output for the same reason.
 * ``--motifFilter`` / ``--genome2bit`` need a 2bit genome that is not in
   ``testdata/``.
-* 15 further flags are exposed for parity but routed through
+* 14 further flags are exposed for parity but routed through
   ``backend.warn_unsupported``; they are ignored by the backend.
 
 Run the tests::
@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 import pytest
 from _cli_testing import (
     BAM1,
+    BAM_MERGED,
     BARCODES,
     BARCODES_1MIS,
     BED,
@@ -69,11 +70,6 @@ SCENARIOS: dict[str, Scenario] = {
             "every barcode's reads are co-located, so each occupies exactly one "
             "bin at any bin size (see the module docstring)"
         ),
-    ),
-    "group_tag": Scenario(
-        ["-gt", "RG"],
-        differs=False,
-        reason="routed through backend.warn_unsupported; parity-only, ignored",
     ),
     "verbose": Scenario(
         ["-v"], differs=False, reason="affects stderr only, never the TSV"
@@ -155,6 +151,43 @@ def test_rank_plot_writes_png_even_when_every_count_is_equal(tmp_path: Path) -> 
     assert proc.returncode == 0, f"{TOOL} -rp failed:\n{proc.stderr}"
     assert png.exists(), "rank plot PNG was not written"
     assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", "output is not a valid PNG"
+
+
+# Merged BAMs: --groupTag
+
+
+def test_a_shared_barcode_becomes_two_entries_under_group_tag(tmp_path: Path) -> None:
+    """``GCGAGCAT`` is in both source samples of the merged BAM.
+
+    Without the flag the two cells collapse into one entry; with it they stay
+    apart, which is the whole reason the option exists.
+    """
+    base = ["-b", BAM_MERGED, "-w", BARCODES, "-ct", "BC", "-p", "1"]
+
+    flat = run_ok(tool_path(TOOL), base, [], str(tmp_path / "flat.tsv"))
+    grouped = run_ok(
+        tool_path(TOOL), base, ["-gt", "RG"], str(tmp_path / "grouped.tsv")
+    )
+
+    def names(text: str) -> list[str]:
+        return [line.split("\t")[0] for line in text.splitlines()[1:]]
+
+    assert [n for n in names(flat) if n.endswith("GCGAGCAT")] == ["GCGAGCAT"]
+    assert [n for n in names(grouped) if n.endswith("GCGAGCAT")] == [
+        "test_i1::GCGAGCAT",
+        "test_i2::GCGAGCAT",
+    ]
+    assert len(names(grouped)) == len(names(flat)) + 1
+
+
+def test_group_tag_on_a_bam_without_read_groups_is_rejected(tmp_path: Path) -> None:
+    """An un-merged BAM has no @RG, and counting it per-barcode would be wrong."""
+    proc = run(
+        tool_path(TOOL),
+        [*BASE, "-o", str(tmp_path / "out.tsv"), "-gt", "RG"],
+    )
+    assert proc.returncode != 0
+    assert "@RG" in proc.stdout + proc.stderr
 
 
 # Error paths

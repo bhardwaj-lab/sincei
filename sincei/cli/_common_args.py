@@ -391,13 +391,13 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="XX",
         rich_help_panel=_BAM,
         help=(
-            "In case of a grouped BAM file, such as the one containing Read Group "
-            "(``RG``) or Sample (``SM``) tag, it is possible to group the reads using "
-            "the provided ``--grouptag`` argument. NOTE: in case of such input, please "
-            "ensure that the ``--labels`` argument indicates the expected group labels "
-            "contained in the BAM files. The ``--grouptag`` along with the "
-            "``--celltag`` is then used to identify unique samples (cells) from the "
-            "input."
+            "Name of the BAM tag holding each read's sample of origin, for a BAM "
+            "merged from several samples (usually ``RG``).\n\n"
+            "In a merged file a cell barcode may no longer be unique, since the "
+            "same barcode in two source samples is two different cells. This tag, "
+            "together with ``--cellTag``, is what identifies a cell.\n\n"
+            "Requires a single input BAM, which must declare its samples as ``@RG`` "
+            "header lines."
         ),
     ),
     "labels": typer.Option(

@@ -78,6 +78,9 @@ pub struct ScRecord<'a> {
     pub barcode: Option<&'a [u8]>,
     /// UMI tag bytes, borrowed from the BAM record (no allocation).
     pub umi: Option<&'a [u8]>,
+    /// Group tag bytes (the read's sample of origin in a merged BAM), borrowed
+    /// from the record. `None` unless a group tag was asked for.
+    pub group: Option<&'a [u8]>,
     /// Value to add to the count matrix (defaults to 1).
     pub count: u32,
     /// GC fraction in `[0, 1]`. `None` if not requested.
@@ -99,6 +102,7 @@ impl<'a> ScRecord<'a> {
         bc_tag: &Tag,
         umi_tag: Option<&Tag>,
         count_tag: Option<&Tag>,
+        group_tag: Option<&Tag>,
         opts: &ScRecordOptions,
     ) -> Result<Option<Self>> {
         let flags = record.flags();
@@ -159,6 +163,11 @@ impl<'a> ScRecord<'a> {
 
         let umi = match umi_tag {
             Some(utag) => get_tag_bytes(record, utag)?,
+            None => None,
+        };
+
+        let group = match group_tag {
+            Some(gtag) => get_tag_bytes(record, gtag)?,
             None => None,
         };
 
@@ -259,6 +268,7 @@ impl<'a> ScRecord<'a> {
             read_length,
             barcode,
             umi,
+            group,
             count,
             gc_content,
             aligned_fraction,
@@ -367,6 +377,7 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
         read_length: end - start,
         barcode: None,
         umi: None,
+        group: None,
         count: 1,
         gc_content: None,
         aligned_fraction: None,
@@ -577,9 +588,10 @@ mod tests {
         let (header, records) = read_test_bam(1);
         let bc = Tag::new(b'B', b'C');
 
-        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &plain_opts())
-            .unwrap()
-            .expect("the first record of the test BAM is mapped");
+        let rec =
+            ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &plain_opts())
+                .unwrap()
+                .expect("the first record of the test BAM is mapped");
 
         assert!(
             rec.alignment_end > rec.alignment_start,
@@ -602,10 +614,17 @@ mod tests {
         let bc = Tag::new(b'B', b'C');
         let rx = Tag::new(b'R', b'X');
 
-        let rec =
-            ScRecord::from_bam_record(&records[0], &header, &bc, Some(&rx), None, &plain_opts())
-                .unwrap()
-                .unwrap();
+        let rec = ScRecord::from_bam_record(
+            &records[0],
+            &header,
+            &bc,
+            Some(&rx),
+            None,
+            None,
+            &plain_opts(),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(rec.umi, Some(b"AGC".as_slice()));
     }
 
@@ -614,10 +633,17 @@ mod tests {
         let (header, records) = read_test_bam(1);
         let absent = Tag::new(b'Z', b'Z');
 
-        let rec =
-            ScRecord::from_bam_record(&records[0], &header, &absent, None, None, &plain_opts())
-                .unwrap()
-                .unwrap();
+        let rec = ScRecord::from_bam_record(
+            &records[0],
+            &header,
+            &absent,
+            None,
+            None,
+            None,
+            &plain_opts(),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(rec.barcode, None);
     }
 
@@ -632,7 +658,7 @@ mod tests {
             compute_covered_span: false,
         };
 
-        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
             .unwrap()
             .unwrap();
 
@@ -652,7 +678,7 @@ mod tests {
             compute_covered_span: false,
         };
 
-        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
             .unwrap()
             .unwrap();
 
@@ -678,7 +704,7 @@ mod tests {
             compute_covered_span: false,
         };
 
-        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, &opts)
+        let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
             .unwrap()
             .unwrap();
 
@@ -698,7 +724,8 @@ mod tests {
             // Never an Err: the file is well formed, so each record is either
             // a usable ScRecord or a deliberate skip.
             let parsed =
-                ScRecord::from_bam_record(record, &header, &bc, None, None, &plain_opts()).unwrap();
+                ScRecord::from_bam_record(record, &header, &bc, None, None, None, &plain_opts())
+                    .unwrap();
             if let Some(rec) = parsed {
                 assert!(rec.alignment_end > rec.alignment_start);
             }

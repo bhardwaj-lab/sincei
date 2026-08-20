@@ -12,7 +12,9 @@ use triple_accel::hamming::hamming;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{ChromIndex, GenomeIndex};
-use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+};
 
 /// A map of barcodes stored as bytes in a `Vec<u8>` (directly read from the BAM
 /// record) to the bins is was detected in, stored as their index.
@@ -30,6 +32,7 @@ fn run_filter_barcodes(
     whitelist: Option<Vec<String>>,
     blacklist_file_name: Option<&Path>,
     cell_tag: &str,
+    group_tag: Option<&str>,
     min_hamming_dist: usize,
     min_mapping_quality: Option<u8>,
     bin_size: usize,
@@ -55,6 +58,15 @@ fn run_filter_barcodes(
     ensure_barcode_tags_present(&[bamfile], tag, None)?;
 
     let header = read_bam_header(bamfile)?;
+
+    // With --groupTag a barcode alone no longer names a cell, so the reported
+    // unit becomes `group::barcode`. The valid groups are the BAM's own @RG IDs.
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
+    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
+        Some(_) => Some(read_group_ids(&header, bamfile)?),
+        None => None,
+    };
+    let known_groups: AHashSet<&[u8]> = group_ids.iter().flatten().map(Vec::as_slice).collect();
 
     let chrom_sizes: Vec<(String, usize)> = header
         .reference_sequences()
@@ -111,6 +123,9 @@ fn run_filter_barcodes(
                     };
 
                     let mut local_bins: BinsByBarcode = AHashMap::new();
+                    // Reused across records so building the composite key
+                    // does not allocate per read.
+                    let mut composite: Vec<u8> = Vec::new();
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
@@ -167,19 +182,39 @@ fn run_filter_barcodes(
                             continue;
                         }
 
+                        // The counted unit: the barcode alone, or `group::barcode`
+                        // when the reads carry their sample of origin.
+                        let key: &[u8] = match &group_tag_parsed {
+                            Some(gtag) => {
+                                let Some(group) = read_cell_barcode(&record, gtag)? else {
+                                    continue;
+                                };
+                                if !known_groups.contains(group) {
+                                    warn_unknown_group(group);
+                                    continue;
+                                }
+                                composite.clear();
+                                composite.extend_from_slice(group);
+                                composite.extend_from_slice(b"::");
+                                composite.extend_from_slice(barcode);
+                                &composite
+                            }
+                            None => barcode,
+                        };
+
                         // A read counts once, in the bin holding its start.
                         let bin_idx = start / bin_size;
                         let bin_key = pack_bin(*chrom_idx, bin_idx);
                         // Look up by the borrowed bytes first and only copy the
-                        // barcode the first time this chunk sees it.
-                        match local_bins.get_mut(barcode) {
+                        // key the first time this chunk sees it.
+                        match local_bins.get_mut(key) {
                             Some(bins) => {
                                 bins.insert(bin_key);
                             }
                             None => {
                                 let mut bins = AHashSet::new();
                                 bins.insert(bin_key);
-                                local_bins.insert(barcode.to_vec(), bins);
+                                local_bins.insert(key.to_vec(), bins);
                             }
                         }
                     }
@@ -404,6 +439,7 @@ fn blacklist_chrom_index<'a>(
     whitelist = None,
     blacklist_file_name = None,
     cell_tag = "CB",
+    group_tag = None,
     min_hamming_dist = 0,
     min_mapping_quality = None,
     bin_size = 100_000,
@@ -416,6 +452,7 @@ pub fn filter_barcodes(
     whitelist: Option<Vec<String>>,
     blacklist_file_name: Option<PathBuf>,
     cell_tag: &str,
+    group_tag: Option<String>,
     min_hamming_dist: usize,
     min_mapping_quality: Option<u8>,
     bin_size: usize,
@@ -428,6 +465,7 @@ pub fn filter_barcodes(
         whitelist,
         blacklist_file_name.as_deref(),
         cell_tag,
+        group_tag.as_deref(),
         min_hamming_dist,
         min_mapping_quality,
         bin_size,
@@ -673,6 +711,7 @@ mod tests {
             whitelist,
             None,
             "BC",
+            None,
             min_hamming,
             None,
             bin_size,
@@ -771,6 +810,7 @@ mod tests {
             None,
             None,
             "BC",
+            None,
             0,
             None,
             2_000,

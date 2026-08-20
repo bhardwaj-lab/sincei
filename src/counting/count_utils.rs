@@ -133,7 +133,9 @@ pub(super) fn build_csr(
 pub(crate) fn write_counts_anndata(
     output_path: &Path,
     matrix: CsrMatrix<u32>,
-    bam_paths: &[(&Path, &str)],
+    // One label per row block, in row order. Normally the input BAMs' labels;
+    // under `--groupTag` the merged BAM's `@RG` IDs.
+    samples: &[String],
     barcodes: &[String],
     var: &[Feature],
     compression: &str,
@@ -154,14 +156,14 @@ pub(crate) fn write_counts_anndata(
     });
 
     // obs: one row per (sample, barcode), in the same order as the matrix rows.
-    let n_cells = bam_paths.len() * barcodes.len();
+    let n_cells = samples.len() * barcodes.len();
     let mut obs_index: Vec<String> = Vec::with_capacity(n_cells);
     let mut sample_col: Vec<String> = Vec::with_capacity(n_cells);
     let mut barcode_col: Vec<String> = Vec::with_capacity(n_cells);
-    for (_, sample) in bam_paths {
+    for sample in samples {
         for bc in barcodes {
             obs_index.push(format!("{}::{}", sample, bc));
-            sample_col.push((*sample).to_string());
+            sample_col.push(sample.clone());
             barcode_col.push(bc.clone());
         }
     }
@@ -330,7 +332,6 @@ mod tests {
             .collect();
         let matrix = build_csr(&acc, 2, 3).unwrap();
 
-        let bam = Path::new("/does/not/need/to/exist/s1.bam");
         let var = vec![
             feature("chr1", 0, 100),
             feature("chr1", 100, 200),
@@ -338,7 +339,16 @@ mod tests {
         ];
         let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
 
-        write_counts_anndata(&path, matrix, &[(bam, "s1")], &barcodes, &var, "none", 0).unwrap();
+        write_counts_anndata(
+            &path,
+            matrix,
+            &["s1".to_string()],
+            &barcodes,
+            &var,
+            "none",
+            0,
+        )
+        .unwrap();
         assert!(path.exists(), "the h5ad file was not created");
 
         // X comes back as f64 whatever it was stored as.
@@ -358,14 +368,12 @@ mod tests {
 
         // Two samples x two barcodes = four rows, samples varying slowest.
         let matrix = build_csr(&AHashMap::new(), 4, 1).unwrap();
-        let one = Path::new("/tmp/one.bam");
-        let two = Path::new("/tmp/two.bam");
         let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
 
         write_counts_anndata(
             &path,
             matrix,
-            &[(one, "s1"), (two, "s2")],
+            &["s1".to_string(), "s2".to_string()],
             &barcodes,
             &[feature("chr1", 0, 100)],
             "none",
@@ -393,7 +401,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["s1".to_string()],
             &["AAA".to_string()],
             &var,
             "none",
@@ -421,7 +429,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["s1".to_string()],
             &["AAA".to_string()],
             &[feature("chr1", 0, 100)],
             "gzip",
@@ -442,7 +450,7 @@ mod tests {
         let err = write_counts_anndata(
             &path,
             build_csr(&AHashMap::new(), 1, 1).unwrap(),
-            &[(Path::new("/tmp/s1.bam"), "s1")],
+            &["s1".to_string()],
             &["AAA".to_string()],
             &[feature("chr1", 0, 100)],
             "blosc",

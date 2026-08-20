@@ -9,7 +9,9 @@ use rayon::prelude::*;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
-use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+};
 use crate::bam::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 
@@ -95,6 +97,7 @@ pub fn run_filter_stats(
     barcodes: &[String],
     bc_tag: &str,
     umi_tag: Option<&str>,
+    group_tag: Option<&str>,
     bin_size: usize,
     distance_between_bins: usize,
     min_mapq: Option<u8>,
@@ -137,6 +140,20 @@ pub fn run_filter_stats(
 
     let header = read_bam_header(bam_path)?;
 
+    // With --groupTag the row unit is `group::barcode`: a merged BAM's reads
+    // carry their sample of origin, and the valid values are its @RG IDs.
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
+    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
+        Some(_) => Some(read_group_ids(&header, bam_path)?),
+        None => None,
+    };
+    let group_index: AHashMap<&[u8], usize> = group_ids
+        .iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, id)| (id.as_slice(), i))
+        .collect();
+
     let skip_set: AHashSet<&[u8]> = chr_to_skip.iter().map(|s| s.as_bytes()).collect();
     let chrom_sizes: Vec<(String, usize)> = header
         .reference_sequences()
@@ -151,6 +168,8 @@ pub fn run_filter_stats(
     // stride = distance between consecutive sampling-bin starts on the chromosome grid
     let stride = bin_size.saturating_add(distance_between_bins).max(1);
     let n_barcodes = barcodes.len();
+    // One row block per group when grouping, otherwise a single block.
+    let n_rows = group_ids.as_ref().map_or(1, Vec::len) * n_barcodes;
 
     // Build chunk work list sorted by descending size.
     // Each chunk will iterate the sampling bins whose start falls within it.
@@ -192,7 +211,7 @@ pub fn run_filter_stats(
                         dup_method.map(DuplicateFilter::new);
 
                     let mut local_stats: Vec<BarcodeStat> =
-                        (0..n_barcodes).map(|_| BarcodeStat::default()).collect();
+                        (0..n_rows).map(|_| BarcodeStat::default()).collect();
 
                     // Align to the global sampling grid so that bins are consistent
                     // across chunks. The grid starts at 0 on each chromosome with
@@ -233,6 +252,7 @@ pub fn run_filter_stats(
                                 &bc_tag_parsed,
                                 umi_tag_parsed.as_ref(),
                                 None,
+                                group_tag_parsed.as_ref(),
                                 &record_opts,
                             )?
                             else {
@@ -247,8 +267,23 @@ pub fn run_filter_stats(
                             let Some(barcode) = sc_rec.barcode else {
                                 continue;
                             };
-                            let Some(&cell_i) = barcode_idx.get(barcode) else {
+                            let Some(&local_bc) = barcode_idx.get(barcode) else {
                                 continue;
+                            };
+                            // Under --groupTag the read's own group picks the row
+                            // block, so a barcode shared by two source samples
+                            // stays two rows.
+                            let cell_i = if group_tag_parsed.is_some() {
+                                let Some(group) = sc_rec.group else {
+                                    continue;
+                                };
+                                let Some(&group_i) = group_index.get(group) else {
+                                    warn_unknown_group(group);
+                                    continue;
+                                };
+                                group_i * n_barcodes + local_bc
+                            } else {
+                                local_bc
                             };
 
                             let raw_flags = u16::from(record.flags());
@@ -353,7 +388,7 @@ pub fn run_filter_stats(
             .collect::<Result<Vec<_>>>()
     })?;
 
-    let mut stats: Vec<BarcodeStat> = (0..n_barcodes).map(|_| BarcodeStat::default()).collect();
+    let mut stats: Vec<BarcodeStat> = (0..n_rows).map(|_| BarcodeStat::default()).collect();
     for partial in partial_stats {
         for (i, s) in partial.into_iter().enumerate() {
             stats[i] += s;
@@ -361,7 +396,20 @@ pub fn run_filter_stats(
     }
 
     let stat_vecs: Vec<Vec<u64>> = stats.iter().map(|s| s.to_vec()).collect();
-    Ok((barcodes.to_vec(), stat_vecs))
+
+    // Row labels: bare barcodes normally, `group::barcode` when grouping, so the
+    // caller can use them as Cell_IDs without knowing which mode ran.
+    let row_labels: Vec<String> = match &group_ids {
+        None => barcodes.to_vec(),
+        Some(ids) => ids
+            .iter()
+            .flat_map(|id| {
+                let group = String::from_utf8_lossy(id).into_owned();
+                barcodes.iter().map(move |bc| format!("{group}::{bc}"))
+            })
+            .collect(),
+    };
+    Ok((row_labels, stat_vecs))
 }
 
 #[pyfunction(signature = (
@@ -369,6 +417,7 @@ pub fn run_filter_stats(
     barcodes,
     bc_tag = "CB",
     umi_tag = None,
+    group_tag = None,
     bin_size = 100_000,
     distance_between_bins = 1_000_000,
     min_mapq = None,
@@ -391,6 +440,7 @@ pub fn filter_stats(
     barcodes: Vec<String>,
     bc_tag: &str,
     umi_tag: Option<String>,
+    group_tag: Option<String>,
     bin_size: usize,
     distance_between_bins: usize,
     min_mapq: Option<u8>,
@@ -419,6 +469,7 @@ pub fn filter_stats(
         &barcodes,
         bc_tag,
         umi_tag.as_deref(),
+        group_tag.as_deref(),
         bin_size,
         distance_between_bins,
         min_mapq,
@@ -587,6 +638,7 @@ mod tests {
             &testdata().join("test_i1.bam"),
             barcodes,
             bc_tag,
+            None,
             None,
             bin_size,
             0,

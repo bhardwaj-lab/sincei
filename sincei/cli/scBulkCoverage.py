@@ -203,8 +203,16 @@ def main(
         # Options exposed for parity but not honored by the coverage backend.
         backend.warn_unsupported(
             normalize_by_reference=normalize_by_reference,
-            group_tag=group_tag,
         )
+
+        # A merged BAM carries its samples in a read tag rather than in separate
+        # files, so the group-info `sample` column names @RG IDs, not labels.
+        if group_tag is not None and len(bam_files) > 1:
+            msg = (
+                f"--groupTag expects a single merged BAM, but {len(bam_files)} "
+                f"were given. Merge them first, e.g. `samtools merge -r`."
+            )
+            raise typer.BadParameter(msg)
 
         min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
         bam_labels = backend.resolve_labels(bam_files, labels, smart_labels)
@@ -220,6 +228,7 @@ def main(
             step_size=step_size,
             bc_tag=cell_tag,
             umi_tag=backend.umi_tag_if_used(umi_tag, duplicate_filter),
+            group_tag=group_tag,
             region=region,
             min_mapq=min_mapping_quality,
             sam_flag_include=sam_flag_include,

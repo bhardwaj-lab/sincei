@@ -25,7 +25,9 @@ use rayon::prelude::*;
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{build_bigwig_index, build_bigwig_index_in_window};
-use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
@@ -230,6 +232,7 @@ pub fn run_bulk_coverage(
     step_size: usize,
     bc_tag: &str,
     umi_tag: Option<&str>,
+    group_tag: Option<&str>,
     region: Option<&str>,
     chr_to_skip: &[String],
     ignore_for_normalization: &[String],
@@ -253,8 +256,40 @@ pub fn run_bulk_coverage(
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
     anyhow::ensure!(!bam_paths.is_empty(), "at least one BAM file is required");
 
-    let bam_labels: Vec<&str> = bam_paths.iter().map(|(_, l)| *l).collect();
-    let parsed = parse_group_info(group_info_path, &bam_labels)?;
+    // With --groupTag the samples come from the reads' group tag rather than
+    // from separate files, so the group-info `sample` column names @RG IDs and
+    // exactly one BAM is accepted.
+    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
+        Some(_) => {
+            anyhow::ensure!(
+                bam_paths.len() == 1,
+                "--groupTag expects a single merged BAM, but {} were given",
+                bam_paths.len()
+            );
+            let (path, _) = bam_paths[0];
+            Some(read_group_ids(&read_bam_header(path)?, path)?)
+        }
+        None => None,
+    };
+    let group_names: Vec<String> = group_ids
+        .iter()
+        .flatten()
+        .map(|id| String::from_utf8_lossy(id).into_owned())
+        .collect();
+
+    // The sample axis the group-info file is matched against.
+    let sample_labels: Vec<&str> = match &group_ids {
+        Some(_) => group_names.iter().map(String::as_str).collect(),
+        None => bam_paths.iter().map(|(_, l)| *l).collect(),
+    };
+    let parsed = parse_group_info(group_info_path, &sample_labels)?;
+
+    let group_index: AHashMap<&[u8], usize> = group_ids
+        .iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, id)| (id.as_slice(), i))
+        .collect();
 
     let n_groups = parsed.groups.len();
     let n_cells = parsed.cells.len();
@@ -279,6 +314,7 @@ pub fn run_bulk_coverage(
     let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some());
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
 
@@ -471,6 +507,7 @@ pub fn run_bulk_coverage(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             None,
+                            group_tag_parsed.as_ref(),
                             &record_opts,
                         )?
                         else {
@@ -491,7 +528,21 @@ pub fn run_bulk_coverage(
                         let Some(barcode) = sc_rec.barcode else {
                             continue;
                         };
-                        let Some(&cell_idx) = cell_index.get(&(bam_idx, barcode)) else {
+                        // Under --groupTag the read's own group picks the sample,
+                        // so a barcode shared across source samples stays two cells.
+                        let sample_idx = if group_tag_parsed.is_some() {
+                            let Some(group) = sc_rec.group else {
+                                continue;
+                            };
+                            let Some(&group_i) = group_index.get(group) else {
+                                warn_unknown_group(group);
+                                continue;
+                            };
+                            group_i
+                        } else {
+                            bam_idx
+                        };
+                        let Some(&cell_idx) = cell_index.get(&(sample_idx, barcode)) else {
                             continue;
                         };
 
@@ -824,6 +875,7 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
     step_size = 100,
     bc_tag = "CB",
     umi_tag = None,
+    group_tag = None,
     region = None,
     min_mapq = None,
     sam_flag_include = None,
@@ -859,6 +911,7 @@ pub fn bulk_coverage(
     step_size: usize,
     bc_tag: &str,
     umi_tag: Option<String>,
+    group_tag: Option<String>,
     region: Option<String>,
     min_mapq: Option<u8>,
     sam_flag_include: Option<u16>,
@@ -1015,6 +1068,7 @@ pub fn bulk_coverage(
         step_size,
         bc_tag,
         umi_tag.as_deref(),
+        group_tag.as_deref(),
         region.as_deref(),
         &chr_to_skip,
         &ignore_for_normalization,
@@ -1388,6 +1442,7 @@ mod tests {
             step_size,
             "BC",
             None,
+            None,
             region,
             &[],
             &[],
@@ -1757,6 +1812,7 @@ mod tests {
             100_000,
             100_000,
             "BC",
+            None,
             None,
             None,
             &[],

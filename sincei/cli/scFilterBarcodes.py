@@ -139,7 +139,6 @@ def main(
     # Options exposed for parity but not honored by the barcode-detection backend.
     backend.warn_unsupported(
         region=region,
-        group_tag=group_tag,
         labels=labels,
         smart_labels=smart_labels,
         distance_between_bins=distance_between_bins,
@@ -160,6 +159,7 @@ def main(
         whitelist=backend.read_barcodes(whitelist) if whitelist else None,
         blacklist_file_name=backend.first_blacklist(blacklist),
         cell_tag=cell_tag,
+        group_tag=group_tag,
         min_hamming_dist=min_hamming_dist,
         min_mapping_quality=min_mapping_quality,
         bin_size=bin_size,

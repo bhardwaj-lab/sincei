@@ -5,8 +5,8 @@
 //! their alignment start so none is counted twice.
 //!
 //! A read is credited to exactly one feature: the overlaps of a feature's
-//! sub-intervals — metagene exons, or the pieces left by blacklist subtraction
-//! — are summed first, and the feature with the largest total wins. So a read
+//! sub-intervals, metagene exons, or the pieces left by blacklist subtraction
+//! are summed first, and the feature with the largest total wins. So a read
 //! spanning two exons of one gene counts once for that gene.
 
 use ahash::{AHashMap, AHashSet};
@@ -20,7 +20,9 @@ use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{
     build_counting_index, parse_annotation_files, parse_blacklist_bed,
 };
-use crate::bam::bam_io::{BamWorker, ensure_barcode_tags_present, read_bam_header};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+};
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
@@ -46,6 +48,7 @@ pub fn count_bam_features(
     bc_tag: &str,
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
+    group_tag: Option<&str>,
     params: &CountingParams,
     adjust: &AdjustRead,
     record_filter: Option<&RawRecordFilter>,
@@ -69,6 +72,7 @@ pub fn count_bam_features(
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
     let count_tag_parsed = count_tag.map(parse_tag).transpose()?;
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let region_filter = params.region.as_deref().map(parse_region).transpose()?;
 
     let n_barcodes = barcodes.len();
@@ -78,7 +82,38 @@ pub fn count_bam_features(
         .enumerate()
         .map(|(i, bc)| (bc.as_bytes(), i))
         .collect();
-    let n_cells = bam_paths.len() * n_barcodes;
+
+    // With --groupTag the sample axis comes from the reads' group tag rather
+    // than from which BAM they were read out of, so exactly one input is
+    // allowed and the row space is the header's @RG IDs x barcodes.
+    let group_ids: Option<Vec<Vec<u8>>> = if group_tag.is_some() {
+        anyhow::ensure!(
+            bam_paths.len() == 1,
+            "--groupTag expects a single merged BAM, but {} were given",
+            bam_paths.len()
+        );
+        let (path, _) = bam_paths[0];
+        Some(read_group_ids(&read_bam_header(path)?, path)?)
+    } else {
+        None
+    };
+    let group_index: AHashMap<&[u8], usize> = group_ids
+        .iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, id)| (id.as_slice(), i))
+        .collect();
+
+    // Row labels, and hence the row count: group IDs when grouping, otherwise
+    // one block per input BAM.
+    let sample_labels: Vec<String> = match &group_ids {
+        Some(ids) => ids
+            .iter()
+            .map(|id| String::from_utf8_lossy(id).into_owned())
+            .collect(),
+        None => bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
+    };
+    let n_cells = sample_labels.len() * n_barcodes;
 
     // `Vec<String>` -> `&[&str]` for the parser, which borrows the type names.
     let feature_types: Option<Vec<&str>> = params
@@ -194,6 +229,9 @@ pub fn count_bam_features(
                     let mut dup_filter: Option<DuplicateFilter> =
                         dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    // Without --groupTag the sample is fixed for the whole chunk, so
+                    // the row offset is hoisted; with it the sample varies per read
+                    // and the offset is resolved below.
                     let cell_offset = bam_idx * n_barcodes;
 
                     for result in query.records() {
@@ -213,6 +251,7 @@ pub fn count_bam_features(
                             &bc_tag_parsed,
                             umi_tag_parsed.as_ref(),
                             count_tag_parsed.as_ref(),
+                            group_tag_parsed.as_ref(),
                             &record_opts,
                         )?
                         else {
@@ -257,7 +296,21 @@ pub fn count_bam_features(
                         }
 
                         let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
-                        let cell_idx = cell_offset + local_bc_idx;
+                        // Under --groupTag the read's own group tag picks the row
+                        // block, so two reads sharing a barcode but coming from
+                        // different source samples stay separate cells.
+                        let cell_idx = if group_tag_parsed.is_some() {
+                            let Some(group) = sc_rec.group else {
+                                continue;
+                            };
+                            let Some(&group_idx) = group_index.get(group) else {
+                                warn_unknown_group(group);
+                                continue;
+                            };
+                            group_idx * n_barcodes + local_bc_idx
+                        } else {
+                            cell_offset + local_bc_idx
+                        };
 
                         // Largest-overlap-wins: each read contributes to exactly
                         // one region. Sub-intervals of the same region (from
@@ -311,7 +364,7 @@ pub fn count_bam_features(
     write_counts_anndata(
         output_path,
         matrix,
-        bam_paths,
+        &sample_labels,
         barcodes,
         &var_meta,
         compression,
@@ -350,6 +403,7 @@ mod tests {
             annotation,
             &test_barcodes(),
             "BC",
+            None,
             None,
             None,
             params,
@@ -491,6 +545,7 @@ mod tests {
             "BC",
             None,
             None,
+            None,
             &CountingParams::default(),
             &AdjustRead::default(),
             None,
@@ -523,6 +578,7 @@ mod tests {
             "BC",
             None,
             None,
+            None,
             &CountingParams::default(),
             &AdjustRead::default(),
             None,
@@ -553,6 +609,7 @@ mod tests {
             &testdata().join("Chrna9.gtf"),
             &test_barcodes(),
             "ZZ",
+            None,
             None,
             None,
             &CountingParams::default(),

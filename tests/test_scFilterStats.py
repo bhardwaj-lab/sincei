@@ -41,6 +41,7 @@ import pytest
 from _cli_testing import (
     BAM1,
     BAM2,
+    BAM_MERGED,
     BARCODES,
     BED,
     Scenario,
@@ -211,6 +212,127 @@ def test_labels_apply_to_each_bam_in_order(tmp_path: Path) -> None:
     cell_ids = [row.split("\t")[0] for row in text.splitlines()[1:]]
     assert any(cid.startswith("first::") for cid in cell_ids)
     assert any(cid.startswith("second::") for cid in cell_ids)
+
+
+# Merged BAMs: --groupTag
+
+
+def _cell_ids(text: str) -> list[str]:
+    return [row.split("\t")[0] for row in text.splitlines()[1:]]
+
+
+def test_a_merged_bam_grouped_by_tag_matches_its_separate_sources(
+    tmp_path: Path,
+) -> None:
+    """The invariant --groupTag exists to satisfy.
+
+    One merged file, split back apart by each read's group tag, must give the
+    same per-cell stats as counting the two source files separately. This is
+    the check that catches a group axis wired up wrongly: without it the tool
+    still exits 0 and still writes a well-formed table, just full of zeros.
+    """
+    separate = run_ok(
+        tool_path(TOOL),
+        ["-b", BAM1, BAM2, "-bc", BARCODES, "-ct", "BC", "-p", "1"],
+        [*SAMPLING],
+        str(tmp_path / "separate.tsv"),
+    )
+    grouped = run_ok(
+        tool_path(TOOL),
+        ["-b", BAM_MERGED, "-bc", BARCODES, "-ct", "BC", "-p", "1"],
+        [*SAMPLING, "-gt", "RG"],
+        str(tmp_path / "grouped.tsv"),
+    )
+
+    assert norm(grouped) == norm(separate)
+
+
+def test_a_barcode_shared_across_samples_stays_two_cells(tmp_path: Path) -> None:
+    """``GCGAGCAT`` occurs in both sources of the merged BAM.
+
+    Counted per-barcode the two cells merge into one row and their reads are
+    summed; counted per-group they stay apart.
+    """
+    base = ["-b", BAM_MERGED, "-bc", BARCODES, "-ct", "BC", "-p", "1"]
+
+    flat = run_ok(tool_path(TOOL), base, [*SAMPLING], str(tmp_path / "flat.tsv"))
+    grouped = run_ok(
+        tool_path(TOOL), base, [*SAMPLING, "-gt", "RG"], str(tmp_path / "grouped.tsv")
+    )
+
+    def shared(ids: list[str]) -> list[str]:
+        return [i for i in ids if i.endswith("GCGAGCAT")]
+
+    assert len(shared(_cell_ids(flat))) == 1
+    assert shared(_cell_ids(grouped)) == [
+        "test_i1::GCGAGCAT",
+        "test_i2::GCGAGCAT",
+    ]
+
+
+def test_grouping_names_cells_after_the_read_group_not_the_file(
+    tmp_path: Path,
+) -> None:
+    """The sample half of the Cell_ID comes from the tag, so ``--labels`` and
+    the file name have no say in it."""
+    text = run_ok(
+        tool_path(TOOL),
+        ["-b", BAM_MERGED, "-bc", BARCODES, "-ct", "BC", "-p", "1"],
+        [*SAMPLING, "-gt", "RG", "-l", "ignored"],
+        str(tmp_path / "grouped.tsv"),
+    )
+    cell_ids = _cell_ids(text)
+
+    assert not any(cid.startswith("ignored::") for cid in cell_ids)
+    assert not any(cid.startswith("test_i1_i2::") for cid in cell_ids)
+    prefixes = {cid.split("::")[0] for cid in cell_ids}
+    assert prefixes == {"test_i1", "test_i2"}
+
+
+def test_group_tag_with_several_bams_is_rejected(tmp_path: Path) -> None:
+    """A merged BAM carries its samples internally, so there is only ever one."""
+    proc = run(
+        tool_path(TOOL),
+        [
+            "-b",
+            BAM1,
+            BAM2,
+            "-bc",
+            BARCODES,
+            "-ct",
+            "BC",
+            "-o",
+            str(tmp_path / "out.tsv"),
+            *SAMPLING,
+            "-gt",
+            "RG",
+        ],
+    )
+    assert proc.returncode != 0
+    assert "single merged BAM" in proc.stdout + proc.stderr
+
+
+def test_group_tag_on_a_bam_without_read_groups_is_rejected(tmp_path: Path) -> None:
+    """An un-merged BAM declares no @RG, and counting it per-barcode would
+    silently merge cells that share a barcode across samples."""
+    proc = run(
+        tool_path(TOOL),
+        [
+            "-b",
+            BAM1,
+            "-bc",
+            BARCODES,
+            "-ct",
+            "BC",
+            "-o",
+            str(tmp_path / "out.tsv"),
+            *SAMPLING,
+            "-gt",
+            "RG",
+        ],
+    )
+    assert proc.returncode != 0
+    assert "@RG" in proc.stdout + proc.stderr
 
 
 # UMI tag

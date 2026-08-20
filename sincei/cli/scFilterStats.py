@@ -117,6 +117,7 @@ def main(
     filter_rna_strand: Annotated[
         FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
     ] = None,
+    group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
     blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
@@ -132,11 +133,21 @@ def main(
 
     min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
     barcode_list = backend.read_barcodes(barcodes)
+    # A merged BAM carries its samples in a read tag rather than in separate
+    # files, so the barcode alone no longer identifies a cell.
+    if group_tag is not None and len(bam_files) > 1:
+        msg = (
+            f"--groupTag expects a single merged BAM, but {len(bam_files)} were "
+            f"given. Merge them first, e.g. `samtools merge -r`."
+        )
+        raise typer.BadParameter(msg)
+
     sample_labels = backend.resolve_labels(bam_files, labels, smart_labels)
 
     kwargs = {
         "barcodes": barcode_list,
         "bc_tag": cell_tag,
+        "group_tag": group_tag,
         "umi_tag": backend.umi_tag_if_used(umi_tag, duplicate_filter),
         "bin_size": bin_size,
         "distance_between_bins": distance_between_bins or 0,
@@ -161,10 +172,17 @@ def main(
     with Path(out_file).open("w") as out:
         out.write("\t".join(["Cell_ID", *_STAT_COLUMNS]) + "\n")
         for bam, label in zip(bam_files, sample_labels, strict=True):
-            result_barcodes, stat_rows = internal.filter_stats(bam, **kwargs)
+            row_labels, stat_rows = internal.filter_stats(bam, **kwargs)
+            # Grouping makes the backend return `group::barcode` already, since
+            # the sample comes from the reads rather than from the file.
+            cell_ids = (
+                row_labels
+                if group_tag is not None
+                else [f"{label}::{barcode}" for barcode in row_labels]
+            )
             out.writelines(
-                "\t".join([f"{label}::{barcode}", *_format_row(row)]) + "\n"
-                for barcode, row in zip(result_barcodes, stat_rows, strict=True)
+                "\t".join([cell_id, *_format_row(row)]) + "\n"
+                for cell_id, row in zip(cell_ids, stat_rows, strict=True)
             )
 
     return 0

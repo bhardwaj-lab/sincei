@@ -169,9 +169,17 @@ def _count_reads(
     if verbose:
         log_parameters(mode=mode, bam_files=bam_files, out_file=out_file)
 
+    # A merged BAM carries its samples in a read tag rather than in separate
+    # files, so the barcode alone no longer identifies a cell.
+    if group_tag is not None and len(bam_files) > 1:
+        msg = (
+            f"--groupTag expects a single merged BAM, but {len(bam_files)} were "
+            f"given. Merge them first, e.g. `samtools merge -r`."
+        )
+        raise typer.BadParameter(msg)
+
     # Options accepted by the CLI for parity with deepTools but not (yet) implemented
     backend.warn_unsupported(
-        group_tag=group_tag,
         labels=labels,
         smart_labels=smart_labels,
     )
@@ -184,6 +192,7 @@ def _count_reads(
         "bc_tag": cell_tag,
         "umi_tag": backend.umi_tag_if_used(umi_tag, duplicate_filter),
         "count_tag": value_tag,
+        "group_tag": group_tag,
         "min_mapq": min_mapping_quality,
         "sam_flag_include": sam_flag_include,
         "sam_flag_exclude": sam_flag_exclude,
