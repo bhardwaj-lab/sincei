@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn extend_reads_never_shrinks_a_read_longer_than_the_fragment() {
         // A read already longer than the requested fragment is left unchanged,
-        // not truncated to `frag_len` — matching "reads that already exceed the
+        // not truncated to `frag_len`. Matching "reads that already exceed the
         // fragment length are not extended".
         let adjust = AdjustRead {
             extend_reads: Some(200),

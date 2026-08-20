@@ -4,9 +4,9 @@
 //! skip, an optional region, a blacklist, and how to select features from an
 //! annotation file.
 //!
-//! How a *read* becomes an interval is deliberately not here — that is
-//! `crate::bam::sc_record::AdjustRead`, which keeps the `bam` module free of any
-//! dependency on this one.
+//! How a *read* becomes an interval is deliberately not here, that is
+//! `crate::bam::sc_record::AdjustRead`, which keeps the `bam` module free of
+//! any dependency on this one.
 
 use std::path::PathBuf;
 

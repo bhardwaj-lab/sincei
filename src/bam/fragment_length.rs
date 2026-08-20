@@ -28,7 +28,7 @@ pub(crate) enum LibraryLayout {
     SingleEnd,
     /// Sampled reads are paired.  The median holds the TLEN of the properly
     /// paired fragments seen, or `None` when the sample contained none to
-    /// measure (e.g. every mate unmapped) — paired, but nothing to estimate from.
+    /// measure (e.g. every mate unmapped).
     PairedEnd {
         median_fragment_length: Option<usize>,
     },
@@ -54,7 +54,7 @@ pub(crate) fn resolve_extend_reads(
 /// Every BAM must be paired-end since fragment length cannot be inferred from
 /// single-end reads, so this errors and names the offending files rather than
 /// guessing.  Otherwise each BAM contributes the median fragment length of its
-/// sample, and their mean is the value used to extend reads — one value covers
+/// sample, and their mean is the value used to extend reads. One value covers
 /// all the BAMs, which are weighted equally regardless of depth.
 fn estimate_fragment_length(bam_paths: &[(&Path, &str)]) -> Result<usize> {
     anyhow::ensure!(
