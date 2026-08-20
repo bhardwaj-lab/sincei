@@ -121,8 +121,8 @@ def version_callback(ctx: click.Context, value: bool) -> None:
 
     Used as the callback of the shared ``--version`` option (``OTHER_OPTS["version"]``).
     The command path is reconstructed from the click context, so it works for the
-    standalone console scripts (e.g. ``scReduceDims LSA``) as well as for
-    ``sincei scReduceDims LSA --version``.
+    standalone console scripts (e.g. ``scClusterCells``) as well as for
+    ``sincei scClusterCells --version``.
     """
     if value:
         names: list[str] = []
@@ -232,6 +232,13 @@ class DimRed(str, Enum):
     LDA = "LDA"
     logPCA = "logPCA"
     glmPCA = "glmPCA"
+
+
+class CombineMethod(str, Enum):
+    # Hyphens are not valid in identifiers, so the member names differ from the
+    # values the user types.
+    multi_sample = "multi-sample"
+    multi_modal = "multi-modal"
 
 
 # ---------------------------------------------------------------------------

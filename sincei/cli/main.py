@@ -9,8 +9,7 @@ from ._common_args import OTHER_OPTS, preprocess_args, version_string
 # Import subcommand apps to register them with the main app.
 from .scBulkCoverage import app as scBulkCoverage_app
 from .scClusterCells import app as scClusterCells_app
-from .scCombineMods import app as scCombineMods_app
-from .scCombineSamples import app as scCombineSamples_app
+from .scCombineCounts import app as scCombineCounts_app
 from .scCountQC import app as scCountQC_app
 from .scCountReads import app as scCountReads_app
 from .scExportSignal import app as scExportSignal_app
@@ -19,7 +18,6 @@ from .scFilterStats import app as scFilterStats_app
 from .scFindVCRs import app as scFindVCRs_app
 from .scJSD import app as scJSD_app
 from .scPlotRegion import app as scPlotRegion_app
-from .scReduceDims import app as scReduceDims_app
 from .scScoreFeatures import app as scScoreFeatures_app
 
 DESCRIPTION = f"""
@@ -47,11 +45,9 @@ app.add_typer(scJSD_app, name="scJSD")
 app.add_typer(scCountReads_app, name="scCountReads")
 app.add_typer(scCountQC_app, name="scCountQC")
 app.add_typer(scFindVCRs_app, name="scFindVCRs")
-app.add_typer(scReduceDims_app, name="scReduceDims")
 app.add_typer(scClusterCells_app, name="scClusterCells")
 app.add_typer(scScoreFeatures_app, name="scScoreFeatures")
-app.add_typer(scCombineSamples_app, name="scCombineSamples")
-app.add_typer(scCombineMods_app, name="scCombineMods")
+app.add_typer(scCombineCounts_app, name="scCombineCounts")
 app.add_typer(scPlotRegion_app, name="scPlotRegion")
 app.add_typer(scBulkCoverage_app, name="scBulkCoverage")
 app.add_typer(scExportSignal_app, name="scExportSignal")
