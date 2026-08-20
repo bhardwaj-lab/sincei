@@ -122,6 +122,17 @@ def main(
             ),
         ),
     ] = None,
+    recompute_reduction: Annotated[
+        bool,
+        typer.Option(
+            "--recomputeReduction",
+            rich_help_panel=_REDUCTION,
+            help=(
+                "Recompute the dimensionality reduction even if a precomputed version "
+                "exists."
+            ),
+        ),
+    ] = False,
     # LDA options
     n_passes: Annotated[
         int,
@@ -243,6 +254,7 @@ def main(
         n_prin_comps=n_prin_comps,
         n_neighbors=n_neighbors,
         binarize=binarize,
+        recompute_reduction=recompute_reduction,
         out_file_trained_model=out_file_trained_model,
         n_passes=n_passes,
         n_iterations=n_iterations,
