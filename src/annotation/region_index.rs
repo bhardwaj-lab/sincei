@@ -2,7 +2,7 @@
 //!
 //! A [`Feature`] is one column of the count matrix; an [`Interval`] is one
 //! stretch to search, pointing back at its feature through `var_idx`. The two
-//! are deliberately not 1:1 — the exons of a transcript, or the pieces a
+//! are deliberately not 1:1, the exons of a transcript, or the pieces a
 //! blacklist cuts a feature into, are several intervals sharing one feature.
 //!
 //! Reads are then assigned by one of two strategies: a [`GenomeIndex`] (one
@@ -165,7 +165,7 @@ impl BinIndex {
 /// chromosome.
 ///
 /// Use this wherever the bins are only ever counted into and written out by
-/// coordinate — coverage tracks, for one. [`build_bin_index`] additionally
+/// coordinate, coverage tracks, for one. [`build_bin_index`] additionally
 /// materializes a [`Feature`] per bin, which only the count matrices need for
 /// their `var` table, and which at a 100 bp bin size means tens of millions of
 /// allocated names.
