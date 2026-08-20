@@ -441,6 +441,7 @@ pub fn filter_barcodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::annotation::region_index::Interval;
 
     fn wl(entries: &[&str]) -> Vec<String> {
         entries.iter().map(|s| s.to_string()).collect()
@@ -532,5 +533,253 @@ mod tests {
         // A bin index at the edge of its 32-bit half must not bleed into the
         // chromosome half.
         assert_eq!(pack_bin(2, u32::MAX as usize) >> 32, 2);
+    }
+
+    // Tag parsing and barcode extraction
+
+    #[test]
+    fn a_barcode_tag_must_be_exactly_two_characters() {
+        assert_eq!(parse_tag("BC").unwrap(), Tag::new(b'B', b'C'));
+        assert!(parse_tag("B").is_err());
+        assert!(parse_tag("BCX").is_err());
+        assert!(parse_tag("").is_err());
+    }
+
+    fn testdata() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn first_record() -> (bam::Record, ()) {
+        let path = testdata().join("test_i1.bam");
+        let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
+        reader.read_header().unwrap();
+        let record = reader.records().next().unwrap().unwrap();
+        (record, ())
+    }
+
+    #[test]
+    fn the_barcode_is_borrowed_from_the_record_when_the_tag_holds_a_string() {
+        let (record, _) = first_record();
+        let barcode = read_cell_barcode(&record, &Tag::new(b'B', b'C')).unwrap();
+        assert_eq!(barcode, Some(b"ATATAACT".as_slice()));
+    }
+
+    #[test]
+    fn a_tag_that_is_absent_or_not_a_string_yields_no_barcode() {
+        let (record, _) = first_record();
+        // NM is an integer, ZZ is not present at all.
+        assert_eq!(
+            read_cell_barcode(&record, &Tag::new(b'N', b'M')).unwrap(),
+            None
+        );
+        assert_eq!(
+            read_cell_barcode(&record, &Tag::new(b'Z', b'Z')).unwrap(),
+            None
+        );
+    }
+
+    // Block splitting
+
+    #[test]
+    fn blocks_tile_the_whole_string_without_gaps_or_overlap() {
+        for (len, n_blocks) in [(8usize, 3usize), (10, 4), (7, 7), (5, 1)] {
+            let mut previous_end = 0;
+            for b in 0..n_blocks {
+                let (start, end) = block_bounds(len, n_blocks, b);
+                assert_eq!(start, previous_end, "gap or overlap at block {b}");
+                assert!(end >= start);
+                previous_end = end;
+            }
+            assert_eq!(previous_end, len, "blocks did not reach the end");
+        }
+    }
+
+    #[test]
+    fn blocks_of_an_evenly_divisible_string_are_equal() {
+        assert_eq!(block_bounds(9, 3, 0), (0, 3));
+        assert_eq!(block_bounds(9, 3, 1), (3, 6));
+        assert_eq!(block_bounds(9, 3, 2), (6, 9));
+    }
+
+    #[test]
+    fn a_string_shorter_than_its_block_count_leaves_empty_blocks() {
+        // Two bytes over three blocks: one block has to be empty.
+        let bounds: Vec<(usize, usize)> = (0..3).map(|b| block_bounds(2, 3, b)).collect();
+        assert_eq!(bounds.last().unwrap().1, 2);
+        assert!(bounds.iter().any(|(s, e)| s == e), "{bounds:?}");
+    }
+
+    // Blacklist lookup
+
+    fn genome_index(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
+        let intervals = spans
+            .iter()
+            .enumerate()
+            .map(|(i, &(start, end))| Interval {
+                start,
+                end,
+                var_idx: i,
+            })
+            .collect();
+        let mut index = GenomeIndex::new();
+        index.insert(chrom.to_string(), ChromIndex::build(intervals));
+        index
+    }
+
+    #[test]
+    fn a_read_inside_a_blacklisted_span_is_blacklisted() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(is_blacklisted(&bl, "chr1", 150, 160));
+        assert!(
+            !is_blacklisted(&bl, "chr1", 200, 260),
+            "half-open at the end"
+        );
+    }
+
+    #[test]
+    fn the_chr_prefix_is_bridged_in_both_directions() {
+        let with_prefix = genome_index("chr1", &[(100, 200)]);
+        assert!(blacklist_chrom_index(&with_prefix, "1").is_some());
+
+        let without_prefix = genome_index("1", &[(100, 200)]);
+        assert!(blacklist_chrom_index(&without_prefix, "chr1").is_some());
+    }
+
+    #[test]
+    fn an_unknown_chromosome_has_no_blacklist_index() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(blacklist_chrom_index(&bl, "chr9").is_none());
+        assert!(!is_blacklisted(&bl, "chr9", 150, 160));
+    }
+
+    // Whole run against the test BAM
+
+    fn barcodes_of(bam: &str) -> Vec<String> {
+        std::fs::read_to_string(testdata().join(bam))
+            .unwrap()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    fn run(
+        whitelist: Option<Vec<String>>,
+        min_hamming: usize,
+        bin_size: usize,
+    ) -> Result<Vec<(String, usize)>> {
+        run_filter_barcodes(
+            &testdata().join("test_i1.bam"),
+            whitelist,
+            None,
+            "BC",
+            min_hamming,
+            None,
+            bin_size,
+            &[],
+            1,
+            1_000_000,
+        )
+    }
+
+    #[test]
+    fn every_detected_barcode_occupies_at_least_one_bin() {
+        let counts = run(None, 0, 2_000).unwrap();
+
+        assert!(!counts.is_empty(), "no barcodes were detected");
+        for (barcode, bins) in &counts {
+            assert!(*bins > 0, "{barcode} was reported with no bins");
+            assert!(!barcode.is_empty());
+        }
+    }
+
+    #[test]
+    fn the_detected_barcodes_are_the_ones_the_file_carries() {
+        let counts = run(None, 0, 2_000).unwrap();
+        let found: AHashSet<&str> = counts.iter().map(|(bc, _)| bc.as_str()).collect();
+
+        // These are the eight barcodes present in test_i1.bam.
+        for expected in ["ATATAACT", "ACGGTAAT", "GTCAAGCA", "TAGACTTG"] {
+            assert!(found.contains(expected), "missing {expected} in {found:?}");
+        }
+    }
+
+    #[test]
+    fn a_whitelist_restricts_the_output_to_its_own_barcodes() {
+        let whitelist = vec!["ATATAACT".to_string()];
+        let counts = run(Some(whitelist), 0, 2_000).unwrap();
+
+        assert_eq!(counts.len(), 1);
+        assert_eq!(counts[0].0, "ATATAACT");
+    }
+
+    #[test]
+    fn a_whitelist_entry_the_file_never_uses_reports_nothing() {
+        let counts = run(Some(vec!["TTTTTTTT".to_string()]), 0, 2_000).unwrap();
+        assert!(counts.is_empty(), "{counts:?}");
+    }
+
+    #[test]
+    fn fuzzy_matching_recovers_a_barcode_with_one_substitution() {
+        // ATATAACT with its last base changed; a Hamming distance of 1 should
+        // still match it, while exact matching should not.
+        let near_miss = vec!["ATATAACG".to_string()];
+
+        let exact = run(Some(near_miss.clone()), 0, 2_000).unwrap();
+        assert!(exact.is_empty(), "exact matching should not reach it");
+
+        let fuzzy = run(Some(near_miss), 1, 2_000).unwrap();
+        assert_eq!(fuzzy.len(), 1, "fuzzy matching missed the neighbour");
+    }
+
+    #[test]
+    fn a_smaller_bin_size_never_reports_fewer_bins() {
+        // Bins only subdivide, so the same reads can only spread over more.
+        let coarse = run(None, 0, 1_000_000).unwrap();
+        let fine = run(None, 0, 1_000).unwrap();
+
+        let lookup: AHashMap<&str, usize> =
+            coarse.iter().map(|(bc, n)| (bc.as_str(), *n)).collect();
+        for (barcode, fine_bins) in &fine {
+            let coarse_bins = lookup.get(barcode.as_str()).copied().unwrap_or(0);
+            assert!(
+                *fine_bins >= coarse_bins,
+                "{barcode}: {fine_bins} fine bins is fewer than {coarse_bins} coarse"
+            );
+        }
+    }
+
+    #[test]
+    fn the_whole_barcode_file_can_be_used_as_a_whitelist() {
+        let counts = run(Some(barcodes_of("test_barcodes.txt")), 0, 2_000).unwrap();
+        // Eight of the fourteen listed barcodes occur in test_i1.bam.
+        assert_eq!(counts.len(), 8, "{counts:?}");
+    }
+
+    // Argument validation
+
+    #[test]
+    fn a_zero_bin_size_is_rejected() {
+        let err = run(None, 0, 0).unwrap_err().to_string();
+        assert!(err.contains("bin_size"), "{err}");
+    }
+
+    #[test]
+    fn a_zero_chunk_size_is_rejected() {
+        let err = run_filter_barcodes(
+            &testdata().join("test_i1.bam"),
+            None,
+            None,
+            "BC",
+            0,
+            None,
+            2_000,
+            &[],
+            1,
+            0,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("chunk_size"), "{err}");
     }
 }

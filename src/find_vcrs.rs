@@ -571,3 +571,324 @@ pub fn find_vcrs(
     .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
     Ok(out_file.display().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Absolute tolerance for values that go through a few float operations.
+    const EPS: f64 = 1e-9;
+
+    fn assert_close(got: f64, want: f64) {
+        assert!((got - want).abs() < EPS, "expected {want}, got {got}");
+    }
+
+    // Sparse dot product
+
+    #[test]
+    fn sparse_dot_multiplies_only_the_rows_the_two_columns_share() {
+        let rows_a = [0usize, 2, 5];
+        let vals_a = [1.0, 2.0, 3.0];
+        let rows_b = [2usize, 3, 5];
+        let vals_b = [10.0, 20.0, 30.0];
+
+        // Rows 2 and 5 are shared: 2*10 + 3*30.
+        assert_close(sparse_dot(&rows_a, &vals_a, &rows_b, &vals_b), 110.0);
+    }
+
+    #[test]
+    fn sparse_dot_of_columns_with_no_shared_rows_is_zero() {
+        assert_close(sparse_dot(&[0, 2], &[1.0, 1.0], &[1, 3], &[1.0, 1.0]), 0.0);
+    }
+
+    #[test]
+    fn sparse_dot_with_an_empty_column_is_zero() {
+        assert_close(sparse_dot(&[], &[], &[1, 2], &[1.0, 1.0]), 0.0);
+        assert_close(sparse_dot(&[1, 2], &[1.0, 1.0], &[], &[]), 0.0);
+    }
+
+    // Banded correlation
+
+    #[test]
+    fn the_main_diagonal_of_the_correlation_band_is_all_ones() {
+        let rows = [0usize, 1, 2, 3];
+        let a = [1.0, 2.0, 3.0, 4.0];
+        let cols: Vec<(&[usize], &[f64])> = vec![(&rows, &a), (&rows, &a), (&rows, &a)];
+
+        let band = sparse_band_corr(&cols, 4, 2);
+
+        assert_eq!(band.len(), 2 * 2 + 1, "band holds 2k+1 diagonals");
+        assert_eq!(band[2], vec![1.0; 3], "band[k] is the main diagonal");
+    }
+
+    #[test]
+    fn two_identical_columns_correlate_at_one() {
+        let rows = [0usize, 1, 2, 3];
+        let a = [1.0, 2.0, 3.0, 4.0];
+        let cols: Vec<(&[usize], &[f64])> = vec![(&rows, &a), (&rows, &a)];
+
+        let band = sparse_band_corr(&cols, 4, 1);
+
+        // k = 1, so band[0] is the -1 diagonal and band[2] the +1 diagonal.
+        assert_close(band[2][0], 1.0);
+        assert_close(band[0][1], 1.0);
+    }
+
+    #[test]
+    fn two_opposed_columns_correlate_at_minus_one() {
+        let rows = [0usize, 1, 2, 3];
+        let up = [1.0, 2.0, 3.0, 4.0];
+        let down = [4.0, 3.0, 2.0, 1.0];
+        let cols: Vec<(&[usize], &[f64])> = vec![(&rows, &up), (&rows, &down)];
+
+        let band = sparse_band_corr(&cols, 4, 1);
+
+        assert_close(band[2][0], -1.0);
+    }
+
+    #[test]
+    fn a_column_with_no_variance_correlates_with_nothing() {
+        // A constant column has zero norm; the code substitutes infinity so the
+        // correlation collapses to zero rather than dividing by zero.
+        let rows = [0usize, 1, 2, 3];
+        let varying = [1.0, 2.0, 3.0, 4.0];
+        let constant = [2.0, 2.0, 2.0, 2.0];
+        let cols: Vec<(&[usize], &[f64])> = vec![(&rows, &varying), (&rows, &constant)];
+
+        let band = sparse_band_corr(&cols, 4, 1);
+
+        assert_close(band[2][0], 0.0);
+        assert!(band[2][0].is_finite(), "must not be NaN or infinite");
+    }
+
+    #[test]
+    fn the_band_is_symmetric_about_the_main_diagonal() {
+        let rows = [0usize, 1, 2, 3];
+        let a = [1.0, 5.0, 2.0, 8.0];
+        let b = [3.0, 1.0, 9.0, 2.0];
+        let c = [7.0, 2.0, 4.0, 1.0];
+        let cols: Vec<(&[usize], &[f64])> = vec![(&rows, &a), (&rows, &b), (&rows, &c)];
+
+        let k = 2;
+        let band = sparse_band_corr(&cols, 4, k);
+
+        for d in 1..=k {
+            for j in 0..cols.len() - d {
+                assert_close(band[k - d][j + d], band[k + d][j]);
+            }
+        }
+    }
+
+    // Gaussian kernel
+
+    #[test]
+    fn the_distance_kernel_sums_to_one() {
+        for radius in [0usize, 1, 3, 5] {
+            let kernel = distance_kernel(1.5, radius);
+            let total: f64 = kernel.iter().flatten().sum();
+            assert_close(total, 1.0);
+        }
+    }
+
+    #[test]
+    fn the_distance_kernel_is_square_and_odd_sized() {
+        let kernel = distance_kernel(2.0, 3);
+        assert_eq!(kernel.len(), 1 + 2 * 3);
+        for row in &kernel {
+            assert_eq!(row.len(), kernel.len());
+        }
+    }
+
+    #[test]
+    fn a_zero_radius_kernel_is_a_single_cell_holding_all_the_weight() {
+        assert_eq!(distance_kernel(1.0, 0), vec![vec![1.0]]);
+    }
+
+    #[test]
+    fn the_kernel_peaks_at_its_centre_and_falls_off_symmetrically() {
+        let radius = 3;
+        let kernel = distance_kernel(2.0, radius);
+        let centre = kernel[radius][radius];
+
+        for (r, row) in kernel.iter().enumerate() {
+            for (c, &v) in row.iter().enumerate() {
+                assert!(v <= centre + EPS, "cell ({r},{c}) exceeded the centre");
+                // Chebyshev distance decides the value, so opposite cells match.
+                assert_close(v, kernel[2 * radius - r][2 * radius - c]);
+            }
+        }
+    }
+
+    // Matrix diagonals
+
+    #[test]
+    fn the_zeroth_diagonal_is_the_main_diagonal() {
+        let m = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
+        assert_eq!(matrix_diagonal(&m, 3, 0), vec![1.0, 5.0, 9.0]);
+    }
+
+    #[test]
+    fn positive_and_negative_offsets_walk_opposite_sides() {
+        let m = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
+        // numpy.diag(a, 1) -> a[i, i+1]; numpy.diag(a, -1) -> a[i+1, i].
+        assert_eq!(matrix_diagonal(&m, 3, 1), vec![2.0, 6.0]);
+        assert_eq!(matrix_diagonal(&m, 3, -1), vec![4.0, 8.0]);
+        assert_eq!(matrix_diagonal(&m, 3, 2), vec![3.0]);
+        assert_eq!(matrix_diagonal(&m, 3, -2), vec![7.0]);
+    }
+
+    // Convolution
+
+    #[test]
+    fn convolving_with_a_unit_impulse_returns_the_input() {
+        let a = [1.0, 2.0, 3.0];
+        assert_eq!(convolve_same(&a, &[1.0]), vec![1.0, 2.0, 3.0]);
+        // A centred delta of odd width is also the identity.
+        assert_eq!(convolve_same(&a, &[0.0, 1.0, 0.0]), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn convolve_same_matches_numpy_same_mode() {
+        // numpy.convolve([1,1,1], [1,1], mode="same") == [1, 2, 2]
+        assert_eq!(
+            convolve_same(&[1.0, 1.0, 1.0], &[1.0, 1.0]),
+            vec![1.0, 2.0, 2.0]
+        );
+    }
+
+    #[test]
+    fn the_convolution_is_as_long_as_its_longer_input() {
+        assert_eq!(convolve_same(&[1.0, 2.0, 3.0, 4.0], &[1.0, 1.0]).len(), 4);
+        assert_eq!(convolve_same(&[1.0, 1.0], &[1.0, 2.0, 3.0, 4.0]).len(), 4);
+    }
+
+    // Segment cost
+
+    #[test]
+    fn a_segment_of_identical_values_costs_nothing() {
+        let scores = vec![vec![3.0], vec![3.0], vec![3.0], vec![3.0]];
+        let cost = SegmentCost::new(&scores);
+        assert_close(cost.cost(0, 4), 0.0);
+    }
+
+    #[test]
+    fn the_segment_cost_is_the_sum_of_squared_deviations_from_the_mean() {
+        // Values 1..4: mean 2.5, deviations 1.5/0.5/0.5/1.5, squares sum to 5.
+        let scores = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
+        let cost = SegmentCost::new(&scores);
+        assert_close(cost.cost(0, 4), 5.0);
+    }
+
+    #[test]
+    fn segment_costs_add_across_score_dimensions() {
+        let scores = vec![
+            vec![1.0, 1.0],
+            vec![2.0, 2.0],
+            vec![3.0, 3.0],
+            vec![4.0, 4.0],
+        ];
+        let cost = SegmentCost::new(&scores);
+        assert_close(cost.cost(0, 4), 10.0);
+    }
+
+    // PELT changepoints
+
+    #[test]
+    fn the_last_breakpoint_is_always_the_end_of_the_series() {
+        let scores = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
+        for pen in [0.0, 1.0, 100.0] {
+            let bkps = pelt_predict(&scores, pen);
+            assert_eq!(*bkps.last().unwrap(), scores.len(), "pen {pen}");
+        }
+    }
+
+    #[test]
+    fn a_flat_series_is_one_segment() {
+        let scores = vec![vec![5.0]; 8];
+        assert_eq!(pelt_predict(&scores, 1.0), vec![8]);
+    }
+
+    #[test]
+    fn a_step_change_is_found_where_the_level_shifts() {
+        let mut scores = vec![vec![0.0]; 5];
+        scores.extend(vec![vec![10.0]; 5]);
+
+        // A small penalty makes the split worth its cost.
+        assert_eq!(pelt_predict(&scores, 1.0), vec![5, 10]);
+    }
+
+    #[test]
+    fn a_large_penalty_suppresses_the_split() {
+        let mut scores = vec![vec![0.0]; 5];
+        scores.extend(vec![vec![10.0]; 5]);
+
+        // The step costs 250 to leave unsplit, so a penalty above that wins.
+        assert_eq!(pelt_predict(&scores, 1_000.0), vec![10]);
+    }
+
+    // Region parsing
+
+    fn bin_table() -> (Vec<String>, Vec<i64>, Vec<i64>) {
+        (
+            vec!["chr1".to_string(), "chr1".to_string(), "chr2".to_string()],
+            vec![0, 100, 500],
+            vec![100, 200, 600],
+        )
+    }
+
+    #[test]
+    fn a_bare_chromosome_spans_all_of_its_bins() {
+        let (chrom, start, end) = bin_table();
+        assert_eq!(
+            parse_region("chr1", &chrom, &start, &end).unwrap(),
+            ("chr1".to_string(), 0, 200)
+        );
+    }
+
+    #[test]
+    fn a_start_only_region_runs_to_the_last_bin_of_the_chromosome() {
+        let (chrom, start, end) = bin_table();
+        assert_eq!(
+            parse_region("chr1:50", &chrom, &start, &end).unwrap(),
+            ("chr1".to_string(), 50, 200)
+        );
+    }
+
+    #[test]
+    fn an_explicit_range_is_taken_as_given() {
+        let (chrom, start, end) = bin_table();
+        assert_eq!(
+            parse_region("chr1:10:90", &chrom, &start, &end).unwrap(),
+            ("chr1".to_string(), 10, 90)
+        );
+    }
+
+    #[test]
+    fn a_chromosome_with_no_bins_is_rejected() {
+        let (chrom, start, end) = bin_table();
+        let err = parse_region("chrX", &chrom, &start, &end)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("chrX"), "{err}");
+    }
+
+    #[test]
+    fn a_region_with_too_many_fields_is_rejected() {
+        let (chrom, start, end) = bin_table();
+        assert!(parse_region("chr1:1:2:3", &chrom, &start, &end).is_err());
+    }
+
+    #[test]
+    fn a_non_numeric_coordinate_is_rejected() {
+        let (chrom, start, end) = bin_table();
+        assert!(parse_region("chr1:abc", &chrom, &start, &end).is_err());
+    }
+}

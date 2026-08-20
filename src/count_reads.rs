@@ -364,3 +364,113 @@ pub fn count_features(
     )
     .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Duplicate-method parsing
+
+    #[test]
+    fn every_documented_dup_method_parses() {
+        assert!(matches!(
+            parse_dup_method("barcode_start").unwrap(),
+            DupMethod::BarcodeStart
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_start_end").unwrap(),
+            DupMethod::BarcodeStartEnd
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_umi_start").unwrap(),
+            DupMethod::BarcodeUmiStart
+        ));
+        assert!(matches!(
+            parse_dup_method("barcode_umi_start_end").unwrap(),
+            DupMethod::BarcodeUmiStartEnd
+        ));
+    }
+
+    #[test]
+    fn an_unknown_dup_method_names_the_valid_ones() {
+        let err = parse_dup_method("start_umi").unwrap_err().to_string();
+        assert!(err.contains("barcode_start"), "{err}");
+        assert!(err.contains("barcode_umi_start_end"), "{err}");
+    }
+
+    #[test]
+    fn dup_method_parsing_is_case_sensitive() {
+        assert!(parse_dup_method("Barcode_Start").is_err());
+        assert!(parse_dup_method("").is_err());
+    }
+
+    // QC filter construction
+
+    #[test]
+    fn no_qc_option_means_no_qc_filter_at_all() {
+        // Building a filter that rejects nothing would cost a check per read.
+        assert!(build_qc_filter(None, None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn a_single_qc_option_is_enough_to_build_the_filter() {
+        for filter in [
+            build_qc_filter(Some(50), None, None, None, None),
+            build_qc_filter(None, Some(500), None, None, None),
+            build_qc_filter(None, None, Some(0.3), None, None),
+            build_qc_filter(None, None, None, Some(0.7), None),
+            build_qc_filter(None, None, None, None, Some(0.9)),
+        ] {
+            assert!(filter.is_some());
+        }
+    }
+
+    #[test]
+    fn the_qc_filter_carries_every_option_through_unchanged() {
+        let filter = build_qc_filter(Some(50), Some(500), Some(0.3), Some(0.7), Some(0.9)).unwrap();
+
+        assert_eq!(filter.min_fragment_length, Some(50));
+        assert_eq!(filter.max_fragment_length, Some(500));
+        assert_eq!(filter.min_gc, Some(0.3));
+        assert_eq!(filter.max_gc, Some(0.7));
+        assert_eq!(filter.min_aligned_fraction, Some(0.9));
+    }
+
+    // Raw-record filter construction
+
+    #[test]
+    fn no_record_option_means_no_record_filter_at_all() {
+        assert!(build_record_filter(None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn a_single_record_option_is_enough_to_build_the_filter() {
+        for filter in [
+            build_record_filter(Some(20), None, None, None),
+            build_record_filter(None, Some(64), None, None),
+            build_record_filter(None, None, Some(16), None),
+            build_record_filter(None, None, None, Some("forward".to_string())),
+        ] {
+            assert!(filter.is_some());
+        }
+    }
+
+    #[test]
+    fn the_record_filter_carries_every_option_through_unchanged() {
+        let filter =
+            build_record_filter(Some(20), Some(64), Some(16), Some("reverse".to_string())).unwrap();
+
+        assert_eq!(filter.min_mapq, Some(20));
+        assert_eq!(filter.sam_flag_include, Some(64));
+        assert_eq!(filter.sam_flag_exclude, Some(16));
+        assert_eq!(filter.filter_rna_strand.as_deref(), Some("reverse"));
+    }
+
+    #[test]
+    fn a_zero_valued_option_still_builds_a_filter() {
+        // Zero is a real threshold, not an absent one: `Some(0)` must not be
+        // confused with `None`.
+        assert!(build_record_filter(Some(0), None, None, None).is_some());
+        assert!(build_qc_filter(Some(0), None, None, None, None).is_some());
+    }
+}

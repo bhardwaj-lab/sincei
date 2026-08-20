@@ -437,3 +437,267 @@ pub fn filter_stats(
     )
     .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::annotation::region_index::{ChromIndex, Interval};
+
+    // Column order of BarcodeStat::to_vec, used to index the returned rows.
+    const TOTAL: usize = 0;
+    const FILTERED: usize = 1;
+    const BLACKLISTED: usize = 2;
+    const LOW_MAPQ: usize = 3;
+    const N_STATS: usize = 13;
+
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn test_barcodes() -> Vec<String> {
+        std::fs::read_to_string(testdata().join("test_barcodes.txt"))
+            .unwrap()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    fn genome_index(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
+        let intervals = spans
+            .iter()
+            .enumerate()
+            .map(|(i, &(start, end))| Interval {
+                start,
+                end,
+                var_idx: i,
+            })
+            .collect();
+        let mut index = GenomeIndex::new();
+        index.insert(chrom.to_string(), ChromIndex::build(intervals));
+        index
+    }
+
+    // Blacklist lookup
+
+    #[test]
+    fn a_blacklisted_span_is_recognised_on_the_same_chromosome_name() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(is_blacklisted(&bl, "chr1", 150, 160));
+        assert!(
+            !is_blacklisted(&bl, "chr1", 200, 300),
+            "half-open at the end"
+        );
+        assert!(
+            !is_blacklisted(&bl, "chr1", 0, 100),
+            "half-open at the start"
+        );
+    }
+
+    #[test]
+    fn the_chr_prefix_is_bridged_in_both_directions() {
+        // BAMs and BED files disagree about the "chr" prefix all the time.
+        let with_prefix = genome_index("chr1", &[(100, 200)]);
+        assert!(is_blacklisted(&with_prefix, "1", 150, 160));
+
+        let without_prefix = genome_index("1", &[(100, 200)]);
+        assert!(is_blacklisted(&without_prefix, "chr1", 150, 160));
+    }
+
+    #[test]
+    fn a_chromosome_absent_from_the_blacklist_is_never_blacklisted() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(!is_blacklisted(&bl, "chr9", 150, 160));
+    }
+
+    // Stat accumulation
+
+    #[test]
+    fn the_stat_vector_lists_every_counter_in_a_fixed_order() {
+        let stat = BarcodeStat {
+            total: 1,
+            filtered: 2,
+            blacklisted: 3,
+            low_mapq: 4,
+            missing_flags: 5,
+            excluded_flags: 6,
+            internal_dupes: 7,
+            external_dupes: 8,
+            singletons: 9,
+            wrong_strand: 10,
+            wrong_motif: 11,
+            wrong_gc: 12,
+            low_aligned_fraction: 13,
+        };
+
+        assert_eq!(stat.to_vec(), (1..=13).collect::<Vec<u64>>());
+        assert_eq!(stat.to_vec().len(), N_STATS);
+    }
+
+    #[test]
+    fn adding_two_stat_sets_sums_every_counter() {
+        let mut a = BarcodeStat {
+            total: 1,
+            filtered: 1,
+            blacklisted: 1,
+            low_mapq: 1,
+            missing_flags: 1,
+            excluded_flags: 1,
+            internal_dupes: 1,
+            external_dupes: 1,
+            singletons: 1,
+            wrong_strand: 1,
+            wrong_motif: 1,
+            wrong_gc: 1,
+            low_aligned_fraction: 1,
+        };
+        let b = BarcodeStat {
+            total: 2,
+            filtered: 2,
+            blacklisted: 2,
+            low_mapq: 2,
+            missing_flags: 2,
+            excluded_flags: 2,
+            internal_dupes: 2,
+            external_dupes: 2,
+            singletons: 2,
+            wrong_strand: 2,
+            wrong_motif: 2,
+            wrong_gc: 2,
+            low_aligned_fraction: 2,
+        };
+
+        a += b;
+        assert_eq!(a.to_vec(), vec![3u64; N_STATS]);
+    }
+
+    // Whole run against the test BAM
+
+    #[allow(clippy::too_many_arguments)]
+    fn stats(
+        barcodes: &[String],
+        bc_tag: &str,
+        min_mapq: Option<u8>,
+        chr_to_skip: &[String],
+        bin_size: usize,
+        chunk_size: usize,
+    ) -> Result<(Vec<String>, Vec<Vec<u64>>)> {
+        run_filter_stats(
+            &testdata().join("test_i1.bam"),
+            barcodes,
+            bc_tag,
+            None,
+            bin_size,
+            0,
+            min_mapq,
+            None,
+            None,
+            chr_to_skip,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            1,
+            chunk_size,
+        )
+    }
+
+    #[test]
+    fn one_row_of_counters_comes_back_per_barcode() {
+        let barcodes = test_barcodes();
+        let (returned, rows) = stats(&barcodes, "BC", None, &[], 2_000, 1_000_000).unwrap();
+
+        assert_eq!(returned, barcodes, "the barcodes come back in input order");
+        assert_eq!(rows.len(), barcodes.len());
+        for row in &rows {
+            assert_eq!(row.len(), N_STATS);
+        }
+    }
+
+    #[test]
+    fn barcodes_in_the_file_accumulate_reads_and_absent_ones_stay_at_zero() {
+        // ATATAACT is in test_i1.bam; the other is not a barcode at all.
+        let barcodes = vec!["ATATAACT".to_string(), "TTTTTTTT".to_string()];
+        let (_, rows) = stats(&barcodes, "BC", None, &[], 2_000, 1_000_000).unwrap();
+
+        assert!(rows[0][TOTAL] > 0, "a real barcode saw no reads");
+        assert_eq!(
+            rows[1],
+            vec![0u64; N_STATS],
+            "an absent barcode counted reads"
+        );
+    }
+
+    #[test]
+    fn no_counter_can_exceed_the_total_it_is_drawn_from() {
+        let (_, rows) = stats(&test_barcodes(), "BC", None, &[], 2_000, 1_000_000).unwrap();
+
+        for row in &rows {
+            assert!(row[FILTERED] <= row[TOTAL], "filtered {row:?}");
+            assert!(row[BLACKLISTED] <= row[TOTAL], "blacklisted {row:?}");
+            assert!(row[LOW_MAPQ] <= row[TOTAL], "low_mapq {row:?}");
+        }
+    }
+
+    #[test]
+    fn an_impossible_mapping_quality_threshold_rejects_every_read() {
+        let barcodes = test_barcodes();
+
+        let (_, lenient) = stats(&barcodes, "BC", None, &[], 2_000, 1_000_000).unwrap();
+        let (_, strict) = stats(&barcodes, "BC", Some(255), &[], 2_000, 1_000_000).unwrap();
+
+        let sum = |rows: &[Vec<u64>], col: usize| -> u64 { rows.iter().map(|r| r[col]).sum() };
+
+        assert_eq!(
+            sum(&lenient, LOW_MAPQ),
+            0,
+            "no threshold, no low-mapq reads"
+        );
+        assert!(
+            sum(&strict, LOW_MAPQ) > 0,
+            "a 255 threshold rejected nothing"
+        );
+        assert_eq!(
+            sum(&strict, TOTAL),
+            sum(&lenient, TOTAL),
+            "the total is counted before filtering, so it must not move"
+        );
+    }
+
+    #[test]
+    fn skipping_the_only_chromosome_leaves_nothing_to_count() {
+        let barcodes = test_barcodes();
+        let (_, rows) = stats(&barcodes, "BC", None, &["5".to_string()], 2_000, 1_000_000).unwrap();
+
+        let total: u64 = rows.iter().map(|r| r[TOTAL]).sum();
+        assert_eq!(total, 0, "chromosome 5 was skipped but reads were counted");
+    }
+
+    // Argument validation
+
+    #[test]
+    fn a_zero_bin_size_is_rejected() {
+        let err = stats(&test_barcodes(), "BC", None, &[], 0, 1_000_000)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("bin_size"), "{err}");
+    }
+
+    #[test]
+    fn a_barcode_tag_the_file_does_not_carry_is_rejected() {
+        let err = stats(&test_barcodes(), "ZZ", None, &[], 2_000, 1_000_000)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("ZZ"), "{err}");
+    }
+
+    #[test]
+    fn a_malformed_tag_name_is_rejected() {
+        assert!(stats(&test_barcodes(), "B", None, &[], 2_000, 1_000_000).is_err());
+        assert!(stats(&test_barcodes(), "BCX", None, &[], 2_000, 1_000_000).is_err());
+    }
+}

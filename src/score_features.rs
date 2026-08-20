@@ -382,3 +382,242 @@ pub fn score_features(
     .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
     Ok(out_path.display().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn feature(chrom: &str, start: usize, end: usize) -> Feature {
+        Feature {
+            chrom: chrom.to_string(),
+            start,
+            end,
+            name: format!("{chrom}:{start}-{end}"),
+            strand: '*',
+        }
+    }
+
+    /// Three adjacent 100 bp bins on `chr1`, as columns 0, 1 and 2.
+    fn bin_layout() -> (AHashMap<String, ChromIndex>, Vec<i64>, Vec<i64>) {
+        let intervals = (0..3)
+            .map(|i| Interval {
+                start: i * 100,
+                end: (i + 1) * 100,
+                var_idx: i,
+            })
+            .collect();
+        let mut index = AHashMap::new();
+        index.insert("chr1".to_string(), ChromIndex::build(intervals));
+        (index, vec![0, 100, 200], vec![100, 200, 300])
+    }
+
+    /// Dense (cells x bins) matrix as CSC, which is how the scorer reads it.
+    fn csc(rows: usize, cols: usize, entries: &[(usize, usize, f64)]) -> CscMatrix<f64> {
+        let coo = nalgebra_sparse::CooMatrix::try_from_triplets(
+            rows,
+            cols,
+            entries.iter().map(|e| e.0).collect(),
+            entries.iter().map(|e| e.1).collect(),
+            entries.iter().map(|e| e.2).collect(),
+        )
+        .unwrap();
+        CscMatrix::from(&coo)
+    }
+
+    // compute_feature_score
+
+    #[test]
+    fn a_feature_sums_the_counts_of_every_bin_it_covers() {
+        let (index, starts, ends) = bin_layout();
+        // Cell 0 has 1 in each of the three bins; cell 1 has 10 in bin 1 only.
+        let x = csc(2, 3, &[(0, 0, 1.0), (0, 1, 1.0), (0, 2, 1.0), (1, 1, 10.0)]);
+
+        let score = compute_feature_score(
+            &feature("chr1", 0, 300),
+            &index,
+            &starts,
+            &ends,
+            &x,
+            2,
+            "all",
+        )
+        .expect("the feature covers bins that carry signal");
+
+        assert_eq!(score, vec![3.0, 10.0]);
+    }
+
+    #[test]
+    fn the_all_policy_counts_a_partly_covered_bin_in_full() {
+        let (index, starts, ends) = bin_layout();
+        let x = csc(1, 3, &[(0, 0, 4.0), (0, 1, 4.0)]);
+
+        // The feature covers bin 0 fully and half of bin 1.
+        let score = compute_feature_score(
+            &feature("chr1", 0, 150),
+            &index,
+            &starts,
+            &ends,
+            &x,
+            1,
+            "all",
+        )
+        .unwrap();
+
+        assert_eq!(score, vec![8.0]);
+    }
+
+    #[test]
+    fn the_partial_policy_weights_a_bin_by_the_fraction_inside_the_feature() {
+        let (index, starts, ends) = bin_layout();
+        let x = csc(1, 3, &[(0, 0, 4.0), (0, 1, 4.0)]);
+
+        // Bin 0 lies wholly inside; bin 1 contributes half of its 4.
+        let score = compute_feature_score(
+            &feature("chr1", 0, 150),
+            &index,
+            &starts,
+            &ends,
+            &x,
+            1,
+            "partial",
+        )
+        .unwrap();
+
+        assert_eq!(score, vec![6.0]);
+    }
+
+    #[test]
+    fn the_none_policy_drops_a_bin_that_is_not_wholly_inside_the_feature() {
+        let (index, starts, ends) = bin_layout();
+        let x = csc(1, 3, &[(0, 0, 4.0), (0, 1, 4.0)]);
+
+        let score = compute_feature_score(
+            &feature("chr1", 0, 150),
+            &index,
+            &starts,
+            &ends,
+            &x,
+            1,
+            "none",
+        )
+        .unwrap();
+
+        // Only bin 0 survives.
+        assert_eq!(score, vec![4.0]);
+    }
+
+    #[test]
+    fn a_feature_on_an_unknown_chromosome_scores_nothing() {
+        let (index, starts, ends) = bin_layout();
+        let x = csc(1, 3, &[(0, 0, 4.0)]);
+
+        assert!(
+            compute_feature_score(
+                &feature("chrZ", 0, 300),
+                &index,
+                &starts,
+                &ends,
+                &x,
+                1,
+                "all"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn a_feature_overlapping_no_bin_scores_nothing() {
+        let (index, starts, ends) = bin_layout();
+        let x = csc(1, 3, &[(0, 0, 4.0)]);
+
+        assert!(
+            compute_feature_score(
+                &feature("chr1", 5_000, 6_000),
+                &index,
+                &starts,
+                &ends,
+                &x,
+                1,
+                "all"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn a_feature_whose_bins_are_all_empty_scores_nothing() {
+        let (index, starts, ends) = bin_layout();
+        // Signal exists, but not in the bins this feature covers.
+        let x = csc(1, 3, &[(0, 2, 9.0)]);
+
+        assert!(
+            compute_feature_score(
+                &feature("chr1", 0, 100),
+                &index,
+                &starts,
+                &ends,
+                &x,
+                1,
+                "all"
+            )
+            .is_none()
+        );
+    }
+
+    // build_score_csr
+
+    #[test]
+    fn the_csr_offsets_count_the_entries_of_each_row() {
+        // Two cells, three features; feature 1 has no signal at all.
+        let scores = vec![Some(vec![1.0f32, 0.0]), None, Some(vec![2.0f32, 3.0])];
+
+        let (offsets, cols, values) = build_score_csr(&scores, 2);
+
+        // Cell 0 has features 0 and 2; cell 1 has feature 2 only.
+        assert_eq!(offsets, vec![0, 2, 3]);
+        assert_eq!(cols, vec![0, 2, 2]);
+        assert_eq!(values, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn a_feature_without_signal_still_occupies_its_column() {
+        let scores = vec![None, Some(vec![5.0f32])];
+        let (offsets, cols, values) = build_score_csr(&scores, 1);
+
+        assert_eq!(offsets, vec![0, 1]);
+        assert_eq!(cols, vec![1], "the surviving entry keeps column index 1");
+        assert_eq!(values, vec![5.0]);
+    }
+
+    #[test]
+    fn scores_of_zero_are_left_out_of_the_sparse_matrix() {
+        let scores = vec![Some(vec![0.0f32, 7.0])];
+        let (offsets, cols, values) = build_score_csr(&scores, 2);
+
+        assert_eq!(offsets, vec![0, 0, 1], "cell 0 contributes nothing");
+        assert_eq!(cols, vec![0]);
+        assert_eq!(values, vec![7.0]);
+    }
+
+    #[test]
+    fn an_empty_score_set_yields_an_all_zero_matrix() {
+        let (offsets, cols, values) = build_score_csr(&[], 3);
+
+        assert_eq!(offsets, vec![0, 0, 0, 0]);
+        assert!(cols.is_empty());
+        assert!(values.is_empty());
+    }
+
+    #[test]
+    fn csr_entries_come_out_ordered_by_cell_then_feature() {
+        let scores = vec![
+            Some(vec![1.0f32, 1.0]),
+            Some(vec![1.0f32, 1.0]),
+            Some(vec![1.0f32, 1.0]),
+        ];
+        let (offsets, cols, _) = build_score_csr(&scores, 2);
+
+        assert_eq!(offsets, vec![0, 3, 6]);
+        assert_eq!(cols, vec![0, 1, 2, 0, 1, 2]);
+    }
+}
