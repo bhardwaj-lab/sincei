@@ -25,6 +25,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,7 @@ def _tool_path() -> str:
 def run_tool(extra: list[str], out: str) -> str:
     """Run the tool, assert it succeeds, return the output TSV text."""
     cmd = [_tool_path(), *BASE, "-o", out, *extra]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert proc.returncode == 0, f"{TOOL} {extra} failed:\n{proc.stderr}"
     return Path(out).read_text()
 
@@ -125,9 +126,11 @@ def test_cell_id_joins_sample_and_barcode(tmp_path: Path) -> None:
 def test_snapshot(name: str, tmp_path: Path) -> None:
     snap = SNAP_DIR / f"{name}.tsv"
     if not snap.exists():
-        pytest.skip(
-            f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)"
+        msg = (
+            f"missing snapshot {snap} "
+            f"(regenerate: python {Path(__file__).name} --update)"
         )
+        pytest.skip(msg)
     got = run_tool(_args(name), str(tmp_path / f"{name}.tsv"))
     assert _norm(got) == _norm(snap.read_text()), (
         f"output for '{name}' differs from snapshot"
@@ -136,7 +139,6 @@ def test_snapshot(name: str, tmp_path: Path) -> None:
 
 def _generate() -> None:
     SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         for name in SCENARIOS:
@@ -149,4 +151,5 @@ if __name__ == "__main__":
     if "--update" in sys.argv:
         _generate()
     else:
-        raise SystemExit("use --update to regenerate snapshots, or run via pytest")
+        msg = "use --update to regenerate snapshots, or run via pytest"
+        raise SystemExit(msg)

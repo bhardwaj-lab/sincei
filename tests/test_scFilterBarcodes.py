@@ -23,6 +23,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -60,7 +61,7 @@ def _tool_path() -> str:
 def run_tool(extra: list[str], out: str) -> str:
     """Run the tool, assert it succeeds, return the output TSV text."""
     cmd = [_tool_path(), *BASE, "-o", out, *extra]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert proc.returncode == 0, f"{TOOL} {extra} failed:\n{proc.stderr}"
     return Path(out).read_text()
 
@@ -74,9 +75,11 @@ def _norm(text: str) -> str:
 def test_snapshot(name: str, tmp_path: Path) -> None:
     snap = SNAP_DIR / f"{name}.tsv"
     if not snap.exists():
-        pytest.skip(
-            f"missing snapshot {snap} (regenerate: python {Path(__file__).name} --update)"
+        msg = (
+            f"missing snapshot {snap} "
+            f"(regenerate: python {Path(__file__).name} --update)"
         )
+        pytest.skip(msg)
     got = run_tool(SCENARIOS[name], str(tmp_path / f"{name}.tsv"))
     assert _norm(got) == _norm(snap.read_text()), (
         f"output for '{name}' differs from snapshot"
@@ -87,15 +90,15 @@ def test_rank_plot_writes_png(tmp_path: Path) -> None:
     """`-rp` should run and write a PNG; the image is not snapshotted."""
     png = tmp_path / "rank.png"
     cmd = [_tool_path(), *BASE, "-o", str(tmp_path / "out.tsv"), "-rp", str(png)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert proc.returncode == 0, f"{TOOL} -rp failed:\n{proc.stderr}"
-    assert png.exists() and png.stat().st_size > 0, "rank plot PNG was not written"
+    assert png.exists(), "rank plot PNG was not written"
+    assert png.stat().st_size > 0, "rank plot PNG was empty"
     assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", "output is not a valid PNG"
 
 
 def _generate() -> None:
     SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         for name, extra in SCENARIOS.items():
@@ -108,4 +111,5 @@ if __name__ == "__main__":
     if "--update" in sys.argv:
         _generate()
     else:
-        raise SystemExit("use --update to regenerate snapshots, or run via pytest")
+        msg = "use --update to regenerate snapshots, or run via pytest"
+        raise SystemExit(msg)
