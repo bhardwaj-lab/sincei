@@ -657,7 +657,7 @@ mod tests {
             100_000,
             &barcodes,
             &CountingParams {
-                region: Some("5:1-100000".to_string()),
+                region: Some("5:0-100000".to_string()),
                 ..CountingParams::default()
             },
             1_000_000,
@@ -686,7 +686,7 @@ mod tests {
             10_000,
             &test_barcodes(),
             &CountingParams {
-                region: Some("5:65900001-66000000".to_string()),
+                region: Some("5:65900000-66000000".to_string()),
                 ..CountingParams::default()
             },
             1_000_000,
@@ -726,7 +726,7 @@ mod tests {
             10_000,
             &barcodes,
             &CountingParams {
-                region: Some("5:65900001-66000000".to_string()),
+                region: Some("5:65900000-66000000".to_string()),
                 ..CountingParams::default()
             },
             1_000_000,
@@ -757,7 +757,7 @@ mod tests {
             10_000,
             &test_barcodes(),
             &CountingParams {
-                region: Some("5:65970001-65971000".to_string()),
+                region: Some("5:65970000-65971000".to_string()),
                 ..CountingParams::default()
             },
             1_000_000,
@@ -768,6 +768,73 @@ mod tests {
         let names = adata.var_names().into_vec();
         // The last bin is clamped to the window end, not to the bin size.
         assert_eq!(names, vec!["5:65970000-65971000"]);
+    }
+
+    #[test]
+    fn a_region_start_tiles_from_the_window_start() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("offgrid.h5ad");
+
+        count_into(
+            &out,
+            10_000,
+            10_000,
+            &test_barcodes(),
+            &CountingParams {
+                region: Some("5:65905000-65965000".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+
+        // 65,905,000..65,965,000 is 60 kb, so exactly six 10 kb bins, the
+        // first starting at the requested start.
+        assert_eq!(
+            names,
+            vec![
+                "5:65905000-65915000",
+                "5:65915000-65925000",
+                "5:65925000-65935000",
+                "5:65935000-65945000",
+                "5:65945000-65955000",
+                "5:65955000-65965000",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_region_length_that_is_not_a_whole_number_of_bins_ends_short() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("shorttail.h5ad");
+
+        count_into(
+            &out,
+            10_000,
+            10_000,
+            &test_barcodes(),
+            &CountingParams {
+                region: Some("5:65900000-65925000".to_string()),
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+
+        assert_eq!(
+            names,
+            vec![
+                "5:65900000-65910000",
+                "5:65910000-65920000",
+                "5:65920000-65925000",
+            ]
+        );
     }
 
     #[test]

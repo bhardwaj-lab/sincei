@@ -360,7 +360,9 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "Region of the genome to limit the operation to. Format as "
             "chr:start:end, for example ``--region chr10`` or ``--region "
-            "chr10:456700:891000``."
+            "chr10:456700:891000``.\n\n"
+            "Coordinates are [bold yellow]0-based, half-open[/bold yellow], as "
+            "in the BED format."
         ),
     ),
 }

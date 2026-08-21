@@ -87,10 +87,7 @@ impl Default for CountingParams {
 /// coordinates.
 ///
 /// Accepts `"chrom"`, `"chrom:start"`, or `"chrom:start:end"`. The coordinate
-/// separator may be `':'` (the form the CLI normalizes to) or `'-'` (samtools
-/// style). Input coordinates are 1-based inclusive; the returned start is
-/// 0-based and the end is exclusive. A missing start defaults to 0 and a
-/// missing end to `usize::MAX`.
+/// separator may be `':'` or `'-'`.
 pub(super) fn parse_region(region: &str) -> anyhow::Result<(String, usize, usize)> {
     let Some((chrom, rest)) = region.split_once(':') else {
         // Bare chromosome (note: chromosome names may themselves contain '-',
@@ -110,8 +107,7 @@ pub(super) fn parse_region(region: &str) -> anyhow::Result<(String, usize, usize
             .map_err(|_| anyhow::anyhow!("invalid region end in {:?}", region))?,
         None => usize::MAX,
     };
-    // Convert 1-based inclusive -> 0-based half-open.
-    Ok((chrom.to_string(), start.saturating_sub(1), end))
+    Ok((chrom.to_string(), start, end))
 }
 
 #[cfg(test)]
@@ -130,7 +126,7 @@ mod tests {
     fn start_only_is_open_ended() {
         assert_eq!(
             parse_region("chr1:100").unwrap(),
-            ("chr1".to_string(), 99, usize::MAX)
+            ("chr1".to_string(), 100, usize::MAX)
         );
     }
 
@@ -139,7 +135,7 @@ mod tests {
         // samtools style and the CLI-normalized style must agree.
         let dash = parse_region("chr1:100-200").unwrap();
         let colon = parse_region("chr1:100:200").unwrap();
-        assert_eq!(dash, ("chr1".to_string(), 99, 200));
+        assert_eq!(dash, ("chr1".to_string(), 100, 200));
         assert_eq!(dash, colon);
     }
 
@@ -153,13 +149,18 @@ mod tests {
         );
         assert_eq!(
             parse_region("chr1-alt:5-10").unwrap(),
-            ("chr1-alt".to_string(), 4, 10)
+            ("chr1-alt".to_string(), 5, 10)
         );
     }
 
     #[test]
-    fn start_of_zero_does_not_underflow() {
-        assert_eq!(parse_region("chr1:0-10").unwrap().1, 0);
+    fn coordinates_are_taken_as_written() {
+        // 0-based half-open, so a start of 0 is the first base of the
+        // chromosome and needs no special case.
+        assert_eq!(
+            parse_region("chr1:0-10").unwrap(),
+            ("chr1".to_string(), 0, 10)
+        );
     }
 
     #[test]
