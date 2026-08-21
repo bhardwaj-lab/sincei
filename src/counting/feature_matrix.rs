@@ -5,9 +5,9 @@
 //! their alignment start so none is counted twice.
 //!
 //! A read is credited to exactly one feature: the overlaps of a feature's
-//! sub-intervals, metagene exons, or the pieces left by blacklist subtraction
-//! are summed first, and the feature with the largest total wins. So a read
-//! spanning two exons of one gene counts once for that gene.
+//! sub-intervals or metagene exons are summed first, and the feature with the
+//! largest total wins. So a read spanning two exons of one gene counts once for
+//! that gene.
 
 use ahash::{AHashMap, AHashSet};
 use std::path::Path;
@@ -17,14 +17,13 @@ use rayon::prelude::*;
 
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::params::{CountingParams, parse_region};
-use crate::annotation::parse_annotation::{
-    build_counting_index, parse_annotation_files, parse_blacklist_bed,
-};
+use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::{
-    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
+    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
+    derive_record_opts, read_is_blacklisted,
 };
 
 // Maximum number of distinct regions a single read can overlap and still be
@@ -140,13 +139,12 @@ pub fn count_bam_features(
         .as_deref()
         .map(parse_blacklist_bed)
         .transpose()?;
-    let counting_index = build_counting_index(&feature_index, blacklist.as_ref());
 
     // Chromosomes to skip, as a byte-slice set for O(1) membership tests.
     let skip_set: AHashSet<&[u8]> = params.chr_to_skip.iter().map(|s| s.as_bytes()).collect();
 
     // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
-    // Only include chromosomes that appear in counting_index.
+    // Only include chromosomes that appear in feature_index.
     // Sort by descending chunk size.
     let mut work: Vec<(usize, &Path, String, usize, usize)> = Vec::new();
     for (bam_idx, &(bam_path, _)) in bam_paths.iter().enumerate() {
@@ -157,7 +155,7 @@ pub fn count_bam_features(
                 continue;
             }
             let chrom = name.to_string();
-            if !counting_index.contains_key(&chrom) {
+            if !feature_index.contains_key(&chrom) {
                 continue;
             }
             let chrom_len = seq.length().get();
@@ -201,9 +199,14 @@ pub fn count_bam_features(
 
                     // Each work chunk covers a single chromosome, so its feature
                     // index is looked up once here rather than per read.
-                    let Some(chrom_index) = counting_index.get(chrom.as_str()) else {
+                    let Some(chrom_index) = feature_index.get(chrom.as_str()) else {
                         return Ok(AHashMap::new());
                     };
+                    // Likewise the blacklist: one chromosome per chunk, so a
+                    // read costs an interval query and no name hashing.
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
 
                     // Hoisted region filter: if a region was requested on a
                     // different chromosome, the whole chunk is skipped.
@@ -272,6 +275,15 @@ pub fn count_bam_features(
                             continue;
                         }
 
+                        // Judged on the read's own alignment span, as the filter
+                        // tools judge it, and before --extendReads / --centerReads
+                        // move the interval that is counted.
+                        if let Some(bl) = chunk_blacklist
+                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+                        {
+                            continue;
+                        }
+
                         let Some(barcode) = sc_rec.barcode else {
                             continue;
                         };
@@ -313,10 +325,10 @@ pub fn count_bam_features(
                         };
 
                         // Largest-overlap-wins: each read contributes to exactly
-                        // one region. Sub-intervals of the same region (from
-                        // blacklist splitting or metagene exons) accumulate their
-                        // overlaps before the comparison, so a read spanning two
-                        // exons of gene A still counts once for gene A.
+                        // one region. Sub-intervals of the same region (metagene
+                        // exons) accumulate their overlaps before the comparison,
+                        // so a read spanning two exons of gene A still counts once
+                        // for gene A.
                         let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
                         let mut n_hits = 0usize;
                         for sub in chrom_index.find(eff_start, eff_end) {
@@ -459,6 +471,82 @@ mod tests {
         .unwrap();
 
         assert!(open(&out).n_vars() > 0);
+    }
+
+    /// Every matrix entry, keyed by cell row and feature name, so two runs can
+    /// be compared entry for entry.
+    fn entries(path: &Path) -> std::collections::BTreeMap<(usize, String), f64> {
+        let adata = open(path);
+        let names = adata.var_names().into_vec();
+        let x = super::super::count_utils::read_x_f64(&adata).unwrap();
+        let mut out = std::collections::BTreeMap::new();
+        for (row, col, &v) in x.triplet_iter() {
+            *out.entry((row, names[col].clone())).or_insert(0.0) += v;
+        }
+        out
+    }
+
+    fn count_with_blacklist(out: &Path, blacklist: Option<PathBuf>) {
+        count_into(
+            out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams {
+                blacklist_path: blacklist,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_blacklist_removes_reads_and_never_moves_them() {
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None);
+
+        // Both BED regions cover the whole locus this BAM was cut from, so
+        // every read is at least half blacklisted.
+        let filtered = dir.path().join("filtered.h5ad");
+        count_with_blacklist(&filtered, Some(testdata().join("Chrna9_regions.bed")));
+
+        // The features themselves survive: a blacklist filters reads, it does
+        // not shorten or drop columns.
+        assert_eq!(open(&filtered).n_vars(), open(&base).n_vars());
+
+        let base = entries(&base);
+        let filtered = entries(&filtered);
+        assert!(!base.is_empty(), "the unfiltered run counted nothing");
+
+        // No read is moved to a neighbouring feature: an entry can only shrink,
+        // and no entry appears that the unfiltered run did not have.
+        for (key, value) in &filtered {
+            let before = base.get(key).copied().unwrap_or(0.0);
+            assert!(
+                *value <= before,
+                "{key:?} grew from {before} to {value} under a blacklist"
+            );
+        }
+        let total: f64 = filtered.values().sum();
+        assert!(total < base.values().sum::<f64>(), "no read was removed");
+    }
+
+    #[test]
+    fn a_blacklist_region_that_only_clips_reads_removes_none() {
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None);
+
+        // 20 bp inside the leftmost reads, which are 61 bp long: under the
+        // threshold, so nothing is dropped. Subtracting the region from the
+        // feature instead would shrink the overlap that picks the winner.
+        let bed = dir.path().join("narrow.bed");
+        std::fs::write(&bed, "5\t65966820\t65966840\tregion\t0\t.\n").unwrap();
+        let clipped = dir.path().join("clipped.h5ad");
+        count_with_blacklist(&clipped, Some(bed));
+
+        assert_eq!(entries(&clipped), entries(&base));
     }
 
     #[test]

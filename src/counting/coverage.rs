@@ -31,6 +31,7 @@ use crate::bam::bam_io::{
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
+use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::fragment_length::resolve_extend_reads;
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
@@ -449,7 +450,7 @@ pub fn run_bulk_coverage(
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
                     // Each work chunk covers a single chromosome, so its bin
-                    // geometry and blacklist segments are resolved once here
+                    // geometry and blacklist are resolved once here
                     // rather than per read.
                     let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
                     else {
@@ -471,11 +472,9 @@ pub fn run_bulk_coverage(
                         None => None,
                     };
 
-                    let chunk_blacklist = blacklist.as_ref().and_then(|bl| {
-                        bl.get(chrom.as_str())
-                            .or_else(|| chrom.strip_prefix("chr").and_then(|c| bl.get(c)))
-                            .or_else(|| bl.get(&format!("chr{}", chrom)))
-                    });
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
 
                     let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
                     let region: noodles::core::Region = region_str
@@ -525,6 +524,15 @@ pub fn run_bulk_coverage(
                             continue;
                         }
 
+                        // Judged on the read's own alignment span, as the filter
+                        // tools judge it, and before --extendReads / --centerReads
+                        // move the interval that is covered.
+                        if let Some(bl) = chunk_blacklist
+                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+                        {
+                            continue;
+                        }
+
                         let Some(barcode) = sc_rec.barcode else {
                             continue;
                         };
@@ -558,15 +566,6 @@ pub fn run_bulk_coverage(
                         }
                         if let Some(mf) = motif.as_mut()
                             && !mf.passes(&sc_rec, chrom)?
-                        {
-                            continue;
-                        }
-
-                        if let Some(idx) = chunk_blacklist
-                            && idx
-                                .find(sc_rec.alignment_start, sc_rec.alignment_end)
-                                .next()
-                                .is_some()
                         {
                             continue;
                         }
@@ -1477,6 +1476,78 @@ mod tests {
             100_000,
             1_000_000,
         )
+    }
+
+    /// `run_default`, with a blacklist and its own output prefix.
+    fn run_with_blacklist(prefix: &Path, blacklist: Option<&Path>) -> Vec<PathBuf> {
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+        run_bulk_coverage(
+            &[(i1.as_path(), "test_i1"), (i2.as_path(), "test_i2")],
+            &testdata().join("test_group_info.tsv"),
+            prefix.to_str().unwrap(),
+            100_000,
+            100_000,
+            "BC",
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            blacklist,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            NormalizeMethod::None,
+            1.0,
+            OutputFormat::BedGraph,
+            ReadMode::Normal,
+            1,
+            1_000_000,
+        )
+        .unwrap()
+    }
+
+    /// Total signal over every group's track.
+    fn total_signal(files: &[PathBuf]) -> f64 {
+        files
+            .iter()
+            .flat_map(|f| bedgraph_rows(f))
+            .map(|(_, _, _, value)| value)
+            .sum()
+    }
+
+    #[test]
+    fn a_blacklist_removes_reads_from_the_coverage_tracks() {
+        let dir = TempDir::new().unwrap();
+
+        let base = total_signal(&run_with_blacklist(&dir.path().join("base"), None));
+        assert!(base > 0.0, "the unfiltered run produced no signal");
+
+        // 20 bp, shorter than any read here, so no read reaches the threshold
+        // and the tracks are untouched.
+        let narrow = dir.path().join("narrow.bed");
+        std::fs::write(&narrow, "5\t65966820\t65966840\tregion\t0\t.\n").unwrap();
+        let clipped = total_signal(&run_with_blacklist(
+            &dir.path().join("clipped"),
+            Some(&narrow),
+        ));
+        assert_eq!(clipped, base, "a clipping blacklist dropped a read");
+
+        // Both BED regions cover the whole locus these BAMs were cut from, so
+        // every read is at least half blacklisted.
+        let filtered = total_signal(&run_with_blacklist(
+            &dir.path().join("filtered"),
+            Some(&testdata().join("Chrna9_regions.bed")),
+        ));
+        assert!(
+            filtered < base,
+            "the blacklist removed no read at all ({base})"
+        );
     }
 
     /// bedGraph rows, without the leading track line.

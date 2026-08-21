@@ -460,6 +460,14 @@ pub fn is_blacklisted(
     let Some(idx) = blacklist_chrom_index(blacklist_index, chromosome) else {
         return false;
     };
+    read_is_blacklisted(idx, start, end)
+}
+
+/// [`is_blacklisted`] against a chromosome index the caller already holds.
+///
+/// A work chunk covers one chromosome, so the counting loops resolve the index
+/// once per chunk and no read hashes a chromosome name.
+pub fn read_is_blacklisted(idx: &ChromIndex, start: usize, end: usize) -> bool {
     let read_len = end.saturating_sub(start);
     if read_len == 0 {
         return false;
@@ -658,6 +666,20 @@ mod tests {
     fn an_empty_read_interval_is_never_blacklisted() {
         let bl = genome_index("chr1", &[(100, 200)]);
         assert!(!is_blacklisted(&bl, "chr1", 150, 150));
+    }
+
+    #[test]
+    fn the_hoisted_call_answers_exactly_as_the_lookup_one() {
+        // What the counting loops call once the chromosome is resolved.
+        let bl = genome_index("chr1", &[(100, 200)]);
+        let idx = blacklist_chrom_index(&bl, "chr1").unwrap();
+        for (start, end) in [(150, 160), (150, 250), (151, 251), (199, 299), (150, 150)] {
+            assert_eq!(
+                read_is_blacklisted(idx, start, end),
+                is_blacklisted(&bl, "chr1", start, end),
+                "[{start}, {end})"
+            );
+        }
     }
 
     // SAM flag bits used below.

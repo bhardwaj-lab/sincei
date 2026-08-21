@@ -15,6 +15,6 @@ pub mod sc_record;
 
 pub use filters::{
     BLACKLIST_MIN_OVERLAP_PERCENT, DupMethod, DuplicateFilter, MotifFilter, QcFilter,
-    RawRecordFilter, is_blacklisted,
+    RawRecordFilter, blacklist_chrom_index, is_blacklisted, read_is_blacklisted,
 };
 pub use sc_record::{AdjustRead, ScRecord};

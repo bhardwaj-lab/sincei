@@ -17,14 +17,13 @@ use rayon::prelude::*;
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::{
-    BinIndex, GenomeIndex, build_bin_index, build_bin_index_in_window,
-};
+use crate::annotation::region_index::{build_bin_index, build_bin_index_in_window};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::{
-    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
+    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
+    derive_record_opts, read_is_blacklisted,
 };
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
@@ -166,7 +165,6 @@ pub fn count_bam_bins(
         .as_deref()
         .map(parse_blacklist_bed)
         .transpose()?;
-    let blacklisted_bins = blacklisted_bin_indices(&bin_index, blacklist.as_ref());
 
     // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
     // Use chrom_sizes (from first BAM) as the master chromosome set.
@@ -229,6 +227,11 @@ pub fn count_bam_bins(
                     // Bin 0 of this chromosome starts here: 0 unless a region
                     // restricted the tiling to a window.
                     let window_start = bin_index.window_start(chrom.as_str());
+                    // Likewise the blacklist: one chromosome per chunk, so a
+                    // read costs an interval query and no name hashing.
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
 
                     // Hoisted region filter: if a region was requested on a
                     // different chromosome, the whole chunk is skipped.
@@ -292,6 +295,15 @@ pub fn count_bam_bins(
                         if let Some((region_start, region_end)) = region_bounds
                             && (sc_rec.alignment_end <= region_start
                                 || sc_rec.alignment_start >= region_end)
+                        {
+                            continue;
+                        }
+
+                        // Judged on the read's own alignment span, as the filter
+                        // tools judge it, and before --extendReads / --centerReads
+                        // move the interval that is counted.
+                        if let Some(bl) = chunk_blacklist
+                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
                         {
                             continue;
                         }
@@ -369,12 +381,8 @@ pub fn count_bam_bins(
                             }
                             if best_overlap > 0 {
                                 let feature_idx = chrom_offset + best_bin;
-                                if blacklisted_bins.is_empty()
-                                    || !blacklisted_bins.contains(&feature_idx)
-                                {
-                                    *local_acc.entry((cell_idx, feature_idx)).or_insert(0) +=
-                                        sc_rec.count;
-                                }
+                                *local_acc.entry((cell_idx, feature_idx)).or_insert(0) +=
+                                    sc_rec.count;
                             }
                         }
                     }
@@ -413,136 +421,9 @@ pub fn count_bam_bins(
     Ok(())
 }
 
-fn blacklisted_bin_indices(
-    bin_index: &BinIndex,
-    blacklist: Option<&GenomeIndex>,
-) -> AHashSet<usize> {
-    let Some(bl) = blacklist else {
-        return AHashSet::new();
-    };
-
-    let bin_size = bin_index.bin_size;
-    let step_size = bin_index.step_size;
-    let mut set = AHashSet::new();
-
-    for (chrom, bl_chrom_idx) in bl {
-        let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom) else {
-            continue;
-        };
-        let window_start = bin_index.window_start(chrom);
-        for bl_iv in bl_chrom_idx.iter() {
-            // Measured from the window origin, like the read intervals are.
-            let bl_start = bl_iv.start.saturating_sub(window_start);
-            let bl_end = bl_iv.end.saturating_sub(window_start);
-            if bl_end == 0 {
-                continue;
-            }
-            let last_bl_bin = ((bl_end - 1) / step_size).min(n_bins - 1);
-            let first_bl_bin = if bl_start + 1 > bin_size {
-                (bl_start - bin_size + step_size) / step_size
-            } else {
-                0
-            };
-            for bin in first_bl_bin..=last_bl_bin {
-                set.insert(chrom_offset + bin);
-            }
-        }
-    }
-    set
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::annotation::region_index::{ChromIndex, Interval};
-
-    fn blacklist(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
-        let intervals = spans
-            .iter()
-            .map(|&(start, end)| Interval {
-                start,
-                end,
-                var_idx: 0,
-            })
-            .collect();
-        [(chrom.to_string(), ChromIndex::build(intervals))]
-            .into_iter()
-            .collect()
-    }
-
-    /// chr1 (300 bp) and chr2 (100 bp) tiled into 100 bp bins:
-    /// feature indices 0,1,2 = chr1 bins; 3 = chr2 bin.
-    fn two_chrom_index() -> BinIndex {
-        let (index, _) = build_bin_index(
-            &[("chr1".to_string(), 300), ("chr2".to_string(), 100)],
-            100,
-            100,
-        );
-        index
-    }
-
-    fn sorted(set: AHashSet<usize>) -> Vec<usize> {
-        let mut v: Vec<usize> = set.into_iter().collect();
-        v.sort_unstable();
-        v
-    }
-
-    #[test]
-    fn no_blacklist_means_no_excluded_bins() {
-        assert!(blacklisted_bin_indices(&two_chrom_index(), None).is_empty());
-    }
-
-    #[test]
-    fn a_blacklist_region_excludes_every_bin_it_touches() {
-        // [150, 160) lies inside the second chr1 bin.
-        let excluded =
-            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(150, 160)])));
-        assert_eq!(sorted(excluded), vec![1]);
-
-        // A region spanning a bin boundary excludes both bins.
-        let excluded =
-            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(90, 110)])));
-        assert_eq!(sorted(excluded), vec![0, 1]);
-
-        // A region covering the whole chromosome excludes all of its bins.
-        let excluded =
-            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(0, 300)])));
-        assert_eq!(sorted(excluded), vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn excluded_bins_are_offset_by_chromosome() {
-        // chr2's only bin is feature index 3, not 0.
-        let excluded =
-            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr2", &[(10, 20)])));
-        assert_eq!(sorted(excluded), vec![3]);
-    }
-
-    #[test]
-    fn blacklist_regions_on_unknown_chromosomes_are_ignored() {
-        let excluded = blacklisted_bin_indices(
-            &two_chrom_index(),
-            Some(&blacklist("chrUnplaced", &[(0, 50)])),
-        );
-        assert!(excluded.is_empty());
-    }
-
-    #[test]
-    fn a_blacklist_region_past_the_chromosome_end_clamps_to_the_last_bin() {
-        let excluded =
-            blacklisted_bin_indices(&two_chrom_index(), Some(&blacklist("chr1", &[(250, 5000)])));
-        assert_eq!(sorted(excluded), vec![2]);
-    }
-
-    #[test]
-    fn sliding_bins_that_overlap_a_blacklist_region_are_all_excluded() {
-        // 100 bp bins every 50 bp on a 300 bp chromosome: bins start at
-        // 0, 50, 100, 150, 200, 250. A region at [120, 130) is covered by the
-        // bins starting at 50 and 100.
-        let (index, _) = build_bin_index(&[("chr1".to_string(), 300)], 100, 50);
-        let excluded = blacklisted_bin_indices(&index, Some(&blacklist("chr1", &[(120, 130)])));
-        assert_eq!(sorted(excluded), vec![1, 2]);
-    }
 
     // Counting a real BAM end to end
 
@@ -632,6 +513,103 @@ mod tests {
             *sums.entry(names[col].clone()).or_insert(0.0) += v;
         }
         sums
+    }
+
+    fn n_vars(path: &Path) -> usize {
+        AnnData::<H5>::open(H5::open(path).unwrap())
+            .unwrap()
+            .n_vars()
+    }
+
+    /// Every matrix entry, keyed by cell row and bin name, so two runs can be
+    /// compared entry for entry.
+    fn entries(path: &Path) -> std::collections::BTreeMap<(usize, String), f64> {
+        let adata = AnnData::<H5>::open(H5::open(path).unwrap()).unwrap();
+        let names = adata.var_names().into_vec();
+        let x = super::super::count_utils::read_x_f64(&adata).unwrap();
+        let mut out = std::collections::BTreeMap::new();
+        for (row, col, &v) in x.triplet_iter() {
+            *out.entry((row, names[col].clone())).or_insert(0.0) += v;
+        }
+        out
+    }
+
+    /// A BED holding one region, written where the test wants it.
+    fn blacklist_bed(dir: &Path, name: &str, start: usize, end: usize) -> PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("5\t{start}\t{end}\tregion\t0\t.\n")).unwrap();
+        path
+    }
+
+    fn count_with_blacklist(out: &Path, blacklist: Option<PathBuf>, barcodes: &[String]) {
+        count_into(
+            out,
+            100_000,
+            100_000,
+            barcodes,
+            &CountingParams {
+                blacklist_path: blacklist,
+                ..CountingParams::default()
+            },
+            1_000_000,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_blacklist_removes_reads_and_never_moves_them() {
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None, &barcodes);
+
+        // Both BED regions cover the whole locus this BAM was cut from, so
+        // every read is at least half blacklisted.
+        let filtered = dir.path().join("filtered.h5ad");
+        count_with_blacklist(
+            &filtered,
+            Some(testdata().join("Chrna9_regions.bed")),
+            &barcodes,
+        );
+
+        // The bins themselves survive: a blacklist filters reads, it does not
+        // delete columns.
+        assert_eq!(n_vars(&filtered), n_vars(&base));
+
+        let base = entries(&base);
+        let filtered = entries(&filtered);
+        assert!(!base.is_empty(), "the unfiltered run counted nothing");
+
+        // No read is moved: an entry can only shrink, and no entry appears that
+        // the unfiltered run did not have.
+        for (key, value) in &filtered {
+            let before = base.get(key).copied().unwrap_or(0.0);
+            assert!(
+                *value <= before,
+                "{key:?} grew from {before} to {value} under a blacklist"
+            );
+        }
+        let total: f64 = filtered.values().sum();
+        assert!(total < base.values().sum::<f64>(), "no read was removed");
+    }
+
+    #[test]
+    fn a_blacklist_region_that_only_clips_reads_removes_none() {
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None, &barcodes);
+
+        // 20 bp inside the leftmost reads, which are 61 bp long: under the
+        // threshold, so nothing is dropped. Excluding whole bins instead would
+        // empty the 100 kb bin that holds them.
+        let bed = blacklist_bed(dir.path(), "narrow.bed", 65_966_820, 65_966_840);
+        let clipped = dir.path().join("clipped.h5ad");
+        count_with_blacklist(&clipped, Some(bed), &barcodes);
+
+        assert_eq!(entries(&clipped), entries(&base));
     }
 
     #[test]

@@ -23,8 +23,10 @@ pub struct CountingParams {
     /// just `"chrom"` for a whole chromosome.
     pub region: Option<String>,
 
-    /// BED file whose regions define a blacklist. Reads whose effective
-    /// interval overlaps any blacklisted region are discarded.
+    /// BED file whose regions define a blacklist. The counting functions
+    /// discard a read when blacklisted regions cover at least half of its
+    /// alignment span. The alignment span is used, not the interval that
+    /// --extendReads / --centerReads produce.
     pub blacklist_path: Option<PathBuf>,
 
     /// For GTF / GFF3 annotation files: the column-3 feature types that define

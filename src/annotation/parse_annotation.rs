@@ -513,9 +513,9 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
 ///
 /// This is the metagene parsing path. The resulting intervals have `var_idx` =
 /// group index (into the returned `Feature` vec) rather than a per-exon index,
-/// so `build_counting_index` (blacklist subtraction) and the counting inner loop
-/// naturally treat all exons of one group as one region. A group's span runs
-/// from its first exon's start to its last exon's end.
+/// so the counting inner loop naturally treats all exons of one group as one
+/// region. A group's span runs from its first exon's start to its last exon's
+/// end.
 ///
 /// Exons are grouped by the value of their `group_attr` attribute,
 /// `transcript_id` or `Parent` for per-transcript features, `gene_id` for
@@ -600,92 +600,6 @@ where
         intervals: intervals_by_chrom,
         features: var,
     })
-}
-
-/// Build a "counting index" from a feature index by subtracting blacklisted
-/// regions from every interval.
-///
-/// Each original interval `[start, end)` with feature-index `var_idx` is replaced
-/// by the sub-intervals that remain after removing any overlapping blacklist
-/// segments. All sub-intervals inherit the same `var_idx`, so a single
-/// `ChromIndex::find` query per read is sufficient to count into the correct
-/// matrix column.
-///
-/// If `blacklist` is `None` the returned index is structurally identical to
-/// `feature_index`.
-pub fn build_counting_index(
-    feature_index: &GenomeIndex,
-    blacklist: Option<&GenomeIndex>,
-) -> GenomeIndex {
-    feature_index
-        .iter()
-        .map(|(chrom, chrom_idx)| {
-            let new_intervals: Vec<Interval> = chrom_idx
-                .iter()
-                .flat_map(|iv| {
-                    valid_sub_intervals(iv.start, iv.end, chrom, blacklist)
-                        .into_iter()
-                        .map(move |(s, e)| Interval {
-                            start: s,
-                            end: e,
-                            var_idx: iv.var_idx,
-                        })
-                })
-                .collect();
-            (chrom.clone(), ChromIndex::build(new_intervals))
-        })
-        .collect()
-}
-
-/// Return the portions of `[feat_start, feat_end)` not covered by the
-/// blacklist on `chrom`. Returns the original interval unchanged when there
-/// is no blacklist or no overlap.
-fn valid_sub_intervals(
-    feat_start: usize,
-    feat_end: usize,
-    chrom: &str,
-    blacklist: Option<&GenomeIndex>,
-) -> Vec<(usize, usize)> {
-    let Some(bl_index) = blacklist else {
-        return vec![(feat_start, feat_end)];
-    };
-    let Some(bl_chrom_idx) = bl_index.get(chrom) else {
-        return vec![(feat_start, feat_end)];
-    };
-
-    // Collect blacklist segments overlapping the feature, clamped to its bounds.
-    let mut bl_segs: Vec<(usize, usize)> = bl_chrom_idx
-        .find(feat_start, feat_end)
-        .map(|iv| (iv.start.max(feat_start), iv.end.min(feat_end)))
-        .collect();
-
-    if bl_segs.is_empty() {
-        return vec![(feat_start, feat_end)];
-    }
-
-    // Sort then merge overlapping / adjacent blacklist segments.
-    bl_segs.sort_unstable();
-    let mut merged: Vec<(usize, usize)> = Vec::new();
-    for (s, e) in bl_segs {
-        match merged.last_mut() {
-            Some(last) if s <= last.1 => last.1 = last.1.max(e),
-            _ => merged.push((s, e)),
-        }
-    }
-
-    // Valid sub-intervals are the gaps between merged blacklist segments.
-    let mut valid: Vec<(usize, usize)> = Vec::new();
-    let mut cursor = feat_start;
-    for (bl_s, bl_e) in merged {
-        if cursor < bl_s {
-            valid.push((cursor, bl_s));
-        }
-        cursor = cursor.max(bl_e);
-    }
-    if cursor < feat_end {
-        valid.push((cursor, feat_end));
-    }
-    valid
 }
 
 #[cfg(test)]
@@ -1256,92 +1170,5 @@ mod tests {
                 .1;
             assert_eq!(strip_version(&var), ENSEMBL_IDS, "{file}");
         }
-    }
-
-    // Blacklist subtraction
-
-    #[test]
-    fn a_feature_is_split_around_an_overlapping_blacklist_region() {
-        let feature: GenomeIndex = [(
-            "chr1".to_string(),
-            ChromIndex::build(vec![Interval {
-                start: 100,
-                end: 200,
-                var_idx: 0,
-            }]),
-        )]
-        .into_iter()
-        .collect();
-        let bl: GenomeIndex = [(
-            "chr1".to_string(),
-            ChromIndex::build(vec![Interval {
-                start: 120,
-                end: 140,
-                var_idx: 0,
-            }]),
-        )]
-        .into_iter()
-        .collect();
-
-        let counting = build_counting_index(&feature, Some(&bl));
-        let parts: Vec<(usize, usize, usize)> = counting
-            .get("chr1")
-            .unwrap()
-            .iter()
-            .map(|iv| (iv.start, iv.end, iv.var_idx))
-            .collect();
-
-        // Both halves keep the feature's index, so the read still counts once.
-        assert_eq!(parts, vec![(100, 120, 0), (140, 200, 0)]);
-
-        // Without a blacklist the index is passed through unchanged.
-        let same = build_counting_index(&feature, None);
-        assert_eq!(same.get("chr1").unwrap().len(), 1);
-    }
-
-    #[test]
-    fn valid_sub_intervals_handles_every_blacklist_geometry() {
-        let bl: GenomeIndex = [(
-            "chr1".to_string(),
-            ChromIndex::build(vec![
-                Interval {
-                    start: 120,
-                    end: 140,
-                    var_idx: 0,
-                },
-                // Overlapping and adjacent segments, which must be merged
-                // before the gaps are computed.
-                Interval {
-                    start: 135,
-                    end: 150,
-                    var_idx: 0,
-                },
-                Interval {
-                    start: 150,
-                    end: 160,
-                    var_idx: 0,
-                },
-            ]),
-        )]
-        .into_iter()
-        .collect();
-        let bl = Some(&bl);
-
-        // Overlapping segments merge into one gap.
-        assert_eq!(
-            valid_sub_intervals(100, 200, "chr1", bl),
-            vec![(100, 120), (160, 200)]
-        );
-        // A blacklist covering the feature leaves nothing to count.
-        assert_eq!(
-            valid_sub_intervals(120, 160, "chr1", bl),
-            Vec::<(usize, usize)>::new()
-        );
-        // Trimming from one end only.
-        assert_eq!(valid_sub_intervals(130, 200, "chr1", bl), vec![(160, 200)]);
-        assert_eq!(valid_sub_intervals(100, 130, "chr1", bl), vec![(100, 120)]);
-        // No overlap, and an unlisted chromosome, both pass through.
-        assert_eq!(valid_sub_intervals(0, 100, "chr1", bl), vec![(0, 100)]);
-        assert_eq!(valid_sub_intervals(100, 200, "chr2", bl), vec![(100, 200)]);
     }
 }

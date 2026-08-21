@@ -27,8 +27,7 @@ pub struct Feature {
 /// A half-open genomic interval `[start, end)` and what feature it belongs to
 /// (noted in `var_idx`).
 ///
-/// Several intervals may share a `var_idx`. E.g., the exons of one transcript,
-/// or the pieces a feature is split by blacklist subtraction.
+/// Several intervals may share a `var_idx`. E.g., the exons of one transcript.
 #[derive(Clone, Debug)]
 pub struct Interval {
     pub start: usize,
