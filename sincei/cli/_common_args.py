@@ -427,11 +427,9 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar=".bed",
         rich_help_panel=_BAM,
         help=(
-            "A BED or GTF file containing regions that should be excluded from all "
-            "analyses. Currently this works by rejecting genomic chunks that happen to "
-            "overlap an entry, so a read partially overlapping a blacklisted region "
-            "(or a fragment spanning it) might still be considered. Adjust the "
-            "effective genome size if relevant."
+            "A BED or GTF file containing regions that should be excluded from the "
+            "analyses. A read is rejected if at least half of it lies inside a "
+            "blacklist entry."
         ),
     ),
     "chr_to_skip": typer.Option(

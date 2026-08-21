@@ -11,10 +11,11 @@ use rayon::prelude::*;
 use triple_accel::hamming::hamming;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::{ChromIndex, GenomeIndex};
+use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
+use crate::bam::filters::is_blacklisted;
 
 /// A map of barcodes stored as bytes in a `Vec<u8>` (directly read from the BAM
 /// record) to the bins is was detected in, stored as their index.
@@ -365,31 +366,6 @@ impl<'a> WhitelistMatcher<'a> {
     }
 }
 
-fn is_blacklisted(
-    blacklist_index: &GenomeIndex,
-    chromosome: &str,
-    start: usize,
-    end: usize,
-) -> bool {
-    blacklist_chrom_index(blacklist_index, chromosome)
-        .map(|idx| idx.find(start, end).next().is_some())
-        .unwrap_or(false)
-}
-
-fn blacklist_chrom_index<'a>(
-    blacklist_index: &'a GenomeIndex,
-    chromosome: &str,
-) -> Option<&'a ChromIndex> {
-    blacklist_index
-        .get(chromosome)
-        .or_else(|| {
-            chromosome
-                .strip_prefix("chr")
-                .and_then(|c| blacklist_index.get(c))
-        })
-        .or_else(|| blacklist_index.get(&format!("chr{chromosome}")))
-}
-
 /// Detect the cell barcodes in a BAM file and count the bins each one occupies.
 ///
 /// Every mapped read carrying a ``cell_tag`` tag is placed in the ``bin_size``
@@ -479,7 +455,6 @@ pub fn filter_barcodes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::annotation::region_index::Interval;
 
     fn wl(entries: &[&str]) -> Vec<String> {
         entries.iter().map(|s| s.to_string()).collect()
@@ -645,49 +620,6 @@ mod tests {
         let bounds: Vec<(usize, usize)> = (0..3).map(|b| block_bounds(2, 3, b)).collect();
         assert_eq!(bounds.last().unwrap().1, 2);
         assert!(bounds.iter().any(|(s, e)| s == e), "{bounds:?}");
-    }
-
-    // Blacklist lookup
-
-    fn genome_index(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
-        let intervals = spans
-            .iter()
-            .enumerate()
-            .map(|(i, &(start, end))| Interval {
-                start,
-                end,
-                var_idx: i,
-            })
-            .collect();
-        let mut index = GenomeIndex::new();
-        index.insert(chrom.to_string(), ChromIndex::build(intervals));
-        index
-    }
-
-    #[test]
-    fn a_read_inside_a_blacklisted_span_is_blacklisted() {
-        let bl = genome_index("chr1", &[(100, 200)]);
-        assert!(is_blacklisted(&bl, "chr1", 150, 160));
-        assert!(
-            !is_blacklisted(&bl, "chr1", 200, 260),
-            "half-open at the end"
-        );
-    }
-
-    #[test]
-    fn the_chr_prefix_is_bridged_in_both_directions() {
-        let with_prefix = genome_index("chr1", &[(100, 200)]);
-        assert!(blacklist_chrom_index(&with_prefix, "1").is_some());
-
-        let without_prefix = genome_index("1", &[(100, 200)]);
-        assert!(blacklist_chrom_index(&without_prefix, "chr1").is_some());
-    }
-
-    #[test]
-    fn an_unknown_chromosome_has_no_blacklist_index() {
-        let bl = genome_index("chr1", &[(100, 200)]);
-        assert!(blacklist_chrom_index(&bl, "chr9").is_none());
-        assert!(!is_blacklisted(&bl, "chr9", 150, 160));
     }
 
     // Whole run against the test BAM

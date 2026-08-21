@@ -19,6 +19,7 @@ use anyhow::Result;
 use twobit::TwoBitFile;
 
 use super::sc_record::{ScRecord, ScRecordOptions};
+use crate::annotation::region_index::{ChromIndex, GenomeIndex};
 
 /// Cheap per-record filter evaluated directly on a raw BAM record's flags and
 /// mapping quality, before any tag parsing or [`ScRecord`] construction.
@@ -442,6 +443,84 @@ impl MotifFilter {
     }
 }
 
+/// Overlap threshold for a read to be considered blacklisted.
+pub const BLACKLIST_MIN_OVERLAP_PERCENT: usize = 50;
+
+/// Returns `true` if at least [`BLACKLIST_MIN_OVERLAP_PERCENT`] of the read
+/// interval `[start, end)` is covered by blacklisted regions on `chromosome`.
+///
+/// Coordinates are 0-based half-open on both sides. The read interval is the
+/// full alignment span, CIGAR is not consulted.
+pub fn is_blacklisted(
+    blacklist_index: &GenomeIndex,
+    chromosome: &str,
+    start: usize,
+    end: usize,
+) -> bool {
+    let Some(idx) = blacklist_chrom_index(blacklist_index, chromosome) else {
+        return false;
+    };
+    let read_len = end.saturating_sub(start);
+    if read_len == 0 {
+        return false;
+    }
+    // Rounded up.
+    let required = (read_len * BLACKLIST_MIN_OVERLAP_PERCENT).div_ceil(100);
+
+    // Most reads meet no blacklist region at all, and most of the rest meet
+    // exactly one, which the early return settles without allocating.
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for iv in idx.find(start, end) {
+        let s = iv.start.max(start);
+        let e = iv.end.min(end);
+        if e <= s {
+            continue;
+        }
+        if e - s >= required {
+            return true;
+        }
+        spans.push((s, e));
+    }
+    if spans.len() < 2 {
+        return false;
+    }
+
+    spans.sort_unstable();
+    let mut covered = 0usize;
+    let (mut cur_start, mut cur_end) = spans[0];
+    for &(s, e) in &spans[1..] {
+        if s <= cur_end {
+            cur_end = cur_end.max(e);
+        } else {
+            covered += cur_end - cur_start;
+            if covered >= required {
+                return true;
+            }
+            (cur_start, cur_end) = (s, e);
+        }
+    }
+    covered += cur_end - cur_start;
+    covered >= required
+}
+
+/// Look up a chromosome in a blacklist index, bridging the `chr` prefix.
+///
+/// BAM headers and BED files sometimes disagree about the prefix, so `chr1` and
+/// `1` are treated as the same chromosome.
+pub fn blacklist_chrom_index<'a>(
+    blacklist_index: &'a GenomeIndex,
+    chromosome: &str,
+) -> Option<&'a ChromIndex> {
+    blacklist_index
+        .get(chromosome)
+        .or_else(|| {
+            chromosome
+                .strip_prefix("chr")
+                .and_then(|c| blacklist_index.get(c))
+        })
+        .or_else(|| blacklist_index.get(&format!("chr{chromosome}")))
+}
+
 /// Returns `true` if the read should be **excluded** based on the RNA strand filter.
 ///
 /// This assumes a dUTP-based paired-end library: "forward" keeps reads from genes
@@ -486,7 +565,100 @@ fn complement(b: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::annotation::region_index::Interval;
     use crate::bam::sc_record::test_record;
+
+    // Blacklist lookup
+
+    fn genome_index(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
+        let intervals = spans
+            .iter()
+            .enumerate()
+            .map(|(i, &(start, end))| Interval {
+                start,
+                end,
+                var_idx: i,
+            })
+            .collect();
+        let mut index = GenomeIndex::new();
+        index.insert(chrom.to_string(), ChromIndex::build(intervals));
+        index
+    }
+
+    #[test]
+    fn a_read_inside_a_blacklisted_span_is_blacklisted() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(is_blacklisted(&bl, "chr1", 150, 160));
+        assert!(
+            !is_blacklisted(&bl, "chr1", 200, 300),
+            "half-open at the end"
+        );
+        assert!(
+            !is_blacklisted(&bl, "chr1", 0, 100),
+            "half-open at the start"
+        );
+    }
+
+    #[test]
+    fn a_read_is_blacklisted_only_once_half_of_it_is_covered() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        // 100 bp read, 50 bp inside: exactly at the threshold.
+        assert!(is_blacklisted(&bl, "chr1", 150, 250));
+        // One base less is one base short.
+        assert!(!is_blacklisted(&bl, "chr1", 151, 251));
+        // A read that only clips the edge stays.
+        assert!(!is_blacklisted(&bl, "chr1", 199, 299));
+    }
+
+    #[test]
+    fn an_odd_length_read_needs_more_than_half_its_bases() {
+        // 101 bp read: 50 bp is under half, 51 bp is over it.
+        let bl = genome_index("chr1", &[(100, 150)]);
+        assert!(!is_blacklisted(&bl, "chr1", 100, 201));
+        let bl = genome_index("chr1", &[(100, 151)]);
+        assert!(is_blacklisted(&bl, "chr1", 100, 201));
+    }
+
+    #[test]
+    fn several_blacklist_regions_add_up_without_double_counting() {
+        // Two disjoint 30 bp spans cover 60 of the read's 100 bases.
+        let bl = genome_index("chr1", &[(100, 130), (160, 190)]);
+        assert!(is_blacklisted(&bl, "chr1", 100, 200));
+
+        // Two 20 bp spans cover only 40, which is under the threshold.
+        let bl = genome_index("chr1", &[(100, 120), (160, 180)]);
+        assert!(!is_blacklisted(&bl, "chr1", 100, 200));
+
+        // Overlapping spans reach 60 bases together, but a naive sum would
+        // count the shared 40 twice and wrongly pass on 100 bases of read.
+        let bl = genome_index("chr1", &[(100, 140), (110, 145), (120, 160)]);
+        assert!(!is_blacklisted(&bl, "chr1", 100, 300));
+    }
+
+    #[test]
+    fn the_chr_prefix_is_bridged_in_both_directions() {
+        // BAMs and BED files disagree about the "chr" prefix all the time.
+        let with_prefix = genome_index("chr1", &[(100, 200)]);
+        assert!(is_blacklisted(&with_prefix, "1", 150, 160));
+        assert!(blacklist_chrom_index(&with_prefix, "1").is_some());
+
+        let without_prefix = genome_index("1", &[(100, 200)]);
+        assert!(is_blacklisted(&without_prefix, "chr1", 150, 160));
+        assert!(blacklist_chrom_index(&without_prefix, "chr1").is_some());
+    }
+
+    #[test]
+    fn a_chromosome_absent_from_the_blacklist_is_never_blacklisted() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(blacklist_chrom_index(&bl, "chr9").is_none());
+        assert!(!is_blacklisted(&bl, "chr9", 150, 160));
+    }
+
+    #[test]
+    fn an_empty_read_interval_is_never_blacklisted() {
+        let bl = genome_index("chr1", &[(100, 200)]);
+        assert!(!is_blacklisted(&bl, "chr1", 150, 150));
+    }
 
     // SAM flag bits used below.
     const PAIRED: u16 = 0x1;

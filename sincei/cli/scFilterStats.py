@@ -65,7 +65,7 @@ DESCRIPTION = (
     "what you specify (the order output also matches this):\n"
     "* Total sampled reads (including unmapped)\n"
     "* Mapped reads\n"
-    "* Reads in blacklisted regions (--blackListFileName)\n\n"
+    "* Reads at least 50% inside blacklisted regions (--blacklist)\n\n"
     "The following metrics are estimated according to the --binSize and "
     "--distanceBetweenBins parameters:\n"
     "* Estimated mapped reads filtered (the total number of mapped reads filtered for "

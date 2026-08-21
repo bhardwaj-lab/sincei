@@ -12,7 +12,7 @@ use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
-use crate::bam::filters::{DupMethod, DuplicateFilter, rna_strand_filter};
+use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 
 #[derive(Default, Clone)]
@@ -82,14 +82,6 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
             s
         ),
     }
-}
-
-fn is_blacklisted(bl: &GenomeIndex, chrom: &str, start: usize, end: usize) -> bool {
-    bl.get(chrom)
-        .or_else(|| chrom.strip_prefix("chr").and_then(|c| bl.get(c)))
-        .or_else(|| bl.get(&format!("chr{chrom}")))
-        .map(|idx| idx.find(start, end).next().is_some())
-        .unwrap_or(false)
 }
 
 pub fn run_filter_stats(
@@ -493,7 +485,6 @@ pub fn filter_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::annotation::region_index::{ChromIndex, Interval};
 
     // Column order of BarcodeStat::to_vec, used to index the returned rows.
     const TOTAL: usize = 0;
@@ -513,53 +504,6 @@ mod tests {
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
             .collect()
-    }
-
-    fn genome_index(chrom: &str, spans: &[(usize, usize)]) -> GenomeIndex {
-        let intervals = spans
-            .iter()
-            .enumerate()
-            .map(|(i, &(start, end))| Interval {
-                start,
-                end,
-                var_idx: i,
-            })
-            .collect();
-        let mut index = GenomeIndex::new();
-        index.insert(chrom.to_string(), ChromIndex::build(intervals));
-        index
-    }
-
-    // Blacklist lookup
-
-    #[test]
-    fn a_blacklisted_span_is_recognised_on_the_same_chromosome_name() {
-        let bl = genome_index("chr1", &[(100, 200)]);
-        assert!(is_blacklisted(&bl, "chr1", 150, 160));
-        assert!(
-            !is_blacklisted(&bl, "chr1", 200, 300),
-            "half-open at the end"
-        );
-        assert!(
-            !is_blacklisted(&bl, "chr1", 0, 100),
-            "half-open at the start"
-        );
-    }
-
-    #[test]
-    fn the_chr_prefix_is_bridged_in_both_directions() {
-        // BAMs and BED files disagree about the "chr" prefix all the time.
-        let with_prefix = genome_index("chr1", &[(100, 200)]);
-        assert!(is_blacklisted(&with_prefix, "1", 150, 160));
-
-        let without_prefix = genome_index("1", &[(100, 200)]);
-        assert!(is_blacklisted(&without_prefix, "chr1", 150, 160));
-    }
-
-    #[test]
-    fn a_chromosome_absent_from_the_blacklist_is_never_blacklisted() {
-        let bl = genome_index("chr1", &[(100, 200)]);
-        assert!(!is_blacklisted(&bl, "chr9", 150, 160));
     }
 
     // Stat accumulation
