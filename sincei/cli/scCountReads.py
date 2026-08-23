@@ -20,6 +20,7 @@ from ._common_args import (
     Compression,
     DuplicateFilter,
     FilterRNAStrand,
+    configure_logging,
     log_parameters,
     preprocess_args,
 )
@@ -423,6 +424,7 @@ def features(
 
 
 def cli() -> None:
+    configure_logging()
     preprocess_args()
     app()
 

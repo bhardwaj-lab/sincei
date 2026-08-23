@@ -4,7 +4,7 @@ The CLI exposes user-friendly option shapes (choice enums, ``"low,high"``
 strings, barcode/whitelist files) whereas the Rust functions take plain
 scalars and lists.  This module centralizes those conversions and input
 checks, plus the small amount of app plumbing shared by every command
-(``preprocess_args`` and ``log_parameters``).
+(``configure_logging``, ``preprocess_args`` and ``log_parameters``).
 """
 
 from __future__ import annotations
@@ -172,6 +172,23 @@ def log_parameters(**parameters: object) -> None:
     """Log each ``name: value`` parameter at INFO level (used under ``--verbose``)."""
     for name, value in parameters.items():
         logging.info("%s: %s", name, value)
+
+
+def configure_logging() -> None:
+    """Set up logging for a CLI run.
+
+    The library itself configures nothing, so that importing sincei leaves the
+    root logger of the importing application alone. Every command calls this
+    from its ``cli()`` entry point instead. ``basicConfig`` does nothing if the
+    root logger already has a handler, so an application that wraps a command
+    keeps its own setup.
+    """
+    logging.basicConfig(
+        stream=sys.stderr,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO,
+    )
 
 
 def preprocess_args() -> None:

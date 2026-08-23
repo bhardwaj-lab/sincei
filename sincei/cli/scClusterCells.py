@@ -12,6 +12,7 @@ from ._common_args import (
     DimRed,
     GLMPCAFamily,
     PlotFileFormat,
+    configure_logging,
     log_parameters,
     preprocess_args,
 )
@@ -274,6 +275,7 @@ def main(
 
 
 def cli() -> None:
+    configure_logging()
     preprocess_args()
     app()
 

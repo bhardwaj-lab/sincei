@@ -37,7 +37,7 @@ from sincei import _sincei as internal
 
 # Re-exported so ``from ._common_args import log_parameters, preprocess_args``
 # keeps working for the command modules; the definitions are in ``_parsers``.
-from ._parsers import log_parameters, preprocess_args  # noqa: F401
+from ._parsers import configure_logging, log_parameters, preprocess_args  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

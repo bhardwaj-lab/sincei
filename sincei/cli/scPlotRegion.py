@@ -8,6 +8,7 @@ from ._common_args import (
     AVAILABLE_PROCESSORS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
+    configure_logging,
     log_parameters,
     preprocess_args,
 )
@@ -141,6 +142,7 @@ def main(
 
 
 def cli() -> None:
+    configure_logging()
     preprocess_args()
     app()
 

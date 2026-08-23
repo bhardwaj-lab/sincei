@@ -4,7 +4,12 @@ from typing import Annotated
 
 import typer
 
-from ._common_args import OTHER_OPTS, preprocess_args, version_string
+from ._common_args import (
+    OTHER_OPTS,
+    configure_logging,
+    preprocess_args,
+    version_string,
+)
 
 # Import subcommand apps to register them with the main app.
 from .scBulkCoverage import app as scBulkCoverage_app
@@ -66,6 +71,7 @@ def main(
 
 
 def cli() -> None:
+    configure_logging()
     preprocess_args()
     app()
 
