@@ -116,12 +116,18 @@ impl QcFilter {
 
     /// Returns `true` if the record passes all active thresholds.
     pub fn passes(&self, rec: &ScRecord<'_>) -> bool {
-        // Fragment length: use |TLEN| for paired-end reads, alignment span otherwise.
+        // Fragment length: |TLEN| for paired-end reads, and otherwise the
+        // reference bases the read covers.
+        //
+        // Deliberately `covered_span` rather than `alignment_end -
+        // alignment_start`: the span counts a skipped region, so a spliced read
+        // would be measured as long as its intron and fail the maximum length.
         if self.min_fragment_length.is_some() || self.max_fragment_length.is_some() {
             let frag_len = if rec.template_length != 0 {
                 rec.template_length.unsigned_abs() as usize
             } else {
-                rec.alignment_end - rec.alignment_start
+                rec.covered_span
+                    .unwrap_or(rec.alignment_end - rec.alignment_start)
             };
             if let Some(min) = self.min_fragment_length
                 && frag_len < min
@@ -179,6 +185,12 @@ impl QcFilter {
     pub(super) fn needs_aligned_fraction(&self) -> bool {
         self.min_aligned_fraction.is_some()
     }
+
+    /// Returns whether the covered span must be computed to evaluate this
+    /// filter, which the fragment-length bounds measure a single-end read with.
+    pub(super) fn needs_covered_span(&self) -> bool {
+        self.min_fragment_length.is_some() || self.max_fragment_length.is_some()
+    }
 }
 
 /// Derive the [`ScRecordOptions`] needed to evaluate `qc` and, when
@@ -195,7 +207,7 @@ pub(crate) fn derive_record_opts(
         compute_gc: qc.is_some_and(|f| f.needs_gc()),
         compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
         store_sequence: has_motif,
-        compute_covered_span: dedup,
+        compute_covered_span: dedup || qc.is_some_and(|f| f.needs_covered_span()),
         compute_blocks: adjust.extend_reads.is_none() && !adjust.center_reads,
     }
 }
@@ -822,6 +834,11 @@ mod tests {
 
         rec.template_length = 120;
         assert!(f.passes(&rec));
+
+        // A covered span is not consulted when the read carries an insert size.
+        rec.covered_span = Some(100);
+        rec.template_length = 500;
+        assert!(!f.passes(&rec));
     }
 
     #[test]
@@ -899,6 +916,47 @@ mod tests {
         assert!(opts.compute_aligned_fraction);
         // The motif filter is the only consumer of the stored sequence.
         assert!(opts.store_sequence);
+    }
+
+    #[test]
+    fn the_covered_span_is_computed_for_the_fragment_length_bounds() {
+        let opts = |qc: Option<&QcFilter>, dedup: bool| {
+            derive_record_opts(qc, false, dedup, &AdjustRead::default()).compute_covered_span
+        };
+
+        assert!(!opts(None, false));
+        assert!(opts(None, true), "deduplication still needs it");
+
+        let bounded = QcFilter {
+            max_fragment_length: Some(500),
+            ..QcFilter::new()
+        };
+        assert!(opts(Some(&bounded), false));
+
+        // A filter that does not measure a fragment that does not need it.
+        let gc_only = QcFilter {
+            max_gc: Some(0.6),
+            ..QcFilter::new()
+        };
+        assert!(!opts(Some(&gc_only), false));
+    }
+
+    #[test]
+    fn the_fragment_length_bounds_ignore_a_spliced_read_intron() {
+        // A 100 bp read over a 20 kb intron is a 100 bp fragment.
+        let filter = QcFilter {
+            max_fragment_length: Some(500),
+            ..QcFilter::new()
+        };
+
+        let mut rec = test_record(1000, 21_100);
+        rec.covered_span = Some(100);
+        assert!(filter.passes(&rec));
+
+        // The bound still filters a read that really is that long.
+        let mut long = test_record(1000, 21_100);
+        long.covered_span = Some(20_100);
+        assert!(!filter.passes(&long));
     }
 
     #[test]

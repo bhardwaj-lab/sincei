@@ -296,7 +296,13 @@ impl<'a> ScRecord<'a> {
             None
         };
 
-        // Aligned fraction: M operations / read-consuming length.
+        // Aligned fraction: M operations over the length of the read as it was
+        // sequenced.
+        //
+        // The denominator counts hard-clipped bases as well as the ones the
+        // record still carries. Those bases were part of the read, so leaving
+        // them out would overstate how much of it aligned. Soft clips are
+        // already counted by `consumes_read`.
         let aligned_fraction = if opts.compute_aligned_fraction {
             let mut match_len: usize = 0;
             let mut read_consuming: usize = 0;
@@ -305,7 +311,7 @@ impl<'a> ScRecord<'a> {
                 if matches!(op.kind(), CigarKind::Match) {
                     match_len += op.len();
                 }
-                if op.kind().consumes_read() {
+                if op.kind().consumes_read() || matches!(op.kind(), CigarKind::HardClip) {
                     read_consuming += op.len();
                 }
             }
@@ -772,12 +778,35 @@ mod tests {
     /// `RX` (UMI) and `NM` (an integer edit distance, reused here as a stand-in
     /// for a numeric count tag).
     fn read_test_bam(n: usize) -> (Header, Vec<bam::Record>) {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata/test_i1.bam");
+        read_bam("test_i1.bam", n)
+    }
+
+    fn read_bam(name: &str, n: usize) -> (Header, Vec<bam::Record>) {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/testdata")
+            .join(name);
         let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
         let header = reader.read_header().unwrap();
         let records = reader.records().take(n).map(|r| r.unwrap()).collect();
         (header, records)
+    }
+
+    /// Every read of `test_cigars.bam`, keyed by the CIGAR shape its name gives.
+    fn cigar_shapes(opts: &ScRecordOptions) -> std::collections::BTreeMap<String, ScRecord<'_>> {
+        let (header, records) = read_bam("test_cigars.bam", 100);
+        let (header, records) = (Box::leak(Box::new(header)), Box::leak(Box::new(records)));
+        let bc = Tag::new(b'B', b'C');
+
+        records
+            .iter()
+            .map(|record| {
+                let name = String::from_utf8_lossy(record.name().unwrap().as_ref()).into_owned();
+                let rec = ScRecord::from_bam_record(record, header, &bc, None, None, None, opts)
+                    .unwrap()
+                    .unwrap();
+                (name, rec)
+            })
+            .collect()
     }
 
     fn plain_opts() -> ScRecordOptions {
@@ -922,6 +951,37 @@ mod tests {
             .aligned_fraction
             .expect("the aligned fraction was requested");
         assert!((0.0..=1.0).contains(&fraction), "out of range: {fraction}");
+    }
+
+    #[test]
+    fn the_aligned_fraction_divides_by_the_length_of_the_sequenced_read() {
+        // The denominator is the read as it was sequenced, so hard-clipped
+        // bases count towards it exactly as soft-clipped ones do. Leaving them
+        // out would report a hard-clipped read as fully aligned.
+        let opts = ScRecordOptions {
+            compute_gc: false,
+            compute_aligned_fraction: true,
+            store_sequence: false,
+            compute_covered_span: false,
+            compute_blocks: false,
+        };
+        let shapes = cigar_shapes(&opts);
+        let fraction = |name: &str| shapes[name].aligned_fraction.unwrap();
+
+        // 10H10M and 5S10M5S: 10 aligned bases of a 20-base read.
+        assert_eq!(fraction("hardclip"), 0.5);
+        assert_eq!(fraction("softclip"), 0.5);
+
+        // 10M5I10M: the insertion is part of the read and is not an M.
+        assert_eq!(fraction("ins"), 20.0 / 25.0);
+
+        // Deletions and introns consume no read base, so they do not dilute it.
+        assert_eq!(fraction("del2"), 1.0);
+        assert_eq!(fraction("intron"), 1.0);
+
+        // Only `M` counts as aligned, so an =/X alignment reports nothing,
+        // which is what the reference implementation reports too.
+        assert_eq!(fraction("eqx"), 0.0);
     }
 
     #[test]
