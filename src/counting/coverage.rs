@@ -24,7 +24,9 @@ use rayon::prelude::*;
 
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::{build_bigwig_index, build_bigwig_index_in_window};
+use crate::annotation::region_index::{
+    bins_touched, build_bigwig_index, build_bigwig_index_in_window,
+};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
@@ -33,7 +35,7 @@ use crate::bam::filters::{
 };
 use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::fragment_length::resolve_extend_reads;
-use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
+use crate::bam::sc_record::{AdjustRead, EffectiveIntervals, ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {
@@ -117,15 +119,20 @@ fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, 
     })
 }
 
-fn get_effective_interval(
-    rec: &ScRecord,
+/// The intervals a read covers under `mode`.
+///
+/// `Normal` follows the read's own shape, so a spliced read yields one interval
+/// per gapless block. The other two modes pick a synthetic window inside the
+/// read, which is a single interval by construction.
+fn get_effective_intervals<'a>(
+    rec: &'a ScRecord,
     adjust: &AdjustRead,
     mode: ReadMode,
-) -> Option<(usize, usize)> {
+) -> EffectiveIntervals<'a> {
     match mode {
-        ReadMode::Normal => Some(rec.effective_interval(adjust)),
-        ReadMode::MNase => apply_mnase(rec),
-        ReadMode::Offset(start, end) => apply_offset(rec, start, end),
+        ReadMode::Normal => rec.effective_intervals(adjust),
+        ReadMode::MNase => EffectiveIntervals::One(apply_mnase(rec)),
+        ReadMode::Offset(start, end) => EffectiveIntervals::One(apply_offset(rec, start, end)),
     }
 }
 
@@ -311,18 +318,20 @@ pub fn run_bulk_coverage(
         .map(|(i, (bam_idx, bc, _))| ((*bam_idx, bc.as_bytes()), i))
         .collect();
 
+    // Resolved before the record options, which ask it whether the gapless
+    // blocks are worth computing.
+    let adjust = AdjustRead {
+        extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,
+        center_reads,
+    };
+
     let has_motif = genome_path.is_some() && motifs.is_some();
-    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some());
+    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some(), &adjust);
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
-
-    let adjust = AdjustRead {
-        extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,
-        center_reads,
-    };
     let params = CountingParams {
         chr_to_skip: chr_to_skip.to_vec(),
         region: region.map(String::from),
@@ -570,28 +579,18 @@ pub fn run_bulk_coverage(
                             continue;
                         }
 
-                        let Some((eff_start, eff_end)) =
-                            get_effective_interval(&sc_rec, &adjust, read_mode)
-                        else {
-                            continue;
-                        };
-
-                        // Bin indices are relative to the window origin. A read
-                        // ending before the window has no bin to fall in.
-                        let rel_start = eff_start.saturating_sub(window_start);
-                        let rel_end = eff_end.saturating_sub(window_start);
-
-                        if rel_end > 0 && n_bins > 0 {
-                            let last_bin = ((rel_end - 1) / step_size).min(n_bins - 1);
-                            let first_bin = if rel_start + 1 > bin_size {
-                                (rel_start - bin_size + step_size) / step_size
-                            } else {
-                                0
-                            };
-                            for bin in first_bin..=last_bin {
-                                *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
-                                    sc_rec.count;
-                            }
+                        // A spliced read covers its blocks and not the intron
+                        // between them, and a bin reached twice over is still
+                        // covered once.
+                        for bin in bins_touched(
+                            get_effective_intervals(&sc_rec, &adjust, read_mode),
+                            window_start,
+                            bin_size,
+                            step_size,
+                            n_bins,
+                        ) {
+                            *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
+                                sc_rec.count;
                         }
                     }
 
@@ -1196,6 +1195,10 @@ mod tests {
 
     // Read-mode dispatch
 
+    fn intervals_of(rec: &ScRecord, adjust: &AdjustRead, mode: ReadMode) -> Vec<(usize, usize)> {
+        get_effective_intervals(rec, adjust, mode).collect()
+    }
+
     #[test]
     fn the_read_mode_selects_which_interval_rule_applies() {
         let mut rec = test_record(1000, 1050);
@@ -1204,16 +1207,13 @@ mod tests {
         let adjust = AdjustRead::default();
 
         assert_eq!(
-            get_effective_interval(&rec, &adjust, ReadMode::Normal),
-            Some((1000, 1050))
+            intervals_of(&rec, &adjust, ReadMode::Normal),
+            [(1000, 1050)]
         );
+        assert_eq!(intervals_of(&rec, &adjust, ReadMode::MNase), [(1099, 1101)]);
         assert_eq!(
-            get_effective_interval(&rec, &adjust, ReadMode::MNase),
-            Some((1099, 1101))
-        );
-        assert_eq!(
-            get_effective_interval(&rec, &adjust, ReadMode::Offset(1, None)),
-            Some((1000, 1001))
+            intervals_of(&rec, &adjust, ReadMode::Offset(1, None)),
+            [(1000, 1001)]
         );
     }
 
@@ -1221,8 +1221,29 @@ mod tests {
     fn a_read_the_mode_cannot_place_yields_no_interval() {
         let rec = test_record(1000, 1050);
         // Not a proper pair, so MNase has no fragment to centre on.
-        let interval = get_effective_interval(&rec, &AdjustRead::default(), ReadMode::MNase);
-        assert_eq!(interval, None);
+        let intervals = intervals_of(&rec, &AdjustRead::default(), ReadMode::MNase);
+        assert!(intervals.is_empty(), "{intervals:?}");
+    }
+
+    #[test]
+    fn only_the_normal_mode_follows_a_spliced_read() {
+        // A synthetic window inside the read is one interval whatever the read's
+        // own shape, so only `Normal` splits.
+        let mut rec = test_record(1000, 1120);
+        rec.is_proper_pair = true;
+        rec.template_length = 200;
+        rec.blocks = Some(vec![(1000, 1010), (1110, 1120)]);
+        let adjust = AdjustRead::default();
+
+        assert_eq!(
+            intervals_of(&rec, &adjust, ReadMode::Normal),
+            [(1000, 1010), (1110, 1120)]
+        );
+        assert_eq!(intervals_of(&rec, &adjust, ReadMode::MNase).len(), 1);
+        assert_eq!(
+            intervals_of(&rec, &adjust, ReadMode::Offset(1, None)).len(),
+            1
+        );
     }
 
     // Group-name sanitizing

@@ -18,7 +18,7 @@ use std::path::Path;
 use anyhow::Result;
 use twobit::TwoBitFile;
 
-use super::sc_record::{ScRecord, ScRecordOptions};
+use super::sc_record::{AdjustRead, ScRecord, ScRecordOptions};
 use crate::annotation::region_index::{ChromIndex, GenomeIndex};
 
 /// Cheap per-record filter evaluated directly on a raw BAM record's flags and
@@ -183,16 +183,20 @@ impl QcFilter {
 
 /// Derive the [`ScRecordOptions`] needed to evaluate `qc` and, when
 /// `has_motif` is set, the motif filter (which needs the raw read sequence).
+///
+/// `adjust` decides whether the gapless blocks shoudl be computed.
 pub(crate) fn derive_record_opts(
     qc: Option<&QcFilter>,
     has_motif: bool,
     dedup: bool,
+    adjust: &AdjustRead,
 ) -> ScRecordOptions {
     ScRecordOptions {
         compute_gc: qc.is_some_and(|f| f.needs_gc()),
         compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
         store_sequence: has_motif,
         compute_covered_span: dedup,
+        compute_blocks: adjust.extend_reads.is_none() && !adjust.center_reads,
     }
 }
 
@@ -873,7 +877,7 @@ mod tests {
 
     #[test]
     fn record_options_are_derived_from_the_active_filters() {
-        let none = derive_record_opts(None, false, false);
+        let none = derive_record_opts(None, false, false, &AdjustRead::default());
         assert!(!none.compute_gc);
         assert!(!none.compute_aligned_fraction);
         assert!(!none.store_sequence);
@@ -882,7 +886,7 @@ mod tests {
             max_gc: Some(0.6),
             ..QcFilter::new()
         };
-        let opts = derive_record_opts(Some(&gc_only), false, false);
+        let opts = derive_record_opts(Some(&gc_only), false, false, &AdjustRead::default());
         assert!(opts.compute_gc);
         assert!(!opts.compute_aligned_fraction);
 
@@ -890,11 +894,31 @@ mod tests {
             min_aligned_fraction: Some(0.5),
             ..QcFilter::new()
         };
-        let opts = derive_record_opts(Some(&af_only), true, false);
+        let opts = derive_record_opts(Some(&af_only), true, false, &AdjustRead::default());
         assert!(!opts.compute_gc);
         assert!(opts.compute_aligned_fraction);
         // The motif filter is the only consumer of the stored sequence.
         assert!(opts.store_sequence);
+    }
+
+    #[test]
+    fn the_gapless_blocks_are_computed_only_when_the_read_keeps_its_own_shape() {
+        let blocks_of =
+            |adjust: &AdjustRead| derive_record_opts(None, false, false, adjust).compute_blocks;
+
+        // Counted on the alignment itself: the blocks are the interval.
+        assert!(blocks_of(&AdjustRead::default()));
+
+        // Both adjustments replace the alignment with a synthetic interval, so
+        // there is no point splitting it.
+        assert!(!blocks_of(&AdjustRead {
+            extend_reads: Some(300),
+            center_reads: false,
+        }));
+        assert!(!blocks_of(&AdjustRead {
+            extend_reads: None,
+            center_reads: true,
+        }));
     }
 
     /// A record carrying a barcode/UMI, since the duplicate key is built from them.

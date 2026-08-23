@@ -278,6 +278,50 @@ pub fn build_bin_index_in_window(
     (index, var)
 }
 
+/// The bins a read reaches, each yielded once, in ascending order.
+///
+/// `intervals` are the read's genomic intervals: one span normally, or its
+/// gapless blocks when it is spliced. They must be sorted and disjoint, which
+/// blocks are, so a bin already emitted is skipped with a high-water mark
+/// rather than a set. A read that reaches one bin through two of its blocks is
+/// therefore credited to it once..
+///
+/// Returned indices are relative to the window origin, so a caller adds its
+/// chromosome offset to reach the feature index.
+pub fn bins_touched(
+    intervals: impl Iterator<Item = (usize, usize)>,
+    window_start: usize,
+    bin_size: usize,
+    step_size: usize,
+    n_bins: usize,
+) -> impl Iterator<Item = usize> {
+    // Lowest bin not yet credited to this read.
+    let mut next_bin = 0usize;
+
+    intervals.flat_map(move |(start, end)| {
+        let rel_start = start.saturating_sub(window_start);
+        let rel_end = end.saturating_sub(window_start);
+
+        // An interval ending before the window has no bin to fall in.
+        if rel_end == 0 || n_bins == 0 {
+            return 0..0;
+        }
+        let last = ((rel_end - 1) / step_size).min(n_bins - 1);
+        let first = if rel_start + 1 > bin_size {
+            (rel_start - bin_size + step_size) / step_size
+        } else {
+            0
+        }
+        .max(next_bin);
+
+        if first > last {
+            return 0..0;
+        }
+        next_bin = last + 1;
+        first..last + 1
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,6 +340,78 @@ mod tests {
         let mut v: Vec<usize> = idx.find(start, end).map(|iv| iv.var_idx).collect();
         v.sort_unstable();
         v
+    }
+
+    // Bins touched by a read
+
+    /// `bins_touched` over a whole chromosome window, collected.
+    fn touched(intervals: &[(usize, usize)], bin_size: usize, step_size: usize) -> Vec<usize> {
+        bins_touched(intervals.iter().copied(), 0, bin_size, step_size, 1000).collect()
+    }
+
+    #[test]
+    fn one_interval_touches_every_bin_it_overlaps() {
+        // 100 bp bins: [0,100) [100,200) [200,300)
+        assert_eq!(touched(&[(0, 50)], 100, 100), vec![0]);
+        assert_eq!(touched(&[(50, 150)], 100, 100), vec![0, 1]);
+        assert_eq!(touched(&[(0, 300)], 100, 100), vec![0, 1, 2]);
+        // A bin boundary is half-open, so ending on it touches one bin.
+        assert_eq!(touched(&[(0, 100)], 100, 100), vec![0]);
+    }
+
+    #[test]
+    fn a_spliced_read_skips_the_bins_under_its_intron() {
+        // Two blocks 1 kb apart at 100 bp bins: bins 0 and 10, nothing between.
+        assert_eq!(touched(&[(0, 50), (1000, 1050)], 100, 100), vec![0, 10]);
+    }
+
+    #[test]
+    fn a_bin_two_blocks_share_is_credited_once() {
+        // A short deletion leaves both blocks inside bin 0.
+        assert_eq!(touched(&[(0, 20), (25, 45)], 100, 100), vec![0]);
+        // And where the blocks straddle a boundary, each bin still appears once.
+        assert_eq!(touched(&[(50, 120), (130, 250)], 100, 100), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn bins_come_out_ascending_and_without_repeats() {
+        let bins = touched(&[(0, 250), (240, 260), (900, 1100)], 100, 100);
+        assert_eq!(bins, vec![0, 1, 2, 9, 10]);
+        assert!(bins.windows(2).all(|w| w[0] < w[1]), "{bins:?}");
+    }
+
+    #[test]
+    fn an_interval_in_a_gap_between_bins_touches_nothing() {
+        // 50 bp bins every 200 bp: [0,50) [200,250) ...
+        assert_eq!(touched(&[(60, 90)], 50, 200), Vec::<usize>::new());
+        // The block before it still counts.
+        assert_eq!(touched(&[(10, 20), (60, 90)], 50, 200), vec![0]);
+    }
+
+    #[test]
+    fn bins_stop_at_the_end_of_the_chromosome() {
+        // Three bins only: an interval running past them clamps to the last.
+        let bins: Vec<usize> = bins_touched([(0, 100_000)].into_iter(), 0, 100, 100, 3).collect();
+        assert_eq!(bins, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn a_zero_length_interval_touches_nothing() {
+        // A degenerate CIGAR such as `0M50N20M` yields an empty first block, and
+        // the reference implementation skips it explicitly. Here the bounds do
+        // it: `last` is derived from the final covered base, so an empty
+        // interval leaves `first` above `last`.
+        assert_eq!(touched(&[(2000, 2000)], 10, 10), Vec::<usize>::new());
+        assert_eq!(
+            touched(&[(2000, 2000), (2050, 2070)], 10, 10),
+            vec![205, 206]
+        );
+    }
+
+    #[test]
+    fn an_interval_before_the_window_touches_nothing() {
+        let bins: Vec<usize> = bins_touched([(10, 40)].into_iter(), 100, 100, 100, 10).collect();
+        assert!(bins.is_empty(), "{bins:?}");
     }
 
     #[test]

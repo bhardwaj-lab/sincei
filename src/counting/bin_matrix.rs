@@ -17,7 +17,7 @@ use rayon::prelude::*;
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
-use crate::annotation::region_index::{build_bin_index, build_bin_index_in_window};
+use crate::annotation::region_index::{bins_touched, build_bin_index, build_bin_index_in_window};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
@@ -64,7 +64,7 @@ pub fn count_bam_bins(
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
 
     let has_motif = genome_path.is_some() && motifs.is_some();
-    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some());
+    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some(), adjust);
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
@@ -332,7 +332,6 @@ pub fn count_bam_bins(
                             continue;
                         }
 
-                        let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
                         // Under --groupTag the read's own group tag picks the row
                         // block, so two reads sharing a barcode but coming from
                         // different source samples stay separate cells.
@@ -349,32 +348,22 @@ pub fn count_bam_bins(
                             cell_offset + local_bc_idx
                         };
 
-                        // A read counts once in every bin its effective interval
-                        // overlaps, so a read straddling a boundary adds to both
-                        // sides. The column sums therefore exceed the read count,
-                        // which is what the reference implementation reports.
-                        //
-                        // Bin indices are relative to the window origin. A read
-                        // that ends before the window has nothing to fall in; one
-                        // that starts after it produces an empty bin range.
-                        // Every bin in `first_bin..=last_bin` overlaps the read by
-                        // construction: `last_bin` is the last bin starting before
-                        // `rel_end`, and `first_bin` the first one ending after
-                        // `rel_start`, so neither bound needs its overlap re-tested.
-                        let rel_start = eff_start.saturating_sub(window_start);
-                        let rel_end = eff_end.saturating_sub(window_start);
-
-                        if rel_end > 0 && n_bins > 0 {
-                            let last_bin = ((rel_end - 1) / step_size).min(n_bins - 1);
-                            let first_bin = if rel_start + 1 > bin_size {
-                                (rel_start - bin_size + step_size) / step_size
-                            } else {
-                                0
-                            };
-                            for bin in first_bin..=last_bin {
-                                *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
-                                    sc_rec.count;
-                            }
+                        // A read counts once in every bin it overlaps, so a read
+                        // straddling a boundary adds to both sides. The column
+                        // sums therefore exceed the read count, which is what the
+                        // reference implementation reports. A spliced read
+                        // contributes its blocks, not the intron between them,
+                        // and a bin reached by two of its blocks is still counted
+                        // once.
+                        for bin in bins_touched(
+                            sc_rec.effective_intervals(adjust),
+                            window_start,
+                            bin_size,
+                            step_size,
+                            n_bins,
+                        ) {
+                            *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
+                                sc_rec.count;
                         }
                     }
 
@@ -594,6 +583,133 @@ mod tests {
             sums.get("5:65966850-65966900").copied(),
             Some(2.0),
             "the bin holding the read ends counted {sums:?}"
+        );
+    }
+
+    /// `count_bam_bins` over a named BAM, everything optional off.
+    fn count_bam_into(
+        out: &Path,
+        bam: &Path,
+        bin_size: usize,
+        barcodes: &[String],
+        adjust: &AdjustRead,
+    ) -> Result<()> {
+        count_bam_bins(
+            &[(bam, "s1")],
+            bin_size,
+            bin_size,
+            barcodes,
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            adjust,
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    #[test]
+    fn a_spliced_read_counts_its_exons_and_not_its_intron() {
+        // test_spliced.bam holds two reads with a 20 kb intron whose exons land
+        // in bins 65,960,000 and 65,980,000, one plain read in the first bin,
+        // and one read whose 10 bp deletion leaves both its blocks in the
+        // middle bin. At a 10 kb tiling the intron covers that middle bin
+        // entirely.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("spliced.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            10_000,
+            &barcodes,
+            &AdjustRead::default(),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("5:65960000-65970000").copied(),
+            Some(3.0),
+            "two spliced first exons and the plain read {sums:?}"
+        );
+        assert_eq!(
+            sums.get("5:65980000-65990000").copied(),
+            Some(2.0),
+            "two spliced second exons {sums:?}"
+        );
+        // The middle bin is pure intron for the spliced reads. Only the
+        // deletion read, which really covers it, is counted there.
+        assert_eq!(
+            sums.get("5:65970000-65980000").copied(),
+            Some(1.0),
+            "the intron was counted {sums:?}"
+        );
+        assert_eq!(total(&out), 6.0, "{sums:?}");
+    }
+
+    #[test]
+    fn two_blocks_of_one_read_in_one_bin_count_once() {
+        // The deletion read's blocks are 10 bp apart, so a 10 kb bin holds both.
+        // Counting per block rather than per read would make it 2.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("deleted.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            10_000,
+            &barcodes,
+            &AdjustRead::default(),
+        )
+        .unwrap();
+
+        let per_cell: f64 = entries(&out)
+            .iter()
+            .filter(|((_, bin), _)| bin == "5:65970000-65980000")
+            .map(|(_, v)| *v)
+            .sum();
+        assert_eq!(per_cell, 1.0);
+    }
+
+    #[test]
+    fn extending_a_spliced_read_covers_its_intron_again() {
+        // Extension replaces the alignment with one interval, so the blocks go
+        // with it. The reference implementation does the same, and warns that
+        // --extendReads is not for spliced data.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("extended.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            10_000,
+            &barcodes,
+            &AdjustRead {
+                extend_reads: Some(200),
+                center_reads: false,
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("5:65970000-65980000").copied(),
+            Some(3.0),
+            "both spliced reads should now span the middle bin {sums:?}"
         );
     }
 

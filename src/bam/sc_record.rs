@@ -24,6 +24,9 @@ pub(crate) struct ScRecordOptions {
     pub(crate) store_sequence: bool,
     /// Needed by the duplicate filter to size a fragment when TLEN is 0.
     pub(crate) compute_covered_span: bool,
+    /// Split the alignment into its gapless blocks, so a spliced read credits
+    /// its exons and not the intron between them.
+    pub(crate) compute_blocks: bool,
 }
 
 /// How a read's position can be adjusted.
@@ -91,6 +94,12 @@ pub struct ScRecord<'a> {
     pub aligned_fraction: Option<f32>,
     /// Raw BAM read sequence (read orientation). `None` if not requested.
     pub read_sequence: Option<Vec<u8>>,
+    /// The alignment's gapless blocks, `None` unless it has more than one.
+    ///
+    /// A read without a `N` or `D` in its CIGAR covers one unbroken interval,
+    /// which `alignment_start .. alignment_end` already describes, so the
+    /// common case stores nothing and allocates nothing.
+    pub blocks: Option<Vec<(usize, usize)>>,
 }
 
 impl<'a> ScRecord<'a> {
@@ -232,6 +241,61 @@ impl<'a> ScRecord<'a> {
             None
         };
 
+        // Gapless blocks, the reference intervals the read actually covers.
+        // `D` breaks a block as `N` does, matching pysam's `get_blocks`. An
+        // insertion consumes no reference, so it leaves the block it sits in
+        // unbroken.
+        //
+        // Almost every read is one block, and that block is the alignment span
+        // the record already carries. So the first block is held in a local and
+        // `later` stays empty (and unallocated) until a second one turns up:
+        // an ungapped read walks its CIGAR and allocates nothing.
+        //
+        // A single-operation CIGAR cannot hold a gap *between* aligned bases, so
+        // it is not walked at all. That is 90% of the reads in a typical file.
+        let blocks = if opts.compute_blocks && record.cigar().len() > 1 {
+            let mut first: Option<(usize, usize)> = None;
+            let mut later: Vec<(usize, usize)> = Vec::new();
+            let mut pos = start;
+            let mut open: Option<usize> = None;
+
+            for result in record.cigar().iter() {
+                let op = result.context("failed to decode CIGAR op")?;
+                match op.kind() {
+                    CigarKind::Match | CigarKind::SequenceMatch | CigarKind::SequenceMismatch => {
+                        open.get_or_insert(pos);
+                        pos += op.len();
+                    }
+                    CigarKind::Deletion | CigarKind::Skip => {
+                        if let Some(block_start) = open.take() {
+                            match first {
+                                None => first = Some((block_start, pos)),
+                                Some(_) => later.push((block_start, pos)),
+                            }
+                        }
+                        pos += op.len();
+                    }
+                    // Consumes no reference, so it cannot end a block.
+                    _ => {}
+                }
+            }
+            if let Some(block_start) = open {
+                match first {
+                    None => first = Some((block_start, pos)),
+                    Some(_) => later.push((block_start, pos)),
+                }
+            }
+
+            first.filter(|_| !later.is_empty()).map(|first| {
+                let mut all = Vec::with_capacity(later.len() + 1);
+                all.push(first);
+                all.append(&mut later);
+                all
+            })
+        } else {
+            None
+        };
+
         // Aligned fraction: M operations / read-consuming length.
         let aligned_fraction = if opts.compute_aligned_fraction {
             let mut match_len: usize = 0;
@@ -275,7 +339,27 @@ impl<'a> ScRecord<'a> {
             gc_content,
             aligned_fraction,
             read_sequence,
+            blocks,
         }))
+    }
+
+    /// The genomic intervals to credit this read to.
+    ///
+    /// Normally the one interval [`Self::effective_interval`] returns. A spliced
+    /// read counted on its own alignment yields one interval per gapless block
+    /// instead, so its intron collects no signal. Extension and centering both
+    /// replace the alignment with a synthetic interval that has no blocks to
+    /// speak of, so they always yield a single interval.
+    ///
+    /// Callers must credit a bin or feature **once per read**, not once per
+    /// interval: two blocks of one read can reach the same bin.
+    pub(crate) fn effective_intervals(&self, adjust: &AdjustRead) -> EffectiveIntervals<'_> {
+        match &self.blocks {
+            Some(blocks) if adjust.extend_reads.is_none() && !adjust.center_reads => {
+                EffectiveIntervals::Blocks(blocks.iter())
+            }
+            _ => EffectiveIntervals::One(Some(self.effective_interval(adjust))),
+        }
     }
 
     /// Genomic interval to credit this read to, after applying the extension
@@ -350,6 +434,40 @@ impl<'a> ScRecord<'a> {
     }
 }
 
+/// The intervals of one read: either a single span or its gapless blocks.
+///
+/// An enum rather than a boxed iterator so the common single-interval case
+/// costs no allocation and no indirect call.
+pub(crate) enum EffectiveIntervals<'a> {
+    One(Option<(usize, usize)>),
+    Blocks(std::slice::Iter<'a, (usize, usize)>),
+}
+
+impl Iterator for EffectiveIntervals<'_> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::One(interval) => interval.take(),
+            Self::Blocks(blocks) => blocks.next().copied(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.len();
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for EffectiveIntervals<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::One(interval) => usize::from(interval.is_some()),
+            Self::Blocks(blocks) => blocks.len(),
+        }
+    }
+}
+
 /// GC fraction of a sequence in `[0, 1]`, or `None` for an empty sequence.
 /// Counts uppercase `G`/`C` only (BAM sequences are upper-cased on decode).
 #[inline]
@@ -410,6 +528,7 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
         gc_content: None,
         aligned_fraction: None,
         read_sequence: None,
+        blocks: None,
     }
 }
 
@@ -667,6 +786,7 @@ mod tests {
             compute_aligned_fraction: false,
             store_sequence: false,
             compute_covered_span: false,
+            compute_blocks: false,
         }
     }
 
@@ -743,6 +863,7 @@ mod tests {
             compute_aligned_fraction: false,
             store_sequence: false,
             compute_covered_span: false,
+            compute_blocks: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -763,6 +884,7 @@ mod tests {
             compute_aligned_fraction: false,
             store_sequence: true,
             compute_covered_span: false,
+            compute_blocks: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -789,6 +911,7 @@ mod tests {
             compute_aligned_fraction: true,
             store_sequence: false,
             compute_covered_span: false,
+            compute_blocks: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)

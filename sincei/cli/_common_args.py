@@ -620,6 +620,8 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "read is centered at the fragment length defined by the two ends of the "
             "fragment; for single-end data the given fragment length is used. Useful "
             "to get a sharper signal around enriched regions."
+            "*NOTE*: generally NOT recommended for spliced-read data such as RNA-seq, "
+            "as it would make reads cover skipped regions.\n\n"
         ),
     ),
 }

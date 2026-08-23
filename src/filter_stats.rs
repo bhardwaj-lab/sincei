@@ -119,6 +119,9 @@ pub fn run_filter_stats(
         compute_aligned_fraction: min_aligned_fraction.is_some(),
         store_sequence: motifs.is_some(),
         compute_covered_span: dup_method.is_some(),
+        // This tool counts reads, not intervals, so an alignment's shape does
+        // not matter to it.
+        compute_blocks: false,
     };
 
     let blacklist: Option<GenomeIndex> = blacklist_path.map(parse_blacklist_bed).transpose()?;

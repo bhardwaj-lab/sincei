@@ -71,7 +71,7 @@ pub fn count_bam_features(
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
 
     let has_motif = genome_path.is_some() && motifs.is_some();
-    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some());
+    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some(), adjust);
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
@@ -316,7 +316,6 @@ pub fn count_bam_features(
                             continue;
                         }
 
-                        let (eff_start, eff_end) = sc_rec.effective_interval(adjust);
                         // Under --groupTag the read's own group tag picks the row
                         // block, so two reads sharing a barcode but coming from
                         // different source samples stay separate cells.
@@ -333,6 +332,10 @@ pub fn count_bam_features(
                             cell_offset + local_bc_idx
                         };
 
+                        // A spliced read reaches a feature through its blocks, so
+                        // the intron between them credits nothing.
+                        let intervals = sc_rec.effective_intervals(adjust);
+
                         if metagene {
                             // One gene per read: a gene's exons accumulate their
                             // overlaps first, then the largest total wins. A read
@@ -341,19 +344,21 @@ pub fn count_bam_features(
                             // rather than for the exons themselves.
                             let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
                             let mut n_hits = 0usize;
-                            for sub in chrom_index.find(eff_start, eff_end) {
-                                let overlap = eff_end.min(sub.end) - eff_start.max(sub.start);
-                                let mut merged = false;
-                                for entry in hits[..n_hits].iter_mut() {
-                                    if entry.0 == sub.var_idx {
-                                        entry.1 += overlap;
-                                        merged = true;
-                                        break;
+                            for (start, end) in intervals {
+                                for sub in chrom_index.find(start, end) {
+                                    let overlap = end.min(sub.end) - start.max(sub.start);
+                                    let mut merged = false;
+                                    for entry in hits[..n_hits].iter_mut() {
+                                        if entry.0 == sub.var_idx {
+                                            entry.1 += overlap;
+                                            merged = true;
+                                            break;
+                                        }
                                     }
-                                }
-                                if !merged && n_hits < MAX_REGION_HITS {
-                                    hits[n_hits] = (sub.var_idx, overlap);
-                                    n_hits += 1;
+                                    if !merged && n_hits < MAX_REGION_HITS {
+                                        hits[n_hits] = (sub.var_idx, overlap);
+                                        n_hits += 1;
+                                    }
                                 }
                             }
                             if let Some(&(best_val, _)) =
@@ -361,15 +366,33 @@ pub fn count_bam_features(
                             {
                                 *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
                             }
-                        } else {
+                        } else if intervals.len() < 2 {
                             // A read counts once for every region it overlaps, so
                             // overlapping annotations each get their own count and
                             // the column sums exceed the read count. Without
                             // `metagene` a region is a single interval, so each hit
                             // is a distinct region and no merging is needed.
-                            for sub in chrom_index.find(eff_start, eff_end) {
-                                *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
-                                    sc_rec.count;
+                            for (start, end) in intervals {
+                                for sub in chrom_index.find(start, end) {
+                                    *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
+                                        sc_rec.count;
+                                }
+                            }
+                        } else {
+                            // Two blocks of one read can land in one feature, and
+                            // that is still a single read. Only a spliced read
+                            // reaches this arm, so the small `Vec` it costs is
+                            // paid by the reads that need it.
+                            let mut credited: Vec<usize> = Vec::new();
+                            for (start, end) in intervals {
+                                for sub in chrom_index.find(start, end) {
+                                    if credited.contains(&sub.var_idx) {
+                                        continue;
+                                    }
+                                    credited.push(sub.var_idx);
+                                    *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
+                                        sc_rec.count;
+                                }
                             }
                         }
                     }
@@ -601,6 +624,93 @@ mod tests {
         let sums = column_sums(&per_gene);
         assert_eq!(sums.get("G1").copied(), Some(8.0), "{sums:?}");
         assert_eq!(total(&per_gene), 8.0, "a read was counted twice");
+    }
+
+    /// `count_bam_features` over a named BAM.
+    fn count_bam_into(out: &Path, bam: &Path, annotation: &Path) -> Result<()> {
+        count_bam_features(
+            &[(bam, "s1")],
+            annotation,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    /// Four regions around the reads of `test_spliced.bam`: one on each exon,
+    /// one wholly inside the intron, and one spanning the entire alignment.
+    fn spliced_regions(dir: &Path) -> PathBuf {
+        let path = dir.join("regions.bed");
+        std::fs::write(
+            &path,
+            "5\t65960000\t65960050\texon1\t0\t.\n\
+             5\t65972000\t65975000\tintron_gene\t0\t.\n\
+             5\t65980050\t65980100\texon2\t0\t.\n\
+             5\t65960000\t65980100\twhole\t0\t.\n",
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn a_gene_inside_an_intron_gets_no_count_from_the_spliced_read() {
+        // The read's blocks are its exons, so a region between them is not
+        // overlapped at all. Counting the alignment span instead would credit
+        // this region with both spliced reads.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            &spliced_regions(dir.path()),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("intron_gene").copied().unwrap_or(0.0),
+            0.0,
+            "a region inside the intron was credited {sums:?}"
+        );
+        assert_eq!(sums.get("exon1").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(sums.get("exon2").copied(), Some(2.0), "{sums:?}");
+    }
+
+    #[test]
+    fn a_read_reaching_one_feature_through_two_blocks_counts_once() {
+        // `whole` covers both exons of each spliced read. Counting per block
+        // would make each of them 2, and the four reads 6 rather than 4.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            &spliced_regions(dir.path()),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("whole").copied(),
+            Some(4.0),
+            "one count per read was expected {sums:?}"
+        );
     }
 
     fn count_with_blacklist(out: &Path, blacklist: Option<PathBuf>) {
