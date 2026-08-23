@@ -81,3 +81,5 @@ opt-level = 3
 debug = false
 lto = true
 panic = 'unwind'
+codegen-units = 1
+strip = true
