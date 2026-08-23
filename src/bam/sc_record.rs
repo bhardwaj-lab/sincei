@@ -29,8 +29,10 @@ pub(crate) struct ScRecordOptions {
 /// How a read's position can be adjusted.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AdjustRead {
-    /// Extend each read to this fragment length (bp).  For a properly paired
-    /// read the observed insert size (TLEN) is used, up to `4 × extend_reads`.
+    /// Extend each read to this fragment length (bp).  A pair that is properly
+    /// paired, on one reference, facing inward and no longer than
+    /// `4 × extend_reads` is extended to its observed insert size (TLEN)
+    /// instead; any other read is extended to this length.
     /// `None` leaves the alignment span unchanged.
     pub extend_reads: Option<usize>,
     /// After extension, replace the interval with a `read_length` window
@@ -284,11 +286,31 @@ impl<'a> ScRecord<'a> {
             Some(frag_len) => {
                 let max_paired = 4 * frag_len;
                 let tlen_abs = self.template_length.unsigned_abs() as usize;
-                let use_tlen = self.is_proper_pair && tlen_abs > 0 && tlen_abs <= max_paired;
+                // The proper-pair flag alone cannot be trusted to mean that TLEN
+                // describes a fragment, so the pair is checked for: one reference,
+                // opposite strands, facing each other, and an insert size within
+                // `max_paired`. A pair failing any of those is treated as
+                // single-ended and extended by a fixed length.
+                //
+                // The orientation test is what keeps the interval sound. An
+                // outward-facing pair puts a reverse read's mate *after* the
+                // read, and taking the fragment from the mate would then produce
+                // an interval that starts after it ends.
+                let fragment_start = self.mate_alignment_start.filter(|&mate| {
+                    self.is_proper_pair
+                        && self.reference_id == self.mate_reference_id
+                        && self.is_reverse != self.mate_is_reverse
+                        && tlen_abs > 0
+                        && tlen_abs <= max_paired
+                        && if self.is_reverse {
+                            mate <= self.alignment_start
+                        } else {
+                            self.alignment_start <= mate
+                        }
+                });
 
-                if use_tlen {
+                if let Some(mate) = fragment_start {
                     if self.is_reverse {
-                        let mate = self.mate_alignment_start.unwrap_or(self.alignment_start);
                         (mate, self.alignment_end)
                     } else {
                         (self.alignment_start, self.alignment_start + tlen_abs)
@@ -310,6 +332,12 @@ impl<'a> ScRecord<'a> {
                 }
             }
         };
+
+        // Every branch above keeps the bounds in order, as the reference
+        // implementation asserts of its own fragment. An inverted interval would
+        // not be caught downstream: the bin loop would silently drop the read
+        // and the feature loop would underflow its overlap subtraction.
+        debug_assert!(start < end, "inverted interval {start}..{end}");
 
         if adjust.center_reads && self.read_length > 0 {
             let center = (start + end) / 2;
@@ -472,44 +500,103 @@ mod tests {
         assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
     }
 
-    #[test]
-    fn extend_reads_prefers_the_observed_insert_size_for_proper_pairs() {
-        let adjust = AdjustRead {
+    /// A record whose pair passes every proper-pair test: one reference,
+    /// opposite strands and facing inward.
+    ///
+    /// The sign of `tlen` says which end of the fragment this read is. A
+    /// positive one makes it the leftmost, forward read of the pair, and a
+    /// negative one the rightmost, reverse read, which is the orientation a
+    /// library is expected to have.
+    fn proper_pair<'a>(start: usize, end: usize, tlen: i64, mate_start: usize) -> ScRecord<'a> {
+        let mut rec = test_record(start, end);
+        rec.is_paired = true;
+        rec.is_proper_pair = true;
+        rec.template_length = tlen;
+        rec.mate_alignment_start = Some(mate_start);
+        rec.reference_id = Some(0);
+        rec.mate_reference_id = Some(0);
+        rec.is_reverse = tlen < 0;
+        rec.mate_is_reverse = tlen >= 0;
+        rec
+    }
+
+    /// `--extendReads 200`, the setting every extension test below uses.
+    fn extend_to_200() -> AdjustRead {
+        AdjustRead {
             extend_reads: Some(200),
             ..Default::default()
-        };
+        }
+    }
+
+    #[test]
+    fn extend_reads_prefers_the_observed_insert_size_for_proper_pairs() {
+        let adjust = extend_to_200();
 
         // Forward mate: TLEN wins over the requested fragment length.
-        let mut fwd = test_record(1000, 1050);
-        fwd.is_proper_pair = true;
-        fwd.template_length = 300;
+        let fwd = proper_pair(1000, 1050, 300, 1250);
         assert_eq!(fwd.effective_interval(&adjust), (1000, 1300));
 
         // Reverse mate: the fragment runs from the mate's start to this read's end.
-        let mut rev = test_record(1250, 1300);
-        rev.is_proper_pair = true;
-        rev.is_reverse = true;
-        rev.template_length = -300;
-        rev.mate_alignment_start = Some(1000);
+        let rev = proper_pair(1250, 1300, -300, 1000);
         assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
     }
 
     #[test]
     fn implausible_insert_sizes_fall_back_to_the_requested_length() {
-        let adjust = AdjustRead {
-            extend_reads: Some(200),
-            ..Default::default()
-        };
+        let adjust = extend_to_200();
 
         // |TLEN| > 4 × extend_reads is treated as a mapping artifact.
-        let mut rec = test_record(1000, 1050);
-        rec.is_proper_pair = true;
-        rec.template_length = 801;
+        let mut rec = proper_pair(1000, 1050, 801, 1750);
         assert_eq!(rec.effective_interval(&adjust), (1000, 1200));
 
         // Exactly 4 × extend_reads is still plausible.
         rec.template_length = 800;
         assert_eq!(rec.effective_interval(&adjust), (1000, 1800));
+    }
+
+    // The proper-pair flag is not enough on its own: a pair failing any of the
+    // tests below is extended as if it were single-ended (1000..1050 + 200).
+
+    #[test]
+    fn a_mate_on_another_reference_is_not_a_fragment() {
+        let mut rec = proper_pair(1000, 1050, 300, 1250);
+        rec.mate_reference_id = Some(1);
+
+        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+    }
+
+    #[test]
+    fn a_mate_on_the_same_strand_is_not_a_fragment() {
+        let mut rec = proper_pair(1000, 1050, 300, 1250);
+        rec.mate_is_reverse = false;
+
+        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+    }
+
+    #[test]
+    fn a_mate_without_a_recorded_position_is_not_a_fragment() {
+        let mut rec = proper_pair(1000, 1050, 300, 1250);
+        rec.mate_alignment_start = None;
+
+        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+    }
+
+    #[test]
+    fn an_outward_facing_pair_is_not_a_fragment() {
+        let adjust = extend_to_200();
+
+        // A forward read whose mate lies behind it: the fragment would run
+        // backwards from the read.
+        let fwd = proper_pair(2000, 2050, 300, 1000);
+        assert_eq!(fwd.effective_interval(&adjust), (2000, 2200));
+
+        // The reverse read of such a pair is the dangerous one. Its fragment
+        // start would be the mate at 2000, past its own end at 1300, giving an
+        // interval that starts after it ends.
+        let rev = proper_pair(1250, 1300, -300, 2000);
+        let (start, end) = rev.effective_interval(&adjust);
+        assert!(start < end, "inverted interval {start}..{end}");
+        assert_eq!((start, end), (1100, 1300));
     }
 
     #[test]
