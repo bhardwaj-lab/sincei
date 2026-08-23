@@ -4,9 +4,9 @@
 //! involved. Work is parallel over sub-chromosome chunks, each an independent
 //! BAI query.
 //!
-//! A read is credited to exactly one bin (the one its effective interval
-//! overlaps most) and is owned by the chunk holding its alignment start, so a
-//! read whose interval spills into the next chunk is still counted once.
+//! A read is credited to every bin its effective interval overlaps, and is
+//! owned by the chunk holding its alignment start, so a read whose interval
+//! spills into the next chunk is still counted exactly once per bin.
 
 use std::path::Path;
 
@@ -34,7 +34,8 @@ use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 /// derived from the first BAM's header. Parallelism is over sub-chromosome
 /// chunks of `chunk_size` bp; each chunk is an independent BAI query. Reads
 /// are assigned to chunks by `alignment_start` to avoid double-counting. A
-/// read's effective interval can still overlap bins in adjacent chunks.
+/// read's effective interval can still overlap bins in adjacent chunks, and it
+/// is counted in each of them.
 pub fn count_bam_bins(
     bam_paths: &[(&Path, &str)],
     bin_size: usize,
@@ -348,14 +349,18 @@ pub fn count_bam_bins(
                             cell_offset + local_bc_idx
                         };
 
-                        // Largest-overlap-wins: assign the read to exactly one
-                        // bin, the one whose [bin_start, bin_start+bin_size)
-                        // interval overlaps the effective read interval the most.
-                        // For non-overlapping bins this is equivalent to placing
-                        // the read at the center of its effective interval.
+                        // A read counts once in every bin its effective interval
+                        // overlaps, so a read straddling a boundary adds to both
+                        // sides. The column sums therefore exceed the read count,
+                        // which is what the reference implementation reports.
+                        //
                         // Bin indices are relative to the window origin. A read
                         // that ends before the window has nothing to fall in; one
                         // that starts after it produces an empty bin range.
+                        // Every bin in `first_bin..=last_bin` overlaps the read by
+                        // construction: `last_bin` is the last bin starting before
+                        // `rel_end`, and `first_bin` the first one ending after
+                        // `rel_start`, so neither bound needs its overlap re-tested.
                         let rel_start = eff_start.saturating_sub(window_start);
                         let rel_end = eff_end.saturating_sub(window_start);
 
@@ -366,22 +371,8 @@ pub fn count_bam_bins(
                             } else {
                                 0
                             };
-                            let mut best_bin = first_bin;
-                            let mut best_overlap = 0usize;
                             for bin in first_bin..=last_bin {
-                                let bin_start = window_start + bin * step_size;
-                                let bin_end = bin_start + bin_size;
-                                let overlap = eff_end
-                                    .min(bin_end)
-                                    .saturating_sub(eff_start.max(bin_start));
-                                if overlap > best_overlap {
-                                    best_overlap = overlap;
-                                    best_bin = bin;
-                                }
-                            }
-                            if best_overlap > 0 {
-                                let feature_idx = chrom_offset + best_bin;
-                                *local_acc.entry((cell_idx, feature_idx)).or_insert(0) +=
+                                *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
                                     sc_rec.count;
                             }
                         }
@@ -532,6 +523,78 @@ mod tests {
             *out.entry((row, names[col].clone())).or_insert(0.0) += v;
         }
         out
+    }
+
+    /// Every value in the matrix, summed.
+    fn total(path: &Path) -> f64 {
+        column_sums(path).values().sum()
+    }
+
+    #[test]
+    fn a_read_counts_in_every_bin_it_overlaps() {
+        // test_i1.bam holds 13 reads of 47-62 bp, all inside one 100 kb bin, so
+        // a coarse run counts each of them exactly once.
+        //
+        // At 100 bp six of those reads straddle a bin boundary. Each of the six
+        // adds one to the bin on either side, which takes the total from 13 to
+        // 19. Crediting a read to its best bin alone would leave it at 13.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let coarse = dir.path().join("coarse.h5ad");
+        count_into(
+            &coarse,
+            100_000,
+            100_000,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+        assert_eq!(total(&coarse), 13.0, "one count per read was expected");
+
+        let fine = dir.path().join("fine.h5ad");
+        count_into(
+            &fine,
+            100,
+            100,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+        assert_eq!(total(&fine), 19.0, "a straddling read counts on both sides");
+    }
+
+    #[test]
+    fn a_read_lands_in_two_neighbouring_bins_at_once() {
+        // The two reads at 65,966,811 are 61 bp long. A 50 bp tiling puts a
+        // boundary at 65,966,850, inside them, so both bins must hold them.
+        let barcodes = test_barcodes();
+        let dir = TempDir::new().unwrap();
+
+        let out = dir.path().join("split.h5ad");
+        count_into(
+            &out,
+            50,
+            50,
+            &barcodes,
+            &CountingParams::default(),
+            1_000_000,
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("5:65966800-65966850").copied(),
+            Some(2.0),
+            "the bin holding the read starts counted {sums:?}"
+        );
+        assert_eq!(
+            sums.get("5:65966850-65966900").copied(),
+            Some(2.0),
+            "the bin holding the read ends counted {sums:?}"
+        );
     }
 
     /// A BED holding one region, written where the test wants it.

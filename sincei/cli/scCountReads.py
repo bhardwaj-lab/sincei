@@ -48,14 +48,21 @@ bins_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
-    help="Count reads in fixed-size bins.",
+    help=(
+        "Count reads in fixed-size bins. A read is counted in every bin it "
+        "overlaps, so a read on a bin boundary adds to both bins."
+    ),
     context_settings={"help_option_names": []},
 )
 features_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
-    help="Count reads on provided features.",
+    help=(
+        "Count reads on provided features. A read is counted once for every "
+        "feature it overlaps, so overlapping features each get their own count. "
+        "Use --metagene to count each read only once."
+    ),
     context_settings={"help_option_names": []},
 )
 
@@ -111,9 +118,12 @@ METAGENE = typer.Option(
     "--metagene",
     rich_help_panel=_GTF,
     help=(
-        "Group exon intervals by gene (gene_id attribute) and count each read once "
-        "per gene. Reads overlapping multiple exons of the same gene are counted "
-        "once, assigned to the gene with the greatest total exon overlap."
+        "When counting features from a GTF/GFF file, count only in the merged exons of "
+        "a transcript instead taking the 5' and 3' bounds of the transcript."
+        "Count exons instead of whole transcripts, and count each read only once. "
+        "Exons are grouped per transcript. Use --transcriptIDtag gene_id to "
+        "group them per gene instead. A read that meets several exons of one group "
+        "is counted once, against the group it overlaps most."
     ),
 )
 

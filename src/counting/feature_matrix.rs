@@ -4,10 +4,10 @@
 //! chunks, each an independent BAI query, with reads owned by the chunk holding
 //! their alignment start so none is counted twice.
 //!
-//! A read is credited to exactly one feature: the overlaps of a feature's
-//! sub-intervals or metagene exons are summed first, and the feature with the
-//! largest total wins. So a read spanning two exons of one gene counts once for
-//! that gene.
+//! A read is credited to every feature it overlaps, so overlapping annotations
+//! each get their own count. Under `metagene` the rule changes to one gene per
+//! read: a gene's exon overlaps are summed first and the largest total wins, so
+//! a read spanning two exons of one gene counts once for that gene.
 
 use ahash::{AHashMap, AHashSet};
 use std::path::Path;
@@ -26,9 +26,11 @@ use crate::bam::filters::{
     derive_record_opts, read_is_blacklisted,
 };
 
-// Maximum number of distinct regions a single read can overlap and still be
-// assigned correctly. In practice reads are short and features rarely pile up
-// this densely, so 16 is a safe ceiling.
+// Maximum number of distinct genes a single read can overlap and still be
+// assigned correctly under `metagene`. In practice reads are short and genes
+// rarely pile up this densely, so 16 is a safe ceiling. Only the metagene arm
+// uses it; without it a read is counted for every region it overlaps, however
+// many there are.
 const MAX_REGION_HITS: usize = 16;
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
@@ -40,6 +42,10 @@ use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 /// query. Reads are assigned to chunks by `alignment_start` to avoid
 /// double-counting. A read's effective interval can still extend into any
 /// feature regardless of chunk boundaries.
+///
+/// A read counts once for each feature it overlaps, unless `params.metagene` is
+/// set, in which case it counts once in total, for the gene whose exons it
+/// overlaps most.
 pub fn count_bam_features(
     bam_paths: &[(&Path, &str)],
     annotation_path: &Path,
@@ -133,6 +139,9 @@ pub fn count_bam_features(
     )?;
     let n_features = var_meta.len();
     feature_index.retain(|chrom, _| !params.chr_to_skip.contains(chrom));
+    // Copied out of `params` so the counting closure captures a `bool` instead
+    // of borrowing the whole struct.
+    let metagene = params.metagene;
 
     let blacklist = params
         .blacklist_path
@@ -324,32 +333,44 @@ pub fn count_bam_features(
                             cell_offset + local_bc_idx
                         };
 
-                        // Largest-overlap-wins: each read contributes to exactly
-                        // one region. Sub-intervals of the same region (metagene
-                        // exons) accumulate their overlaps before the comparison,
-                        // so a read spanning two exons of gene A still counts once
-                        // for gene A.
-                        let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
-                        let mut n_hits = 0usize;
-                        for sub in chrom_index.find(eff_start, eff_end) {
-                            let overlap = eff_end.min(sub.end) - eff_start.max(sub.start);
-                            let mut merged = false;
-                            for entry in hits[..n_hits].iter_mut() {
-                                if entry.0 == sub.var_idx {
-                                    entry.1 += overlap;
-                                    merged = true;
-                                    break;
+                        if metagene {
+                            // One gene per read: a gene's exons accumulate their
+                            // overlaps first, then the largest total wins. A read
+                            // spanning two exons of gene A counts once for A, not
+                            // twice, which is the whole point of asking for genes
+                            // rather than for the exons themselves.
+                            let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
+                            let mut n_hits = 0usize;
+                            for sub in chrom_index.find(eff_start, eff_end) {
+                                let overlap = eff_end.min(sub.end) - eff_start.max(sub.start);
+                                let mut merged = false;
+                                for entry in hits[..n_hits].iter_mut() {
+                                    if entry.0 == sub.var_idx {
+                                        entry.1 += overlap;
+                                        merged = true;
+                                        break;
+                                    }
+                                }
+                                if !merged && n_hits < MAX_REGION_HITS {
+                                    hits[n_hits] = (sub.var_idx, overlap);
+                                    n_hits += 1;
                                 }
                             }
-                            if !merged && n_hits < MAX_REGION_HITS {
-                                hits[n_hits] = (sub.var_idx, overlap);
-                                n_hits += 1;
+                            if let Some(&(best_val, _)) =
+                                hits[..n_hits].iter().max_by_key(|&&(_, ov)| ov)
+                            {
+                                *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
                             }
-                        }
-                        if let Some(&(best_val, _)) =
-                            hits[..n_hits].iter().max_by_key(|&&(_, ov)| ov)
-                        {
-                            *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
+                        } else {
+                            // A read counts once for every region it overlaps, so
+                            // overlapping annotations each get their own count and
+                            // the column sums exceed the read count. Without
+                            // `metagene` a region is a single interval, so each hit
+                            // is a distinct region and no merging is needed.
+                            for sub in chrom_index.find(eff_start, eff_end) {
+                                *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
+                                    sc_rec.count;
+                            }
                         }
                     }
 
@@ -486,6 +507,102 @@ mod tests {
         out
     }
 
+    /// Column sums keyed by feature name.
+    fn column_sums(path: &Path) -> std::collections::BTreeMap<String, f64> {
+        let mut sums = std::collections::BTreeMap::new();
+        for ((_, name), v) in entries(path) {
+            *sums.entry(name).or_insert(0.0) += v;
+        }
+        sums
+    }
+
+    fn total(path: &Path) -> f64 {
+        column_sums(path).values().sum()
+    }
+
+    #[test]
+    fn a_read_counts_once_for_every_feature_it_overlaps() {
+        // Chrna9.gtf holds two transcripts, and the shorter one lies inside the
+        // longer. Eight of the BAM's reads fall in the long transcript and two
+        // of those eight fall in the short one as well, so those two are counted
+        // twice, once against each. Ten counts from eight reads.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("transcripts.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams::default(),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("ENSMUST00000031108").copied(),
+            Some(8.0),
+            "{sums:?}"
+        );
+        assert_eq!(
+            sums.get("ENSMUST00000201664").copied(),
+            Some(2.0),
+            "{sums:?}"
+        );
+        assert_eq!(total(&out), 10.0, "{sums:?}");
+    }
+
+    /// A GTF whose two transcripts overlap and share one gene, each with a
+    /// single exon spanning its whole body.
+    fn overlapping_gtf(dir: &Path) -> PathBuf {
+        let path = dir.join("overlapping.gtf");
+        let mut text = String::new();
+        for (name, start, end) in [
+            ("T1", 65_967_125, 65_977_326),
+            ("T2", 65_975_897, 65_977_140),
+        ] {
+            for ty in ["transcript", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"G1\"; transcript_id \"{name}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn metagene_counts_a_read_once_however_many_exons_it_meets() {
+        // Both transcripts of this GTF carry one exon over their whole body, and
+        // both name gene G1. Grouped by gene, the two reads inside the overlap
+        // meet two of G1's exons but must add only one count each.
+        let dir = TempDir::new().unwrap();
+        let gtf = overlapping_gtf(dir.path());
+
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+        assert_eq!(
+            total(&per_transcript),
+            10.0,
+            "eight reads, two of them inside both transcripts"
+        );
+
+        let per_gene = dir.path().join("gene.h5ad");
+        count_into(
+            &per_gene,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                name_attr: Some("gene_id".to_string()),
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&per_gene);
+        assert_eq!(sums.get("G1").copied(), Some(8.0), "{sums:?}");
+        assert_eq!(total(&per_gene), 8.0, "a read was counted twice");
+    }
+
     fn count_with_blacklist(out: &Path, blacklist: Option<PathBuf>) {
         count_into(
             out,
@@ -602,8 +719,10 @@ mod tests {
         let transcript_total = total(&per_transcript);
 
         assert!(gene_total > 0.0, "nothing was counted against the exons");
-        // A transcript feature spans its introns too, so an intronic read is
-        // counted there but has no exon to fall in under metagene grouping.
+        // Two reasons, both one-way: a transcript feature spans its introns too,
+        // so an intronic read is counted there but has no exon to fall in under
+        // metagene grouping; and a read inside two transcripts counts twice
+        // without metagene and once with it.
         assert!(
             gene_total <= transcript_total,
             "exonic total {gene_total} exceeded whole-transcript total {transcript_total}"
