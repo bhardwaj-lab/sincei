@@ -85,6 +85,7 @@ impl ChromIndex {
     ///
     /// Every interval not filtered out starts before the query ends and ends
     /// after it begins, a half-open overlap.
+    #[inline]
     pub fn find(&self, start: usize, end: usize) -> impl Iterator<Item = &Interval> {
         let candidates = self.intervals.partition_point(|iv| iv.start < end);
 
