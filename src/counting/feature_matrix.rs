@@ -18,6 +18,7 @@ use rayon::prelude::*;
 use super::count_utils::{build_csr, write_counts_anndata};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
+use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
@@ -33,6 +34,58 @@ use crate::bam::filters::{
 // many there are.
 const MAX_REGION_HITS: usize = 16;
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
+
+/// Drop the features a `--region` leaves out, and renumber the rest.
+///
+/// A feature is kept when its **start** falls inside the region, which is the
+/// rule the reference implementation applies through
+/// `findOverlaps(..., trimOverlap=True)`, and the same ownership rule reads
+/// already follow here. So a feature reaching past the region's end is kept
+/// whole, and one that begins before the region is left out even though it
+/// overlaps: it belongs to the stretch of genome before this one.
+///
+/// The feature's own intervals are kept as they are, exons included, and only
+/// their `var_idx` is remapped onto the retained features.
+fn retain_features_in_region(
+    index: &mut GenomeIndex,
+    var: &mut Vec<Feature>,
+    chrom: &str,
+    start: usize,
+    end: usize,
+) {
+    // Old feature index -> new one, or `None` for a feature being dropped.
+    let mut renumbered: Vec<Option<usize>> = Vec::with_capacity(var.len());
+    let mut kept: Vec<Feature> = Vec::new();
+    for feature in var.iter() {
+        let inside = feature.chrom == chrom && feature.start >= start && feature.start < end;
+        renumbered.push(inside.then(|| {
+            kept.push(feature.clone());
+            kept.len() - 1
+        }));
+    }
+    *var = kept;
+
+    let mut rebuilt: AHashMap<String, Vec<Interval>> = AHashMap::new();
+    for (chrom_name, chrom_index) in index.iter() {
+        for interval in chrom_index.iter() {
+            if let Some(var_idx) = renumbered[interval.var_idx] {
+                rebuilt
+                    .entry(chrom_name.clone())
+                    .or_default()
+                    .push(Interval {
+                        start: interval.start,
+                        end: interval.end,
+                        var_idx,
+                    });
+            }
+        }
+    }
+
+    *index = rebuilt
+        .into_iter()
+        .map(|(chrom_name, intervals)| (chrom_name, ChromIndex::build(intervals)))
+        .collect();
+}
 
 /// Count reads from one or more BAM files into a cell × feature matrix, then
 /// write the result as an AnnData HDF5 file.
@@ -130,13 +183,25 @@ pub fn count_bam_features(
         .as_ref()
         .map(|t| t.iter().map(String::as_str).collect());
 
-    let (mut feature_index, var_meta) = parse_annotation_files(
+    let (mut feature_index, mut var_meta) = parse_annotation_files(
         [annotation_path],
         feature_types.as_deref(),
         exon_types.as_deref(),
         params.name_attr.as_deref(),
         params.metagene,
     )?;
+    // A region restricts which features the output has, exactly as it restricts
+    // which bins `bins` mode tiles.
+    if let Some((region_chrom, region_start, region_end)) = &region_filter {
+        retain_features_in_region(
+            &mut feature_index,
+            &mut var_meta,
+            region_chrom,
+            *region_start,
+            *region_end,
+        );
+    }
+
     let n_features = var_meta.len();
     feature_index.retain(|chrom, _| !params.chr_to_skip.contains(chrom));
     // Copied out of `params` so the counting closure captures a `bool` instead
@@ -664,6 +729,125 @@ mod tests {
         )
         .unwrap();
         path
+    }
+
+    /// Five BED regions around a `--region` of `5:65965000-65975000`: one
+    /// inside it, one starting inside and reaching past its end, one starting
+    /// before it, one spanning it entirely, and one nowhere near.
+    fn region_boundary_bed(dir: &Path) -> PathBuf {
+        let path = dir.join("boundaries.bed");
+        std::fs::write(
+            &path,
+            "5\t65966000\t65967000\tinside\t0\t.\n\
+             5\t65974000\t65976000\tstarts_inside\t0\t.\n\
+             5\t65964000\t65966000\tstarts_before\t0\t.\n\
+             5\t65960000\t65980000\tspanning\t0\t.\n\
+             5\t66500000\t66501000\telsewhere\t0\t.\n",
+        )
+        .unwrap();
+        path
+    }
+
+    fn var_names(path: &Path) -> Vec<String> {
+        open(path).var_names().into_vec()
+    }
+
+    #[test]
+    fn a_region_keeps_only_the_features_that_begin_inside_it() {
+        // The reference implementation asks its interval tree with
+        // `trimOverlap=True`, which owns a feature by its start. So a feature
+        // reaching past the region survives whole, and one that begins earlier
+        // does not, however much of it overlaps.
+        let dir = TempDir::new().unwrap();
+        let bed = region_boundary_bed(dir.path());
+
+        let all = dir.path().join("all.h5ad");
+        count_bam_into(&all, &testdata().join("test_i1.bam"), &bed).unwrap();
+        assert_eq!(
+            var_names(&all).len(),
+            5,
+            "the unrestricted run lost features"
+        );
+
+        let restricted = dir.path().join("region.h5ad");
+        count_bam_features(
+            &[(testdata().join("test_i1.bam").as_path(), "s1")],
+            &bed,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams {
+                region: Some("5:65965000-65975000".to_string()),
+                ..CountingParams::default()
+            },
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &restricted,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(var_names(&restricted), vec!["inside", "starts_inside"]);
+    }
+
+    #[test]
+    fn a_region_renumbers_the_features_it_keeps() {
+        // The kept features are renumbered, so a count has to land in the
+        // column of the feature it belongs to and not in the one that feature
+        // used to occupy.
+        let dir = TempDir::new().unwrap();
+        let bed = dir.path().join("two.bed");
+        // The first region is dropped by the `--region`, so `covered`, which
+        // was feature 1, becomes feature 0.
+        std::fs::write(
+            &bed,
+            "5\t65900000\t65910000\tdropped\t0\t.\n\
+             5\t65966000\t65970000\tcovered\t0\t.\n",
+        )
+        .unwrap();
+
+        let out = dir.path().join("region.h5ad");
+        count_bam_features(
+            &[(testdata().join("test_i1.bam").as_path(), "s1")],
+            &bed,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams {
+                region: Some("5:65960000-65980000".to_string()),
+                ..CountingParams::default()
+            },
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(var_names(&out), vec!["covered"]);
+        let sums = column_sums(&out);
+        assert!(
+            sums.get("covered").copied().unwrap_or(0.0) > 0.0,
+            "the surviving feature lost its reads {sums:?}"
+        );
     }
 
     #[test]
