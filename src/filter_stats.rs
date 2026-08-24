@@ -167,13 +167,19 @@ pub fn run_filter_stats(
     let n_rows = group_ids.as_ref().map_or(1, Vec::len) * n_barcodes;
 
     // Build chunk work list sorted by descending size.
-    // Each chunk will iterate the sampling bins whose start falls within it.
-    let mut chunks: Vec<(String, usize, usize)> = chrom_sizes
+    // Each chunk iterates the sampling bins whose start falls within it, and
+    // carries its chromosome's length to bound the bins.
+    let mut chunks: Vec<(String, usize, usize, usize)> = chrom_sizes
         .iter()
         .flat_map(|(chrom, chrom_len)| {
-            (0..*chrom_len)
-                .step_by(chunk_size)
-                .map(move |start| (chrom.clone(), start, (start + chunk_size).min(*chrom_len)))
+            (0..*chrom_len).step_by(chunk_size).map(move |start| {
+                (
+                    chrom.clone(),
+                    start,
+                    (start + chunk_size).min(*chrom_len),
+                    *chrom_len,
+                )
+            })
         })
         .collect();
     chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.2 - b.1));
@@ -199,7 +205,9 @@ pub fn run_filter_stats(
             .par_iter()
             .map_init(
                 BamWorker::new,
-                |worker, &(ref chrom, chunk_start, chunk_end)| -> Result<Vec<BarcodeStat>> {
+                |worker,
+                 &(ref chrom, chunk_start, chunk_end, chrom_len)|
+                 -> Result<Vec<BarcodeStat>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
                     let mut dup_filter: Option<DuplicateFilter> =
@@ -220,7 +228,12 @@ pub fn run_filter_stats(
 
                     let mut bin_start = first_bin;
                     while bin_start < chunk_end {
-                        let bin_end = (bin_start + bin_size).min(chunk_end);
+                        // A bin is bounded by its chromosome, not by the chunk
+                        // that owns it. Cutting it at `chunk_end` would drop the
+                        // rest of a bin that reaches past the boundary. Ownership
+                        // goes by the bin's *start*, which lies back here. Reading
+                        // past the edge cannot double count for the same reason.
+                        let bin_end = (bin_start + bin_size).min(chrom_len);
 
                         let region_str = format!("{}:{}-{}", chrom, bin_start + 1, bin_end);
                         let region: noodles::core::Region = match region_str.parse() {
@@ -675,6 +688,42 @@ mod tests {
 
         let total: u64 = rows.iter().map(|r| r[TOTAL]).sum();
         assert_eq!(total, 0, "chromosome 5 was skipped but reads were counted");
+    }
+
+    #[test]
+    fn the_work_chunk_size_does_not_change_what_is_sampled() {
+        // Chunking is how the work is spread over threads, nothing more. A bin
+        // reaching past a chunk boundary must still be sampled whole, so the
+        // answer cannot depend on where those boundaries fall.
+        //
+        // Every read of the file sits between 65.96 and 65.98 Mb, so at a
+        // 200 kb sampling bin they all fall in the bin starting at 65.8 Mb.
+        // 65,900,000 is the chunk size that matters here: it puts a boundary
+        // inside that bin, which is the case that used to lose them. The other
+        // sizes leave the bin whole and are here to keep the property honest.
+        let barcodes = test_barcodes();
+
+        let reference = stats(&barcodes, "BC", None, &[], 200_000, 4_000_000).unwrap();
+        for chunk_size in [65_900_000, 300_000, 700_000, 1_000_001] {
+            let other = stats(&barcodes, "BC", None, &[], 200_000, chunk_size).unwrap();
+            assert_eq!(
+                other, reference,
+                "a chunk size of {chunk_size} changed the sampling"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bin_wider_than_a_work_chunk_is_still_sampled_whole() {
+        // The reads of test_i1.bam sit at 65.97 Mb, inside the bin that starts
+        // at 64 Mb when the bin is 2 Mb wide. Cutting that bin at its chunk's
+        // end used to hide every one of them, and the run reported nothing.
+        let barcodes = test_barcodes();
+
+        let (_, rows) = stats(&barcodes, "BC", None, &[], 2_000_000, 1_000_000).unwrap();
+        let sampled: u64 = rows.iter().map(|r| r[TOTAL]).sum();
+
+        assert_eq!(sampled, 13, "the BAM's 13 reads were not all sampled");
     }
 
     // Argument validation
