@@ -34,7 +34,7 @@ use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
 use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
-use crate::bam::fragment_length::resolve_extend_reads;
+use crate::bam::fragment_length::{ensure_paired_end, resolve_extend_reads};
 use crate::bam::sc_record::{AdjustRead, EffectiveIntervals, ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
@@ -138,6 +138,7 @@ fn get_effective_intervals<'a>(
 
 // Group-info parsing
 
+#[derive(Debug)]
 struct ParsedGroups {
     /// Ordered unique group names.
     groups: Vec<String>,
@@ -145,6 +146,59 @@ struct ParsedGroups {
     n_cells_per_group: Vec<usize>,
     /// All cells: (bam_idx, barcode, group_idx).
     cells: Vec<(usize, String, usize)>,
+}
+
+/// The two shapes a group-info file comes in, told apart by its column count.
+///
+/// Both name the same three things; the wide one is what `scClusterCells`
+/// writes, where the cell is already one `sample::barcode` string and the two
+/// UMAP coordinates sit between it and the group.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GroupInfoLayout {
+    /// `sample`, `barcode`, `group`.
+    Plain,
+    /// `sample::barcode`, `UMAP1`, `UMAP2`, `group`.
+    Clustered,
+}
+
+impl GroupInfoLayout {
+    /// Read the layout off the header, which fixes the file's column count.
+    fn from_header(header: &str, path: &Path) -> Result<Self> {
+        match header.trim_end_matches(['\r', '\n']).split('\t').count() {
+            3 => Ok(Self::Plain),
+            4 => Ok(Self::Clustered),
+            n => anyhow::bail!(
+                "{} has {} columns; a group info file has 3 (sample, barcode, group) \
+                 or 4 (sample::barcode, UMAP1, UMAP2, group)",
+                path.display(),
+                n
+            ),
+        }
+    }
+
+    fn n_columns(self) -> usize {
+        match self {
+            Self::Plain => 3,
+            Self::Clustered => 4,
+        }
+    }
+
+    /// Pull `(sample, barcode, group)` out of one data row.
+    fn read_row<'a>(self, fields: &[&'a str]) -> Result<(&'a str, &'a str, &'a str)> {
+        match self {
+            Self::Plain => Ok((fields[0], fields[1], fields[2])),
+            Self::Clustered => {
+                let (sample, barcode) = fields[0].split_once("::").with_context(|| {
+                    format!(
+                        "cell id {:?} is not `sample::barcode`; a 4-column group info file \
+                         names each cell that way",
+                        fields[0]
+                    )
+                })?;
+                Ok((sample, barcode, fields[3]))
+            }
+        }
+    }
 }
 
 fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
@@ -164,44 +218,46 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
     let mut cells: Vec<(usize, String, usize)> = Vec::new();
 
     let mut lines = reader.lines();
-    // Skip header line.
-    lines.next();
+    // The header names the columns rather than holding data, and its width is
+    // what says which of the two layouts this file uses.
+    let header = lines
+        .next()
+        .transpose()
+        .with_context(|| format!("failed to read {}", path.display()))?
+        .with_context(|| format!("{} is empty", path.display()))?;
+    let layout = GroupInfoLayout::from_header(&header, path)?;
 
     for (line_no, line) in lines.enumerate() {
-        let line =
-            line.with_context(|| format!("failed to read group info line {}", line_no + 2))?;
+        let line_no = line_no + 2;
+        let line = line.with_context(|| format!("failed to read group info line {line_no}"))?;
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let mut fields = line.split('\t');
-        let sample = fields
-            .next()
-            .context("missing sample column")?
-            .trim()
-            .to_string();
-        let barcode = fields
-            .next()
-            .context("missing barcode column")?
-            .trim()
-            .to_string();
-        let group = fields
-            .next()
-            .context("missing group column")?
-            .trim()
-            .to_string();
 
-        let Some(&bam_idx) = label_to_bam.get(sample.as_str()) else {
+        let fields: Vec<&str> = line.split('\t').map(str::trim).collect();
+        anyhow::ensure!(
+            fields.len() == layout.n_columns(),
+            "group info line {} has {} columns, but the header has {}",
+            line_no,
+            fields.len(),
+            layout.n_columns()
+        );
+        let (sample, barcode, group) = layout
+            .read_row(&fields)
+            .with_context(|| format!("group info line {line_no}"))?;
+
+        let Some(&bam_idx) = label_to_bam.get(sample) else {
             continue; // sample not in BAM list. Skip
         };
 
-        let group_idx = *group_index.entry(group.clone()).or_insert_with(|| {
+        let group_idx = *group_index.entry(group.to_string()).or_insert_with(|| {
             let idx = groups.len();
-            groups.push(group);
+            groups.push(group.to_string());
             idx
         });
 
-        cells.push((bam_idx, barcode, group_idx));
+        cells.push((bam_idx, barcode.to_string(), group_idx));
     }
 
     let n_groups = groups.len();
@@ -317,6 +373,13 @@ pub fn run_bulk_coverage(
         .enumerate()
         .map(|(i, (bam_idx, bc, _))| ((*bam_idx, bc.as_bytes()), i))
         .collect();
+
+    // --mnase reads the fragment from the two mates, so a single-end library
+    // has nothing to take a centre from. Checked before any counting, so the
+    // run fails instead of writing an empty track.
+    if matches!(read_mode, ReadMode::MNase) {
+        ensure_paired_end(bam_paths, "--mnase")?;
+    }
 
     // Resolved before the record options, which ask it whether the gapless
     // blocks are worth computing.
@@ -674,9 +737,14 @@ pub fn run_bulk_coverage(
         (0..n_groups)
             .into_par_iter()
             .map(|group_idx| -> Result<PathBuf> {
+                // `{prefix}_{group}.{ext}`, the name the reference
+                // implementation writes, so a pipeline that globs for these
+                // files finds them either way. The group name is still made
+                // safe to use as one path component, which the reference
+                // implementation does not do.
                 let group_name = &parsed.groups[group_idx];
                 let output_path = PathBuf::from(format!(
-                    "{}.{}.{}",
+                    "{}_{}.{}",
                     output_prefix,
                     sanitize_group_name(group_name),
                     ext
@@ -1357,6 +1425,77 @@ mod tests {
     }
 
     #[test]
+    fn a_four_column_group_info_names_each_cell_as_sample_and_barcode() {
+        // The shape `scClusterCells` writes: the cell is one `sample::barcode`
+        // string with the two UMAP coordinates between it and the group.
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(
+            &dir,
+            "Cell_ID\tUMAP1\tUMAP2\tcluster\n\
+             s1::AAA\t0.1\t-2.3\tg1\n\
+             s1::CCC\t1.4\t0.7\tg2\n\
+             s2::GGG\t-0.8\t1.1\tg1\n",
+        );
+
+        let parsed = parse_group_info(&path, &["s1", "s2"]).unwrap();
+
+        assert_eq!(parsed.groups, vec!["g1", "g2"]);
+        assert_eq!(
+            parsed.cells,
+            vec![
+                (0, "AAA".to_string(), 0),
+                (0, "CCC".to_string(), 1),
+                (1, "GGG".to_string(), 0),
+            ]
+        );
+        assert_eq!(parsed.n_cells_per_group, vec![2, 1]);
+    }
+
+    #[test]
+    fn a_group_info_with_another_column_count_is_rejected() {
+        let dir = TempDir::new().unwrap();
+
+        for header in ["sample\tgroup", "a\tb\tc\td\te"] {
+            let path = write_group_info(&dir, &format!("{header}\n"));
+            let err = parse_group_info(&path, &["s1"]).unwrap_err().to_string();
+            assert!(err.contains("columns"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_four_column_cell_id_must_name_its_sample() {
+        // Without the `::` there is no sample to match against a BAM, which is
+        // an error rather than a row to skip: every row would be dropped and
+        // the run would report an empty track.
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(
+            &dir,
+            "Cell_ID\tUMAP1\tUMAP2\tcluster\ns1_AAA\t0.1\t-2.3\tg1\n",
+        );
+
+        let err = format!("{:#}", parse_group_info(&path, &["s1"]).unwrap_err());
+        assert!(err.contains("sample::barcode"), "{err}");
+    }
+
+    #[test]
+    fn a_row_that_does_not_match_the_header_width_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(&dir, "sample\tbarcode\tgroup\ns1\tAAA\tg1\ns1\tCCC\n");
+
+        let err = parse_group_info(&path, &["s1"]).unwrap_err().to_string();
+        assert!(err.contains("line 3"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_group_info_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(&dir, "");
+
+        let err = parse_group_info(&path, &["s1"]).unwrap_err().to_string();
+        assert!(err.contains("empty"), "{err}");
+    }
+
+    #[test]
     fn group_info_ignores_blank_lines_comments_and_unknown_samples() {
         let dir = TempDir::new().unwrap();
         let path = write_group_info(
@@ -1615,12 +1754,12 @@ mod tests {
 
         // The 8 singleton groups of test_i1 plus the one pooled group of test_i2.
         assert!(
-            names.contains(&"cov.i2_pool.bedgraph".to_string()),
+            names.contains(&"cov_i2_pool.bedgraph".to_string()),
             "{names:?}"
         );
         for bc in ["ACGGTAAT", "ATATAACT", "GCGAGCAT", "TAGACTTG"] {
             assert!(
-                names.contains(&format!("cov.i1_{bc}.bedgraph")),
+                names.contains(&format!("cov_i1_{bc}.bedgraph")),
                 "missing i1_{bc} in {names:?}"
             );
         }
@@ -1639,8 +1778,8 @@ mod tests {
 
         // GCGAGCAT is in both BAMs: once as its own test_i1 group, once inside
         // the pooled test_i2 group. It must not collapse into one cell.
-        assert!(names.contains(&"cov.i1_GCGAGCAT.bedgraph".to_string()));
-        assert!(names.contains(&"cov.i2_pool.bedgraph".to_string()));
+        assert!(names.contains(&"cov_i1_GCGAGCAT.bedgraph".to_string()));
+        assert!(names.contains(&"cov_i2_pool.bedgraph".to_string()));
         assert_eq!(files.len(), N_GROUPS);
     }
 
@@ -1669,11 +1808,55 @@ mod tests {
 
         // i2_pool holds all 7 test_i2 cells, so its signal cannot be less than
         // the single test_i1 cell that shares a barcode with one of them.
-        let pooled: f64 = bedgraph_rows(&dir.path().join("cov.i2_pool.bedgraph"))
+        let pooled: f64 = bedgraph_rows(&dir.path().join("cov_i2_pool.bedgraph"))
             .iter()
             .map(|(_, _, _, v)| v)
             .sum();
         assert!(pooled > 0.0, "the pooled group counted nothing");
+    }
+
+    #[test]
+    fn mnase_refuses_a_single_end_library() {
+        // The centre of a fragment is defined by its two mates, so there is
+        // nothing to compute from a single-end file. Better to say so than to
+        // write an empty track, which is what skipping every read would give.
+        let dir = TempDir::new().unwrap();
+        let single_end = testdata().join("test_spliced.bam");
+        let group_info =
+            write_group_info(&dir, "sample\tbarcode\tgroup\ntest_spliced\tATATAACT\tg1\n");
+
+        let err = run_bulk_coverage(
+            &[(single_end.as_path(), "test_spliced")],
+            &group_info,
+            dir.path().join("cov").to_str().unwrap(),
+            10_000,
+            10_000,
+            "BC",
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            NormalizeMethod::None,
+            1.0,
+            OutputFormat::BedGraph,
+            ReadMode::MNase,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("--mnase"), "{err}");
+        assert!(err.contains("single-end"), "{err}");
     }
 
     #[test]
@@ -1700,6 +1883,19 @@ mod tests {
             assert_eq!(file.extension().unwrap(), "bw");
             assert!(file.metadata().unwrap().len() > 0, "empty bigWig");
         }
+
+        // `{prefix}_{group}.bw`, as the reference implementation names it.
+        let names: Vec<String> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"cov_i2_pool.bw".to_string()), "{names:?}");
+        assert!(
+            names
+                .iter()
+                .all(|n| n.starts_with("cov_") && n.ends_with(".bw")),
+            "{names:?}"
+        );
     }
 
     #[test]
@@ -1736,8 +1932,8 @@ mod tests {
         )
         .unwrap();
 
-        let a = bedgraph_rows(&dir.path().join("plain.i2_pool.bedgraph"));
-        let b = bedgraph_rows(&dir.path().join("scaled.i2_pool.bedgraph"));
+        let a = bedgraph_rows(&dir.path().join("plain_i2_pool.bedgraph"));
+        let b = bedgraph_rows(&dir.path().join("scaled_i2_pool.bedgraph"));
         assert_eq!(a.len(), b.len(), "scaling changed the interval layout");
 
         for ((c1, s1, e1, v1), (c2, s2, e2, v2)) in a.iter().zip(b.iter()) {
@@ -1768,8 +1964,8 @@ mod tests {
         )
         .unwrap();
 
-        let a = bedgraph_rows(&dir.path().join("raw.i2_pool.bedgraph"));
-        let b = bedgraph_rows(&dir.path().join("cpm.i2_pool.bedgraph"));
+        let a = bedgraph_rows(&dir.path().join("raw_i2_pool.bedgraph"));
+        let b = bedgraph_rows(&dir.path().join("cpm_i2_pool.bedgraph"));
 
         assert_eq!(a.len(), b.len());
         let intervals = |rows: &[(String, u32, u32, f64)]| -> Vec<(String, u32, u32)> {
@@ -2011,8 +2207,8 @@ mod tests {
         )
         .unwrap();
 
-        let whole_signal = signal_by_interval(&dir.path().join("whole.i2_pool.bedgraph"));
-        let region_signal = signal_by_interval(&dir.path().join("region.i2_pool.bedgraph"));
+        let whole_signal = signal_by_interval(&dir.path().join("whole_i2_pool.bedgraph"));
+        let region_signal = signal_by_interval(&dir.path().join("region_i2_pool.bedgraph"));
 
         assert!(!region_signal.is_empty(), "the region carried no signal");
         for (interval, value) in &region_signal {
@@ -2049,8 +2245,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            signal_by_interval(&dir.path().join("bare.i2_pool.bedgraph")),
-            signal_by_interval(&dir.path().join("whole.i2_pool.bedgraph"))
+            signal_by_interval(&dir.path().join("bare_i2_pool.bedgraph")),
+            signal_by_interval(&dir.path().join("whole_i2_pool.bedgraph"))
         );
     }
 }

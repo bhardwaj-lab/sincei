@@ -151,9 +151,6 @@ def main(
     blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
     chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
     bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100,
-    distance_between_bins: Annotated[
-        int | None, BAM_OPTS["distance_between_bins"]
-    ] = None,
     # Filter options
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
@@ -198,8 +195,9 @@ def main(
             bam_labels = backend.resolve_labels(bam_files, None, False)
         else:
             bam_labels = backend.resolve_labels(bam_files, labels, smart_labels)
-        # stepSize = binSize + gap; a zero gap yields contiguous bins.
-        step_size = bin_size + (distance_between_bins or 0)
+
+        # Bigwig file cover the entire genome without gaps or overlaps
+        step_size = bin_size
 
         output_files = internal.bulk_coverage(
             bam_files,

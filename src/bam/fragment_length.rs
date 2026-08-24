@@ -49,6 +49,50 @@ pub(crate) fn resolve_extend_reads(
     }
 }
 
+/// Fail unless every BAM holds a measurable paired-end library.
+///
+/// `option` names the flag that needs one, for the error message. Used by the
+/// modes that read a fragment from the two mates and so have nothing to work
+/// with in a single-end file, which the reference implementation also refuses.
+pub(crate) fn ensure_paired_end(bam_paths: &[(&Path, &str)], option: &str) -> Result<()> {
+    let layouts = sample_library_layouts(bam_paths)?;
+
+    let named = |wanted: fn(&LibraryLayout) -> bool| -> Vec<String> {
+        layouts
+            .iter()
+            .zip(bam_paths)
+            .filter(|(layout, _)| wanted(layout))
+            .map(|(_, (path, _))| path.display().to_string())
+            .collect()
+    };
+
+    let single_end = named(|l| matches!(l, LibraryLayout::SingleEnd));
+    anyhow::ensure!(
+        single_end.is_empty(),
+        "{} needs paired-end reads, but {} contain(s) only single-end reads",
+        option,
+        single_end.join(", ")
+    );
+
+    let unmeasurable = named(|l| {
+        matches!(
+            l,
+            LibraryLayout::PairedEnd {
+                median_fragment_length: None
+            }
+        )
+    });
+    anyhow::ensure!(
+        unmeasurable.is_empty(),
+        "{} needs paired-end fragments, but {} contain(s) none in the first {} reads",
+        option,
+        unmeasurable.join(", "),
+        SAMPLE_READS
+    );
+
+    Ok(())
+}
+
 /// Estimate a fragment length from the reads at the start of each BAM.
 ///
 /// Every BAM must be paired-end since fragment length cannot be inferred from

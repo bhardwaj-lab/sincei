@@ -325,7 +325,10 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
         "--outFilePrefix",
         metavar="PATH",
         rich_help_panel=_IO,
-        help="Prefix for output file names.",
+        help=(
+            "Prefix for output file names. One file per group is written, named "
+            "`<prefix>_<group>.bw` or `<prefix>_<group>.bedgraph`."
+        ),
     ),
     "group_info": typer.Option(
         "-gi",
