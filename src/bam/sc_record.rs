@@ -32,15 +32,19 @@ pub(crate) struct ScRecordOptions {
 /// How a read's position can be adjusted.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AdjustRead {
-    /// Extend each read to this fragment length (bp).  A pair that is properly
+    /// Extend each read to this fragment length (bp). A pair that is properly
     /// paired, on one reference, facing inward and no longer than
-    /// `4 × extend_reads` is extended to its observed insert size (TLEN)
-    /// instead; any other read is extended to this length.
+    /// [`Self::max_paired_fragment_length`] is extended to its observed insert
+    /// size (TLEN) instead; any other read is extended to this length.
     /// `None` leaves the alignment span unchanged.
     pub extend_reads: Option<usize>,
     /// After extension, replace the interval with a `read_length` window
     /// centered on its midpoint.
     pub center_reads: bool,
+    /// Largest insert size that may be accepted as a fragment. `None` means
+    /// `4 × extend_reads`. If`--maxFragmentLength` is given, that value
+    /// replaces it.
+    pub max_paired_fragment_length: Option<usize>,
 }
 
 /// A parsed, filter-passing BAM record carrying the fields needed for
@@ -374,7 +378,9 @@ impl<'a> ScRecord<'a> {
         let (start, end) = match adjust.extend_reads {
             None => (self.alignment_start, self.alignment_end),
             Some(frag_len) => {
-                let max_paired = 4 * frag_len;
+                // Four times the requested fragment length, unless a maximum was
+                // given.
+                let max_paired = adjust.max_paired_fragment_length.unwrap_or(4 * frag_len);
                 let tlen_abs = self.template_length.unsigned_abs() as usize;
                 // The proper-pair flag alone cannot be trusted to mean that TLEN
                 // describes a fragment, so the pair is checked for: one reference,
@@ -679,6 +685,34 @@ mod tests {
         assert_eq!(rec.effective_interval(&adjust), (1000, 1800));
     }
 
+    #[test]
+    fn a_maximum_fragment_length_replaces_the_insert_size_bound() {
+        // Without a maximum the bound is 4 x the requested fragment length, so a
+        // 700 bp insert is believed at `--extendReads 200`.
+        let rec = proper_pair(1000, 1050, 700, 1650);
+        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1700));
+
+        // `--maxFragmentLength` replaces that bound outright, as it does in the
+        // reference implementation, so the same pair is now too long to believe
+        // and falls back to the fixed extension.
+        let bounded = AdjustRead {
+            extend_reads: Some(200),
+            center_reads: false,
+            max_paired_fragment_length: Some(500),
+        };
+        assert_eq!(rec.effective_interval(&bounded), (1000, 1200));
+
+        // It replaces rather than tightens: a bound above 4x widens what counts.
+        let widened = AdjustRead {
+            extend_reads: Some(200),
+            center_reads: false,
+            max_paired_fragment_length: Some(2000),
+        };
+        let long = proper_pair(1000, 1050, 1500, 2450);
+        assert_eq!(long.effective_interval(&widened), (1000, 2500));
+        assert_eq!(long.effective_interval(&extend_to_200()), (1000, 1200));
+    }
+
     // The proper-pair flag is not enough on its own: a pair failing any of the
     // tests below is extended as if it were single-ended (1000..1050 + 200).
 
@@ -753,6 +787,7 @@ mod tests {
         let adjust = AdjustRead {
             extend_reads: Some(200),
             center_reads: true,
+            ..AdjustRead::default()
         };
 
         // Extended to [1000, 1200), centered at 1100; a 50 bp read spans [1075, 1125).

@@ -972,10 +972,12 @@ mod tests {
         assert!(!blocks_of(&AdjustRead {
             extend_reads: Some(300),
             center_reads: false,
+            ..AdjustRead::default()
         }));
         assert!(!blocks_of(&AdjustRead {
             extend_reads: None,
             center_reads: true,
+            ..AdjustRead::default()
         }));
     }
 

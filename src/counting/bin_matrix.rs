@@ -701,6 +701,7 @@ mod tests {
             &AdjustRead {
                 extend_reads: Some(200),
                 center_reads: false,
+                ..AdjustRead::default()
             },
         )
         .unwrap();

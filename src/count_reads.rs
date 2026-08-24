@@ -214,6 +214,7 @@ pub fn count_bins(
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
             .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
         center_reads,
+        max_paired_fragment_length: max_fragment_length,
     };
 
     count_bam_bins(
@@ -361,6 +362,7 @@ pub fn count_features(
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
             .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
         center_reads,
+        max_paired_fragment_length: max_fragment_length,
     };
 
     count_bam_features(

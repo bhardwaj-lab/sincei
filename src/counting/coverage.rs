@@ -386,6 +386,7 @@ pub fn run_bulk_coverage(
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,
         center_reads,
+        max_paired_fragment_length: qc_filter.and_then(|f| f.max_fragment_length),
     };
 
     let has_motif = genome_path.is_some() && motifs.is_some();
