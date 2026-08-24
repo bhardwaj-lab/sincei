@@ -19,7 +19,8 @@ use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{bins_touched, build_bin_index, build_bin_index_in_window};
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -69,6 +70,13 @@ pub fn count_bam_bins(
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
+
+    // A genome from the wrong assembly makes every motif lookup wrong, so this
+    // is checked once here rather than a silent loss of reads.
+    if has_motif && let Some(genome) = genome_path {
+        ensure_genome_matches_bams(genome, &all_bams)?;
+    }
+
     let count_tag_parsed = count_tag.map(parse_tag).transpose()?;
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let region_filter = params.region.as_deref().map(parse_region).transpose()?;

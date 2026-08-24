@@ -28,7 +28,8 @@ use crate::annotation::region_index::{
     bins_touched, build_bigwig_index, build_bigwig_index_in_window,
 };
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -396,6 +397,13 @@ pub fn run_bulk_coverage(
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
+
+    // A genome from the wrong assembly makes every motif lookup wrong, so this
+    // is checked once here rather than a silent loss of reads.
+    if has_motif && let Some(genome) = genome_path {
+        ensure_genome_matches_bams(genome, &all_bams)?;
+    }
+
     let params = CountingParams {
         chr_to_skip: chr_to_skip.to_vec(),
         region: region.map(String::from),

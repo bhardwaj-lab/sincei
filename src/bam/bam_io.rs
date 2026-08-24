@@ -16,7 +16,7 @@ use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
 use bstr::BString;
 use noodles::bam;
@@ -25,6 +25,7 @@ use noodles::sam::Header;
 use noodles::sam::alignment::record::data::field::Tag;
 use noodles::sam::header::record::value::{Map, map::ReadGroup, map::ReferenceSequence};
 use noodles::sam::header::{ReadGroups, ReferenceSequences};
+use twobit::TwoBitFile;
 
 use super::filters::MotifFilter;
 
@@ -100,6 +101,68 @@ fn ensure_tag_present(path: &Path, option: &str, tag: Tag) -> Result<()> {
         TAG_SAMPLE_READS,
         path.display()
     )
+}
+
+/// Fail unless the 2bit genome describes the same chromosomes as the BAMs.
+///
+/// The motif filter reads reference bases at each read's coordinates, so a
+/// genome from another assembly returns the wrong sequence for every read. It
+/// also puts reads past the end of a chromosome, where the reference
+/// implementation dies inside py2bit and this one would quietly treat the
+/// failed lookup as "no match" and drop the read.
+///
+/// Only the chromosomes named by both are compared.
+pub(crate) fn ensure_genome_matches_bams(genome_path: &Path, bam_paths: &[&Path]) -> Result<()> {
+    let genome = TwoBitFile::open(genome_path)
+        .with_context(|| format!("failed to open 2bit genome: {}", genome_path.display()))?;
+    let lengths: AHashMap<String, usize> = genome
+        .chrom_names()
+        .into_iter()
+        .zip(genome.chrom_sizes())
+        .collect();
+
+    for path in bam_paths {
+        let header = read_bam_header(path)?;
+        let mut shared = 0usize;
+
+        for (name, seq) in header.reference_sequences() {
+            let chrom = String::from_utf8_lossy(name.as_ref()).into_owned();
+            let Some(&genome_len) = lengths.get(&chrom) else {
+                continue;
+            };
+            shared += 1;
+            let bam_len = seq.length().get();
+            anyhow::ensure!(
+                bam_len == genome_len,
+                "{} and {} disagree about {}: {} bases in the BAM, {} in the genome.\n\
+                 They are different assemblies, so --motifFilter would read the wrong \
+                 bases for every read.",
+                path.display(),
+                genome_path.display(),
+                chrom,
+                bam_len,
+                genome_len
+            );
+        }
+
+        anyhow::ensure!(
+            shared > 0,
+            "{} and {} name no chromosome in common, so --motifFilter has no \
+             sequence to read.\nThe genome has {}; check whether one side uses a \
+             `chr` prefix and the other does not.",
+            path.display(),
+            genome_path.display(),
+            genome
+                .chrom_names()
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    Ok(())
 }
 
 /// The `@RG` IDs a BAM declares, in header order.
@@ -338,6 +401,27 @@ impl<'a> BamWorker<'a> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_genome_whose_chromosome_lengths_match_the_bam_is_accepted() {
+        // test_i1.bam is mm10 chr1 (195,471,971), as is this 2bit.
+        let bam = testdata().join("test_i1.bam");
+        let genome = testdata().join("mm10_chr1.2bit");
+        if !genome.exists() {
+            return; // the 2bit is not committed; the extended suite covers it
+        }
+        assert!(ensure_genome_matches_bams(&genome, &[bam.as_path()]).is_ok());
+    }
+
+    #[test]
+    fn a_missing_genome_file_is_reported_with_its_path() {
+        let bam = testdata().join("test_i1.bam");
+        let missing = testdata().join("no_such_genome.2bit");
+        let err = ensure_genome_matches_bams(&missing, &[bam.as_path()])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no_such_genome.2bit"), "{err}");
+    }
+
     use super::*;
     use std::path::PathBuf;
     use tempfile::TempDir;

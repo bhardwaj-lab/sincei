@@ -10,7 +10,8 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
@@ -113,6 +114,14 @@ pub fn run_filter_stats(
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     ensure_barcode_tags_present(&[bam_path], bc_tag_parsed, umi_tag_parsed)?;
+
+    // A genome from the wrong assembly makes every motif lookup wrong, so this
+    // is checked once here rather than a silent loss of reads.
+    if let Some(genome) = genome_path
+        && motifs.is_some()
+    {
+        ensure_genome_matches_bams(genome, &[bam_path])?;
+    }
 
     let record_opts = ScRecordOptions {
         compute_gc: min_gc.is_some() || max_gc.is_some(),
