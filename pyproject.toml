@@ -3,7 +3,7 @@ requires = ["maturin>=1.10,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "sincei"
+name = "sincei_rust"
 description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
