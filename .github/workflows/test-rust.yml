@@ -42,6 +42,8 @@ jobs:
           sed -i "s|^SF:$PWD/|SF:|" lcov.info
 
       - name: Upload coverage to Codecov
+        # Workflow dispatches do not upload coverage.
+        if: github.event_name != 'workflow_dispatch'
         uses: codecov/codecov-action@v7
         with:
           files: ./lcov.info
