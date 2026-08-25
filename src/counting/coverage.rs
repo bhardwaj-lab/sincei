@@ -81,50 +81,75 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
     Some((frag_start, frag_end))
 }
 
-/// Returns the genomic interval corresponding to an offset (or offset range)
-/// within the read. Offsets are 1-based; negative values index from the read
-/// end. A single value returns a 1-bp interval; two values return a range.
+/// Returns the genomic intervals for an offset (or offset range) inside the
+/// read. Offsets are 1-based; negative values index from the read's 3' end.
+/// A single value gives one base, two give the range between them.
 ///
-/// Simplified: treats each read as a contiguous block (no CIGAR-block
-/// traversal), which is correct for unspliced data.
-fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Option<(usize, usize)> {
-    let len = rec.read_length as i32;
+/// The offset counts **aligned** positions, walking the read's gapless blocks.
+/// Counting along the alignment span instead would step through an intron or a
+/// deletion and place the signal where the read has none. Counting along the
+/// stored sequence would step through soft-clipped bases and run off the end.
+/// Because a window can cross a gap, the result may be several intervals,
+/// always in ascending genomic order.
+fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Vec<(usize, usize)> {
+    // Ungapped reads carry no block list, their one block being the alignment.
+    let span = [(rec.alignment_start, rec.alignment_end)];
+    let blocks: &[(usize, usize)] = rec.blocks.as_deref().unwrap_or(&span);
+
+    let len: usize = blocks.iter().map(|(s, e)| e - s).sum();
     if len == 0 {
-        return None;
+        return Vec::new();
     }
+    let len_i = len as i32;
 
-    // Convert 1-based possibly-negative offset to 0-based index into the
-    // conceptual stretch (list of read positions from 5′ to 3′).
-    let to_idx = |o: i32| -> i32 { if o > 0 { o - 1 } else { len + o } };
-
+    // 1-based, possibly negative offset to a 0-based index into the aligned
+    // positions, read 5' to 3'.
+    let to_idx = |o: i32| -> i32 { if o > 0 { o - 1 } else { len_i + o } };
     let idx_s = to_idx(start);
     let idx_e = match end {
         None => idx_s + 1,
         Some(e) => to_idx(e) + 1,
     };
-
-    if idx_s < 0 || idx_e <= idx_s || idx_s >= len {
-        return None;
+    if idx_s < 0 || idx_e <= idx_s || idx_s >= len_i {
+        return Vec::new();
     }
-    let idx_s = idx_s as usize;
-    let idx_e = (idx_e.min(len)) as usize;
+    let (idx_s, idx_e) = (idx_s as usize, (idx_e.min(len_i)) as usize);
 
-    // For reverse reads the stretch is reversed (3′->5′ in genomic order),
-    // so index 0 corresponds to the genomic end of the alignment.
-    Some(if rec.is_reverse {
-        let geno_s = rec.alignment_end.saturating_sub(idx_e);
-        let geno_e = rec.alignment_end.saturating_sub(idx_s);
-        (geno_s, geno_e)
-    } else {
-        (rec.alignment_start + idx_s, rec.alignment_start + idx_e)
-    })
+    // Walk the blocks in read order, taking each one's share of the window.
+    // For a reverse read the 5' end is the genomic end, so the walk runs
+    // backwards and each block is indexed from its own end.
+    let reverse = rec.is_reverse;
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut consumed = 0usize;
+
+    for i in 0..blocks.len() {
+        let (block_start, block_end) = if reverse {
+            blocks[blocks.len() - 1 - i]
+        } else {
+            blocks[i]
+        };
+        let block_len = block_end - block_start;
+        let (from, to) = (consumed, consumed + block_len);
+        consumed = to;
+
+        let lo = idx_s.max(from);
+        let hi = idx_e.min(to);
+        if lo >= hi {
+            continue;
+        }
+        out.push(if reverse {
+            (block_end - (hi - from), block_end - (lo - from))
+        } else {
+            (block_start + (lo - from), block_start + (hi - from))
+        });
+    }
+
+    if reverse {
+        out.reverse(); // back into ascending genomic order
+    }
+    out
 }
 
-/// The intervals a read covers under `mode`.
-///
-/// `Normal` follows the read's own shape, so a spliced read yields one interval
-/// per gapless block. The other two modes pick a synthetic window inside the
-/// read, which is a single interval by construction.
 fn get_effective_intervals<'a>(
     rec: &'a ScRecord,
     adjust: &AdjustRead,
@@ -133,7 +158,9 @@ fn get_effective_intervals<'a>(
     match mode {
         ReadMode::Normal => rec.effective_intervals(adjust),
         ReadMode::MNase => EffectiveIntervals::One(apply_mnase(rec)),
-        ReadMode::Offset(start, end) => EffectiveIntervals::One(apply_offset(rec, start, end)),
+        ReadMode::Offset(start, end) => {
+            EffectiveIntervals::Selected(apply_offset(rec, start, end).into_iter())
+        }
     }
 }
 
@@ -1117,7 +1144,7 @@ pub fn bulk_coverage(
 
     if mnase && parsed_offset.is_some() {
         return Err(PyRuntimeError::new_err(
-            "--MNase and --Offset are mutually exclusive",
+            "--mnase and --offset are mutually exclusive",
         ));
     }
 
@@ -1227,22 +1254,22 @@ mod tests {
     #[test]
     fn a_positive_offset_is_one_based_from_the_read_start() {
         let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 1, None), Some((1000, 1001)));
-        assert_eq!(apply_offset(&rec, 10, None), Some((1009, 1010)));
+        assert_eq!(apply_offset(&rec, 1, None), [(1000, 1001)]);
+        assert_eq!(apply_offset(&rec, 10, None), [(1009, 1010)]);
     }
 
     #[test]
     fn a_negative_offset_counts_back_from_the_read_end() {
         let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, -1, None), Some((1049, 1050)));
-        assert_eq!(apply_offset(&rec, -50, None), Some((1000, 1001)));
+        assert_eq!(apply_offset(&rec, -1, None), [(1049, 1050)]);
+        assert_eq!(apply_offset(&rec, -50, None), [(1000, 1001)]);
     }
 
     #[test]
     fn two_offsets_give_the_range_between_them() {
         let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 1, Some(5)), Some((1000, 1005)));
-        assert_eq!(apply_offset(&rec, 3, Some(-1)), Some((1002, 1050)));
+        assert_eq!(apply_offset(&rec, 1, Some(5)), [(1000, 1005)]);
+        assert_eq!(apply_offset(&rec, 3, Some(-1)), [(1002, 1050)]);
     }
 
     #[test]
@@ -1250,27 +1277,110 @@ mod tests {
         let mut rec = test_record(1000, 1050);
         rec.is_reverse = true;
         // The first base of the read is the last base in genomic order.
-        assert_eq!(apply_offset(&rec, 1, None), Some((1049, 1050)));
-        assert_eq!(apply_offset(&rec, 1, Some(5)), Some((1045, 1050)));
+        assert_eq!(apply_offset(&rec, 1, None), [(1049, 1050)]);
+        assert_eq!(apply_offset(&rec, 1, Some(5)), [(1045, 1050)]);
     }
 
     #[test]
     fn offsets_outside_the_read_are_rejected() {
         let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 51, None), None, "past the read end");
-        assert_eq!(apply_offset(&rec, 5, Some(2)), None, "end before start");
+        assert!(apply_offset(&rec, 51, None).is_empty(), "past the read end");
+        assert!(
+            apply_offset(&rec, 5, Some(2)).is_empty(),
+            "end before start"
+        );
 
         let empty = test_record(1000, 1000);
-        assert_eq!(apply_offset(&empty, 1, None), None, "zero-length read");
+        assert!(apply_offset(&empty, 1, None).is_empty(), "zero-length read");
     }
 
     #[test]
     fn a_range_that_runs_past_the_read_end_is_clamped_to_it() {
         let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 48, Some(100)), Some((1047, 1050)));
+        assert_eq!(apply_offset(&rec, 48, Some(100)), [(1047, 1050)]);
     }
 
     // Read-mode dispatch
+
+    /// A spliced read: two 10 bp exons either side of a 100 bp intron.
+    fn spliced_record<'a>() -> ScRecord<'a> {
+        let mut rec = test_record(1000, 1120);
+        rec.blocks = Some(vec![(1000, 1010), (1110, 1120)]);
+        rec
+    }
+
+    #[test]
+    fn an_offset_counts_aligned_bases_and_steps_over_an_intron() {
+        let rec = spliced_record();
+
+        // Bases 1-10 are the first exon; the 11th aligned base is the first of
+        // the second exon, not the 11th base of the intron.
+        assert_eq!(apply_offset(&rec, 10, None), [(1009, 1010)]);
+        assert_eq!(apply_offset(&rec, 11, None), [(1110, 1111)]);
+
+        // The RiboSeq P-site offset, which is what this option exists for.
+        assert_eq!(apply_offset(&rec, 12, None), [(1111, 1112)]);
+
+        // The last aligned base is the end of the second exon.
+        assert_eq!(apply_offset(&rec, -1, None), [(1119, 1120)]);
+    }
+
+    #[test]
+    fn an_offset_range_crossing_a_gap_comes_back_as_two_intervals() {
+        let rec = spliced_record();
+
+        // Bases 8-13 straddle the junction: three in each exon, none between.
+        assert_eq!(
+            apply_offset(&rec, 8, Some(13)),
+            [(1007, 1010), (1110, 1113)]
+        );
+        // The whole read is its two exons, and nothing of the intron.
+        assert_eq!(
+            apply_offset(&rec, 1, Some(-1)),
+            [(1000, 1010), (1110, 1120)]
+        );
+    }
+
+    #[test]
+    fn an_offset_past_the_aligned_length_yields_nothing() {
+        // 20 aligned bases over a 120 bp footprint: asking for the 21st must
+        // report nothing rather than a position inside the intron.
+        let rec = spliced_record();
+        assert!(apply_offset(&rec, 21, None).is_empty());
+        assert!(apply_offset(&rec, -21, None).is_empty());
+    }
+
+    #[test]
+    fn on_a_reverse_read_the_offset_counts_from_the_far_exon() {
+        // The 5' end of a reverse read is the genomic end, so counting starts
+        // at the last base of the second exon and runs back through it.
+        let mut rec = spliced_record();
+        rec.is_reverse = true;
+
+        assert_eq!(apply_offset(&rec, 1, None), [(1119, 1120)]);
+        assert_eq!(apply_offset(&rec, 10, None), [(1110, 1111)]);
+        assert_eq!(apply_offset(&rec, 11, None), [(1009, 1010)]);
+
+        // A range crossing the junction still comes back ascending. Aligned
+        // bases 9-12 of this read are 1111 and 1110 in the far exon, then 1009
+        // and 1008 in the near one.
+        assert_eq!(
+            apply_offset(&rec, 9, Some(12)),
+            [(1008, 1010), (1110, 1112)]
+        );
+    }
+
+    #[test]
+    fn an_offset_ignores_soft_clipped_bases() {
+        // `5S10M5S`: the stored sequence is 20 bases but only 10 align, so the
+        // 12th aligned base does not exist. Counting the clips would have put
+        // it two bases past the alignment.
+        let mut rec = test_record(1000, 1010);
+        rec.read_length = 20;
+
+        assert!(apply_offset(&rec, 12, None).is_empty());
+        assert_eq!(apply_offset(&rec, -1, None), [(1009, 1010)]);
+    }
 
     fn intervals_of(rec: &ScRecord, adjust: &AdjustRead, mode: ReadMode) -> Vec<(usize, usize)> {
         get_effective_intervals(rec, adjust, mode).collect()

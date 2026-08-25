@@ -10,6 +10,7 @@ checks, plus the small amount of app plumbing shared by every command
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -191,6 +192,21 @@ def configure_logging() -> None:
     )
 
 
+_NEGATIVE_NUMBER = re.compile(r"^-\d|^-\.\d")
+
+
+def _is_option(token: str) -> bool:
+    """Whether an argv token names an option rather than being a value.
+
+    A leading ``-`` is not enough: ``--offset 5 -1`` ends in a negative
+    *number*, and treating it as an option leaves it stranded for click to
+    reject with "No such option: -1". Every flag here begins with a letter, so
+    a ``-`` followed by a digit is always a value. `argparse` applies the same
+    rule, which is why the reference implementation accepts the form.
+    """
+    return token.startswith("-") and not _NEGATIVE_NUMBER.match(token)
+
+
 def preprocess_args() -> None:
     """Expand whitespace-separated multi-value options into repeated options.
 
@@ -214,16 +230,16 @@ def preprocess_args() -> None:
     # Collect the leading command path (everything up to the first option).
     final_cmd: list[str] = []
     for arg in sys.argv:
-        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+        if _is_option(arg):
             break
         final_cmd.append(arg)
 
     # Expand each option so every value gets its own flag.
     for idx, arg in enumerate(sys.argv):
-        if any(arg.startswith(prefix) for prefix in ("-", "--")):
+        if _is_option(arg):
             opt_values: list[str] = []
             for value in sys.argv[idx + 1 :]:
-                if any(value.startswith(prefix) for prefix in ("-", "--")):
+                if _is_option(value):
                     break
                 opt_values.append(value)
 

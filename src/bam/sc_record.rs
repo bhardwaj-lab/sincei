@@ -453,6 +453,10 @@ impl<'a> ScRecord<'a> {
 pub(crate) enum EffectiveIntervals<'a> {
     One(Option<(usize, usize)>),
     Blocks(std::slice::Iter<'a, (usize, usize)>),
+    /// A window selected inside the read, which the record itself does not
+    /// hold: `--Offset` trims the blocks at both ends, and a window crossing a
+    /// gap comes back as several intervals. Built per read, so it owns them.
+    Selected(std::vec::IntoIter<(usize, usize)>),
 }
 
 impl Iterator for EffectiveIntervals<'_> {
@@ -462,6 +466,7 @@ impl Iterator for EffectiveIntervals<'_> {
         match self {
             Self::One(interval) => interval.take(),
             Self::Blocks(blocks) => blocks.next().copied(),
+            Self::Selected(intervals) => intervals.next(),
         }
     }
 
@@ -476,6 +481,7 @@ impl ExactSizeIterator for EffectiveIntervals<'_> {
         match self {
             Self::One(interval) => usize::from(interval.is_some()),
             Self::Blocks(blocks) => blocks.len(),
+            Self::Selected(intervals) => intervals.len(),
         }
     }
 }
