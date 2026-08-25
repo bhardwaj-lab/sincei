@@ -1,0 +1,30 @@
+codecov:
+  require_ci_to_pass: no
+  notify:
+    # Two reports arrive per commit: `python` from test-python and `rust` from
+    # test-rust. Wait for both before posting a status.
+    after_n_builds: 2
+
+coverage:
+  status:
+    project:
+      default:
+        target: 70
+    patch: false
+    changes: false
+
+flags:
+  python:
+    paths:
+      - sincei/
+    carryforward: true
+  rust:
+    paths:
+      - src/
+    carryforward: true
+
+comment:
+  layout: diff, flags, files
+  behavior: once
+  require_base: no
+  after_n_builds: 2

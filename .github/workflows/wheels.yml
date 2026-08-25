@@ -1,0 +1,73 @@
+name: wheels
+
+on:
+  workflow_call:
+  # Build the full matrix on demand, without touching PyPI, to check that a
+  # dependency bump has not broken a platform.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: ${{ matrix.target }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64
+            manylinux: manylinux_2_28
+          - runner: macos-15-intel
+            target: x86_64
+            manylinux: auto
+            deployment_target: "10.13"
+          - runner: macos-14
+            target: aarch64
+            manylinux: auto
+            deployment_target: "11.0"
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-native-deps
+        if: runner.os == 'macOS'
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          maturin-version: "1.14.1"
+          args: --release --out dist
+          before-script-linux: dnf install -y cmake zlib-devel
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.runner }}-${{ matrix.target }}
+          path: dist/*.whl
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          maturin-version: "1.14.1"
+          args: --out dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
