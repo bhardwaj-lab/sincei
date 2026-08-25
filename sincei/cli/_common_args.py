@@ -702,17 +702,18 @@ PLOT_OPTS: dict[str, typer.models.OptionInfo] = {
 
 GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
     "metagene": typer.Option(
-        "-m",
         "--metagene",
         rich_help_panel=_GTF,
         help=(
             "When a GFF/GTF file is used to provide regions, count reads only on the "
-            "combined exons of a transcript or gene rather than on the genomic "
-            "interval defined by the 5-prime and 3-prime transcript bound. Exons  are"
-            "the records whose column-3 type matches ``--exonID``; what they are "
-            "grouped into is set by ``--transcriptIDtag``: one feature per transcript "
-            "(the default) or one per gene (``--transcriptIDtag gene_id``). "
-            "Ignored for BED inputs."
+            "combined exons of a gene or transcript rather than on the genomic "
+            "interval defined by the 5-prime and 3-prime transcript bound, and count "
+            "each read only once. Exons are the records whose column-3 type matches "
+            "``--exonID``; what they are grouped into is set by ``--featureIDtag``: "
+            "one feature per gene (the default) or one per transcript "
+            "(``--featureIDtag transcript_id`` for GTF, ``Parent`` for GFF3). A "
+            "read meeting several exons of one group is counted once, against the "
+            "group it overlaps most. Ignored for BED inputs."
         ),
     ),
     "transcript_id": typer.Option(
@@ -722,10 +723,10 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "The column-3 feature type(s) processed as a region (transcript). May be "
             "given more than once, e.g. ``--transcriptID mRNA --transcriptID lnc_RNA``."
-            " (Default: every transcript type in the file, regardless of "
-            "biotype. GTF and GENCODE GFF3 type them all ``transcript``; an "
-            "Ensembl-style GFF3 names them by biotype instead: mRNA, lnc_RNA, snoRNA, "
-            "etc., which are read out of the file itself.)"
+            " (Default: every transcript type in the file, regardless of biotype. "
+            "GTF and GENCODE GFF3 type them all ``transcript``; an Ensembl-style GFF3 "
+            "names them by biotype instead: mRNA, lnc_RNA, snoRNA, etc., which are "
+            "read out of the file itself.)"
         ),
     ),
     "exon_id": typer.Option(
@@ -735,26 +736,27 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "When a GTF/GFF file is used to provide regions, entries with this value "
             "as their feature (column 3) are treated as exons. May be given more than "
-            'once, e.g. ``--exonID exon --exonID CDS``. "CDS" is another common value. '
-            "NOTE: only used in metagene mode. (Default: ``exon``, which all three "
-            "flavours agree on.)"
+            "once, e.g. ``--exonID exon --exonID CDS``. "
+            "NOTE: only used in metagene mode. (Default: ``exon``)"
         ),
     ),
-    "transcript_id_tag": typer.Option(
-        "--transcriptIDtag",
+    "feature_id_tag": typer.Option(
+        "--featureIDtag",
         metavar="STR",
         rich_help_panel=_GTF,
         help=(
             "The column-9 attribute key whose value names each region. For GTF this is "
             "stored as a key:value pair in the last column. Set this to use a "
-            "different identifier. (Default: ``transcript_id`` for GTF, ``ID`` for "
-            "GFF3.)\n\n"
+            "different identifier. (Default: ``gene_id`` for GTF, ``ID`` for GFF3, "
+            "both of which name the gene. An Ensembl-style GFF3 namespaces its ids "
+            "as ``gene:ENSMUSG...``; the prefix is stripped.)\n\n"
             "In ``--metagene`` mode this key instead selects what exons are grouped "
-            "by, and so what one feature is. The default groups per transcript "
-            "(``transcript_id`` for GTF, ``Parent`` for GFF3, both of which every "
-            "flavour carries). Pass ``--transcriptIDtag gene_id`` to group per gene "
-            "instead. Note that an Ensembl-style GFF3 does not carry a gene id on "
-            "its exons, so grouping by gene gives an error."
+            "by, and so what one feature represents. The default groups per gene, on "
+            "``gene_id``, which both GTF flavours and a GENCODE GFF3 carry on their "
+            "exons. Pass ``--featureIDtag transcript_id`` (GTF) or "
+            "``--featureIDtag Parent`` (GFF3) to group per transcript instead. "
+            "Note that an Ensembl-style GFF3 carries no gene id on its exons, so it "
+            "must be given ``--featureIDtag Parent``."
         ),
     ),
 }

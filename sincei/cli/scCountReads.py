@@ -8,7 +8,6 @@ from sincei import _sincei as internal
 
 from . import _parsers as backend
 from ._common_args import (
-    _GTF,
     _IO,
     AVAILABLE_PROCESSORS,
     BAM_OPTS,
@@ -114,18 +113,6 @@ BED = typer.Option(
     rich_help_panel=_IO,
     help="BED/GTF/GFF files to limit the coverage analysis to the regions in them.",
 )
-METAGENE = typer.Option(
-    "--metagene",
-    rich_help_panel=_GTF,
-    help=(
-        "When counting features from a GTF/GFF file, count only in the merged exons of "
-        "a transcript instead taking the 5' and 3' bounds of the transcript."
-        "Count exons instead of whole transcripts, and count each read only once. "
-        "Exons are grouped per transcript. Use --transcriptIDtag gene_id to "
-        "group them per gene instead. A read that meets several exons of one group "
-        "is counted once, against the group it overlaps most."
-    ),
-)
 
 
 @app.callback(invoke_without_command=True)
@@ -170,7 +157,7 @@ def _count_reads(
     genome_chunk_size: int | None,
     transcript_id: list[str] | None = None,
     exon_id: list[str] | None = None,
-    transcript_id_tag: str | None = None,
+    feature_id_tag: str | None = None,
     metagene: bool = False,
     compression: Compression = Compression.none,
     compression_level: int = 4,
@@ -233,14 +220,14 @@ def _count_reads(
         if not bed:
             msg = "--bed is required for 'features' mode."
             raise typer.BadParameter(msg)
-        # GTF/GFF field selection (ignored for BED inputs). `transcript_id_tag`
+        # GTF/GFF field selection (ignored for BED inputs). `feature_id_tag`
         # is None by default so the backend picks the per-format name attribute.
         internal.count_features(
             bam_files,
             bed,
             feature_type=transcript_id,
             exon_type=exon_id,
-            name_attr=transcript_id_tag,
+            name_attr=feature_id_tag,
             metagene=metagene,
             **shared,
         )
@@ -382,8 +369,8 @@ def features(
     # GTF / GFF options (only affect GTF/GFF inputs, ignored for BED)
     transcript_id: Annotated[list[str] | None, GTF_GFF_OPTS["transcript_id"]] = None,
     exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,
-    transcript_id_tag: Annotated[str | None, GTF_GFF_OPTS["transcript_id_tag"]] = None,
-    metagene: Annotated[bool, METAGENE] = False,
+    feature_id_tag: Annotated[str | None, GTF_GFF_OPTS["feature_id_tag"]] = None,
+    metagene: Annotated[bool, GTF_GFF_OPTS["metagene"]] = False,
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
@@ -426,7 +413,7 @@ def features(
         compression_level=compression_level,
         transcript_id=transcript_id,
         exon_id=exon_id,
-        transcript_id_tag=transcript_id_tag,
+        feature_id_tag=feature_id_tag,
         metagene=metagene,
         number_of_processors=number_of_processors,
         verbose=verbose,

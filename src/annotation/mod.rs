@@ -10,6 +10,6 @@ pub mod parse_annotation;
 pub mod region_index;
 
 pub use parse_annotation::{
-    DEFAULT_EXON_TYPES, GENCODE_TRANSCRIPT_TYPE, parse_annotation_files, parse_blacklist_bed,
+    DEFAULT_EXON_TYPES, GENCODE_GENE_TYPE, parse_annotation_files, parse_blacklist_bed,
 };
 pub use region_index::{BinIndex, ChromIndex, Feature, GenomeIndex, Interval, build_bin_index};

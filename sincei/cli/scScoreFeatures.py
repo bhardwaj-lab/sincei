@@ -83,7 +83,7 @@ def main(
     # GTF/GFF options; only affect GTF/GFF inputs, ignored for BED.
     feature_type: Annotated[list[str] | None, GTF_GFF_OPTS["transcript_id"]] = None,
     exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,
-    name_attr: Annotated[str | None, GTF_GFF_OPTS["transcript_id_tag"]] = None,
+    feature_id_tag: Annotated[str | None, GTF_GFF_OPTS["feature_id_tag"]] = None,
     metagene: Annotated[bool, GTF_GFF_OPTS["metagene"]] = False,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
@@ -100,7 +100,7 @@ def main(
             penalty=penalty,
             feature_type=feature_type,
             exon_id=exon_id,
-            name_attr=name_attr,
+            feature_id_tag=feature_id_tag,
             metagene=metagene,
             number_of_processors=number_of_processors,
         )
@@ -112,7 +112,7 @@ def main(
         penalty=penalty,
         feature_type=feature_type,
         exon_type=exon_id,
-        name_attr=name_attr,
+        feature_id_tag=feature_id_tag,
         metagene=metagene,
         num_threads=number_of_processors,
     )

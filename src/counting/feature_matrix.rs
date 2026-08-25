@@ -618,17 +618,24 @@ mod tests {
 
     #[test]
     fn a_read_counts_once_for_every_feature_it_overlaps() {
-        // Chrna9.gtf holds two transcripts, and the shorter one lies inside the
-        // longer. Eight of the BAM's reads fall in the long transcript and two
-        // of those eight fall in the short one as well, so those two are counted
+        // Asked for transcripts, Chrna9.gtf gives two, the shorter lying inside
+        // the longer. Eight of the BAM's reads fall in the long one and two of
+        // those eight fall in the short one as well, so those two are counted
         // twice, once against each. Ten counts from eight reads.
+        //
+        // Explicitly typed: features are genes by default, and this locus has
+        // only one gene, which would hide the overlap this test is about.
         let dir = TempDir::new().unwrap();
         let out = dir.path().join("transcripts.h5ad");
 
         count_into(
             &out,
             &testdata().join("Chrna9.gtf"),
-            &CountingParams::default(),
+            &CountingParams {
+                feature_type: Some(vec!["transcript".to_string()]),
+                name_attr: Some("transcript_id".to_string()),
+                ..CountingParams::default()
+            },
         )
         .unwrap();
 
@@ -674,21 +681,32 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let gtf = overlapping_gtf(dir.path());
 
+        // Typed explicitly, since this synthetic file carries no gene record
+        // for the gene default to find.
         let per_transcript = dir.path().join("transcripts.h5ad");
-        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+        count_into(
+            &per_transcript,
+            &gtf,
+            &CountingParams {
+                feature_type: Some(vec!["transcript".to_string()]),
+                name_attr: Some("transcript_id".to_string()),
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
         assert_eq!(
             total(&per_transcript),
             10.0,
             "eight reads, two of them inside both transcripts"
         );
 
+        // Metagene groups on gene_id by default, so nothing needs naming here.
         let per_gene = dir.path().join("gene.h5ad");
         count_into(
             &per_gene,
             &gtf,
             &CountingParams {
                 metagene: true,
-                name_attr: Some("gene_id".to_string()),
                 ..CountingParams::default()
             },
         )
