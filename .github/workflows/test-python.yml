@@ -46,7 +46,7 @@ jobs:
         run: uv pip install maturin pytest pytest-cov
 
       - name: Build and install the extension
-        run: maturin develop --profile ci --uv
+        run: maturin develop --profile test --uv
 
       - name: Run tests
         env:

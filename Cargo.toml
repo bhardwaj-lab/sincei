@@ -83,10 +83,3 @@ lto = true
 panic = 'unwind'
 codegen-units = 1
 strip = true
-
-# Used by the test workflow
-[profile.ci]
-inherits = "release"
-opt-level = 2
-lto = false
-codegen-units = 16
