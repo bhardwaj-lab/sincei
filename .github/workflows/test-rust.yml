@@ -34,8 +34,6 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      # This runs the same tests `cargo test` did, under instrumentation, so the
-      # suite is not executed twice.
       - name: Run tests with coverage
         run: |
           cargo llvm-cov --no-fail-fast --lcov --output-path lcov.info

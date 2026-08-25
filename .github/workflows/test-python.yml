@@ -48,10 +48,6 @@ jobs:
       - name: Build and install the extension
         run: maturin develop --release --uv
 
-      # The CLI tests spawn the console scripts as child processes, so all the
-      # coverage comes from those children. pytest-cov 7 no longer exports
-      # COVERAGE_PROCESS_START itself, and without it the .pth hook never starts
-      # coverage in the child and every file reports 0%. Verified: 0% -> 74%.
       - name: Run tests
         env:
           COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
