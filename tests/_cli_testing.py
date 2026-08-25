@@ -20,6 +20,8 @@ turns out to match.  Scenarios that legitimately cannot differ carry a
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -76,9 +78,34 @@ def tool_path(name: str) -> str:
     return path
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+# Typer prints its errors and tracebacks through rich, which picks colour and
+# line width from the environment.  A runner that exports FORCE_COLOR makes
+# rich colour each fragment separately, so substring assertions on the error
+# text then fail in CI while passing locally.
+# Pin the environment, and strip ANSI escapes.
+_NO_COLOUR = {"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"}
+_FORCED_COLOUR = ("FORCE_COLOR", "CLICOLOR_FORCE", "TTY_COMPATIBLE")
+
+
 def run(tool: str, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run `tool` and hand back the completed process, success or not."""
-    return subprocess.run([tool, *args], capture_output=True, text=True, check=False)
+    """Run `tool` and hand back the completed process, success or not.
+
+    Output comes back free of ANSI escapes, so tests can assert on the text a
+    user reads rather than on how rich happened to decorate it.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in _FORCED_COLOUR}
+    env.update(_NO_COLOUR)
+    proc = subprocess.run(
+        [tool, *args], capture_output=True, text=True, check=False, env=env
+    )
+    return subprocess.CompletedProcess(
+        proc.args,
+        proc.returncode,
+        _ANSI.sub("", proc.stdout),
+        _ANSI.sub("", proc.stderr),
+    )
 
 
 def run_ok(tool: str, base: list[str], extra: list[str], out: str) -> str:
