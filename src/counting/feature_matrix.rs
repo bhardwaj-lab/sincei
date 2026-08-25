@@ -28,12 +28,6 @@ use crate::bam::filters::{
     derive_record_opts, read_is_blacklisted,
 };
 
-// Maximum number of distinct genes a single read can overlap and still be
-// assigned correctly under `metagene`. In practice reads are short and genes
-// rarely pile up this densely, so 16 is a safe ceiling. Only the metagene arm
-// uses it; without it a read is counted for every region it overlaps, however
-// many there are.
-const MAX_REGION_HITS: usize = 16;
 use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
 
 /// Drop the features a `--region` leaves out, and renumber the rest.
@@ -314,6 +308,10 @@ pub fn count_bam_features(
                     let mut dup_filter: Option<DuplicateFilter> =
                         dup_method.map(DuplicateFilter::new);
                     let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    // The distinct features one read reaches, with the bases it
+                    // shares with each. Reused across reads so the counting loop
+                    // does not allocate; cleared at the top of every read.
+                    let mut hits: Vec<(usize, usize)> = Vec::new();
                     // Without --groupTag the sample is fixed for the whole chunk, so
                     // the row offset is hoisted; with it the sample varies per read
                     // and the offset is resolved below.
@@ -409,63 +407,36 @@ pub fn count_bam_features(
                         // the intron between them credits nothing.
                         let intervals = sc_rec.effective_intervals(adjust);
 
-                        if metagene {
-                            // One gene per read: a gene's exons accumulate their
-                            // overlaps first, then the largest total wins. A read
-                            // spanning two exons of gene A counts once for A, not
-                            // twice, which is the whole point of asking for genes
-                            // rather than for the exons themselves.
-                            let mut hits = [(0usize, 0usize); MAX_REGION_HITS];
-                            let mut n_hits = 0usize;
-                            for (start, end) in intervals {
-                                for sub in chrom_index.find(start, end) {
-                                    let overlap = end.min(sub.end) - start.max(sub.start);
-                                    let mut merged = false;
-                                    for entry in hits[..n_hits].iter_mut() {
-                                        if entry.0 == sub.var_idx {
-                                            entry.1 += overlap;
-                                            merged = true;
-                                            break;
-                                        }
-                                    }
-                                    if !merged && n_hits < MAX_REGION_HITS {
-                                        hits[n_hits] = (sub.var_idx, overlap);
-                                        n_hits += 1;
-                                    }
+                        // Gather the features this read overlaps. A read is counted
+                        // once per feature, regardless of the number of overlaps. In
+                        // `metagene` mode reads are only counted once, so the feature
+                        // with the most bases in common gets the count.
+                        hits.clear();
+                        for (start, end) in intervals {
+                            for sub in chrom_index.find(start, end) {
+                                let overlap = end.min(sub.end) - start.max(sub.start);
+                                match hits.iter_mut().find(|hit| hit.0 == sub.var_idx) {
+                                    Some(hit) => hit.1 += overlap,
+                                    None => hits.push((sub.var_idx, overlap)),
                                 }
                             }
+                        }
+
+                        if metagene {
+                            // One gene per read: the gene sharing the most bases
+                            // with it wins. A read spanning two exons of gene A
+                            // counts once for A, not twice.
                             if let Some(&(best_val, _)) =
-                                hits[..n_hits].iter().max_by_key(|&&(_, ov)| ov)
+                                hits.iter().max_by_key(|&&(_, overlap)| overlap)
                             {
                                 *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
                             }
-                        } else if intervals.len() < 2 {
-                            // A read counts once for every region it overlaps, so
-                            // overlapping annotations each get their own count and
-                            // the column sums exceed the read count. Without
-                            // `metagene` a region is a single interval, so each hit
-                            // is a distinct region and no merging is needed.
-                            for (start, end) in intervals {
-                                for sub in chrom_index.find(start, end) {
-                                    *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
-                                        sc_rec.count;
-                                }
-                            }
                         } else {
-                            // Two blocks of one read can land in one feature, and
-                            // that is still a single read. Only a spliced read
-                            // reaches this arm, so the small `Vec` it costs is
-                            // paid by the reads that need it.
-                            let mut credited: Vec<usize> = Vec::new();
-                            for (start, end) in intervals {
-                                for sub in chrom_index.find(start, end) {
-                                    if credited.contains(&sub.var_idx) {
-                                        continue;
-                                    }
-                                    credited.push(sub.var_idx);
-                                    *local_acc.entry((cell_idx, sub.var_idx)).or_insert(0) +=
-                                        sc_rec.count;
-                                }
+                            // A read counts once for every feature it overlaps, so
+                            // overlapping annotations each get their own count and
+                            // the  count matrix sum may exceed the read count.
+                            for &(var_idx, _) in hits.iter() {
+                                *local_acc.entry((cell_idx, var_idx)).or_insert(0) += sc_rec.count;
                             }
                         }
                     }
@@ -651,6 +622,72 @@ mod tests {
             "{sums:?}"
         );
         assert_eq!(total(&out), 10.0, "{sums:?}");
+    }
+
+    /// A GTF stacking `n` genes over the two reads at 65,968,139. They end
+    /// together and each starts a base later than the last, so the **first**
+    /// gene shares the most bases with the reads.
+    ///
+    /// The index searches from the highest start down, which makes that gene
+    /// the last one it reaches. So whichever gene metagene credits names how
+    /// many candidates it really weighed. Every gene sits inside those two
+    /// reads alone, so no third read of the fixture reaches one.
+    fn stacked_genes_gtf(dir: &Path, n: usize) -> PathBuf {
+        let path = dir.join("stacked.gtf");
+        let mut text = String::new();
+        for i in 1..=n {
+            let start = 65_968_145 + i;
+            let end = 65_968_197;
+            for ty in ["gene", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"G{i:02}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn metagene_weighs_every_gene_a_read_reaches() {
+        // Twenty genes over one read. The read shares most bases with G01,
+        // which the index reaches last of the twenty, so that is the one
+        // metagene must credit. A fixed-size buffer of sixteen hits used to
+        // drop it unseen and crown G05 instead.
+        let dir = TempDir::new().unwrap();
+        let gtf = stacked_genes_gtf(dir.path(), 20);
+        let out = dir.path().join("stacked.h5ad");
+
+        count_into(
+            &out,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.get("G01").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(total(&out), 2.0, "one count per read, and two reads");
+    }
+
+    #[test]
+    fn without_metagene_a_read_counts_in_every_gene_stacked_over_it() {
+        // The same twenty genes without metagene: each read counts once in each
+        // of them, since a read is credited to every feature it overlaps.
+        let dir = TempDir::new().unwrap();
+        let gtf = stacked_genes_gtf(dir.path(), 20);
+        let out = dir.path().join("stacked.h5ad");
+
+        count_into(&out, &gtf, &CountingParams::default()).unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.len(), 20, "{sums:?}");
+        assert!(sums.values().all(|&v| v == 2.0), "{sums:?}");
+        assert_eq!(total(&out), 40.0, "twenty genes, two reads each");
     }
 
     /// A GTF whose two transcripts overlap and share one gene, each with a
