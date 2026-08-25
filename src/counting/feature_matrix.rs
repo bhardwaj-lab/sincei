@@ -650,6 +650,45 @@ mod tests {
     }
 
     #[test]
+    fn metagene_ranks_genes_by_bases_not_by_transcript_count() {
+        // G1 has two transcripts repeating one 20 bp exon; G2 has a single 30 bp
+        // exon. G2 covers more of the read, so G2 must take it. Summing the exon
+        // records instead gives G1 40 bases against G2's 30 and the wrong gene
+        // wins, which is what merging a gene's exons prevents.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("shared_exons.gtf");
+        let mut text = String::new();
+        for (gene, tx, start, end) in [
+            ("G1", "T1", 65_968_146, 65_968_165),
+            ("G1", "T2", 65_968_146, 65_968_165),
+            ("G2", "T3", 65_968_166, 65_968_195),
+        ] {
+            for ty in ["gene", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"{gene}\"; transcript_id \"{tx}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+
+        let out = dir.path().join("shared_exons.h5ad");
+        count_into(
+            &out,
+            &path,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.get("G2").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(total(&out), 2.0, "one count per read, and two reads");
+    }
+
+    #[test]
     fn metagene_weighs_every_gene_a_read_reaches() {
         // Twenty genes over one read. The read shares most bases with G01,
         // which the index reaches last of the twenty, so that is the one

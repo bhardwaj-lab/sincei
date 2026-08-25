@@ -550,6 +550,31 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
     Ok((build_genome_index(intervals_by_chrom), all_var))
 }
 
+/// Collapse each feature's overlapping intervals into their union.
+///
+/// A gene's transcripts repeat the exons they share, so one base of the genome
+/// can appear in many exon records of the same gene. Left that way, each record
+/// adds its own overlap to the gene's total and `metagene` credits a read to
+/// whichever gene carries the most transcripts rather than to the one it really
+/// covers most. Merging first makes that total count bases.
+///
+/// Intervals that only touch are merged as well: their union is the same, and
+/// the shorter list is quicker to search.
+fn merge_feature_intervals(intervals: &mut Vec<Interval>) {
+    intervals.sort_unstable_by_key(|iv| (iv.var_idx, iv.start));
+
+    let mut merged: Vec<Interval> = Vec::with_capacity(intervals.len());
+    for interval in intervals.drain(..) {
+        match merged.last_mut() {
+            Some(last) if last.var_idx == interval.var_idx && interval.start <= last.end => {
+                last.end = last.end.max(interval.end);
+            }
+            _ => merged.push(interval),
+        }
+    }
+    *intervals = merged;
+}
+
 /// Group exon records by the feature they belong to, so all exons of one
 /// transcript (or gene) share a single region index (`var_idx`).
 ///
@@ -557,7 +582,8 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
 /// group index (into the returned `Feature` vec) rather than a per-exon index,
 /// so the counting inner loop naturally treats all exons of one group as one
 /// region. A group's span runs from its first exon's start to its last exon's
-/// end.
+/// end, and its intervals are the union of its exons, since transcripts of one
+/// gene repeat the exons they share (see [`merge_feature_intervals`]).
 ///
 /// Exons are grouped by the value of their `group_attr` attribute,
 /// `transcript_id` or `Parent` for per-transcript features, `gene_id` for
@@ -628,6 +654,12 @@ where
             end,
             var_idx: group_idx,
         });
+    }
+
+    // The exons of one gene arrive one transcript at a time, so a gene's shared
+    // exons are repeated. Fold them together before measuring overlap.
+    for intervals in intervals_by_chrom.values_mut() {
+        merge_feature_intervals(intervals);
     }
 
     if n_exons > 0 && var.is_empty() {
@@ -1125,11 +1157,46 @@ mod tests {
             assert!(var.iter().all(|v| v.name.starts_with("ENSMUSG")), "{file}");
             assert!(var.iter().all(|v| v.chrom == chrom), "{file}");
 
-            // Every exon is indexed and points at one of the three genes.
+            // The index holds each gene's exonic footprint, not one entry per
+            // exon record: the file's 391 exon lines are 27 distinct stretches
+            // of genome, the rest being exons transcripts share.
             let ivs: Vec<&Interval> = index.get(chrom).unwrap().iter().collect();
-            assert!(ivs.len() >= 391, "{file}");
+            assert_eq!(ivs.len(), 27, "{file}");
             assert!(ivs.iter().all(|iv| iv.var_idx < ids.len()), "{file}");
         }
+    }
+
+    #[test]
+    fn a_genes_shared_exons_are_merged_so_they_count_once() {
+        // Two transcripts of G1 repeat one exon and differ in a second; a third
+        // transcript of G2 has an exon of its own. G1's repeated exon must come
+        // back once, or the bases under it would count twice for G1 and
+        // metagene would credit reads by transcript count rather than by
+        // overlap.
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("shared_exons.gtf");
+        let mut text = String::new();
+        for (gene, tx, start, end) in [
+            ("G1", "T1", 100, 200),
+            ("G1", "T2", 100, 200),
+            ("G1", "T2", 150, 300),
+            ("G2", "T3", 500, 600),
+        ] {
+            text.push_str(&format!(
+                "chr1\ttest\texon\t{start}\t{end}\t.\t+\t.\t\
+                 gene_id \"{gene}\"; transcript_id \"{tx}\";\n"
+            ));
+        }
+        std::fs::write(&path, text).unwrap();
+
+        let (index, var) = parse_annotation_files([path], None, None, None, true).unwrap();
+
+        assert_eq!(names(&var), ["G1", "G2"]);
+        let ivs: Vec<&Interval> = index.get("chr1").unwrap().iter().collect();
+        assert_eq!(ivs.len(), 2, "four exon records, two stretches of genome");
+        // G1's two overlapping exons are one interval spanning both.
+        assert_eq!((ivs[0].start, ivs[0].end, ivs[0].var_idx), (99, 300, 0));
+        assert_eq!((ivs[1].start, ivs[1].end, ivs[1].var_idx), (499, 600, 1));
     }
 
     #[test]
@@ -1171,19 +1238,17 @@ mod tests {
             );
 
             // Every exon of a gene carries that gene's index, so a read spanning
-            // several exons of one gene still resolves to a single feature.
+            // several exons of one gene still resolves to a single feature. The
+            // counts are the gene's distinct exonic stretches, so the 172 and
+            // 216 exon records of the two coding genes come to 18 and 7.
             let ivs: Vec<&Interval> = index.get(chrom).unwrap().iter().collect();
-            assert_eq!(ivs.iter().filter(|iv| iv.var_idx == 0).count(), 3, "{file}");
+            assert_eq!(ivs.iter().filter(|iv| iv.var_idx == 0).count(), 2, "{file}");
             assert_eq!(
                 ivs.iter().filter(|iv| iv.var_idx == 1).count(),
-                172,
+                18,
                 "{file}"
             );
-            assert_eq!(
-                ivs.iter().filter(|iv| iv.var_idx == 2).count(),
-                216,
-                "{file}"
-            );
+            assert_eq!(ivs.iter().filter(|iv| iv.var_idx == 2).count(), 7, "{file}");
         }
     }
 
@@ -1234,7 +1299,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(names(&var), [GENCODE_IDS[1], GENCODE_IDS[2]]);
-        assert_eq!(index.get("chr1").unwrap().len(), 269);
+        assert_eq!(index.get("chr1").unwrap().len(), 23);
 
         // Several exon types can be combined.
         let both = parse_annotation_files(
@@ -1246,7 +1311,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(both.1.len(), 3);
-        assert_eq!(both.0.get("chr1").unwrap().len(), 391 + 269);
+        // Every CDS lies inside an exon, so adding them widens nothing: the
+        // merged footprint is the same 27 stretches the exons alone give.
+        assert_eq!(both.0.get("chr1").unwrap().len(), 27);
     }
 
     #[test]
