@@ -4,11 +4,8 @@ from typing import Annotated
 
 import typer
 
-from sincei import _sincei as internal
-
 from ._common_args import (
     AVAILABLE_PROCESSORS,
-    GTF_GFF_OPTS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
     OverlapPolicy,
@@ -18,11 +15,9 @@ from ._common_args import (
 )
 
 DESCRIPTION = (
-    "Aggregate a binned chromatin count matrix into per-feature scores.\n\n"
-    "``scScoreFeatures`` sums the counts of the bins overlapping each feature in "
-    "``--features``, producing a cells x features matrix. The features can be genes "
-    "(from a GTF/GFF) or Variable Chromatin Regions (from a BED file produced by "
-    "scFindVCRs)."
+    "Aggregate region-level signal into gene-level scores.\n\n"
+    "``scScoreFeatures`` aggregates region-level signal in a pre-processed .h5ad "
+    "object into gene-level scores based on a user-provided BED/GTF file."
 )
 
 
@@ -30,23 +25,28 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
+    help=DESCRIPTION,
     context_settings={"help_option_names": []},
 )
 
-_SCORING = "Scoring options"
+_SCORING = "Common options"
 
 
-@app.command(help=DESCRIPTION)
+@app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
     out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     features: Annotated[
         str,
         typer.Option(
+            "-f",
             "--features",
-            metavar=".bed/.gtf/.gff",
+            metavar=".bed/.gtf",
             rich_help_panel=_SCORING,
-            help="Path to the BED, GTF or GFF file containing the features to score.",
+            help=(
+                "Path to the BED or GTF file containing the features to use for "
+                "aggregation/scoring."
+            ),
         ),
     ],
     overlap_policy: Annotated[
@@ -57,66 +57,87 @@ def main(
             metavar="POLICY",
             rich_help_panel=_SCORING,
             help=(
-                "How to treat a bin in the .h5ad input that only partially overlaps a "
-                "region in --features.\n\n"
-                "[bold yellow]partial[/bold yellow]: count the fraction of the bin "
-                "lying inside the region; "
-                "[bold yellow]all[/bold yellow]: count the whole bin; "
-                "[bold yellow]none[/bold yellow]: ignore the bin unless it lies wholly "
-                "inside the region."
+                "Policy for handling regions present in the .h5ad input file that only "
+                "partially overlap regions present in --features.\n\n"
+                "[bold yellow]partial[/bold yellow]: count reads in anndata regions "
+                "proportionally to the overlap fraction "
+                "(counts_considered = feature_counts * overlap_length / "
+                "region_length).\n\n"
+                "[bold yellow]all[/bold yellow]: count all reads in the partially "
+                "overlapping anndata regions.\n\n"
+                "[bold yellow]none[/bold yellow]: only count reads in anndata regions "
+                "that are fully contained within BED/GTF regions."
             ),
         ),
     ] = OverlapPolicy.partial,
-    penalty: Annotated[
-        float | None,
+    center_scores: Annotated[
+        bool,
         typer.Option(
-            "-pen",
-            "--penalty",
+            "-cs",
+            "--centerScores",
             rich_help_panel=_SCORING,
             help=(
-                "Penalty value to determine which VCRs to score. Used only when the "
-                "input is a BED file created with ``scFindVCRs`` with a range of "
-                "penalties (stored in the 5th column)."
+                "If set, center and scale the scores to unit variance and zero mean."
+            ),
+        ),
+    ] = False,
+    bed_score_filter: Annotated[
+        list[float] | None,
+        typer.Option(
+            "-bsf",
+            "--bedScoreFilter",
+            metavar="FLOAT",
+            rich_help_panel=_SCORING,
+            help=(
+                "Provide a range (two values separated by space), or a threshold "
+                "(upper limit) of score to determine which input features to consider "
+                "for scoring. Used only when the input is a BED file containing scores "
+                "(stored in the 5th column)."
             ),
         ),
     ] = None,
-    # GTF/GFF options; only affect GTF/GFF inputs, ignored for BED.
-    feature_type: Annotated[list[str] | None, GTF_GFF_OPTS["transcript_id"]] = None,
-    exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,
-    feature_id_tag: Annotated[str | None, GTF_GFF_OPTS["feature_id_tag"]] = None,
-    metagene: Annotated[bool, GTF_GFF_OPTS["metagene"]] = False,
+    max_region: Annotated[
+        int,
+        typer.Option(
+            "-mr",
+            "--maxRegion",
+            metavar="INT",
+            rich_help_panel=_SCORING,
+            help=(
+                "Maximum region size (in kb) upstream and downstream of the genes to "
+                "consider for activity calculation."
+            ),
+        ),
+    ] = 100,
+    normalize_gene_lengths: Annotated[
+        bool,
+        typer.Option(
+            "--normalizeGeneLengths",
+            rich_help_panel=_SCORING,
+            help=(
+                "Apply length normalization to the input genes. If provided, gene "
+                "scores are normalized w.r.t. gene length in the input GTF/BED file."
+            ),
+        ),
+    ] = False,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
     ] = AVAILABLE_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    if verbose:
-        log_parameters(
-            input=input,
-            out_file=out_file,
-            features=features,
-            overlap_policy=overlap_policy,
-            penalty=penalty,
-            feature_type=feature_type,
-            exon_id=exon_id,
-            feature_id_tag=feature_id_tag,
-            metagene=metagene,
-            number_of_processors=number_of_processors,
-        )
-    result_path = internal.score_features(
-        input,
-        features,
-        out_file,
-        overlap_policy=overlap_policy.value,
-        penalty=penalty,
-        feature_type=feature_type,
-        exon_type=exon_id,
-        feature_id_tag=feature_id_tag,
-        metagene=metagene,
-        num_threads=number_of_processors,
+    log_parameters(
+        input=input,
+        out_file=out_file,
+        features=features,
+        overlap_policy=overlap_policy,
+        center_scores=center_scores,
+        bed_score_filter=bed_score_filter,
+        max_region=max_region,
+        normalize_gene_lengths=normalize_gene_lengths,
+        number_of_processors=number_of_processors,
+        verbose=verbose,
     )
-    typer.echo(result_path)
     return 0
 
 

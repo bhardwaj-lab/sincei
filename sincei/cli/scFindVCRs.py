@@ -4,8 +4,6 @@ from typing import Annotated
 
 import typer
 
-from sincei import _sincei as internal
-
 from ._common_args import (
     AVAILABLE_PROCESSORS,
     INPUT_OUTPUT_OPTS,
@@ -51,7 +49,7 @@ def main(
         int,
         typer.Option(
             "-bs",
-            "--binsize",
+            "--binSize",
             metavar="INT",
             rich_help_panel=_VCR,
             help="The size of the bins in the input AnnData object.",
@@ -121,32 +119,17 @@ def main(
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    penalties = penalties or [0.05, 0.1, 0.5]
-
-    if verbose:
-        log_parameters(
-            input=input,
-            region=region,
-            bin_size=bin_size,
-            max_region_size=max_region_size,
-            n_kernels=n_kernels,
-            penalties=penalties,
-            out_file=out_file,
-            number_of_processors=number_of_processors,
-            verbose=verbose,
-        )
-
-    result_path = internal.find_vcrs(
-        input,
-        bin_size,
-        out_file,
+    log_parameters(
+        input=input,
+        out_file=out_file,
+        region=region,
+        bin_size=bin_size,
         max_region_size=max_region_size,
         n_kernels=n_kernels,
-        penalties=penalties,
-        region=region,
-        num_threads=number_of_processors,
+        penalties=penalties or [0.05, 0.1, 0.5],
+        number_of_processors=number_of_processors,
+        verbose=verbose,
     )
-    typer.echo(result_path)
     return 0
 
 

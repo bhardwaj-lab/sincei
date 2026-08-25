@@ -4,18 +4,23 @@
 //! into a CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
 //! tables naming its cells and regions.
 //!
-//! The readers (`read_x_f64` and the column helpers) go the other way, for the
-//! downstream commands that take a sincei matrix back in.
+//! The readers (`read_x_f64` and the column helpers) go the other way, reading a
+//! written matrix back.
 
 use std::path::Path;
 
 use ahash::AHashMap;
 
+#[cfg(test)]
+use anndata::ArrayElemOp;
 use anndata::backend::{Compression, WriteConfig, set_default_write_config};
+#[cfg(test)]
 use anndata::data::DynCsrMatrix;
-use anndata::{AnnData, AnnDataOp, ArrayElemOp};
+use anndata::{AnnData, AnnDataOp};
 use anndata_hdf5::H5;
-use anyhow::{Context, Result, bail};
+#[cfg(test)]
+use anyhow::bail;
+use anyhow::{Context, Result};
 use nalgebra_sparse::CsrMatrix;
 use polars::prelude::*;
 
@@ -25,6 +30,7 @@ use crate::annotation::region_index::Feature;
 ///
 /// Bool / string matrices are rejected. Shared by the downstream commands
 /// (`find_vcrs`, `score_features`) that need a dense-friendly float matrix.
+#[cfg(test)]
 pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
     let dyn_csr: DynCsrMatrix = adata
         .x()
@@ -63,6 +69,7 @@ pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
 
 /// Read an integer column from a polars `DataFrame` (e.g. an AnnData `var`
 /// table), casting to `i64` and erroring on missing column or null values.
+#[cfg(test)]
 pub(crate) fn df_i64_col(df: &DataFrame, name: &str) -> Result<Vec<i64>> {
     let col = df
         .column(name)
@@ -78,6 +85,7 @@ pub(crate) fn df_i64_col(df: &DataFrame, name: &str) -> Result<Vec<i64>> {
 
 /// Read a string column from a polars `DataFrame`, erroring on missing column
 /// or null values.
+#[cfg(test)]
 pub(crate) fn df_str_col(df: &DataFrame, name: &str) -> Result<Vec<String>> {
     let col = df
         .column(name)
