@@ -19,9 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/ruff-action@v4
+      - uses: astral-sh/ruff-action@v4.1.0
         with:
-          # Pinned: ruff is pre-1.0, so a minor bump may add or change rules.
           version: "0.16.3"
           args: check --output-format=github
 
@@ -31,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/ruff-action@v4
+      - uses: astral-sh/ruff-action@v4.1.0
         with:
           # Pinned: ruff is pre-1.0, so a minor bump may add or change rules.
           version: "0.16.3"
