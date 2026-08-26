@@ -430,9 +430,8 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar=".bed",
         rich_help_panel=_BAM,
         help=(
-            "A BED or GTF file containing regions that should be excluded from the "
-            "analyses. A read is rejected if at least half of it lies inside a "
-            "blacklist entry."
+            "A BED file containing regions that should be excluded from the analyses. "
+            "A read is rejected if at least half of it lies inside a blacklist entry."
         ),
     ),
     "chr_to_skip": typer.Option(
@@ -441,7 +440,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_BAM,
         help=(
             "A space separated list of chromosomes to exclude, e.g. "
-            "``--chr-to-skip chrM chrX``. Useful for skipping mitochondrial, sex "
+            "``--chrToSkip chrM chrX``. Useful for skipping mitochondrial, sex "
             "chromosomes or unplaced contigs."
         ),
     ),
@@ -457,7 +456,7 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="INT",
         rich_help_panel=_BAM,
         help=(
-            "The gap length, in bases, between bins for calculating coverage. Larger"
+            "The gap length, in bases, between bins for calculating coverage. Larger "
             "values can be used to sample the genome for input files with high "
             "coverage."
         ),
@@ -476,7 +475,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
             "are possible. Read start position and read barcode are always considered. "
             "Default (none) considers all reads as passing the filter. Note that for "
             "paired end data both reads in the fragment are considered (and kept) so, "
-            "to keep only read1 combine this with ``--sam-flag-include``.\n\n"
+            "to keep only read1 combine this with ``--samFlagInclude``.\n\n"
             "One of:"
             "[bold yellow]start_bc[/bold yellow], "
             "[bold yellow]start_bc_umi[/bold yellow], "
@@ -504,7 +503,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="file.2bit",
         rich_help_panel=_FILTER,
         help=(
-            "If ``--motif-filter`` is provided, please also provide the genome "
+            "If ``--motifFilter`` is provided, please also provide the genome "
             "sequence in 2bit format."
         ),
     ),
@@ -525,9 +524,12 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="FLOAT",
         rich_help_panel=_FILTER,
         help=(
-            "Minimum fraction of the read that should be aligned to be counted. This "
-            "includes mismatches tolerated by the aligners, but excludes "
-            "InDels/clippings."
+            "Minimum fraction of the read that must be aligned for it to be counted. "
+            "The fraction is the number of bases in aligned CIGAR operations (``M``, "
+            "``=`` and ``X``) divided by the length of the read as it was sequenced, "
+            "which includes soft- and hard-clipped bases. Mismatches the aligner "
+            "tolerated count as aligned. Insertions count against the read; deletions "
+            "and skipped regions do not, because they consume no read base."
         ),
     ),
 }
@@ -562,7 +564,7 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_READ,
         help=(
             "Exclude reads based on the SAM flag. For example, to get only reads that "
-            "map to the forward strand, use ``--sam-flag-exclude 16``, where 16 is the "
+            "map to the forward strand, use ``--samFlagExclude 16``, where 16 is the "
             "SAM flag for reads that map to the reverse strand."
         ),
     ),
@@ -579,7 +581,11 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
         "--maxFragmentLength",
         metavar="INT",
         rich_help_panel=_READ,
-        help="The maximum fragment length accepted for read/pair inclusion.",
+        help=(
+            "The maximum fragment length accepted for read/pair inclusion. When "
+            "``--extendReads`` is also given, this value replaces the 4x read pairing "
+            "limit described there."
+        ),
     ),
     "filter_rna_strand": typer.Option(
         "--filterRNAstrand",
@@ -587,11 +593,16 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_READ,
         help=(
             "Selects RNA-seq reads (single-end or paired-end) originating from genes "
-            "on the given strand. This assumes a standard dUTP-based library "
-            "preparation (that is, ``--filter-rna-strand forward`` keeps minus-strand "
-            "reads, which originally came from genes on the forward strand using a "
-            "dUTP-based method). Consider using ``--sam-flag-exclude`` instead for "
-            "filtering by strand in other contexts.\n\n"
+            "on the given strand. The value names the strand of the gene, not of the "
+            "read. This assumes a standard dUTP-based library preparation, in which "
+            "read2 has the sense of the transcript and read1 is its complement.\n\n"
+            "For paired-end data, ``--filterRNAstrand forward`` keeps read2 on the "
+            "plus strand together with read1 whose mate is on the plus strand. "
+            "Single-end data carries the read1 orientation only, so the same value "
+            "keeps minus-strand reads instead. ``reverse`` keeps the opposite set in "
+            "each case.\n\n"
+            "Consider using ``--samFlagExclude`` instead for filtering by strand in "
+            "other contexts.\n\n"
             "One of: "
             "[bold yellow]forward[/bold yellow], "
             "[bold yellow]reverse[/bold yellow]."
@@ -612,9 +623,12 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "as it would extend reads over skipped regions.\n\n"
             "*Single-end*: the value is the final fragment length; reads that already "
             "exceed it are left unchanged.\n\n"
-            "*Paired-end*: reads with mates are extended to match the fragment size "
-            "defined by the two read mates (mates that map too far apart, >4x the "
-            "fragment size, or to different chromosomes are treated as single-end)."
+            "*Paired-end*: a read with a mate is extended to the fragment that the "
+            "two mates define. The pair must be properly paired, on one reference, "
+            "on opposite strands, facing inward, and have an insert size (TLEN) of "
+            "at most 4x the fragment size.  When given, ``--maxFragmentLength`` "
+            "replaces that 4x limit. A pair that fails any of these is extended as a "
+            "single-end read instead."
         ),
     ),
     "center_reads": typer.Option(
@@ -707,26 +721,23 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "When a GFF/GTF file is used to provide regions, count reads only on the "
             "combined exons of a gene or transcript rather than on the genomic "
-            "interval defined by the 5-prime and 3-prime transcript bound, and count "
-            "each read only once. Exons are the records whose column-3 type matches "
-            "``--exonID``; what they are grouped into is set by ``--featureIDtag``: "
-            "one feature per gene (the default) or one per transcript "
-            "(``--featureIDtag transcript_id`` for GTF, ``Parent`` for GFF3). A "
-            "read meeting several exons of one group is counted once, against the "
-            "group it overlaps most. Ignored for BED inputs."
+            "interval defined by the 5-prime and 3-prime gene/transcript bound, and "
+            "count each read only once. Exons are the records whose column-3 type"
+            "matches  ``--exonID``; what they are grouped into is set by "
+            "``--featureIDtag``: one feature per gene (the default) or one per "
+            "transcript (``--featureIDtag transcript_id`` for GTF, ``Parent`` for "
+            "GFF3). A read meeting several exons of one group is counted once, against "
+            "the group it overlaps most. Ignored for BED inputs."
         ),
     ),
-    "transcript_id": typer.Option(
-        "--transcriptID",
+    "feature_id": typer.Option(
+        "--featureID",
         metavar="STR",
         rich_help_panel=_GTF,
         help=(
-            "The column-3 feature type(s) processed as a region (transcript). May be "
-            "given more than once, e.g. ``--transcriptID mRNA --transcriptID lnc_RNA``."
-            " (Default: every transcript type in the file, regardless of biotype. "
-            "GTF and GENCODE GFF3 type them all ``transcript``; an Ensembl-style GFF3 "
-            "names them by biotype instead: mRNA, lnc_RNA, snoRNA, etc., which are "
-            "read out of the file itself.)"
+            "The column-3 feature type(s) processed as a feature. May be given more "
+            "than once, e.g. ``--featureID gene --featureID transcript``. (Default: "
+            "gene, detected by file type.)"
         ),
     ),
     "exon_id": typer.Option(

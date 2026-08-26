@@ -25,8 +25,8 @@ DESCRIPTION = (
     "Filter cell barcodes from a BAM file (for droplet-based single-cell seq).\n\n"
     "``scFilterBarcodes`` identifies barcodes present in a BAM file and produces a "
     "list. You can optionally filter these barcodes by matching them to a whitelist or "
-    "based on total counts. This tool expects single experiment BAM files, not merged "
-    "files."
+    "based on total counts. To correctly count barcodes in merged BAM files, specify a "
+    "group tag to separate barcodes by read group."
 )
 
 

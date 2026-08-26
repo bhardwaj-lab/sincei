@@ -119,11 +119,14 @@ def main(
             "--mnase",
             rich_help_panel=_COVERAGE,
             help=(
-                "Determine nucleosome positions from MNase-seq/CUTnRUN data. Only 3 "
-                "nucleotides at the center of each fragment are counted. Only fragment "
-                "lengths between 130-200 bp are considered to avoid dinucleosomes or "
-                "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 is "
-                "recommended."
+                "Determine nucleosome positions from MNase-seq/CUTnRUN data. The 2-3 "
+                "central bases of each fragment are counted: 3 when the fragment "
+                "length is odd, 2 when it is even. Only the forward mate of a proper "
+                "pair contributes, so each fragment is counted once. Unless you set "
+                "them yourself, ``--minFragmentLength`` becomes 130 and "
+                "``--maxFragmentLength`` becomes 200, which avoids dinucleosomes and "
+                "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 "
+                "is recommended."
             ),
         ),
     ] = False,

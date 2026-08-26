@@ -58,7 +58,7 @@ def parse_motif_filter(motifs: list[str] | None) -> list[tuple[str, str]] | None
     for entry in motifs:
         parts = entry.split(",")
         if len(parts) != 2:
-            msg = f"--motif-filter expects 'read_motif,ref_motif' (got {entry!r})"
+            msg = f"--motifFilter expects 'read_motif,ref_motif' (got {entry!r})"
             raise ValueError(msg)
         parsed.append((parts[0].strip(), parts[1].strip()))
     return parsed
@@ -70,7 +70,7 @@ def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
         return None, None
     parts = value.split(",")
     if len(parts) != 2:
-        msg = f"--gc-content-filter expects '<low>,<high>' (got {value!r})"
+        msg = f"--gcContentFilter expects '<low>,<high>' (got {value!r})"
         raise ValueError(msg)
     return float(parts[0]), float(parts[1])
 
@@ -106,7 +106,7 @@ def resolve_labels(
     """Resolve the per-BAM sample labels used to match the group-info file.
 
     Priority: explicit ``--labels`` (must match the BAM count), then
-    ``--smart-labels`` / default, both of which use the file stem.
+    ``--smartLabels`` / default, both of which use the file stem.
     """
     if labels:
         if len(labels) != len(bam_files):

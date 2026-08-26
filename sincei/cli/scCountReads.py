@@ -86,8 +86,8 @@ GENOME_CHUNK_SIZE = typer.Option(
     metavar="INT",
     rich_help_panel=_COUNTING,
     help=(
-        "Manually specify the size of the genome provided to each processor. The "
-        "default (None) determines this from the read density of the BAM file."
+        "Manually specify the size of the genome provided to each processor. "
+        "(Default: 1Mb)"
     ),
 )
 COMPRESSION = typer.Option(
@@ -155,7 +155,7 @@ def _count_reads(
     min_aligned_fraction: float | None,
     value_tag: str | None,
     genome_chunk_size: int | None,
-    transcript_id: list[str] | None = None,
+    feature_id: list[str] | None = None,
     exon_id: list[str] | None = None,
     feature_id_tag: str | None = None,
     metagene: bool = False,
@@ -225,7 +225,7 @@ def _count_reads(
         internal.count_features(
             bam_files,
             bed,
-            feature_type=transcript_id,
+            feature_type=feature_id,
             exon_type=exon_id,
             name_attr=feature_id_tag,
             metagene=metagene,
@@ -367,7 +367,7 @@ def features(
     value_tag: Annotated[str | None, VALUE_TAG] = None,
     genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
     # GTF / GFF options (only affect GTF/GFF inputs, ignored for BED)
-    transcript_id: Annotated[list[str] | None, GTF_GFF_OPTS["transcript_id"]] = None,
+    feature_id: Annotated[list[str] | None, GTF_GFF_OPTS["feature_id"]] = None,
     exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,
     feature_id_tag: Annotated[str | None, GTF_GFF_OPTS["feature_id_tag"]] = None,
     metagene: Annotated[bool, GTF_GFF_OPTS["metagene"]] = False,
@@ -411,7 +411,7 @@ def features(
         genome_chunk_size=genome_chunk_size,
         compression=compression,
         compression_level=compression_level,
-        transcript_id=transcript_id,
+        feature_id=feature_id,
         exon_id=exon_id,
         feature_id_tag=feature_id_tag,
         metagene=metagene,
