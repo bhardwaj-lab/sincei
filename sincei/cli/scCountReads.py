@@ -137,8 +137,11 @@ def _count_reads(
     region: str | None,
     blacklist: list[str] | None,
     chr_to_skip: list[str] | None,
-    bin_size: int,
-    distance_between_bins: int,
+    # Bins mode only; `features` tiles nothing, so it passes neither and the
+    # defaults stand. A zero bin size is not a usable tiling, and the backend
+    # rejects it (`bin_matrix.rs`), so a bins caller that forgot it fails loudly.
+    bin_size: int = 0,
+    distance_between_bins: int = 0,
     cell_tag: str,
     umi_tag: str,
     group_tag: str | None,
@@ -216,7 +219,7 @@ def _count_reads(
 
     if mode == "bins":
         # stepSize = binSize + gap; a zero gap yields contiguous bins.
-        step_size = bin_size + (distance_between_bins or 0)
+        step_size = bin_size + distance_between_bins
         internal.count_bins(bam_files, bin_size=bin_size, step_size=step_size, **shared)
     else:
         if not bed:
@@ -339,8 +342,6 @@ def features(
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
     blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
     chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
-    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 10000,
-    distance_between_bins: Annotated[int, BAM_OPTS["distance_between_bins"]] = 0,
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
     umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
@@ -391,8 +392,6 @@ def features(
         region=region,
         blacklist=blacklist,
         chr_to_skip=chr_to_skip,
-        bin_size=bin_size,
-        distance_between_bins=distance_between_bins,
         cell_tag=cell_tag,
         umi_tag=umi_tag,
         group_tag=group_tag,

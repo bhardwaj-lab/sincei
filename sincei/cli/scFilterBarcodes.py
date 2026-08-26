@@ -69,9 +69,10 @@ def main(
             metavar="INT",
             rich_help_panel=_BARCODE,
             help=(
-                "Minimum number of bins with non-zero counts in order to report a "
-                "barcode. Note that this number ranges from 0 to genome size / bin "
-                "size."
+                "Mark a barcode as ``selected`` when it has at least this many bins "
+                "with non-zero counts. Every barcode found is still written out. "
+                "This sets the ``selected`` column and the cutoff line drawn on "
+                "``--rankPlot``."
             ),
         ),
     ] = 0,
