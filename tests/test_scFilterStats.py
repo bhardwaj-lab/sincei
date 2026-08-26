@@ -4,21 +4,6 @@
 Each scenario runs the tool on ``tests/testdata/`` and compares its per-cell TSV
 against a committed snapshot under ``tests/testdata/scFilterStats/``.
 
-Snapshots here are generated from **the original Python sincei**, so they are a
-cross-implementation contract rather than a freeze of current behaviour: a port
-regression shows up as a snapshot mismatch.
-
-Two are exempt and were taken from the port, because the implementations
-genuinely disagree and neither difference has been adjudicated:
-
-* ``chr_to_skip``: the original ignores ``--chrToSkip`` and returns baseline
-  counts; the port zeroes every count for the skipped chromosome.
-* ``blacklist``: the original excludes blacklisted regions from sampling, so
-  every ``Total_sampled`` is 0; the port samples the reads and reports
-  ``Blacklisted=100%`` instead.
-
-Both are open questions for the sincei merge, not settled behaviour.
-
 Most scenarios use dense sampling (``-bs 2000 --distanceBetweenBins 0``) so the
 tiny test BAM's reads are actually captured; the default 100kb-every-1.1Mb grid
 steps over them and yields all-zero stats.  Scenarios that set their own

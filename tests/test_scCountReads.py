@@ -8,11 +8,6 @@ binary container whose bytes vary between writes, so :func:`render` projects it
 to the part that carries meaning -- the shape, and every non-zero count keyed by
 cell and region.
 
-Snapshots are generated from **the port**.  The counts match the original sincei
-exactly, but the two name regions differently by design (``5:0-100000`` here
-versus ``5_0_100000::None`` upstream), so the original cannot serve as the
-reference the way it does for ``scFilterStats``.
-
 ``scCountReads`` has two subcommands and they share almost every flag, so the
 scenarios are declared once and the ones that apply to both are run twice.
 

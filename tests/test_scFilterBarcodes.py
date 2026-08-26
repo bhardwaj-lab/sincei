@@ -4,13 +4,6 @@
 Each scenario runs the tool on ``tests/testdata/`` and compares its TSV output
 against a committed snapshot under ``tests/testdata/scFilterBarcodes/``.
 
-Snapshots here are generated from **the port**, not from the original sincei.
-The two output formats differ deliberately: the original emits ``count_log10``
-and ``count_rank`` only under ``--rankPlot`` and carries a pandas index column,
-whereas the port always emits both columns and no index.  The port's format is
-the intended one, so these snapshots freeze the port rather than cross-check it
-against the original.
-
 Known limits of this fixture, so the gaps are not mistaken for coverage:
 
 * The tool counts *bins occupied per barcode*, and every barcode's reads in
@@ -21,9 +14,6 @@ Known limits of this fixture, so the gaps are not mistaken for coverage:
   output for the same reason.
 * ``--motifFilter`` / ``--genome2bit`` need a 2bit genome that is not in
   ``testdata/``.
-The tool's flags now match the original sincei's exactly. Options the backend
-does not honour used to be accepted and warned about; they have been removed
-rather than kept as no-ops.
 
 Run the tests::
 
