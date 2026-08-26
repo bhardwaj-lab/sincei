@@ -90,7 +90,9 @@ pub struct ScRecord<'a> {
     /// Group tag bytes (the read's sample of origin in a merged BAM), borrowed
     /// from the record. `None` unless a group tag was asked for.
     pub group: Option<&'a [u8]>,
-    /// Value to add to the count matrix (defaults to 1).
+    /// Value to add to the count matrix. One per read unless a count tag was
+    /// asked for, in which case it is that tag's value, by magnitude: the
+    /// matrix is unsigned, so a negative tag contributes its absolute value.
     pub count: u32,
     /// GC fraction in `[0, 1]`. `None` if not requested.
     pub gc_content: Option<f32>,
@@ -187,11 +189,16 @@ impl<'a> ScRecord<'a> {
             None => None,
         };
 
+        // A read that does not carry the requested count tag has no value to
+        // contribute, so it is dropped. Counting it as one would silently mix
+        // tag values with read counts in the same matrix.
         let count = match count_tag {
-            Some(ctag) => get_count_tag(record, ctag)?,
-            None => Some(1u32),
+            Some(ctag) => match get_count_tag(record, ctag)? {
+                Some(value) => value,
+                None => return Ok(None),
+            },
+            None => 1,
         };
-        let count = count.unwrap_or(1);
 
         // Sequence handling. Only materialize a `Vec` when the motif filter
         // needs the full read sequence (`store_sequence`). When only GC is
@@ -561,14 +568,29 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
     }
 }
 
+/// Read a numeric tag as the value a read contributes to the count matrix.
+///
+/// `Ok(None)` means the record has no such tag, or holds one this cannot read
+/// as a number; the caller drops the read. A string that is not a number is an
+/// error instead, since it names a tag the caller asked for by name.
+///
+/// Signed values come back by magnitude, whether the tag is an integer or a
+/// string spelling one. The count matrix is `u32`, so a negative tag cannot be
+/// represented: `-3` contributes 3.
 fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<u32>> {
     match record.data().get(tag) {
         Some(Ok(value)) => match value {
             Value::String(v) => {
                 let s = String::from_utf8_lossy(v.as_ref()).into_owned();
-                Ok(Some(s.parse::<u32>().with_context(|| {
-                    format!("failed to parse count tag as u32: {:?}", s)
-                })?))
+                // Read wide, then folded, so a string tag behaves like an integer
+                // one: `"-3"` is 3 rather than an error, and the accepted range is
+                // the same on both paths.
+                let signed = s
+                    .parse::<i64>()
+                    .with_context(|| format!("failed to parse count tag as a number: {s:?}"))?;
+                let value = u32::try_from(signed.unsigned_abs())
+                    .with_context(|| format!("count tag {s:?} is too large to count"))?;
+                Ok(Some(value))
             }
             Value::Int8(v) => Ok(Some(v.unsigned_abs() as u32)),
             Value::UInt8(v) => Ok(Some(v as u32)),
@@ -843,6 +865,70 @@ mod tests {
         (header, records)
     }
 
+    /// Write a one-chromosome BAM whose reads carry the given `XC` count tag,
+    /// for the tag shapes no committed fixture holds. Returns the file path;
+    /// the temp dir is leaked so it outlives the reader.
+    fn write_bam_with_count_tags(reads: &[(&str, Value<'_>)]) -> std::path::PathBuf {
+        use noodles::sam::alignment::io::Write as _;
+        use noodles::sam::alignment::record_buf::{RecordBuf, data::field::Value as BufValue};
+        use noodles::sam::header::record::value::{Map, map::ReferenceSequence};
+
+        let dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+        let path = dir.path().join("count_tags.bam");
+
+        let header = Header::builder()
+            .add_reference_sequence(
+                "chr1",
+                Map::<ReferenceSequence>::new(std::num::NonZeroUsize::new(1_000).unwrap()),
+            )
+            .build();
+
+        let mut writer = bam::io::Writer::new(std::fs::File::create(&path).unwrap());
+        writer.write_header(&header).unwrap();
+
+        for (name, value) in reads {
+            let buf_value = match value {
+                Value::Int32(v) => BufValue::Int32(*v),
+                Value::String(v) => BufValue::String(v.to_vec().into()),
+                _ => unreachable!("only the shapes this helper is called with"),
+            };
+            let record = RecordBuf::builder()
+                .set_name(name.as_bytes())
+                .set_flags(noodles::sam::alignment::record::Flags::empty())
+                .set_reference_sequence_id(0)
+                .set_alignment_start(noodles::core::Position::try_from(1).unwrap())
+                .set_data(
+                    [(Tag::new(b'X', b'C'), buf_value)]
+                        .into_iter()
+                        .collect::<noodles::sam::alignment::record_buf::Data>(),
+                )
+                .build();
+            writer.write_alignment_record(&header, &record).unwrap();
+        }
+        writer.try_finish().unwrap();
+        path
+    }
+
+    /// The `XC` count tag each of `reads` produces, in the order written.
+    fn count_tags_of(reads: &[(&str, Value<'_>)]) -> Vec<(String, u32)> {
+        let path = write_bam_with_count_tags(reads);
+        let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
+        let _ = reader.read_header().unwrap();
+        let xc = Tag::new(b'X', b'C');
+
+        reader
+            .records()
+            .map(|record| {
+                let record = record.unwrap();
+                let name = String::from_utf8_lossy(record.name().unwrap().as_ref()).into_owned();
+                let count = get_count_tag(&record, &xc)
+                    .unwrap()
+                    .unwrap_or_else(|| panic!("{name} carried no readable count tag"));
+                (name, count)
+            })
+            .collect()
+    }
+
     /// Every read of `test_cigars.bam`, keyed by the CIGAR shape its name gives.
     fn cigar_shapes(opts: &ScRecordOptions) -> std::collections::BTreeMap<String, ScRecord<'_>> {
         let (header, records) = read_bam("test_cigars.bam", 100);
@@ -1080,6 +1166,34 @@ mod tests {
     }
 
     #[test]
+    fn a_string_count_tag_holding_a_number_is_read_as_that_number() {
+        // A count tag may arrive typed (`XC:i:7`) or spelled out (`XC:Z:7`).
+        // Both name the same value, so both have to read as 7.
+        let counts = count_tags_of(&[
+            ("typed", Value::Int32(7)),
+            ("spelled", Value::String(b"7".as_slice().into())),
+        ]);
+        assert_eq!(
+            counts,
+            vec![("typed".to_string(), 7), ("spelled".to_string(), 7)]
+        );
+    }
+
+    #[test]
+    fn a_negative_count_tag_contributes_its_magnitude() {
+        // The count matrix is unsigned, so the sign is dropped rather than the
+        // read. The integer and string paths have to agree on that.
+        let counts = count_tags_of(&[
+            ("neg_int", Value::Int32(-3)),
+            ("neg_str", Value::String(b"-3".as_slice().into())),
+            ("positive", Value::Int32(3)),
+        ]);
+        for (name, count) in counts {
+            assert_eq!(count, 3, "{name} did not contribute 3");
+        }
+    }
+
+    #[test]
     fn a_count_tag_that_is_not_a_number_is_an_error_naming_the_value() {
         let (_header, records) = read_test_bam(1);
         // BC holds a barcode, which cannot be parsed as a count.
@@ -1087,6 +1201,33 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("count tag"), "{err}");
+    }
+
+    #[test]
+    fn a_read_without_the_requested_count_tag_is_dropped() {
+        // With no count tag every read counts as one. Ask for a tag the file
+        // does not carry and the read has no value to add, so it is filtered
+        // out rather than counted as one.
+        let (header, records) = read_test_bam(1);
+        let bc = Tag::new(b'B', b'C');
+        let absent = Tag::new(b'Z', b'Z');
+
+        let counted =
+            ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &plain_opts())
+                .unwrap();
+        assert!(counted.is_some(), "the record parses without a count tag");
+
+        let dropped = ScRecord::from_bam_record(
+            &records[0],
+            &header,
+            &bc,
+            None,
+            Some(&absent),
+            None,
+            &plain_opts(),
+        )
+        .unwrap();
+        assert!(dropped.is_none(), "a read without the count tag was kept");
     }
 
     #[test]
