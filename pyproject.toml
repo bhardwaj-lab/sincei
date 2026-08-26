@@ -8,7 +8,7 @@ description = "A user-friendly toolkit for QC, counting, clustering and plotting
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
 dynamic = ["version"]
-license = {file = "LICENSE.txt"}
+license = {file = "LICENCE.txt"}
 authors = [
     {name = "Vivek Bhardwaj"},
     {name = "Fernando Sancho Gómez"},
