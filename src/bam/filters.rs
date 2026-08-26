@@ -33,8 +33,9 @@ pub struct RawRecordFilter {
     pub sam_flag_include: Option<u16>,
     /// Drop reads for which `flags & exclude != 0`.
     pub sam_flag_exclude: Option<u16>,
-    /// Strand filter for RNA-seq reads (dUTP library protocol); `"forward"`
-    /// (keeps minus-strand reads) or `"reverse"` (keeps plus-strand reads).
+    /// Strand filter for RNA-seq reads (dUTP library protocol). The value names
+    /// the strand of the *gene*, not of the read, so what it keeps differs
+    /// between paired- and single-end data. See [`rna_strand_filter`].
     pub filter_rna_strand: Option<String>,
 }
 
@@ -90,9 +91,15 @@ impl Default for RawRecordFilter {
 ///
 /// All active thresholds must pass; an unset threshold is always satisfied.
 pub struct QcFilter {
-    /// Minimum fragment length (uses |TLEN| for paired-end, alignment span for single-end).
+    /// Minimum fragment length.
+    ///
+    /// Measured as |TLEN| when the record carries one, and otherwise as the
+    /// reference bases the read covers (`ScRecord::covered_span`, which skips
+    /// introns and deletions). The test is on TLEN being non-zero, not on the
+    /// paired flag.
     pub min_fragment_length: Option<usize>,
-    /// Maximum fragment length.
+    /// Maximum fragment length, measured the same way as
+    /// [`Self::min_fragment_length`].
     pub max_fragment_length: Option<usize>,
     /// Minimum GC content in `[0, 1]`. Requires `ScRecordOptions::compute_gc`.
     pub min_gc: Option<f32>,
@@ -196,7 +203,7 @@ impl QcFilter {
 /// Derive the [`ScRecordOptions`] needed to evaluate `qc` and, when
 /// `has_motif` is set, the motif filter (which needs the raw read sequence).
 ///
-/// `adjust` decides whether the gapless blocks shoudl be computed.
+/// `adjust` decides whether the gapless blocks should be computed.
 pub(crate) fn derive_record_opts(
     qc: Option<&QcFilter>,
     has_motif: bool,
@@ -373,10 +380,26 @@ impl DuplicateFilter {
 /// corresponding genomic overhang.
 ///
 /// A record passes if **any** of the supplied `(read_motif, ref_motif)` pairs
-/// match it. For forward reads the read motif is compared to the first N bases
-/// of the forward read sequence and the reference motif to the genomic bases
-/// immediately upstream of the alignment start. For reverse reads both windows
-/// are mirrored to the 3′ end of the alignment on the reference.
+/// match it. The read motif is compared to the first N bases of the read as
+/// sequenced on the forward strand.
+///
+/// The reference motif is **not** taken from upstream of the alignment: its
+/// window ends *on* the read's first aligned base, so the motif's last base is
+/// the base the read starts on. That is the point of the scChIC `A` / `TA`
+/// pair, where the `A` of `TA` is the read's own first base and the `T` is the
+/// single-base overhang before it:
+///
+/// ```text
+///   forward read      R1 ........A------->
+///   reference         ----------TA--------
+///
+///   reverse read           <-------T....... R1
+///   reference              --------TA----------
+/// ```
+///
+/// Forward reads therefore read `[start + 1 - len, start + 1)`; reverse reads
+/// mirror that to `[end - 1, end + len - 1)` at the alignment's 3′ end. Both
+/// match the reference implementation's `checkMotifs`.
 ///
 /// Requires `ScRecordOptions::store_sequence = true` on the records.
 pub struct MotifFilter {

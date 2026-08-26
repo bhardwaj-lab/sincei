@@ -117,8 +117,6 @@ impl ChromIndex {
 ///
 /// Callers resolve `chrom -> ChromIndex` once per work chunk (each covers a
 /// single chromosome) and then query that index per read.
-///
-/// `AHashMap` preserves the iteration order of chromosomes.
 pub type GenomeIndex = AHashMap<String, ChromIndex>;
 
 /// Uniform-bin tiling of a **whole genome**, covering every chromosome.
@@ -136,9 +134,12 @@ pub type GenomeIndex = AHashMap<String, ChromIndex>;
 pub struct BinIndex {
     pub bin_size: usize,
     pub step_size: usize,
-    /// `chrom -> (first_feature_idx, n_bins_on_chrom)`, in BAM-header order.
-    /// The first element turns a bin's index within its chromosome into its
-    /// column in the count matrix.
+    /// `chrom -> (first_feature_idx, n_bins_on_chrom)`. The first element turns
+    /// a bin's index within its chromosome into its column in the count matrix.
+    ///
+    /// Those offsets are handed out by walking the chromosomes in BAM-header
+    /// order, so the columns follow the header. The map itself is unordered:
+    /// the offsets carry that sequence, not the iteration.
     pub chrom_bins: AHashMap<String, (usize, usize)>,
     /// Total bins across all chromosomes, the number of matrix columns.
     pub n_bins: usize,

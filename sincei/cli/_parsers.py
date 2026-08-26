@@ -70,7 +70,7 @@ def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
         return None, None
     parts = value.split(",")
     if len(parts) != 2:
-        msg = f"--gcContentFilter expects '<low>,<high>' (got {value!r})"
+        msg = f"--GCcontentFilter expects '<low>,<high>' (got {value!r})"
         raise ValueError(msg)
     return float(parts[0]), float(parts[1])
 

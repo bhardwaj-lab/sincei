@@ -85,12 +85,19 @@ fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
 /// read. Offsets are 1-based; negative values index from the read's 3' end.
 /// A single value gives one base, two give the range between them.
 ///
-/// The offset counts **aligned** positions, walking the read's gapless blocks.
-/// Counting along the alignment span instead would step through an intron or a
-/// deletion and place the signal where the read has none. Counting along the
-/// stored sequence would step through soft-clipped bases and run off the end.
-/// Because a window can cross a gap, the result may be several intervals,
-/// always in ascending genomic order.
+/// The offset counts **aligned** positions, walking the read's gapless blocks
+/// when the record carries them. Counting along the alignment span instead
+/// would step through an intron or a deletion and place the signal where the
+/// read has none. Counting along the stored sequence would step through
+/// soft-clipped bases and run off the end. Because a window can cross a gap,
+/// the result may be several intervals, always in ascending genomic order.
+///
+/// A record carries no block list in two cases. An ungapped read needs none:
+/// its alignment span is the single block. But `derive_record_opts` also
+/// switches `compute_blocks` off whenever `--extendReads` or `--centerReads` is
+/// set, since the adjusted interval replaces the blocks. Combining either with
+/// `--offset` therefore falls back to the span, and the walk *does* step
+/// through introns and deletions. Nothing rejects that combination today.
 fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Vec<(usize, usize)> {
     // Ungapped reads carry no block list, their one block being the alignment.
     let span = [(rec.alignment_start, rec.alignment_end)];
@@ -309,8 +316,10 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
 /// `bam_paths`: list of `(path, sample_label)` pairs; labels must match the
 /// `sample` column in `group_info_path`.
 ///
-/// `group_info_path`: TSV with a header line followed by rows of
-/// `sample\tbarcode\tgroup`.
+/// `group_info_path`: TSV with a header line, in either of two layouts, told
+/// apart by the header's column count:
+/// `sample\tbarcode\tgroup`, or `sample::barcode\tUMAP1\tUMAP2\tgroup` as
+/// `scClusterCells` writes it.
 ///
 /// Normalization denominators (CPM, RPKM) are computed from the total reads
 /// over all bins, excluding chromosomes in `ignore_for_normalization`.
@@ -964,8 +973,10 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
 /// `bam_files` and `bam_labels` must be the same length; each label must match
 /// the `sample` column in `group_info`.
 ///
-/// `group_info` is the path to a TSV file with a header line and columns:
-/// `sample`, `barcode`, `group`.
+/// `group_info` is the path to a TSV file with a header line, in either of two
+/// layouts, told apart by the header's column count: `sample`, `barcode`,
+/// `group`; or `sample::barcode`, `UMAP1`, `UMAP2`, `group` as
+/// `scClusterCells` writes it.
 ///
 /// Returns the list of output file paths created.
 #[pyfunction(signature = (

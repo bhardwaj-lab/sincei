@@ -71,25 +71,18 @@ fn type_matches(record_type: &[u8], types: &[&str]) -> bool {
     types.iter().any(|t| t.as_bytes() == record_type)
 }
 
-/// Read which column-3 types a GFF3 file uses for its transcripts.
+/// Read which column-3 types a GFF3 file uses for its gene records.
 ///
-/// GTF and GENCODE GFF3 type every transcript as `transcript`, whatever its
-/// biotype. Ensembl-style GFF3 instead uses Sequence Ontology terms for the
-/// biotypes (`mRNA`, `lnc_RNA`, `snoRNA`, `tRNA`, etc.).
+/// Ensembl types a gene by its biotype, so one file holds `gene`, `ncRNA_gene`,
+/// `pseudogene` and so on, and it namespaces the ids as `ID=gene:...`. Scanning
+/// for that prefix collects whichever of those types the file actually uses.
 ///
-/// Ensembl namespaces a transcript's id as `ID=transcript:...`, GENCODE as
-/// `ID=transcript...`, so we can distinguish between them.
-///
-/// Once we know the style of the GFF3, we can read the transcript types from
-/// the file itself. Every column-3 value on a line containing `ID=transcript:`
-/// is a transcript type.
+/// GENCODE types every gene as `gene` whatever its biotype, and does not
+/// namespace its ids, so no line carries the prefix and the scan falls through
+/// to that single type. A GTF is never asked: `parse_annotation_files` gives it
+/// [`GENCODE_GENE_TYPE`] directly.
 ///
 /// This is a plain line scan; records are not parsed.
-/// The column-3 types an Ensembl-style GFF3 gives its gene records.
-///
-/// Ensembl types a gene by its biotype, so a file holds `gene`, `ncRNA_gene`,
-/// `pseudogene` and so on. GENCODE types them all `gene`, and does not
-/// namespace its ids, so it falls through to that single type.
 fn detect_gff_gene_types(path: &Path) -> Result<Vec<String>> {
     detect_gff_types(path, ENSEMBL_GENE_ID_PREFIX, GENCODE_GENE_TYPE)
 }
@@ -364,7 +357,8 @@ where
 /// `["exon", "CDS"]`); a record is kept when its type is any of them, and
 /// `None` includes every type. `name_attr` is the attribute key used as the
 /// feature name (e.g. `"gene_id"`, `"gene_name"`); falls back to
-/// `"chrom:start-end"` when absent. Coordinates are converted from 1-based
+/// `"chrom:start-end"` when a record lacks it, though a file where no kept
+/// record carries it is an error. Coordinates are converted from 1-based
 /// inclusive to 0-based half-open.
 fn parse_gtf_file(
     path: &Path,
@@ -380,8 +374,9 @@ fn parse_gtf_file(
 /// `feature_types` filters by the type column (e.g. `["mRNA", "lnc_RNA"]`); a
 /// record is kept when its type is any of them, and `None` includes every type.
 /// `name_attr` is the attribute tag used as the feature name (e.g. `"ID"`,
-/// `"Name"`); falls back to `"chrom:start-end"`. Coordinates are converted
-/// from 1-based inclusive to 0-based half-open.
+/// `"Name"`); falls back to `"chrom:start-end"` when a record lacks it, though
+/// a file where no kept record carries it is an error. Coordinates are
+/// converted from 1-based inclusive to 0-based half-open.
 fn parse_gff_file(
     path: &Path,
     feature_types: Option<&[&str]>,
@@ -389,6 +384,27 @@ fn parse_gff_file(
 ) -> Result<ParsedAnnotation> {
     let mut reader = gff::io::Reader::new(open_annotation(path)?);
     build_annotation_index(reader.record_bufs(), feature_types, name_attr)
+}
+
+/// Fold one file's [`ParsedAnnotation`] into the running merge.
+///
+/// Each file's features are appended to `all_features`, and its intervals'
+/// `var_idx` shifted by `offset` (the feature count before this file) so every
+/// feature keeps a unique column in the combined output.
+fn merge(
+    parsed: ParsedAnnotation,
+    offset: usize,
+    all_features: &mut Vec<Feature>,
+    all_intervals: &mut AHashMap<String, Vec<Interval>>,
+) {
+    all_features.extend(parsed.features);
+    for (chrom, intervals) in parsed.intervals {
+        let bucket = all_intervals.entry(chrom).or_default();
+        for mut interval in intervals {
+            interval.var_idx += offset;
+            bucket.push(interval);
+        }
+    }
 }
 
 /// Parse one or more annotation files (BED, GTF, GFF3, or any mix) and merge
@@ -409,12 +425,14 @@ fn parse_gff_file(
 /// `feature_types` (several may be given) which is what lets an Ensembl-style
 /// GFF3 contribute all of its gene biotypes (`gene`, `ncRNA_gene`,
 /// `pseudogene`, …) rather than just one. `None` reads the types out of the
-/// file itself (see [`detect_gff_gene_types`]), so every gene is kept
+/// file itself (see `detect_gff_gene_types`), so every gene is kept
 /// regardless of biotype. Naming `feature_types` is also how to count
 /// transcripts instead: `["transcript"]` for GTF and GENCODE GFF3, or the
-/// biotypes themselves for an Ensembl GFF3. In metagene mode `exon_types` plays the same role for exons,
-/// defaulting to [`DEFAULT_EXON_TYPES`], and `name_attr` names the *grouping*
-/// attribute instead, defaulting to `"gene_id"` for both formats.
+/// biotypes themselves for an Ensembl GFF3.
+///
+/// In metagene mode `exon_types` plays the same role for exons, defaulting to
+/// [`DEFAULT_EXON_TYPES`], and `name_attr` names the *grouping* attribute
+/// instead, defaulting to `"gene_id"` for both formats.
 ///
 /// Feature names are concatenated in file order. Each file's `var_idx` values are
 /// shifted by the cumulative feature count so every feature in the combined
@@ -440,27 +458,6 @@ fn parse_gff_file(
 /// An **Ensembl-style GFF3 must be grouped per transcript**: its exons name
 /// only their transcript, in `Parent`, and carry no gene id, so the default
 /// grouping is an error rather than a silently wrong per-exon result.
-/// Fold one file's [`ParsedAnnotation`] into the running merge.
-///
-/// Each file's features are appended to `all_features`, and its intervals'
-/// `var_idx` shifted by `offset` (the feature count before this file) so every
-/// feature keeps a unique column in the combined output.
-fn merge(
-    parsed: ParsedAnnotation,
-    offset: usize,
-    all_features: &mut Vec<Feature>,
-    all_intervals: &mut AHashMap<String, Vec<Interval>>,
-) {
-    all_features.extend(parsed.features);
-    for (chrom, intervals) in parsed.intervals {
-        let bucket = all_intervals.entry(chrom).or_default();
-        for mut interval in intervals {
-            interval.var_idx += offset;
-            bucket.push(interval);
-        }
-    }
-}
-
 pub fn parse_annotation_files<P: AsRef<Path>>(
     paths: impl IntoIterator<Item = P>,
     feature_types: Option<&[&str]>,
@@ -514,10 +511,10 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
 
         let offset = all_var.len();
 
-        // Region types, when the caller named none: GTF always types its
-        // transcripts `transcript`, while a GFF3 has to be asked which style
-        // it is (see `detect_gff_transcript_types`). The two formats also
-        // differ in how a region names itself: `transcript_id` vs `ID`.
+        // Region types, when the caller named none: a GTF types every gene
+        // `gene`, whatever its biotype, while a GFF3 has to be asked which
+        // style it is (see `detect_gff_gene_types`). The two formats also
+        // differ in how a region names itself: `gene_id` vs `ID`.
         //
         // `detected` owns the type strings for as long as the borrowed slice
         // handed to the parser is alive.

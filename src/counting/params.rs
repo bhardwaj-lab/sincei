@@ -19,8 +19,10 @@ pub struct CountingParams {
     pub chr_to_skip: Vec<String>,
 
     /// Restrict counting to a single genomic region.
-    /// Format: `"chrom:start-end"` (1-based inclusive, samtools style) or
-    /// just `"chrom"` for a whole chromosome.
+    ///
+    /// `"chrom:start-end"`, `"chrom:start"` (to the end of the chromosome), or
+    /// `"chrom"` for the whole of it. Coordinates are 0-based half-open and are
+    /// taken as written. The two coordinates may be separated by `'-'` or `':'`.
     pub region: Option<String>,
 
     /// BED file whose regions define a blacklist. The counting functions
@@ -31,10 +33,10 @@ pub struct CountingParams {
 
     /// For GTF / GFF3 annotation files: the column-3 feature types that define
     /// a counting region. A record is a region when its type is any of them,
-    /// so an Ensembl-style GFF3 can contribute several transcript biotypes
-    /// (`mRNA`, `lnc_RNA`, `tRNA`, …). `None` means `"transcript"` for GTF and,
-    /// for GFF3, the transcript types read out of the file itself, so every
-    /// biotype is kept. Ignored for BED files.
+    /// so an Ensembl-style GFF3 can contribute all of its gene biotypes
+    /// (`gene`, `ncRNA_gene`, `pseudogene`, …). `None` means `"gene"` for GTF
+    /// and, for GFF3, the gene types read out of the file itself. Ignored for
+    /// BED files.
     pub feature_type: Option<Vec<String>>,
 
     /// For GTF / GFF3 annotation files: the column-3 feature types that define
@@ -44,13 +46,19 @@ pub struct CountingParams {
     pub exon_type: Option<Vec<String>>,
 
     /// For GTF / GFF3 annotation files: the column-9 attribute key whose value
-    /// names the feature. `None` selects the per-format default
-    /// (`"transcript_id"` for GTF, `"ID"` for GFF3, or `"gene_id"` for both
-    /// when `metagene` is set). Ignored for BED files (uses the 4th column
-    /// instead). Falls back to `"chrom:start-end"` when the attribute is absent.
+    /// names the feature. `None` selects the per-format default (`"gene_id"`
+    /// for GTF, `"ID"` for GFF3, or `"gene_id"` for both when `metagene` is
+    /// set). Ignored for BED files (uses the 4th column instead).
+    ///
+    /// A single record missing the attribute is named `"chrom:start-end"`, but
+    /// a file where *no* kept record carries it is an error: naming every
+    /// feature by its coordinates is never what was asked for.
     pub name_attr: Option<String>,
 
-    /// When `true`, count reads per gene rather than per transcript.
+    /// When `true`, count only a gene's exons rather than its whole extent.
+    ///
+    /// A feature is a gene either way. This changes which of its bases count,
+    /// not what it is grouped by.
     ///
     /// Exon intervals (type determined by `exon_type`, default `"exon"`) are
     /// grouped per gene: a read overlapping several exons of one gene is

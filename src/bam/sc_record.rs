@@ -472,7 +472,7 @@ pub(crate) enum EffectiveIntervals<'a> {
     One(Option<(usize, usize)>),
     Blocks(std::slice::Iter<'a, (usize, usize)>),
     /// A window selected inside the read, which the record itself does not
-    /// hold: `--Offset` trims the blocks at both ends, and a window crossing a
+    /// hold: `--offset` trims the blocks at both ends, and a window crossing a
     /// gap comes back as several intervals. Built per read, so it owns them.
     Selected(std::vec::IntoIter<(usize, usize)>),
 }

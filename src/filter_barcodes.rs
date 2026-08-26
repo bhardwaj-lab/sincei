@@ -381,7 +381,9 @@ impl<'a> WhitelistMatcher<'a> {
 /// whitelist
 ///     Barcodes to keep. ``None`` keeps every barcode found.
 /// blacklist_file_name
-///     BED file of regions to exclude; overlapping reads are ignored.
+///     BED file of regions to exclude. A read is dropped when blacklisted
+///     regions cover at least half of its alignment span, so a read that only
+///     clips the edge of a region is kept and still counts.
 /// cell_tag
 ///     Two-character BAM auxiliary tag holding the cell barcode.
 /// min_hamming_dist

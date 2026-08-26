@@ -4,8 +4,9 @@
 //! into a CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
 //! tables naming its cells and regions.
 //!
-//! The readers (`read_x_f64` and the column helpers) go the other way, reading a
-//! written matrix back.
+//! The readers (`read_x_f64` and the column helpers) go the other way, reading
+//! a written matrix back. They are test-only: nothing in the crate reads a
+//! count matrix yet.
 
 use std::path::Path;
 
@@ -28,8 +29,11 @@ use crate::annotation::region_index::Feature;
 
 /// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
 ///
-/// Bool / string matrices are rejected. Shared by the downstream commands
-/// (`find_vcrs`, `score_features`) that need a dense-friendly float matrix.
+/// Bool / string matrices are rejected.
+///
+/// Test-only. The downstream commands that would want a dense-friendly float
+/// matrix (`scFindVCRs`, `scScoreFeatures`) have no Rust backend yet, so this
+/// exists to read back what the counting tests write.
 #[cfg(test)]
 pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
     let dyn_csr: DynCsrMatrix = adata

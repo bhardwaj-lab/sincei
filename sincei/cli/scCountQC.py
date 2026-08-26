@@ -101,7 +101,7 @@ def main(
             metavar="BED",
             rich_help_panel=_QC,
             help=(
-                "A BED or GTF file containing regions that should be excluded from all "
+                "A BED file containing regions that should be excluded from all "
                 "analyses. Regions in the anndata object that overlap with blacklisted "
                 "regions will be removed."
             ),
