@@ -401,23 +401,6 @@ impl<'a> BamWorker<'a> {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn a_genome_whose_chromosome_lengths_match_the_bam_is_accepted() {
-        // test_i1.bam is mm10 chr5 (151,834,684), so a genome accepted here has
-        // to carry chromosome 5: the check rejects a pair naming no chromosome
-        // in common.
-        //
-        // NOTE: `mm10_chr1.2bit` is the *extended* suite's genome
-        // (benchmarks/pipeline/cases.py), whose BAMs are on chr1. It does not
-        // match this BAM, so this test would fail rather than pass if that file
-        // were ever placed in tests/testdata.
-        let bam = testdata().join("test_i1.bam");
-        let genome = testdata().join("mm10_chr1.2bit");
-        if !genome.exists() {
-            return; // the 2bit is not committed; the extended suite covers it
-        }
-        assert!(ensure_genome_matches_bams(&genome, &[bam.as_path()]).is_ok());
-    }
 
     #[test]
     fn a_missing_genome_file_is_reported_with_its_path() {
