@@ -94,7 +94,8 @@ pub struct ScRecord<'a> {
     pub count: u32,
     /// GC fraction in `[0, 1]`. `None` if not requested.
     pub gc_content: Option<f32>,
-    /// Fraction of read bases in M-type CIGAR ops. `None` if not requested.
+    /// Fraction of read bases in aligned CIGAR ops (`M`, `=`, `X`).
+    /// `None` if not requested.
     pub aligned_fraction: Option<f32>,
     /// Raw BAM read sequence (read orientation). `None` if not requested.
     pub read_sequence: Option<Vec<u8>>,
@@ -300,27 +301,37 @@ impl<'a> ScRecord<'a> {
             None
         };
 
-        // Aligned fraction: M operations over the length of the read as it was
-        // sequenced.
+        // Aligned fraction: the aligned operations over the length of the read
+        // as it was sequenced.
+        //
+        // `=` and `X` are counted alongside `M`: all three consume a reference
+        // base for a read base, and an aligner that spells its matches out
+        // (minimap2 --eqx, bwa-mem2 -M alternatives) describes the same
+        // alignment as one that emits `M`. Counting `M` alone would score every
+        // read of such a file at 0. The rest of this module already treats the
+        // three the same way.
         //
         // The denominator counts hard-clipped bases as well as the ones the
         // record still carries. Those bases were part of the read, so leaving
         // them out would overstate how much of it aligned. Soft clips are
         // already counted by `consumes_read`.
         let aligned_fraction = if opts.compute_aligned_fraction {
-            let mut match_len: usize = 0;
+            let mut aligned_len: usize = 0;
             let mut read_consuming: usize = 0;
             for result in record.cigar().iter() {
                 let op = result.context("failed to decode CIGAR op")?;
-                if matches!(op.kind(), CigarKind::Match) {
-                    match_len += op.len();
+                if matches!(
+                    op.kind(),
+                    CigarKind::Match | CigarKind::SequenceMatch | CigarKind::SequenceMismatch
+                ) {
+                    aligned_len += op.len();
                 }
                 if op.kind().consumes_read() || matches!(op.kind(), CigarKind::HardClip) {
                     read_consuming += op.len();
                 }
             }
             if read_consuming > 0 {
-                Some(match_len as f32 / read_consuming as f32)
+                Some(aligned_len as f32 / read_consuming as f32)
             } else {
                 None
             }
@@ -1020,9 +1031,9 @@ mod tests {
         assert_eq!(fraction("del2"), 1.0);
         assert_eq!(fraction("intron"), 1.0);
 
-        // Only `M` counts as aligned, so an =/X alignment reports nothing,
-        // which is what the reference implementation reports too.
-        assert_eq!(fraction("eqx"), 0.0);
+        // `=` and `X` are aligned ops like `M`, so 5=5X10N5= is 15 aligned
+        // bases of a 15-base read. The intron consumes none of it.
+        assert_eq!(fraction("eqx"), 1.0);
     }
 
     #[test]

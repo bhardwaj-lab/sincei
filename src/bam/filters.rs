@@ -98,7 +98,7 @@ pub struct QcFilter {
     pub min_gc: Option<f32>,
     /// Maximum GC content in `[0, 1]`. Requires `ScRecordOptions::compute_gc`.
     pub max_gc: Option<f32>,
-    /// Minimum fraction of read bases in M-type CIGAR ops.
+    /// Minimum fraction of read bases in aligned CIGAR ops (`M`, `=`, `X`).
     /// Requires `ScRecordOptions::compute_aligned_fraction`.
     pub min_aligned_fraction: Option<f32>,
 }
