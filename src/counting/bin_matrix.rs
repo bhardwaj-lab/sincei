@@ -583,12 +583,12 @@ mod tests {
 
         let sums = column_sums(&out);
         assert_eq!(
-            sums.get("5:65966800-65966850").copied(),
+            sums.get("5_65966800_65966850::None").copied(),
             Some(2.0),
             "the bin holding the read starts counted {sums:?}"
         );
         assert_eq!(
-            sums.get("5:65966850-65966900").copied(),
+            sums.get("5_65966850_65966900::None").copied(),
             Some(2.0),
             "the bin holding the read ends counted {sums:?}"
         );
@@ -648,19 +648,19 @@ mod tests {
 
         let sums = column_sums(&out);
         assert_eq!(
-            sums.get("5:65960000-65970000").copied(),
+            sums.get("5_65960000_65970000::None").copied(),
             Some(3.0),
             "two spliced first exons and the plain read {sums:?}"
         );
         assert_eq!(
-            sums.get("5:65980000-65990000").copied(),
+            sums.get("5_65980000_65990000::None").copied(),
             Some(2.0),
             "two spliced second exons {sums:?}"
         );
         // The middle bin is pure intron for the spliced reads. Only the
         // deletion read, which really covers it, is counted there.
         assert_eq!(
-            sums.get("5:65970000-65980000").copied(),
+            sums.get("5_65970000_65980000::None").copied(),
             Some(1.0),
             "the intron was counted {sums:?}"
         );
@@ -686,7 +686,7 @@ mod tests {
 
         let per_cell: f64 = entries(&out)
             .iter()
-            .filter(|((_, bin), _)| bin == "5:65970000-65980000")
+            .filter(|((_, bin), _)| bin == "5_65970000_65980000::None")
             .map(|(_, v)| *v)
             .sum();
         assert_eq!(per_cell, 1.0);
@@ -716,7 +716,7 @@ mod tests {
 
         let sums = column_sums(&out);
         assert_eq!(
-            sums.get("5:65970000-65980000").copied(),
+            sums.get("5_65970000_65980000::None").copied(),
             Some(3.0),
             "both spliced reads should now span the middle bin {sums:?}"
         );
@@ -863,8 +863,8 @@ mod tests {
         let names = adata.var_names().into_vec();
 
         assert_eq!(names.len(), 10, "{names:?}");
-        assert_eq!(names[0], "5:65900000-65910000");
-        assert_eq!(names[9], "5:65990000-66000000");
+        assert_eq!(names[0], "5_65900000_65910000::None");
+        assert_eq!(names[9], "5_65990000_66000000::None");
     }
 
     #[test]
@@ -933,7 +933,7 @@ mod tests {
         let adata = AnnData::<H5>::open(H5::open(&out).unwrap()).unwrap();
         let names = adata.var_names().into_vec();
         // The last bin is clamped to the window end, not to the bin size.
-        assert_eq!(names, vec!["5:65970000-65971000"]);
+        assert_eq!(names, vec!["5_65970000_65971000::None"]);
     }
 
     #[test]
@@ -962,12 +962,12 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "5:65905000-65915000",
-                "5:65915000-65925000",
-                "5:65925000-65935000",
-                "5:65935000-65945000",
-                "5:65945000-65955000",
-                "5:65955000-65965000",
+                "5_65905000_65915000::None",
+                "5_65915000_65925000::None",
+                "5_65925000_65935000::None",
+                "5_65935000_65945000::None",
+                "5_65945000_65955000::None",
+                "5_65955000_65965000::None",
             ]
         );
     }
@@ -996,9 +996,9 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "5:65900000-65910000",
-                "5:65910000-65920000",
-                "5:65920000-65925000",
+                "5_65900000_65910000::None",
+                "5_65910000_65920000::None",
+                "5_65920000_65925000::None",
             ]
         );
     }

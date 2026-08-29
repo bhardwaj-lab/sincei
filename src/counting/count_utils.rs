@@ -214,11 +214,18 @@ pub(crate) fn write_counts_anndata(
     )?;
 
     // var: chrom, start, end, name, in feature-index order.
-    let var_index: Vec<String> = var.iter().map(|v| v.name.clone()).collect();
+    //
+    // `var_names` are `{chrom}_{start}_{end}::{name}`. Bins and unnamed
+    // features render the name as the literal `None`.
+    let locus = |v: &Feature| format!("{}_{}_{}", v.chrom, v.start, v.end);
+    let var_index: Vec<String> = var
+        .iter()
+        .map(|v| format!("{}::{}", locus(v), v.name.as_deref().unwrap_or("None")))
+        .collect();
     let chrom_col: Vec<String> = var.iter().map(|v| v.chrom.clone()).collect();
     let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();
     let end_col: Vec<i64> = var.iter().map(|v| v.end as i64).collect();
-    let name_col: Vec<String> = var.iter().map(|v| v.name.clone()).collect();
+    let name_col: Vec<String> = var.iter().map(locus).collect();
     let var_df = DataFrame::new(
         var.len(),
         vec![
@@ -348,7 +355,8 @@ mod tests {
             chrom: chrom.to_string(),
             start,
             end,
-            name: format!("{chrom}:{start}-{end}"),
+            // Bins and nameless annotation records both arrive unnamed.
+            name: None,
             strand: '*',
         }
     }
@@ -424,7 +432,7 @@ mod tests {
             adata.obs_names().into_vec(),
             vec!["s1::AAA", "s1::CCC", "s2::AAA", "s2::CCC"]
         );
-        assert_eq!(adata.var_names().into_vec(), vec!["chr1:0-100"]);
+        assert_eq!(adata.var_names().into_vec(), vec!["chr1_0_100::None"]);
     }
 
     #[test]

@@ -561,11 +561,26 @@ mod tests {
         assert!(open(&out).n_vars() > 0);
     }
 
+    /// The feature name out of a `{chrom}_{start}_{end}::{name}` var_name.
+    /// Unnamed features (bins, nameless annotation records) give `"None"`.
+    fn feature_name(var_name: &str) -> String {
+        var_name
+            .split_once("::")
+            .map(|(_, name)| name)
+            .unwrap_or(var_name)
+            .to_string()
+    }
+
     /// Every matrix entry, keyed by cell row and feature name, so two runs can
     /// be compared entry for entry.
     fn entries(path: &Path) -> std::collections::BTreeMap<(usize, String), f64> {
         let adata = open(path);
-        let names = adata.var_names().into_vec();
+        let names: Vec<String> = adata
+            .var_names()
+            .into_vec()
+            .iter()
+            .map(|n| feature_name(n))
+            .collect();
         let x = super::super::count_utils::read_x_f64(&adata).unwrap();
         let mut out = std::collections::BTreeMap::new();
         for (row, col, &v) in x.triplet_iter() {
@@ -850,8 +865,14 @@ mod tests {
         path
     }
 
+    /// Feature names only, with the locus prefix stripped.
     fn var_names(path: &Path) -> Vec<String> {
-        open(path).var_names().into_vec()
+        open(path)
+            .var_names()
+            .into_vec()
+            .iter()
+            .map(|n| feature_name(n))
+            .collect()
     }
 
     #[test]

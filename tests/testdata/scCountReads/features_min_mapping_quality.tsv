@@ -1,7 +1,7 @@
 shape	14	2
-test_i1::ACGGTAAT	region1	1
-test_i1::CGTGGTAA	region2	1
-test_i1::GCGAGCAT	region2	2
-test_i1::GCGCTGAC	region1	2
-test_i1::GGAGTCAT	region1	2
-test_i1::GTCAAGCA	region2	2
+test_i1::ACGGTAAT	5_65966505_65972514::region1	1
+test_i1::CGTGGTAA	5_65975974_65978268::region2	1
+test_i1::GCGAGCAT	5_65975974_65978268::region2	2
+test_i1::GCGCTGAC	5_65966505_65972514::region1	2
+test_i1::GGAGTCAT	5_65966505_65972514::region1	2
+test_i1::GTCAAGCA	5_65975974_65978268::region2	2

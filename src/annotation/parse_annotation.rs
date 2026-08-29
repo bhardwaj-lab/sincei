@@ -220,18 +220,14 @@ fn parse_bed_file(path: &Path) -> Result<ParsedAnnotation> {
         }
 
         // 4th column lives in other_fields[0] for a Reader<3, _>.
-        let name = record
-            .other_fields()
-            .get(0)
-            .and_then(|n| {
-                let s = n.to_string();
-                if s.is_empty() || s == "." {
-                    None
-                } else {
-                    Some(s)
-                }
-            })
-            .unwrap_or_else(|| format!("{}:{}-{}", chrom, start, end));
+        let name = record.other_fields().get(0).and_then(|n| {
+            let s = n.to_string();
+            if s.is_empty() || s == "." {
+                None
+            } else {
+                Some(s)
+            }
+        });
 
         // 6th column (strand) lives in other_fields[2] for a Reader<3, _>.
         let strand = record
@@ -316,9 +312,9 @@ where
                 // where GTF and GENCODE give the bare one. Stripping it here
                 // means a feature has the same name whichever flavour it was
                 // read from, as it already does under `metagene`.
-                strip_gff_id_prefix(&name)
+                Some(strip_gff_id_prefix(&name))
             }
-            None => format!("{}:{}-{}", chrom, start, end),
+            None => None,
         };
 
         let strand = gff_strand_to_char(record.strand());
@@ -639,7 +635,7 @@ where
                     chrom: chrom.clone(),
                     start,
                     end,
-                    name: group_name.clone(),
+                    name: Some(group_name.clone()),
                     strand: gff_strand_to_char(record.strand()),
                 });
                 idx
@@ -737,8 +733,12 @@ mod tests {
         (v.start, v.end)
     }
 
-    fn names(var: &[Feature]) -> Vec<String> {
-        var.iter().map(|v| v.name.clone()).collect()
+    /// Feature names, with an absent name rendered as `"None"` — the same way
+    /// `var_names` renders it.
+    fn names(var: &[Feature]) -> Vec<&str> {
+        var.iter()
+            .map(|v| v.name.as_deref().unwrap_or("None"))
+            .collect()
     }
 
     fn spans(var: &[Feature]) -> Vec<(usize, usize)> {
@@ -807,9 +807,9 @@ mod tests {
 
         let var = parse_bed_file(&path).unwrap().features;
 
-        // The zero-length feature is dropped; "." and a missing column both
-        // fall back to "chrom:start-end".
-        assert_eq!(names(&var), ["named", "chr1:300-400", "chr1:500-600"]);
+        // The zero-length feature is dropped; "." and a missing 4th column both
+        // leave the feature unnamed, which `var_names` renders as `::None`.
+        assert_eq!(names(&var), ["named", "None", "None"]);
         // No strand column means unstranded.
         assert!(var.iter().all(|v| v.strand == '*'));
     }
@@ -948,7 +948,11 @@ mod tests {
             assert_eq!(var[0].chrom, chrom, "{file}");
             // GTF is 1-based inclusive, so the start comes back one lower.
             assert_eq!(var[0].start, LNCRNA.0, "{file}");
-            assert!(var.iter().all(|v| v.name.starts_with("ENSMUST")), "{file}");
+            assert!(
+                var.iter()
+                    .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUST")),
+                "{file}"
+            );
         }
     }
 
@@ -1006,7 +1010,7 @@ mod tests {
         let var = parse_gtf_file(&data(GTF_GENCODE), None, "gene_name")
             .unwrap()
             .features;
-        assert!(var.iter().any(|v| v.name == "Prim2"));
+        assert!(var.iter().any(|v| v.name.as_deref() == Some("Prim2")));
         assert!(
             var.len() > 3,
             "expected every record type, got {}",
@@ -1031,7 +1035,11 @@ mod tests {
             .unwrap()
             .features;
         assert_eq!(gencode.len(), N_TRANSCRIPTS);
-        assert!(gencode.iter().all(|v| v.name.starts_with("ENSMUST")));
+        assert!(
+            gencode
+                .iter()
+                .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUST"))
+        );
 
         // Ensembl namespaces the id, and the prefix is stripped, so the two
         // styles name the same transcript the same way.
@@ -1043,7 +1051,11 @@ mod tests {
         .unwrap()
         .features;
         assert_eq!(ensembl.len(), N_TRANSCRIPTS);
-        assert!(ensembl.iter().all(|v| v.name.starts_with("ENSMUST")));
+        assert!(
+            ensembl
+                .iter()
+                .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUST"))
+        );
     }
 
     #[test]
@@ -1112,7 +1124,11 @@ mod tests {
                 .unwrap()
                 .1;
             assert_eq!(names(&var), GENCODE_IDS, "{file}");
-            assert!(var.iter().all(|v| v.name.starts_with("ENSMUSG")), "{file}");
+            assert!(
+                var.iter()
+                    .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUSG")),
+                "{file}"
+            );
         }
     }
 
@@ -1124,8 +1140,8 @@ mod tests {
 
         // 3 BED genes followed by the GTF's 3 genes.
         assert_eq!(var.len(), 3 + GENCODE_IDS.len());
-        assert_eq!(var[0].name, "A930006A01Rik");
-        assert!(var[3].name.starts_with("ENSMUSG"));
+        assert_eq!(var[0].name.as_deref(), Some("A930006A01Rik"));
+        assert!(var[3].name.as_deref().unwrap().starts_with("ENSMUSG"));
 
         // Inside Prim2 both files contribute: BED feature 1, plus the GTF gene
         // whose index was shifted past the BED's 3 features.
@@ -1151,7 +1167,11 @@ mod tests {
                 parse_annotation_files([data(file)], None, None, None, true).unwrap();
 
             assert_eq!(names(&var), ids, "{file}");
-            assert!(var.iter().all(|v| v.name.starts_with("ENSMUSG")), "{file}");
+            assert!(
+                var.iter()
+                    .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUSG")),
+                "{file}"
+            );
             assert!(var.iter().all(|v| v.chrom == chrom), "{file}");
 
             // The index holds each gene's exonic footprint, not one entry per
@@ -1211,7 +1231,10 @@ mod tests {
             .unwrap()
             .1;
         assert_eq!(var.len(), N_TRANSCRIPTS);
-        assert!(var.iter().all(|v| v.name.starts_with("ENSMUST")));
+        assert!(
+            var.iter()
+                .all(|v| v.name.as_deref().unwrap().starts_with("ENSMUST"))
+        );
     }
 
     #[test]
@@ -1319,7 +1342,15 @@ mod tests {
         // and each style that can group by gene names the same three genes.
         let strip_version = |var: &[Feature]| -> Vec<String> {
             var.iter()
-                .map(|v| v.name.split('.').next().unwrap().to_string())
+                .map(|v| {
+                    v.name
+                        .as_deref()
+                        .unwrap()
+                        .split('.')
+                        .next()
+                        .unwrap()
+                        .to_string()
+                })
                 .collect()
         };
 

@@ -18,8 +18,8 @@ pub struct Feature {
     pub chrom: String,
     pub start: usize,
     pub end: usize,
-    /// Feature name or `chrom:start-end` for bins/unnamed features.
-    pub name: String,
+    /// Feature name, or `None` for bins and features not named in annotation.
+    pub name: Option<String>,
     /// Strand of the feature: `'+'`, `'-'`, or `'*'` (unstranded/unknown).
     pub strand: char,
 }
@@ -269,7 +269,7 @@ pub fn build_bin_index_in_window(
                 chrom: chrom.clone(),
                 start: bin_start,
                 end: bin_end,
-                name: format!("{}:{}-{}", chrom, bin_start, bin_end),
+                name: None,
                 strand: '*',
             });
             bin_start += step_size;
@@ -497,7 +497,7 @@ mod tests {
         assert_eq!(index.chrom_bins.get("chr1"), Some(&(0, 3)));
         let spans: Vec<(usize, usize)> = var.iter().map(|v| (v.start, v.end)).collect();
         assert_eq!(spans, vec![(0, 100), (100, 200), (200, 250)]);
-        assert_eq!(var[2].name, "chr1:200-250");
+        assert_eq!(var[2].name, None);
         assert!(var.iter().all(|v| v.strand == '*'));
     }
 
@@ -535,6 +535,6 @@ mod tests {
 
         assert_eq!(index.n_bins, 1);
         assert_eq!((var[0].start, var[0].end), (0, 30));
-        assert_eq!(var[0].name, "chr1:0-30");
+        assert_eq!(var[0].name, None);
     }
 }
