@@ -1,0 +1,65 @@
+name: test-python
+
+on:
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: ./.github/actions/setup-native-deps
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Create virtualenv
+        run: |
+          uv venv
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install build and test tools
+        run: uv pip install maturin pytest pytest-cov
+
+      - name: Build and install the extension
+        run: maturin develop --profile dev --uv
+
+      - name: Run tests
+        env:
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
+        run: pytest tests -v --cov=sincei --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+
+      - name: Upload coverage to Codecov
+        # Workflow dispatches do not upload coverage.
+        if: matrix.os == 'ubuntu-latest' && github.event_name != 'workflow_dispatch'
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: python
+          name: codecov-umbrella
+          fail_ci_if_error: true

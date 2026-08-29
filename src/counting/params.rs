@@ -1,0 +1,182 @@
+//! Options shared by the counting entry points.
+//!
+//! [`CountingParams`] carries *what and where* to count: the chromosomes to
+//! skip, an optional region, a blacklist, and how to select features from an
+//! annotation file.
+//!
+//! How a *read* becomes an interval is deliberately not here, that is
+//! `crate::bam::sc_record::AdjustRead`, which keeps the `bam` module free of
+//! any dependency on this one.
+
+use std::path::PathBuf;
+
+/// Options that are common to all BAM counting functions.
+///
+/// These control pre-counting filtering and fragment-interval adjustments that
+/// are independent of the per-record QC/duplicate/motif filters.
+pub struct CountingParams {
+    /// Chromosomes to exclude entirely (e.g. `["chrM", "chrUn"]`).
+    pub chr_to_skip: Vec<String>,
+
+    /// Restrict counting to a single genomic region.
+    ///
+    /// `"chrom:start-end"`, `"chrom:start"` (to the end of the chromosome), or
+    /// `"chrom"` for the whole of it. Coordinates are 0-based half-open and are
+    /// taken as written. The two coordinates may be separated by `'-'` or `':'`.
+    pub region: Option<String>,
+
+    /// BED file whose regions define a blacklist. The counting functions
+    /// discard a read when blacklisted regions cover at least half of its
+    /// alignment span. The alignment span is used, not the interval that
+    /// --extendReads / --centerReads produce.
+    pub blacklist_path: Option<PathBuf>,
+
+    /// For GTF / GFF3 annotation files: the column-3 feature types that define
+    /// a counting region. A record is a region when its type is any of them,
+    /// so an Ensembl-style GFF3 can contribute all of its gene biotypes
+    /// (`gene`, `ncRNA_gene`, `pseudogene`, …). `None` means `"gene"` for GTF
+    /// and, for GFF3, the gene types read out of the file itself. Ignored for
+    /// BED files.
+    pub feature_type: Option<Vec<String>>,
+
+    /// For GTF / GFF3 annotation files: the column-3 feature types that define
+    /// an exon (e.g. `["exon"]`, or `["CDS"]` to count coding sequence only).
+    /// `None` selects `DEFAULT_EXON_TYPES`. Only used when `metagene` is true.
+    /// Ignored for BED files.
+    pub exon_type: Option<Vec<String>>,
+
+    /// For GTF / GFF3 annotation files: the column-9 attribute key whose value
+    /// names the feature. `None` selects the per-format default (`"gene_id"`
+    /// for GTF, `"ID"` for GFF3, or `"gene_id"` for both when `metagene` is
+    /// set). Ignored for BED files (uses the 4th column instead).
+    ///
+    /// A single record missing the attribute is named `"chrom:start-end"`, but
+    /// a file where *no* kept record carries it is an error: naming every
+    /// feature by its coordinates is never what was asked for.
+    pub name_attr: Option<String>,
+
+    /// When `true`, count only a gene's exons rather than its whole extent.
+    ///
+    /// A feature is a gene either way. This changes which of its bases count,
+    /// not what it is grouped by.
+    ///
+    /// Exon intervals (type determined by `exon_type`, default `"exon"`) are
+    /// grouped per gene: a read overlapping several exons of one gene is
+    /// counted once for that gene. The `feature_type` field is ignored in
+    /// metagene mode.
+    ///
+    /// An exon's gene is taken from its `gene_id` attribute or, for the
+    /// Ensembl / RefSeq GFF3 style, whose exons name only their transcript in
+    /// `Parent`, by following that `Parent` to the transcript record and on to
+    /// its gene. Setting `name_attr` overrides this and groups on that
+    /// attribute alone.
+    pub metagene: bool,
+}
+
+impl CountingParams {
+    pub fn new() -> Self {
+        Self {
+            chr_to_skip: Vec::new(),
+            region: None,
+            blacklist_path: None,
+            feature_type: None,
+            exon_type: None,
+            name_attr: None,
+            metagene: false,
+        }
+    }
+}
+
+impl Default for CountingParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Parse a region string into `(chrom, start, end)` using 0-based half-open
+/// coordinates.
+///
+/// Accepts `"chrom"`, `"chrom:start"`, or `"chrom:start:end"`. The coordinate
+/// separator may be `':'` or `'-'`.
+pub(super) fn parse_region(region: &str) -> anyhow::Result<(String, usize, usize)> {
+    let Some((chrom, rest)) = region.split_once(':') else {
+        // Bare chromosome (note: chromosome names may themselves contain '-',
+        // so we only split on the first ':').
+        return Ok((region.to_string(), 0, usize::MAX));
+    };
+
+    let mut coords = rest.splitn(2, [':', '-']);
+    let start: usize = coords
+        .next()
+        .unwrap_or("")
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("invalid region start in {:?}", region))?;
+    let end: usize = match coords.next() {
+        Some(end_str) => end_str
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid region end in {:?}", region))?,
+        None => usize::MAX,
+    };
+    Ok((chrom.to_string(), start, end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bare_chromosome_spans_everything() {
+        assert_eq!(
+            parse_region("chr1").unwrap(),
+            ("chr1".to_string(), 0, usize::MAX)
+        );
+    }
+
+    #[test]
+    fn start_only_is_open_ended() {
+        assert_eq!(
+            parse_region("chr1:100").unwrap(),
+            ("chr1".to_string(), 100, usize::MAX)
+        );
+    }
+
+    #[test]
+    fn both_coordinate_separators_are_accepted() {
+        // samtools style and the CLI-normalized style must agree.
+        let dash = parse_region("chr1:100-200").unwrap();
+        let colon = parse_region("chr1:100:200").unwrap();
+        assert_eq!(dash, ("chr1".to_string(), 100, 200));
+        assert_eq!(dash, colon);
+    }
+
+    #[test]
+    fn chromosome_names_may_contain_dashes() {
+        // Only the first ':' splits the chromosome off, so a '-' in the name
+        // must not be mistaken for a coordinate separator.
+        assert_eq!(
+            parse_region("chr1-alt").unwrap(),
+            ("chr1-alt".to_string(), 0, usize::MAX)
+        );
+        assert_eq!(
+            parse_region("chr1-alt:5-10").unwrap(),
+            ("chr1-alt".to_string(), 5, 10)
+        );
+    }
+
+    #[test]
+    fn coordinates_are_taken_as_written() {
+        // 0-based half-open, so a start of 0 is the first base of the
+        // chromosome and needs no special case.
+        assert_eq!(
+            parse_region("chr1:0-10").unwrap(),
+            ("chr1".to_string(), 0, 10)
+        );
+    }
+
+    #[test]
+    fn non_numeric_coordinates_are_rejected() {
+        assert!(parse_region("chr1:abc").is_err());
+        assert!(parse_region("chr1:100-xyz").is_err());
+        assert!(parse_region("chr1:").is_err());
+    }
+}

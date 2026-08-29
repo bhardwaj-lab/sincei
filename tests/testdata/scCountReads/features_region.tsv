@@ -1,0 +1,9 @@
+shape	14	2
+test_i1::ACGGTAAT	region1	1
+test_i1::ATATAACT	region1	2
+test_i1::CGTGGTAA	region2	1
+test_i1::GCGAGCAT	region2	2
+test_i1::GCGCTGAC	region1	2
+test_i1::GGAGTCAT	region1	2
+test_i1::GTCAAGCA	region2	2
+test_i1::TAGACTTG	region1	1

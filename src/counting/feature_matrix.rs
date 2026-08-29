@@ -1,0 +1,1237 @@
+//! Counts reads into a cell × annotation-feature matrix.
+//!
+//! Regions come from a BED/GTF/GFF3 file. Work is parallel over sub-chromosome
+//! chunks, each an independent BAI query, with reads owned by the chunk holding
+//! their alignment start so none is counted twice.
+//!
+//! A read is credited to every feature it overlaps, so overlapping annotations
+//! each get their own count. Under `metagene` the rule changes to one gene per
+//! read: a gene's exon overlaps are summed first and the largest total wins, so
+//! a read spanning two exons of one gene counts once for that gene.
+
+use ahash::{AHashMap, AHashSet};
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use rayon::prelude::*;
+
+use super::count_utils::{build_csr, write_counts_anndata};
+use super::params::{CountingParams, parse_region};
+use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
+use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
+use crate::bam::bam_io::{
+    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    read_group_ids, warn_unknown_group,
+};
+use crate::bam::filters::{
+    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
+    derive_record_opts, read_is_blacklisted,
+};
+
+use crate::bam::sc_record::{AdjustRead, ScRecord, parse_tag};
+
+/// Drop the features a `--region` leaves out, and renumber the rest.
+///
+/// A feature is kept when its **start** falls inside the region, which is the
+/// rule the reference implementation applies through
+/// `findOverlaps(..., trimOverlap=True)`, and the same ownership rule reads
+/// already follow here. So a feature reaching past the region's end is kept
+/// whole, and one that begins before the region is left out even though it
+/// overlaps: it belongs to the stretch of genome before this one.
+///
+/// The feature's own intervals are kept as they are, exons included, and only
+/// their `var_idx` is remapped onto the retained features.
+fn retain_features_in_region(
+    index: &mut GenomeIndex,
+    var: &mut Vec<Feature>,
+    chrom: &str,
+    start: usize,
+    end: usize,
+) {
+    // Old feature index -> new one, or `None` for a feature being dropped.
+    let mut renumbered: Vec<Option<usize>> = Vec::with_capacity(var.len());
+    let mut kept: Vec<Feature> = Vec::new();
+    for feature in var.iter() {
+        let inside = feature.chrom == chrom && feature.start >= start && feature.start < end;
+        renumbered.push(inside.then(|| {
+            kept.push(feature.clone());
+            kept.len() - 1
+        }));
+    }
+    *var = kept;
+
+    let mut rebuilt: AHashMap<String, Vec<Interval>> = AHashMap::new();
+    for (chrom_name, chrom_index) in index.iter() {
+        for interval in chrom_index.iter() {
+            if let Some(var_idx) = renumbered[interval.var_idx] {
+                rebuilt
+                    .entry(chrom_name.clone())
+                    .or_default()
+                    .push(Interval {
+                        start: interval.start,
+                        end: interval.end,
+                        var_idx,
+                    });
+            }
+        }
+    }
+
+    *index = rebuilt
+        .into_iter()
+        .map(|(chrom_name, intervals)| (chrom_name, ChromIndex::build(intervals)))
+        .collect();
+}
+
+/// Count reads from one or more BAM files into a cell × feature matrix, then
+/// write the result as an AnnData HDF5 file.
+///
+/// `bam_paths` is a list of `(path, sample_name)` pairs. Parallelism is over
+/// sub-chromosome chunks of `chunk_size` bp; each chunk is an independent BAI
+/// query. Reads are assigned to chunks by `alignment_start` to avoid
+/// double-counting. A read's effective interval can still extend into any
+/// feature regardless of chunk boundaries.
+///
+/// A read counts once for each feature it overlaps, unless `params.metagene` is
+/// set, in which case it counts once in total, for the gene whose exons it
+/// overlaps most.
+pub fn count_bam_features(
+    bam_paths: &[(&Path, &str)],
+    annotation_path: &Path,
+    barcodes: &[String],
+    bc_tag: &str,
+    umi_tag: Option<&str>,
+    count_tag: Option<&str>,
+    group_tag: Option<&str>,
+    params: &CountingParams,
+    adjust: &AdjustRead,
+    record_filter: Option<&RawRecordFilter>,
+    qc_filter: Option<&QcFilter>,
+    dup_method: Option<DupMethod>,
+    genome_path: Option<&Path>,
+    motifs: Option<&[(String, String)]>,
+    output_path: &Path,
+    compression: &str,
+    compression_level: u8,
+    num_threads: usize,
+    chunk_size: usize,
+) -> Result<()> {
+    anyhow::ensure!(!bam_paths.is_empty(), "at least one BAM file is required");
+    anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
+
+    let has_motif = genome_path.is_some() && motifs.is_some();
+    let record_opts = derive_record_opts(qc_filter, has_motif, dup_method.is_some(), adjust);
+    let bc_tag_parsed = parse_tag(bc_tag)?;
+    let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
+    let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
+    ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
+
+    // A genome from the wrong assembly makes every motif lookup wrong, so this
+    // is checked once here rather than a silent loss of reads.
+    if has_motif && let Some(genome) = genome_path {
+        ensure_genome_matches_bams(genome, &all_bams)?;
+    }
+
+    let count_tag_parsed = count_tag.map(parse_tag).transpose()?;
+    let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
+    let region_filter = params.region.as_deref().map(parse_region).transpose()?;
+
+    let n_barcodes = barcodes.len();
+    // Keyed by raw bytes so the per-read barcode lookup never allocates.
+    let barcode_index: AHashMap<&[u8], usize> = barcodes
+        .iter()
+        .enumerate()
+        .map(|(i, bc)| (bc.as_bytes(), i))
+        .collect();
+
+    // With --groupTag the sample axis comes from the reads' group tag rather
+    // than from which BAM they were read out of, so exactly one input is
+    // allowed and the row space is the header's @RG IDs x barcodes.
+    let group_ids: Option<Vec<Vec<u8>>> = if group_tag.is_some() {
+        anyhow::ensure!(
+            bam_paths.len() == 1,
+            "--groupTag expects a single merged BAM, but {} were given",
+            bam_paths.len()
+        );
+        let (path, _) = bam_paths[0];
+        Some(read_group_ids(&read_bam_header(path)?, path)?)
+    } else {
+        None
+    };
+    let group_index: AHashMap<&[u8], usize> = group_ids
+        .iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, id)| (id.as_slice(), i))
+        .collect();
+
+    // Row labels, and hence the row count: group IDs when grouping, otherwise
+    // one block per input BAM.
+    let sample_labels: Vec<String> = match &group_ids {
+        Some(ids) => ids
+            .iter()
+            .map(|id| String::from_utf8_lossy(id).into_owned())
+            .collect(),
+        None => bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
+    };
+    let n_cells = sample_labels.len() * n_barcodes;
+
+    // `Vec<String>` -> `&[&str]` for the parser, which borrows the type names.
+    let feature_types: Option<Vec<&str>> = params
+        .feature_type
+        .as_ref()
+        .map(|t| t.iter().map(String::as_str).collect());
+    let exon_types: Option<Vec<&str>> = params
+        .exon_type
+        .as_ref()
+        .map(|t| t.iter().map(String::as_str).collect());
+
+    let (mut feature_index, mut var_meta) = parse_annotation_files(
+        [annotation_path],
+        feature_types.as_deref(),
+        exon_types.as_deref(),
+        params.name_attr.as_deref(),
+        params.metagene,
+    )?;
+    // A region restricts which features the output has, exactly as it restricts
+    // which bins `bins` mode tiles.
+    if let Some((region_chrom, region_start, region_end)) = &region_filter {
+        retain_features_in_region(
+            &mut feature_index,
+            &mut var_meta,
+            region_chrom,
+            *region_start,
+            *region_end,
+        );
+    }
+
+    let n_features = var_meta.len();
+    feature_index.retain(|chrom, _| !params.chr_to_skip.contains(chrom));
+    // Copied out of `params` so the counting closure captures a `bool` instead
+    // of borrowing the whole struct.
+    let metagene = params.metagene;
+
+    let blacklist = params
+        .blacklist_path
+        .as_deref()
+        .map(parse_blacklist_bed)
+        .transpose()?;
+
+    // Chromosomes to skip, as a byte-slice set for O(1) membership tests.
+    let skip_set: AHashSet<&[u8]> = params.chr_to_skip.iter().map(|s| s.as_bytes()).collect();
+
+    // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
+    // Only include chromosomes that appear in feature_index.
+    // Sort by descending chunk size.
+    let mut work: Vec<(usize, &Path, String, usize, usize)> = Vec::new();
+    for (bam_idx, &(bam_path, _)) in bam_paths.iter().enumerate() {
+        let hdr = read_bam_header(bam_path)?;
+        for (name, seq) in hdr.reference_sequences().iter() {
+            let name_bytes: &[u8] = name.as_ref();
+            if skip_set.contains(name_bytes) {
+                continue;
+            }
+            let chrom = name.to_string();
+            if !feature_index.contains_key(&chrom) {
+                continue;
+            }
+            let chrom_len = seq.length().get();
+            let mut start = 0;
+            while start < chrom_len {
+                let end = (start + chunk_size).min(chrom_len);
+                work.push((bam_idx, bam_path, chrom.clone(), start, end));
+                start += chunk_size;
+            }
+        }
+    }
+    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
+
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(n_threads)
+        .build()
+        .context("failed to build thread pool")?;
+
+    // Motif-filter ingredients, passed to each worker so it can build its own
+    // filter once per thread (rather than once per chunk).
+    let motif_ingredients = match (genome_path, motifs) {
+        (Some(g), Some(m)) => Some((g, m)),
+        _ => None,
+    };
+
+    // Count each chunk into its own map, then combine them with a parallel
+    // tree reduction rather than a single-threaded merge.
+    let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
+        work.par_iter()
+            .map_init(
+                BamWorker::new,
+                |worker,
+                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 -> Result<AHashMap<(usize, usize), u32>> {
+                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
+
+                    // Each work chunk covers a single chromosome, so its feature
+                    // index is looked up once here rather than per read.
+                    let Some(chrom_index) = feature_index.get(chrom.as_str()) else {
+                        return Ok(AHashMap::new());
+                    };
+                    // Likewise the blacklist: one chromosome per chunk, so a
+                    // read costs an interval query and no name hashing.
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
+
+                    // Hoisted region filter: if a region was requested on a
+                    // different chromosome, the whole chunk is skipped.
+                    let region_bounds = match &region_filter {
+                        Some((region_chrom, region_start, region_end)) => {
+                            if region_chrom.as_str() != chrom.as_str() {
+                                return Ok(AHashMap::new());
+                            }
+                            Some((*region_start, *region_end))
+                        }
+                        None => None,
+                    };
+
+                    let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
+                    let region: noodles::core::Region = region_str
+                        .parse()
+                        .with_context(|| format!("failed to parse region: {}", region_str))?;
+                    let query = match reader.query(header, &region) {
+                        Ok(q) => q,
+                        Err(_) => return Ok(AHashMap::new()),
+                    };
+
+                    let mut dup_filter: Option<DuplicateFilter> =
+                        dup_method.map(DuplicateFilter::new);
+                    let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    // The distinct features one read reaches, with the bases it
+                    // shares with each. Reused across reads so the counting loop
+                    // does not allocate; cleared at the top of every read.
+                    let mut hits: Vec<(usize, usize)> = Vec::new();
+                    // Without --groupTag the sample is fixed for the whole chunk, so
+                    // the row offset is hoisted; with it the sample varies per read
+                    // and the offset is resolved below.
+                    let cell_offset = bam_idx * n_barcodes;
+
+                    for result in query.records() {
+                        let record = result.context("failed to read BAM record")?;
+
+                        if let Some(rf) = record_filter {
+                            let flags = u16::from(record.flags());
+                            let mapq = record.mapping_quality().map(|q| q.get());
+                            if !rf.passes(flags, mapq) {
+                                continue;
+                            }
+                        }
+
+                        let Some(sc_rec) = ScRecord::from_bam_record(
+                            &record,
+                            header,
+                            &bc_tag_parsed,
+                            umi_tag_parsed.as_ref(),
+                            count_tag_parsed.as_ref(),
+                            group_tag_parsed.as_ref(),
+                            &record_opts,
+                        )?
+                        else {
+                            continue;
+                        };
+
+                        // Ownership: a read belongs to the chunk containing its
+                        // alignment_start. Reads that started before this chunk are
+                        // handled by the previous work chunk.
+                        if sc_rec.alignment_start < chunk_start {
+                            continue;
+                        }
+
+                        if let Some((region_start, region_end)) = region_bounds
+                            && (sc_rec.alignment_end <= region_start
+                                || sc_rec.alignment_start >= region_end)
+                        {
+                            continue;
+                        }
+
+                        // Judged on the read's own alignment span, as the filter
+                        // tools judge it, and before --extendReads / --centerReads
+                        // move the interval that is counted.
+                        if let Some(bl) = chunk_blacklist
+                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+                        {
+                            continue;
+                        }
+
+                        let Some(barcode) = sc_rec.barcode else {
+                            continue;
+                        };
+                        let Some(&local_bc_idx) = barcode_index.get(barcode) else {
+                            continue;
+                        };
+
+                        if let Some(qc) = qc_filter
+                            && !qc.passes(&sc_rec)
+                        {
+                            continue;
+                        }
+                        if let Some(ref mut dup) = dup_filter
+                            && !dup.passes(&sc_rec)
+                        {
+                            continue;
+                        }
+                        if let Some(mf) = motif.as_mut()
+                            && !mf.passes(&sc_rec, chrom)?
+                        {
+                            continue;
+                        }
+
+                        // Under --groupTag the read's own group tag picks the row
+                        // block, so two reads sharing a barcode but coming from
+                        // different source samples stay separate cells.
+                        let cell_idx = if group_tag_parsed.is_some() {
+                            let Some(group) = sc_rec.group else {
+                                continue;
+                            };
+                            let Some(&group_idx) = group_index.get(group) else {
+                                warn_unknown_group(group);
+                                continue;
+                            };
+                            group_idx * n_barcodes + local_bc_idx
+                        } else {
+                            cell_offset + local_bc_idx
+                        };
+
+                        // A spliced read reaches a feature through its blocks, so
+                        // the intron between them credits nothing.
+                        let intervals = sc_rec.effective_intervals(adjust);
+
+                        // Gather the features this read overlaps. A read is counted
+                        // once per feature, regardless of the number of overlaps. In
+                        // `metagene` mode reads are only counted once, so the feature
+                        // with the most bases in common gets the count.
+                        hits.clear();
+                        for (start, end) in intervals {
+                            for sub in chrom_index.find(start, end) {
+                                let overlap = end.min(sub.end) - start.max(sub.start);
+                                match hits.iter_mut().find(|hit| hit.0 == sub.var_idx) {
+                                    Some(hit) => hit.1 += overlap,
+                                    None => hits.push((sub.var_idx, overlap)),
+                                }
+                            }
+                        }
+
+                        if metagene {
+                            // One gene per read: the gene sharing the most bases
+                            // with it wins. A read spanning two exons of gene A
+                            // counts once for A, not twice.
+                            if let Some(&(best_val, _)) =
+                                hits.iter().max_by_key(|&&(_, overlap)| overlap)
+                            {
+                                *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
+                            }
+                        } else {
+                            // A read counts once for every feature it overlaps, so
+                            // overlapping annotations each get their own count and
+                            // the  count matrix sum may exceed the read count.
+                            for &(var_idx, _) in hits.iter() {
+                                *local_acc.entry((cell_idx, var_idx)).or_insert(0) += sc_rec.count;
+                            }
+                        }
+                    }
+
+                    Ok(local_acc)
+                },
+            )
+            .reduce(
+                || Ok(AHashMap::new()),
+                |a, b| {
+                    let (a, b) = (a?, b?);
+                    // Drain the smaller map into the larger. Merging costs one
+                    // hash lookup per entry moved, so moving the shorter side
+                    // does strictly less work.
+                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+                    for (key, val) in drain {
+                        *keep.entry(key).or_insert(0) += val;
+                    }
+                    Ok(keep)
+                },
+            )
+    })?;
+
+    let matrix = build_csr(&global_acc, n_cells, n_features)?;
+    write_counts_anndata(
+        output_path,
+        matrix,
+        &sample_labels,
+        barcodes,
+        &var_meta,
+        compression,
+        compression_level,
+    )?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anndata::{AnnData, AnnDataOp, Backend};
+    use anndata_hdf5::H5;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    fn testdata() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
+    }
+
+    fn test_barcodes() -> Vec<String> {
+        std::fs::read_to_string(testdata().join("test_barcodes.txt"))
+            .unwrap()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    /// `count_bam_features` against `Chrna9.gtf`, everything optional off.
+    fn count_into(out: &Path, annotation: &Path, params: &CountingParams) -> Result<()> {
+        let bam = testdata().join("test_i1.bam");
+        count_bam_features(
+            &[(bam.as_path(), "s1")],
+            annotation,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            params,
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    fn open(path: &Path) -> AnnData<H5> {
+        AnnData::<H5>::open(H5::open(path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn counting_features_gives_one_row_per_cell_and_one_column_per_feature() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams::default(),
+        )
+        .unwrap();
+
+        assert!(out.exists(), "no output file was written");
+        let adata = open(&out);
+        assert_eq!(adata.n_obs(), test_barcodes().len());
+        assert!(
+            adata.n_vars() > 0,
+            "the GTF should yield at least one feature"
+        );
+    }
+
+    #[test]
+    fn a_bed_annotation_is_accepted_as_well_as_a_gtf() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("bed.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9_regions.bed"),
+            &CountingParams::default(),
+        )
+        .unwrap();
+
+        assert!(open(&out).n_vars() > 0);
+    }
+
+    /// Every matrix entry, keyed by cell row and feature name, so two runs can
+    /// be compared entry for entry.
+    fn entries(path: &Path) -> std::collections::BTreeMap<(usize, String), f64> {
+        let adata = open(path);
+        let names = adata.var_names().into_vec();
+        let x = super::super::count_utils::read_x_f64(&adata).unwrap();
+        let mut out = std::collections::BTreeMap::new();
+        for (row, col, &v) in x.triplet_iter() {
+            *out.entry((row, names[col].clone())).or_insert(0.0) += v;
+        }
+        out
+    }
+
+    /// Column sums keyed by feature name.
+    fn column_sums(path: &Path) -> std::collections::BTreeMap<String, f64> {
+        let mut sums = std::collections::BTreeMap::new();
+        for ((_, name), v) in entries(path) {
+            *sums.entry(name).or_insert(0.0) += v;
+        }
+        sums
+    }
+
+    fn total(path: &Path) -> f64 {
+        column_sums(path).values().sum()
+    }
+
+    #[test]
+    fn a_read_counts_once_for_every_feature_it_overlaps() {
+        // Asked for transcripts, Chrna9.gtf gives two, the shorter lying inside
+        // the longer. Eight of the BAM's reads fall in the long one and two of
+        // those eight fall in the short one as well, so those two are counted
+        // twice, once against each. Ten counts from eight reads.
+        //
+        // Explicitly typed: features are genes by default, and this locus has
+        // only one gene, which would hide the overlap this test is about.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("transcripts.h5ad");
+
+        count_into(
+            &out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams {
+                feature_type: Some(vec!["transcript".to_string()]),
+                name_attr: Some("transcript_id".to_string()),
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("ENSMUST00000031108").copied(),
+            Some(8.0),
+            "{sums:?}"
+        );
+        assert_eq!(
+            sums.get("ENSMUST00000201664").copied(),
+            Some(2.0),
+            "{sums:?}"
+        );
+        assert_eq!(total(&out), 10.0, "{sums:?}");
+    }
+
+    /// A GTF stacking `n` genes over the two reads at 65,968,139. They end
+    /// together and each starts a base later than the last, so the **first**
+    /// gene shares the most bases with the reads.
+    ///
+    /// The index searches from the highest start down, which makes that gene
+    /// the last one it reaches. So whichever gene metagene credits names how
+    /// many candidates it really weighed. Every gene sits inside those two
+    /// reads alone, so no third read of the fixture reaches one.
+    fn stacked_genes_gtf(dir: &Path, n: usize) -> PathBuf {
+        let path = dir.join("stacked.gtf");
+        let mut text = String::new();
+        for i in 1..=n {
+            let start = 65_968_145 + i;
+            let end = 65_968_197;
+            for ty in ["gene", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"G{i:02}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn metagene_ranks_genes_by_bases_not_by_transcript_count() {
+        // G1 has two transcripts repeating one 20 bp exon; G2 has a single 30 bp
+        // exon. G2 covers more of the read, so G2 must take it. Summing the exon
+        // records instead gives G1 40 bases against G2's 30 and the wrong gene
+        // wins, which is what merging a gene's exons prevents.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("shared_exons.gtf");
+        let mut text = String::new();
+        for (gene, tx, start, end) in [
+            ("G1", "T1", 65_968_146, 65_968_165),
+            ("G1", "T2", 65_968_146, 65_968_165),
+            ("G2", "T3", 65_968_166, 65_968_195),
+        ] {
+            for ty in ["gene", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"{gene}\"; transcript_id \"{tx}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+
+        let out = dir.path().join("shared_exons.h5ad");
+        count_into(
+            &out,
+            &path,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.get("G2").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(total(&out), 2.0, "one count per read, and two reads");
+    }
+
+    #[test]
+    fn metagene_weighs_every_gene_a_read_reaches() {
+        // Twenty genes over one read. The read shares most bases with G01,
+        // which the index reaches last of the twenty, so that is the one
+        // metagene must credit. A fixed-size buffer of sixteen hits used to
+        // drop it unseen and crown G05 instead.
+        let dir = TempDir::new().unwrap();
+        let gtf = stacked_genes_gtf(dir.path(), 20);
+        let out = dir.path().join("stacked.h5ad");
+
+        count_into(
+            &out,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.get("G01").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(total(&out), 2.0, "one count per read, and two reads");
+    }
+
+    #[test]
+    fn without_metagene_a_read_counts_in_every_gene_stacked_over_it() {
+        // The same twenty genes without metagene: each read counts once in each
+        // of them, since a read is credited to every feature it overlaps.
+        let dir = TempDir::new().unwrap();
+        let gtf = stacked_genes_gtf(dir.path(), 20);
+        let out = dir.path().join("stacked.h5ad");
+
+        count_into(&out, &gtf, &CountingParams::default()).unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(sums.len(), 20, "{sums:?}");
+        assert!(sums.values().all(|&v| v == 2.0), "{sums:?}");
+        assert_eq!(total(&out), 40.0, "twenty genes, two reads each");
+    }
+
+    /// A GTF whose two transcripts overlap and share one gene, each with a
+    /// single exon spanning its whole body.
+    fn overlapping_gtf(dir: &Path) -> PathBuf {
+        let path = dir.join("overlapping.gtf");
+        let mut text = String::new();
+        for (name, start, end) in [
+            ("T1", 65_967_125, 65_977_326),
+            ("T2", 65_975_897, 65_977_140),
+        ] {
+            for ty in ["transcript", "exon"] {
+                text.push_str(&format!(
+                    "5\ttest\t{ty}\t{start}\t{end}\t.\t+\t.\t\
+                     gene_id \"G1\"; transcript_id \"{name}\";\n"
+                ));
+            }
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn metagene_counts_a_read_once_however_many_exons_it_meets() {
+        // Both transcripts of this GTF carry one exon over their whole body, and
+        // both name gene G1. Grouped by gene, the two reads inside the overlap
+        // meet two of G1's exons but must add only one count each.
+        let dir = TempDir::new().unwrap();
+        let gtf = overlapping_gtf(dir.path());
+
+        // Typed explicitly, since this synthetic file carries no gene record
+        // for the gene default to find.
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(
+            &per_transcript,
+            &gtf,
+            &CountingParams {
+                feature_type: Some(vec!["transcript".to_string()]),
+                name_attr: Some("transcript_id".to_string()),
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            total(&per_transcript),
+            10.0,
+            "eight reads, two of them inside both transcripts"
+        );
+
+        // Metagene groups on gene_id by default, so nothing needs naming here.
+        let per_gene = dir.path().join("gene.h5ad");
+        count_into(
+            &per_gene,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let sums = column_sums(&per_gene);
+        assert_eq!(sums.get("G1").copied(), Some(8.0), "{sums:?}");
+        assert_eq!(total(&per_gene), 8.0, "a read was counted twice");
+    }
+
+    /// `count_bam_features` over a named BAM.
+    fn count_bam_into(out: &Path, bam: &Path, annotation: &Path) -> Result<()> {
+        count_bam_features(
+            &[(bam, "s1")],
+            annotation,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+    }
+
+    /// Four regions around the reads of `test_spliced.bam`: one on each exon,
+    /// one wholly inside the intron, and one spanning the entire alignment.
+    fn spliced_regions(dir: &Path) -> PathBuf {
+        let path = dir.join("regions.bed");
+        std::fs::write(
+            &path,
+            "5\t65960000\t65960050\texon1\t0\t.\n\
+             5\t65972000\t65975000\tintron_gene\t0\t.\n\
+             5\t65980050\t65980100\texon2\t0\t.\n\
+             5\t65960000\t65980100\twhole\t0\t.\n",
+        )
+        .unwrap();
+        path
+    }
+
+    /// Five BED regions around a `--region` of `5:65965000-65975000`: one
+    /// inside it, one starting inside and reaching past its end, one starting
+    /// before it, one spanning it entirely, and one nowhere near.
+    fn region_boundary_bed(dir: &Path) -> PathBuf {
+        let path = dir.join("boundaries.bed");
+        std::fs::write(
+            &path,
+            "5\t65966000\t65967000\tinside\t0\t.\n\
+             5\t65974000\t65976000\tstarts_inside\t0\t.\n\
+             5\t65964000\t65966000\tstarts_before\t0\t.\n\
+             5\t65960000\t65980000\tspanning\t0\t.\n\
+             5\t66500000\t66501000\telsewhere\t0\t.\n",
+        )
+        .unwrap();
+        path
+    }
+
+    fn var_names(path: &Path) -> Vec<String> {
+        open(path).var_names().into_vec()
+    }
+
+    #[test]
+    fn a_region_keeps_only_the_features_that_begin_inside_it() {
+        // The reference implementation asks its interval tree with
+        // `trimOverlap=True`, which owns a feature by its start. So a feature
+        // reaching past the region survives whole, and one that begins earlier
+        // does not, however much of it overlaps.
+        let dir = TempDir::new().unwrap();
+        let bed = region_boundary_bed(dir.path());
+
+        let all = dir.path().join("all.h5ad");
+        count_bam_into(&all, &testdata().join("test_i1.bam"), &bed).unwrap();
+        assert_eq!(
+            var_names(&all).len(),
+            5,
+            "the unrestricted run lost features"
+        );
+
+        let restricted = dir.path().join("region.h5ad");
+        count_bam_features(
+            &[(testdata().join("test_i1.bam").as_path(), "s1")],
+            &bed,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams {
+                region: Some("5:65965000-65975000".to_string()),
+                ..CountingParams::default()
+            },
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &restricted,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(var_names(&restricted), vec!["inside", "starts_inside"]);
+    }
+
+    #[test]
+    fn a_region_renumbers_the_features_it_keeps() {
+        // The kept features are renumbered, so a count has to land in the
+        // column of the feature it belongs to and not in the one that feature
+        // used to occupy.
+        let dir = TempDir::new().unwrap();
+        let bed = dir.path().join("two.bed");
+        // The first region is dropped by the `--region`, so `covered`, which
+        // was feature 1, becomes feature 0.
+        std::fs::write(
+            &bed,
+            "5\t65900000\t65910000\tdropped\t0\t.\n\
+             5\t65966000\t65970000\tcovered\t0\t.\n",
+        )
+        .unwrap();
+
+        let out = dir.path().join("region.h5ad");
+        count_bam_features(
+            &[(testdata().join("test_i1.bam").as_path(), "s1")],
+            &bed,
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams {
+                region: Some("5:65960000-65980000".to_string()),
+                ..CountingParams::default()
+            },
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(var_names(&out), vec!["covered"]);
+        let sums = column_sums(&out);
+        assert!(
+            sums.get("covered").copied().unwrap_or(0.0) > 0.0,
+            "the surviving feature lost its reads {sums:?}"
+        );
+    }
+
+    #[test]
+    fn a_gene_inside_an_intron_gets_no_count_from_the_spliced_read() {
+        // The read's blocks are its exons, so a region between them is not
+        // overlapped at all. Counting the alignment span instead would credit
+        // this region with both spliced reads.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            &spliced_regions(dir.path()),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("intron_gene").copied().unwrap_or(0.0),
+            0.0,
+            "a region inside the intron was credited {sums:?}"
+        );
+        assert_eq!(sums.get("exon1").copied(), Some(2.0), "{sums:?}");
+        assert_eq!(sums.get("exon2").copied(), Some(2.0), "{sums:?}");
+    }
+
+    #[test]
+    fn a_read_reaching_one_feature_through_two_blocks_counts_once() {
+        // `whole` covers both exons of each spliced read. Counting per block
+        // would make each of them 2, and the four reads 6 rather than 4.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("features.h5ad");
+
+        count_bam_into(
+            &out,
+            &testdata().join("test_spliced.bam"),
+            &spliced_regions(dir.path()),
+        )
+        .unwrap();
+
+        let sums = column_sums(&out);
+        assert_eq!(
+            sums.get("whole").copied(),
+            Some(4.0),
+            "one count per read was expected {sums:?}"
+        );
+    }
+
+    fn count_with_blacklist(out: &Path, blacklist: Option<PathBuf>) {
+        count_into(
+            out,
+            &testdata().join("Chrna9.gtf"),
+            &CountingParams {
+                blacklist_path: blacklist,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_blacklist_removes_reads_and_never_moves_them() {
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None);
+
+        // Both BED regions cover the whole locus this BAM was cut from, so
+        // every read is at least half blacklisted.
+        let filtered = dir.path().join("filtered.h5ad");
+        count_with_blacklist(&filtered, Some(testdata().join("Chrna9_regions.bed")));
+
+        // The features themselves survive: a blacklist filters reads, it does
+        // not shorten or drop columns.
+        assert_eq!(open(&filtered).n_vars(), open(&base).n_vars());
+
+        let base = entries(&base);
+        let filtered = entries(&filtered);
+        assert!(!base.is_empty(), "the unfiltered run counted nothing");
+
+        // No read is moved to a neighbouring feature: an entry can only shrink,
+        // and no entry appears that the unfiltered run did not have.
+        for (key, value) in &filtered {
+            let before = base.get(key).copied().unwrap_or(0.0);
+            assert!(
+                *value <= before,
+                "{key:?} grew from {before} to {value} under a blacklist"
+            );
+        }
+        let total: f64 = filtered.values().sum();
+        assert!(total < base.values().sum::<f64>(), "no read was removed");
+    }
+
+    #[test]
+    fn a_blacklist_region_that_only_clips_reads_removes_none() {
+        let dir = TempDir::new().unwrap();
+
+        let base = dir.path().join("base.h5ad");
+        count_with_blacklist(&base, None);
+
+        // 20 bp inside the leftmost reads, which are 61 bp long: under the
+        // threshold, so nothing is dropped. Subtracting the region from the
+        // feature instead would shrink the overlap that picks the winner.
+        let bed = dir.path().join("narrow.bed");
+        std::fs::write(&bed, "5\t65966820\t65966840\tregion\t0\t.\n").unwrap();
+        let clipped = dir.path().join("clipped.h5ad");
+        count_with_blacklist(&clipped, Some(bed));
+
+        assert_eq!(entries(&clipped), entries(&base));
+    }
+
+    #[test]
+    fn metagene_mode_collapses_transcripts_onto_their_genes() {
+        let dir = TempDir::new().unwrap();
+        let gtf = testdata().join("Chrna9.gtf");
+
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+
+        let metagene_params = CountingParams {
+            metagene: true,
+            ..CountingParams::default()
+        };
+        let per_gene = dir.path().join("genes.h5ad");
+        count_into(&per_gene, &gtf, &metagene_params).unwrap();
+
+        // One gene can have many transcripts, never the other way round.
+        assert!(
+            open(&per_gene).n_vars() <= open(&per_transcript).n_vars(),
+            "metagene mode produced more columns than transcript mode"
+        );
+    }
+
+    #[test]
+    fn metagene_counting_is_exonic_so_it_never_exceeds_whole_transcript_counting() {
+        let dir = TempDir::new().unwrap();
+        let gtf = testdata().join("Chrna9.gtf");
+
+        let per_gene = dir.path().join("genes.h5ad");
+        count_into(
+            &per_gene,
+            &gtf,
+            &CountingParams {
+                metagene: true,
+                ..CountingParams::default()
+            },
+        )
+        .unwrap();
+
+        let per_transcript = dir.path().join("transcripts.h5ad");
+        count_into(&per_transcript, &gtf, &CountingParams::default()).unwrap();
+
+        let total = |p: &Path| -> f64 {
+            super::super::count_utils::read_x_f64(&open(p))
+                .unwrap()
+                .triplet_iter()
+                .map(|(_, _, &v)| v)
+                .sum()
+        };
+
+        let gene_total = total(&per_gene);
+        let transcript_total = total(&per_transcript);
+
+        assert!(gene_total > 0.0, "nothing was counted against the exons");
+        // Two reasons, both one-way: a transcript feature spans its introns too,
+        // so an intronic read is counted there but has no exon to fall in under
+        // metagene grouping; and a read inside two transcripts counts twice
+        // without metagene and once with it.
+        assert!(
+            gene_total <= transcript_total,
+            "exonic total {gene_total} exceeded whole-transcript total {transcript_total}"
+        );
+    }
+
+    // Argument validation
+
+    #[test]
+    fn a_missing_annotation_file_is_reported() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let missing = dir.path().join("no_such.gtf");
+
+        assert!(count_into(&out, &missing, &CountingParams::default()).is_err());
+    }
+
+    #[test]
+    fn counting_with_no_bam_files_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+
+        let err = count_bam_features(
+            &[],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("at least one BAM"), "{err}");
+    }
+
+    #[test]
+    fn a_zero_chunk_size_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let bam = testdata().join("test_i1.bam");
+
+        let err = count_bam_features(
+            &[(bam.as_path(), "s1")],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "BC",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            0,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("chunk_size"), "{err}");
+    }
+
+    #[test]
+    fn a_barcode_tag_the_bam_does_not_carry_is_rejected_before_any_counting() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unused.h5ad");
+        let bam = testdata().join("test_i1.bam");
+
+        let err = count_bam_features(
+            &[(bam.as_path(), "s1")],
+            &testdata().join("Chrna9.gtf"),
+            &test_barcodes(),
+            "ZZ",
+            None,
+            None,
+            None,
+            &CountingParams::default(),
+            &AdjustRead::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &out,
+            "none",
+            0,
+            1,
+            1_000_000,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("ZZ"), "{err}");
+        assert!(!out.exists());
+    }
+}

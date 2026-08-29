@@ -1,0 +1,85 @@
+[package]
+authors = ["Fernando Sanchó-Gómez <f.sanchogomez@uu.nl>"]
+name = "sincei"
+version = "0.7.0-dev"
+edition = "2024"
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
+license-file = "LICENCE.txt"
+readme = "README.md"
+repository = "https://github.com/bhardwaj-lab/sincei"
+homepage = "https://github.com/bhardwaj-lab/sincei"
+documentation = "https://sincei.readthedocs.io/"
+keywords = [
+    "bioinformatics",
+    "single-cell",
+    "genomics",
+    "epigenomics",
+    ]
+categories = [
+    "command-line-utilities",
+    "science",
+    "bioinformatics",
+    "scientific/engineering",
+    ]
+
+[lib]
+name = "sincei"
+crate-type = ["cdylib"]
+
+[dependencies]
+# PyO3 for Python interoperability.
+pyo3 = { version = "0.27", features = ["extension-module", "abi3-py310", "anyhow"] }
+
+# Dataframes
+polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
+
+# Dense and sparse linear algebra
+nalgebra-sparse = { version = "0.11" }
+
+# Error handling with context and chaining
+anyhow = { version = "1.0" }
+
+# Parallel iterator adapters for easy multi-threaded processing
+rayon = { version = "1.11" }
+tokio = { version = "1.53", features = ["rt"] }
+
+# BAM/SAM parsing
+noodles = { version = "0.115", features = ["bam", "sam", "bgzf", "bed", "gff", "gtf", "core"] }
+
+# gzip/BGZF decompression for annotation files (BED/GTF/GFF3)
+flate2 = { version = "1" }
+
+# 2bit genome file reading (for motif checking with reference genome)
+twobit = { version = "0.2" }
+
+# SIMD hamming distance
+triple_accel = {version = "0.4" }
+
+# BigWig and BigBed parsing and writing
+bigtools = { version = "0.5" , default-features = false , features = ["write"] }
+
+# AnnData
+anndata = { version = "0.7" }
+anndata-hdf5 = { version = "0.5" }
+
+# Byte strings
+bstr = { version = "1.13" }
+
+# Fast non-cryptographic hasher
+ahash = { version = "0.8" }
+
+[dev-dependencies]
+# Temporary files/directories for parser tests
+tempfile = { version = "3" }
+
+# jemalloc for faster memory allocation on non-MSVC platforms (e.g. Linux, macOS)
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { version = "0.7", features = ["disable_initial_exec_tls"] }
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+panic = 'unwind'
+codegen-units = 1
+strip = true

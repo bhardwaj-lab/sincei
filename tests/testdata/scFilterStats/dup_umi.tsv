@@ -1,0 +1,15 @@
+Cell_ID	Total_sampled	Filtered	Blacklisted	Low_MAPQ	Missing_Flags	Excluded_Flags	Internal_Duplicates	Marked_Duplicates	Singletons	Wrong_strand	Wrong_motif	Unwanted_GC_content	Low_aligned_fraction
+test_i1::ACGGTAAT	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::AGATATTG	0												
+test_i1::ATATAACT	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::ATGTCGTG	0												
+test_i1::ATTCTCGA	0												
+test_i1::CGTGGTAA	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::GCGAGCAT	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::GCGCTGAC	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::GGACACCG	0												
+test_i1::GGAGTCAT	2	50.0	0.0	0.0	0.0	0.0	50.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::GTCAAGCA	2	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::GTGCCGCG	0												
+test_i1::TAGACTTG	1	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+test_i1::TCTTCTGT	0												

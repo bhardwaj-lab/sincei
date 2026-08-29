@@ -1,0 +1,53 @@
+name: test-rust
+
+on:
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          # cargo-llvm-cov needs llvm-profdata / llvm-cov from this component.
+          components: llvm-tools-preview
+
+      - uses: ./.github/actions/setup-native-deps
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: |
+          cargo llvm-cov --no-fail-fast --lcov --output-path lcov.info
+          # cargo-llvm-cov writes absolute SF: paths. Codecov matches flag paths
+          # against the repo tree, so make them repo-relative first.
+          sed -i "s|^SF:$PWD/|SF:|" lcov.info
+
+      - name: Upload coverage to Codecov
+        # Workflow dispatches do not upload coverage.
+        if: github.event_name != 'workflow_dispatch'
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: rust
+          name: codecov-umbrella
+          fail_ci_if_error: true
