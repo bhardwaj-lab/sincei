@@ -14,7 +14,9 @@ use ahash::AHashMap;
 
 #[cfg(test)]
 use anndata::ArrayElemOp;
-use anndata::backend::{Compression, WriteConfig, set_default_write_config};
+use anndata::backend::{
+    AttributeOp, Backend, Compression, GroupOp, WriteConfig, set_default_write_config,
+};
 #[cfg(test)]
 use anndata::data::DynCsrMatrix;
 use anndata::{AnnData, AnnDataOp};
@@ -136,6 +138,28 @@ pub(super) fn build_csr(
         .map_err(|e| anyhow::anyhow!("failed to build CSR matrix: {:?}", e))
 }
 
+/// Tag the root group as an AnnData object.
+///
+/// The AnnData spec requires every element to carry `encoding-type` and
+/// `encoding-version`, including the root (`"anndata"` / `"0.1.0"`). Note that
+/// the encoding version is per-element and fixed; it does not track the anndata
+/// package release. anndata-rs writes them for every sub-element but never for
+/// the root, so an external anndata reader may fail without it.
+///
+/// The root cannot be reached through `AnnData`: it keeps its store private, and
+/// `Backend::Store` is bound by `StoreOp + GroupOp` but not `AttributeOp`.
+/// Reopening and asking for `"/"` yields a group, which does implement it.
+///
+/// Must run after the `AnnData` handle is closed.
+fn tag_anndata_root(path: &Path) -> Result<()> {
+    let store = H5::open_rw(path)
+        .with_context(|| format!("failed to reopen {} to tag its root", path.display()))?;
+    let mut root = store.open_group("/")?;
+    root.new_attr("encoding-type", "anndata")?;
+    root.new_attr("encoding-version", "0.1.0")?;
+    Ok(())
+}
+
 /// Write a cell × feature count matrix to an AnnData HDF5 file.
 ///
 /// Cells (`obs`) are the cartesian product of the input BAM samples and the
@@ -212,14 +236,13 @@ pub(crate) fn write_counts_anndata(
     adata.set_var_names(var_index.into_iter().collect())?;
     adata.set_var(var_df)?;
     adata.close()?;
+    tag_anndata_root(output_path)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    // `H5::open` comes from this trait, which the module itself does not need.
-    use anndata::Backend;
 
     /// Dense view of a CSR matrix, for readable assertions.
     fn dense(m: &CsrMatrix<u32>) -> Vec<Vec<u32>> {
