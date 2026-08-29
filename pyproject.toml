@@ -73,6 +73,7 @@ doc = [
     "sphinxcontrib-bibtex",
     "readthedocs-sphinx-ext",
     "sphinx-argparse",
+    "sphinx-copybutton",
     "sphinx_toolbox",
     "nbsphinx",
     "ipywidgets",

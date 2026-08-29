@@ -30,8 +30,16 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinxarg.ext",
     "sphinx_toolbox.collapse",
+    "sphinx_copybutton",
     "nbsphinx",
 ]
+
+# Ignore prompts when coppying code blocks.
+copybutton_prompt_text = r">>> |\.\.\. |\$ |\(sincei\): "
+copybutton_prompt_is_regexp = True
+
+# Capture codeblocks (bash, Python, R).
+copybutton_selector = "div:not(.prompt):not(.output_area) > div.highlight > pre"
 
 # Do not execute tutorial notebooks
 nbsphinx_execute = "never"
