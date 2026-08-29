@@ -1,13 +1,12 @@
+  [![PyPI Version](https://img.shields.io/pypi/v/sincei.svg?style=plastic)](https://pypi.org/project/sincei/) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/sincei/README.html) ![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg) [![Documentation Status](https://readthedocs.org/projects/sincei/badge/?version=latest)](https://sincei.readthedocs.io/en/latest/?badge=latest) [![codecov](https://codecov.io/gh/vivekbhr/sincei/graph/badge.svg?token=VRTMITHHBI)](https://codecov.io/gh/vivekbhr/sincei) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/content/images/sincei-logo-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="./docs/content/images/sincei-logo-light.png">
   <img alt="Sincei logo" src="./docs/content/images/sincei-logo-light.png">
 </picture>
 
-
 ## A command-line toolkit for exploring single-cell (epi)genomics
-
- [![Documentation Status](https://readthedocs.org/projects/sincei/badge/?version=latest)](https://sincei.readthedocs.io/en/latest/?badge=latest) [![PyPI Version](https://img.shields.io/pypi/v/sincei.svg?style=plastic)](https://pypi.org/project/sincei/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg)](https://github.com/vivekbhr/sincei/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/vivekbhr/sincei/graph/badge.svg?token=VRTMITHHBI)](https://codecov.io/gh/vivekbhr/sincei) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/sincei/README.html)
 
 > [!IMPORTANT]
 > This is a pre-release version of sincei. It is much faster and memory efficient
