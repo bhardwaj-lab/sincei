@@ -1,145 +1,158 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+from __future__ import annotations
 
-import argparse
-import sys
+from typing import Annotated
 
-import pandas as pd
 import anndata as ad
+import typer
 
-from sincei import ParserCommon
 from sincei.VCRfinder import VCRfinder
 
+from ._common_args import (
+    AVAILABLE_PROCESSORS,
+    INPUT_OUTPUT_OPTS,
+    OTHER_OPTS,
+    configure_logging,
+    override,
+    preprocess_args,
+)
+from ._parsers import validate_anndata
 
-def parseArguments(args=None):
-    io_args = ParserCommon.inputOutputOptions(opts=["h5adfile"], requiredOpts=["h5adfile"])
-    other_args = ParserCommon.otherOptions()
-
-    parser = argparse.ArgumentParser(
-        parents=[io_args, get_args(), other_args],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="""
-``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin data. It takes a
-.h5ad file containing single-cell genomic signal in bins, and outputs BED files with genome
-segmentations for different sensitivities.
-
-First, a bin-to-bin correlation matrix is computed for each chromosome.
-
-Then, the correlation matrix is turned into a score map by convolving a number of square
-Gaussian kernels along its main diagonal. Each kernel has a sigma calculated using a maximum
-region size to consider. Each kernel produces a 1-D score for each bin, which are stacked
-into a matrix where each row corresponds to a kernel scale and each column to a bin.
-
-Finally, the PELT change-point detection algorithm is applied to the score map to identify
-regions with distinct correlation patterns. This step depends on a penalty parameter that
-controls the number of detected regions.
-        """,
-        usage="scFindVCRs -i binned_signal.h5ad -bs 2000 -mr 100000 -nk 20 -pen 0.05 0.1 0.5 -o detected_VCRs.bed",
-        add_help=False,
-    )
-
-    # If no arguments are provided, show help and exit
-    if args is None and len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    return parser
+DESCRIPTION = (
+    "Call variable chromatin regions (VCRs) from binned chromatin data.\n\n"
+    "``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin "
+    "data. It takes a .h5ad file containing single-cell genomic signal in bins, and "
+    "outputs BED files with genome segmentations for different sensitivities.\n\n"
+    "First, a bin-to-bin correlation matrix is computed for each chromosome.\n\n"
+    "Then, the correlation matrix is turned into a score map by convolving a number "
+    "of square Gaussian kernels along its main diagonal. Each kernel has a sigma "
+    "calculated using a maximum region size to consider. Each kernel produces a 1-D "
+    "score for each bin, which are stacked into a matrix where each row corresponds "
+    "to a kernel scale and each column to a bin.\n\n"
+    "Finally, the PELT change-point detection algorithm is applied to the score map "
+    "to identify regions with distinct correlation patterns. This step depends on a "
+    "penalty parameter that controls the number of detected regions."
+)
 
 
-def get_args():
-    parser = argparse.ArgumentParser(add_help=False)
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help=DESCRIPTION,
+    context_settings={"help_option_names": []},
+)
 
-    vcr_options = parser.add_argument_group("VCR detection options")
+_VCR = "VCR options"
 
-    vcr_options.add_argument(
-        "--binSize",
-        "-bs",
-        type=int,
-        help="The size of the bins in the input Anndata object.",
-        required=True,
-    )
+DEFAULT_PENALTIES = [0.05, 0.1, 0.5]
 
-    vcr_options.add_argument(
-        "--maxRegionSize",
-        "-mr",
-        type=int,
-        help="The maximum region size to be considered, in base pairs. Larger regions may increase "
-        "compute time. Defaults to 100 times the bin size. Default: %(default)s.",
-        default=None,
-    )
-
-    vcr_options.add_argument(
-        "--nKernels",
-        "-nk",
-        type=int,
-        help="The number of kernels to use for the score map. More kernels generally lead to a better "
-        "segmentation, but increase the computational cost. Default: %(default)s.",
-        default=20,
-    )
-
-    vcr_options.add_argument(
-        "--penalties",
-        "-pen",
-        nargs="+",
-        type=float,
-        help="Penalty value for change-point detection. Higher values result in fewer segments. Multiple "
-        "values can be provided (separated by space). Each penalty value will produce a separate set of "
-        'regions within which can be seperated from the output BED file by filtering on the "score" column. Default: %(default)s.',
-        default=[0.05, 0.1, 0.5],
-    )
-
-    vcr_options.add_argument(
-        "--outFile",
-        "-o",
-        type=str,
-        help="Name of the output file (BED format) with genome segmentation result. The penalty threshold "
-        'that defines each segment is saved in the "score" column of the BED file, and the BED file can be '
-        "filtered based on this column to obtain non-overlapping segments.",
-        required=True,
-    )
-
-    vcr_options.add_argument(
-        "--region",
-        "-r",
-        help="Region of the genome to limit the operation to - this is useful when testing parameters to "
-        "reduce the computing time. The format is chr:start:end, for example ``--region chr10`` or "
-        "``--region chr10:456700:891000``.",
-        metavar="CHR:START:END",
-        required=False,
-        type=ParserCommon.genomicRegion,
-    )
-
-    vcr_options.add_argument(
-        "--numberOfProcessors",
-        "-p",
-        help='Number of processors to use. Type "max/2" to use half the maximum number of processors or "max" '
-        'to use all available processors. (Default: "max")',
-        metavar="INT",
-        type=ParserCommon.numberOfProcessors,
-        default=ParserCommon.numberOfProcessors("max"),
-        required=False,
-    )
-
-    return parser
+DEFAULT_MAX_REGION_IN_BINS = 100
 
 
-def main(args=None):
-    args = parseArguments().parse_args(args)
+@app.callback(invoke_without_command=True)
+def main(
+    input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
+    bin_size: Annotated[
+        int,
+        typer.Option(
+            "-bs",
+            "--binSize",
+            metavar="INT",
+            rich_help_panel=_VCR,
+            help="The size of the bins in the input AnnData object.",
+        ),
+    ],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".bed",
+            help=(
+                "Name of the output file (BED format) with the genome segmentation "
+                "result. The penalty threshold that defines each segment is saved in "
+                'the "score" column of the BED file, which can be filtered to obtain '
+                "non-overlapping segments."
+            ),
+        ),
+    ],
+    region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
+    max_region_size: Annotated[
+        int | None,
+        typer.Option(
+            "-mr",
+            "--maxRegionSize",
+            metavar="INT",
+            rich_help_panel=_VCR,
+            show_default="100 x --binSize",
+            help=(
+                "The maximum region size to be considered, in base pairs. Larger "
+                "regions may increase compute time."
+            ),
+        ),
+    ] = None,
+    n_kernels: Annotated[
+        int,
+        typer.Option(
+            "-nk",
+            "--nKernels",
+            metavar="INT",
+            rich_help_panel=_VCR,
+            help=(
+                "The number of kernels to use for the score map. More kernels "
+                "generally lead to a better segmentation, but increase the "
+                "computational cost."
+            ),
+        ),
+    ] = 20,
+    penalties: Annotated[
+        list[float] | None,
+        typer.Option(
+            "-pen",
+            "--penalties",
+            metavar="FLOAT",
+            rich_help_panel=_VCR,
+            show_default="0.05, 0.1, 0.5",
+            help=(
+                "Penalty value(s) for change-point detection. Higher values result in "
+                "fewer segments. Multiple values can be provided (separated by space); "
+                "each produces a separate set of regions, distinguishable in the "
+                'output BED file by filtering on the "score" column.'
+            ),
+        ),
+    ] = None,
+    number_of_processors: Annotated[
+        int, OTHER_OPTS["number_of_processors"]
+    ] = AVAILABLE_PROCESSORS,
+    verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
+    help: Annotated[bool, OTHER_OPTS["help"]] = False,
+) -> int:
+    if max_region_size is None:
+        max_region_size = bin_size * DEFAULT_MAX_REGION_IN_BINS
+    if penalties is None:
+        penalties = DEFAULT_PENALTIES
 
-    if args.maxRegionSize is None:
-        args.maxRegionSize = args.binSize * 100
+    adata = validate_anndata(ad.read_h5ad(input), input)
 
-    adata = ParserCommon.validateAnndata(ad.read_h5ad(args.input), args.input)
-
-    pen_bed_df = VCRfinder(
+    regions = VCRfinder(
         adata=adata,
-        binsize=args.binSize,
-        max_region=args.maxRegionSize,
-        n_kernels=args.nKernels,
-        penalties=args.penalties,
-        region=args.region,
-        verbose=args.verbose,
-        n_threads=args.numberOfProcessors,
+        binsize=bin_size,
+        max_region=max_region_size,
+        n_kernels=n_kernels,
+        penalties=penalties,
+        region=region,
+        verbose=verbose,
+        n_threads=number_of_processors,
     )
 
-    pen_bed_df.to_csv(args.outFile, sep="\t", header=False, index=False)
+    regions.to_csv(out_file, sep="\t", header=False, index=False)
+    return 0
+
+
+def cli() -> None:
+    configure_logging()
+    preprocess_args()
+    app()
+
+
+if __name__ == "__main__":
+    cli()
