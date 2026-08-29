@@ -1,15 +1,3 @@
-.. image:: https://readthedocs.org/projects/sincei/badge/?version=latest
-    :target: https://sincei.readthedocs.io/en/latest/?badge=latest
-    :alt: Documentation Status
-
-.. image:: https://img.shields.io/pypi/v/sincei.svg?style=plastic
-    :target: https://pypi.org/project/sincei/
-    :alt: PyPI Version
-
-.. image:: https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat
-    :target: http://bioconda.github.io/recipes/sincei/README.html
-    :alt: Install with bioconda
-
 .. image:: ./content/images/sincei-logo-light.png
     :align: left
     :class: only-light
