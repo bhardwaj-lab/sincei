@@ -176,10 +176,12 @@ in the two tutorials above into a ``MuData`` object that contains both modalitie
 
 This object can be used for further processing with other software like
 `muon <https://muon.scverse.org/>`__.
+
 ..
-    This object can then be used with our :doc:`modules/multimodalClustering` python module to perform
-    joint clustering of the two data types. Follow :doc:`this tutorial <clustering_tutorial>` to learn
-    how to perform joint clustering of multimodal data using sincei.
+    This object can then be used with our :doc:`/content/modules/multimodalClustering` python module to
+    perform joint clustering of the two data types. Follow
+    :doc:`this tutorial </content/tutorials/clustering_tutorial>` to learn how to perform joint
+    clustering of multimodal data using sincei.
 
 Notes
 -----

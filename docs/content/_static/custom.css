@@ -3,3 +3,9 @@ h3 {
     font-size: 1.75em !important;
     font-weight: bold !important;
 }
+
+.only-light,
+.only-dark {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}

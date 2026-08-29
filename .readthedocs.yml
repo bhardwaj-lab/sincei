@@ -1,17 +1,27 @@
 # yaml file to configure readthedocs build
 version: 2
+
 build:
-    os: ubuntu-22.04
+    os: ubuntu-24.04
     tools:
         python: "3.12"
+        rust: "latest"
+    apt_packages:
+        # hdf5-metno-src, blosc-src, zstd-sys and lz4-sys each compile their C
+        # library from source.
+        - cmake
+        # nbsphinx shells out to pandoc for the tutorial notebooks.
+        - pandoc
+
 sphinx:
     configuration: docs/conf.py
     # disable this for more lenient docs builds
     fail_on_warning: false
+
 python:
     install:
-        - method: pip
+        - method: uv
+          command: pip
           path: .
-          extra_requirements:
+          extras:
               - doc
-        - requirements: docs/requirements.txt

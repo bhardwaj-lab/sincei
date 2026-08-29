@@ -1,7 +1,8 @@
-from itertools import compress
-from deeptools.utilities import getTLen
-import numpy as np
 import sys
+from itertools import compress
+
+import numpy as np
+from deeptools.utilities import getTLen
 
 
 def checkBAMtag(bam, name, tag):
@@ -11,12 +12,13 @@ def checkBAMtag(bam, name, tag):
 
     bctag = [read.has_tag(tag) for read in bam.head(1000)]
     if not any(bctag):
-        sys.stderr.write("WARNING: Input file {} seems to lack the tag {}. Output might be empty. \n".format(name, tag))
-    return None
+        sys.stderr.write(
+            f"WARNING: Input file {name} seems to lack the tag {tag}. Output might be empty. \n"
+        )
 
 
 def checkMotifs(read, chrom, genome, readMotif, refMotif):
-    """
+    r"""
     Check whether a given motif is present in the read and the corresponding reference genome.
     For example, in MNAse (scChIC-seq) data, we expect the reads to have an 'A' at the 5'-end,
     while the genome has a 'TA' over hang (where the 'A' aligns with 'A' in the forward read),
@@ -50,10 +52,10 @@ def checkMotifs(read, chrom, genome, readMotif, refMotif):
     >>> bam = pysam.AlignmentFile("{}/test_TA_filtering.bam".format(root))
     >>> iter = bam.fetch()
     >>> read = next(iter)
-    >>> cr.checkMotifs(read, 'A', 'TA') # for valid scChIC read
+    >>> cr.checkMotifs(read, "A", "TA")  # for valid scChIC read
     True
     >>> read = next(iter)
-    >>> cr.checkMotifs(read, 'A', 'TA') # for invalid scChIC read
+    >>> cr.checkMotifs(read, "A", "TA")  # for invalid scChIC read
     False
     """
     # get read and ref motif pos
@@ -111,11 +113,10 @@ def checkGCcontent(read, lowFilter, highFilter, returnGC=False):
     gc_frac = float(gc_bases) / total_bases
     if returnGC:
         return gc_frac
+    elif gc_frac >= lowFilter and gc_frac <= highFilter:
+        return True
     else:
-        if gc_frac >= lowFilter and gc_frac <= highFilter:
-            return True
-        else:
-            return False
+        return False
 
 
 def checkAlignedFraction(read, lowFilter):
@@ -155,10 +156,10 @@ def colorPicker(name):
 
     Examples
     --------
-    >>> colorPicker('twentyfive')
+    >>> colorPicker("twentyfive")
     ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
 
-    >>> colorPicker('colorblind')
+    >>> colorPicker("colorblind")
     ['#0072B2', '#009E73', '#D55E00', '#CC79A7', '#F0E442', '#56B4E9', '#E69F00', '#000000']
     """
 
@@ -248,7 +249,7 @@ def getDupFilterTuple(read, bc, filterArg):
     --------
     >>> test = Tester()
     >>> read = test.bamFile1.fetch().next()
-    >>> getDupFilterTuple(read, 'ATCG', 'end_umi')
+    >>> getDupFilterTuple(read, "ATCG", "end_umi")
     ('ATCG', 'ATCG', None, None, 0, False)
     """
 
@@ -307,7 +308,7 @@ def gini(i, X):
 
     Examples
     --------
-    >>> X = np.matrix([[1,2,3,4],[5,6,7,8],[9,10,11,12]])
+    >>> X = np.matrix([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
     >>> gini(0, X)
     0.0
     >>> gini(1, X)

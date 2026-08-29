@@ -1,23 +1,12 @@
-# -*- coding: utf-8 -*-
-
 # Configuration file for the Sphinx documentation builder.
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-import os
-import re
-import sys
 from importlib import metadata
 
 # -- Project information -----------------------------------------------------
 
 project = "sincei"
-copyright = "2025, Vivek Bhardwaj"
+copyright = "2026, Vivek Bhardwaj"
 author = metadata.metadata(project).get("Author")
 
 # The full version, including alpha/beta/rc tags
@@ -43,13 +32,9 @@ extensions = [
     "sphinx_toolbox.collapse",
     "nbsphinx",
 ]
-#    'numpydoc'
 
 # Do not execute tutorial notebooks
 nbsphinx_execute = "never"
-
-# This is needed to suppress autosummary reordering
-numpydoc_show_class_members = False
 
 # Order members by source order instead of alphabetically
 autodoc_member_order = "bysource"
@@ -66,28 +51,9 @@ exclude_patterns = [
     ".DS_Store",
 ]
 
-# If optional heavy dependencies aren't present locally, mock them so autodoc doesn't fail.
-# ReadTheDocs installs extras=['doc'], but local builds might not have everything.
-# autodoc_mock_imports = [
-#     "numpy", "pandas", "scipy", "scanpy", "anndata", "mudata", "umap", "leidenalg",
-#     "matplotlib", "networkx", "igraph", "torch", "mctorch", "deeptools", "gensim",
-#     "tqdm", "deeptoolsintervals", "sklearn", "pysam", "pyBigWig", "joblib", "py2bit",
-#     "ruptures",
-# ]
-
-
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-# html_theme = "sphinx_rtd_theme"
-# on_rtd = os.environ.get("READTHEDOCS", None) == "True"
-
-# if not on_rtd:  # only import and set the theme if we're building docs locally
-#     import sphinx_rtd_theme
-
-#     html_theme = "sphinx_rtd_theme"
-
+# The theme to use for the HTML help pages.
 html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/bhardwaj-lab/sincei",
@@ -95,9 +61,11 @@ html_theme_options = {
     "show_toc_level": 3,
     "pygments_light_style": "tango",
     "pygments_dark_style": "monokai",
+    "logo": {
+        "image_light": "content/images/sincei-logo-light.png",
+        "image_dark": "content/images/sincei-logo-dark.png",
+    },
 }
-
-html_logo = "./content/images/sincei-logo-transparent.png"
 html_show_sphinx = False
 
 # Add any paths that contain custom static files (such as style sheets) here,

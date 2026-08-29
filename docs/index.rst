@@ -1,7 +1,3 @@
-.. image:: ./content/images/sincei-logo-transparent.png
-    :align: left
-    :width: 350
-
 .. image:: https://readthedocs.org/projects/sincei/badge/?version=latest
     :target: https://sincei.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
@@ -14,21 +10,35 @@
     :target: http://bioconda.github.io/recipes/sincei/README.html
     :alt: Install with bioconda
 
+.. image:: ./content/images/sincei-logo-light.png
+    :align: left
+    :class: only-light
 
-=======================
-Single Cell Informatics
-=======================
+.. image:: ./content/images/sincei-logo-dark.png
+    :align: left
+    :class: only-dark
 
-A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
+====================================================================
+A command-line toolkit for exploring single-cell (epi)genomics data.
+====================================================================
 
-sincei is described in our preprint: `Bhardwaj V. , Mourragui, S. (2024) User-friendly exploration of epigenomic data in single cells using sincei. <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`__
+sincei provides a flexible, easy-to-use command-line interface to work with single-cell data directly from BAM files. It can:
 
+- Aggregate signal in bins, genes or any feature of interest from single-cells.
+- Perform read-level and count-level quality control.
+- Perform dimensionality reduction and clustering of all kinds of single-cell data (open chromatin, histone marks, methylation, gene expression etc.).
+- Create coverage files (bigwigs) for visualization.
+- Along with additional tools for visualization, and interpretation/annotation of cells.
+
+sincei is also part of the `scVerse ecosystem <https://scverse.org/>`_, and it's command-line tools can easily be combined with other Python or R packages for further analysis.
+
+For details, please `read our preprint <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`_ describing sincei.
 
 ============
 Installation
 ============
 
-sincei is a command line toolkit based on python3. The stable version of sincei can be installed using `conda <https://conda.io/projects/conda/en/latest/user-guide/install/index.html>`_ , while the development versions can be installed from github via pip.
+sincei is a command line toolkit written in Python and Rust. The stable version of sincei can be installed using `conda <https://conda.io/projects/conda/en/latest/user-guide/install/index.html>`_ , while the development versions can be installed from github via pip.
 
 Installation via bioconda
 -------------------------
@@ -39,31 +49,25 @@ Create a new conda environment and install sincei using:
 
     conda create -n sincei -c bioconda -c conda-forge sincei
 
-Mac users with Arm architecture (M1-3 macbooks and beyond) should explicitly specify the osx-64 version to allow dependencies to install properly.
-
-.. code-block:: bash
-
-    conda create -n sincei --subdir 'osx-64' -c bioconda -c conda-forge sincei
-
-*Note:* The dependency `mctorch-lib` required for `scClusterCells` is currently unavailable via conda, therefore, to use `scClusterCells`, we recommend installing it separately via pip.
+*Note:* The dependency `mctorch-lib` required for `scClusterCells` is currently not avilable on conda, therefore, to use `scClusterCells`, we recommend installing it separately via pip or uv.
 
 .. code-block:: bash
 
     # install mctorch-lib
-    (sincei): pip install mctorch-lib
+    (sincei): uv pip install mctorch-lib
     (sincei): scClusterCells --help
 
 
 Installation via github
 -----------------------
 
-Create a new conda environment and install sincei in it using pip from GitHub:
+Create a new conda environment and install sincei from GitHub using pip or uv:
 
 .. code-block:: bash
 
     conda create -n sincei python=3.12
     conda activate sincei
-    (sincei): pip install git+https://github.com/bhardwaj-lab/sincei.git@master#egg=sincei
+    (sincei): uv pip install git+https://github.com/bhardwaj-lab/sincei.git@master#egg=sincei
 
 
 Getting Help

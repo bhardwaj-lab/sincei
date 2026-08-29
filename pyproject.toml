@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "sincei"
-description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
+description = "A command-line toolkit for exploring single-cell (epi)genomics data."
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
 dynamic = ["version"]
@@ -33,6 +33,7 @@ dependencies = [
     "umap-learn",
     "polars",
     "igraph",
+    "leidenalg",
     "click",
     "typer",
     # for debug logging (referenced from the issue template)
@@ -68,18 +69,13 @@ scExportSignal = "sincei.cli.scExportSignal:cli"
 [project.optional-dependencies]
 doc = [
     "sphinx>=9.1.0",
-    "sphinx-book-theme>=1.1.4",
-    "myst-nb",
-    "sphinxcontrib-bibtex>=2.6.5",
-    "sphinx-autodoc-typehints",
+    "sphinx-book-theme",
+    "sphinxcontrib-bibtex",
     "readthedocs-sphinx-ext",
     "sphinx-argparse",
     "sphinx_toolbox",
-    "IPython",
-    # For notebooks
- #   "ipykernel",
- #   "ipython",
- #   "sphinx-copybutton",
+    "nbsphinx",
+    "ipywidgets",
 ]
 test = [
     "pytest"
