@@ -206,8 +206,10 @@ pub(crate) fn write_counts_anndata(
     let obs_df = DataFrame::new(
         n_cells,
         vec![
-            Column::new("sample".into(), sample_col),
-            Column::new("barcode".into(), barcode_col),
+            Column::new("sample".into(), sample_col)
+                .cast(&DataType::from_categories(Categories::global()))?,
+            Column::new("barcode".into(), barcode_col)
+                .cast(&DataType::from_categories(Categories::global()))?,
         ],
     )?;
 
