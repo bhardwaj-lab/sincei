@@ -59,8 +59,7 @@ features_app = typer.Typer(
     rich_markup_mode="rich",
     help=(
         "Count reads on provided features. A read is counted once for every "
-        "feature it overlaps, so overlapping features each get their own count. "
-        "Use --metagene to count each read only once."
+        "feature it overlaps, so overlapping features each get one count. "
     ),
     context_settings={"help_option_names": []},
 )
