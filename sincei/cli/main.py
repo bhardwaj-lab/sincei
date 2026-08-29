@@ -21,7 +21,6 @@ from .scExportSignal import app as scExportSignal_app
 from .scFilterBarcodes import app as scFilterBarcodes_app
 from .scFilterStats import app as scFilterStats_app
 from .scFindVCRs import app as scFindVCRs_app
-from .scJSD import app as scJSD_app
 from .scPlotRegion import app as scPlotRegion_app
 from .scScoreFeatures import app as scScoreFeatures_app
 
@@ -46,7 +45,6 @@ app = typer.Typer(
 # The order of subcommands in the help message follows the order of registration.
 app.add_typer(scFilterBarcodes_app, name="scFilterBarcodes")
 app.add_typer(scFilterStats_app, name="scFilterStats")
-app.add_typer(scJSD_app, name="scJSD")
 app.add_typer(scCountReads_app, name="scCountReads")
 app.add_typer(scCountQC_app, name="scCountQC")
 app.add_typer(scFindVCRs_app, name="scFindVCRs")
