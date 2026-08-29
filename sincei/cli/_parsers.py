@@ -18,6 +18,11 @@ from typing import TYPE_CHECKING
 import typer
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pandas as pd
+    from anndata import AnnData
+
     from ._common_args import DuplicateFilter
 
 logger = logging.getLogger(__name__)
@@ -164,6 +169,118 @@ def warn_unsupported(**options: object) -> None:
             logger.warning(
                 "Option %r is not supported by this command and will be ignored.", name
             )
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+# Columns every sincei-generated .h5ad is expected to carry, and their type.
+
+_REQUIRED_OBS: dict[str, object] = {
+    "sample": "category",
+    "barcode": "category",
+}
+_REQUIRED_VAR: dict[str, object] = {
+    "chrom": "category",
+    "name": "category",
+    "start": int,
+    "end": int,
+}
+
+
+def _coerce_column(
+    frame: pd.DataFrame, column: str, dtype: object, label: str
+) -> str | None:
+    """Coerce one column in place, returning a problem description or None."""
+    if column not in frame.columns:
+        return f"  .{label} is missing the column '{column}'"
+    try:
+        if frame[column].dtype != dtype:
+            frame[column] = frame[column].astype(dtype)
+    except (TypeError, ValueError) as exc:
+        return f"  .{label}['{column}'] cannot be read as {dtype}: {exc}"
+    return None
+
+
+def _anndata_problems(adata: AnnData, filename: str | None = None) -> str | None:
+    """Describe why `adata` is not valid sincei input, or None if it is."""
+    problems: list[str | None] = []
+    if adata.n_obs == 0:
+        problems.append("  .obs has 0 observations (cells)")
+    if adata.n_vars == 0:
+        problems.append("  .var has 0 variables (features)")
+    for column, dtype in _REQUIRED_OBS.items():
+        problems.append(_coerce_column(adata.obs, column, dtype, "obs"))  # ty: ignore[invalid-argument-type]
+    for column, dtype in _REQUIRED_VAR.items():
+        problems.append(_coerce_column(adata.var, column, dtype, "var"))  # ty: ignore[invalid-argument-type]
+
+    found = [problem for problem in problems if problem is not None]
+    if not found:
+        return None
+
+    where = f"'{filename}'" if filename else "the input .h5ad file"
+    return "\n".join([f"{where} is not a valid sincei-formatted input file:", *found])
+
+
+def validate_anndata(adata: AnnData, filename: str | None = None) -> AnnData:
+    """Check that an AnnData carries the fields the sincei tools require.
+
+    Returns the same object with `.var["start"]` / `.var["end"]` cast to int.
+
+    Exits with status 1 after describing every problem found, rather than
+    raising, so a user gets one readable message instead of a traceback.
+    """
+    problems = _anndata_problems(adata, filename)
+    if problems is not None:
+        sys.stderr.write(problems + "\n")
+        raise typer.Exit(code=1)
+    return adata
+
+
+def validate_anndata_list(
+    adatas: Sequence[AnnData], filenames: Sequence[str] | None = None
+) -> list[AnnData]:
+    """`validate_anndata` for several inputs, reporting every bad file at once."""
+    names = list(filenames) if filenames is not None else [None] * len(adatas)
+    problems = [
+        problem
+        for adata, name in zip(adatas, names, strict=False)
+        if (problem := _anndata_problems(adata, name)) is not None
+    ]
+    if problems:
+        sys.stderr.write("\n".join(problems) + "\n")
+        raise typer.Exit(code=1)
+    return list(adatas)
+
+
+_REGION = re.compile(r"([^:]+):(\d+)(?:-|:)(\d+)")
+
+
+def parse_region(region: str) -> tuple[str, int | None, int | None]:
+    """Split `CHROM`, `CHROM:START-END` or `CHROM:START:END` into its parts.
+
+    A chromosome on its own yields `(chrom, None, None)`, meaning the whole
+    chromosome. Complements `normalize_region`, which tidies the string a user
+    typed; this turns the tidied string into coordinates.
+    """
+    text = region.strip()
+    if ":" not in text:
+        return text, None, None
+
+    match = _REGION.fullmatch(text)
+    if match is None:
+        msg = (
+            f"Invalid region {region!r}. Expected 'CHROM', 'CHROM:START-END' "
+            f"or 'CHROM:START:END'."
+        )
+        raise typer.BadParameter(msg)
+
+    chrom, start_text, end_text = match.groups()
+    start, end = int(start_text), int(end_text)
+    if start > end:
+        msg = f"Invalid region {region!r}. START must be <= END."
+        raise typer.BadParameter(msg)
+    return chrom, start, end
 
 
 # ---------------------------------------------------------------------------
