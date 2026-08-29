@@ -1,4 +1,9 @@
-import logging
+from __future__ import annotations
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("cooler").setLevel(logging.WARNING)
+from sincei import _sincei as internal
+
+from . import plotting as pl
+
+__version__ = internal.version()
+
+__all__ = ["pl"]
