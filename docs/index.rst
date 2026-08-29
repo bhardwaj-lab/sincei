@@ -1,10 +1,10 @@
 .. image:: ./content/images/sincei-logo-light.png
     :align: left
-    :class: only-light
+    :class: only-light main-logo
 
 .. image:: ./content/images/sincei-logo-dark.png
     :align: left
-    :class: only-dark
+    :class: only-dark main-logo
 
 ====================================================================
 A command-line toolkit for exploring single-cell (epi)genomics data.

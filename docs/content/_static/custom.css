@@ -4,8 +4,14 @@ h3 {
     font-weight: bold !important;
 }
 
-.only-light,
-.only-dark {
-    margin-top: 2rem;
+/* Increase image margins */
+main img {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Main logo margin */
+.main-logo {
+    margin-top: 0rem;
     margin-bottom: 2rem;
 }
