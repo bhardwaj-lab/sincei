@@ -5,7 +5,7 @@ from typing import Annotated
 import anndata as ad
 import typer
 
-from sincei.VCRfinder import VCRfinder
+from sincei.tools.VCRfinder import VCRfinder
 
 from ._common_args import (
     AVAILABLE_PROCESSORS,
