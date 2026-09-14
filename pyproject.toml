@@ -29,7 +29,6 @@ dependencies = [
     "anndata",
     "mudata",
     "scanpy",
-    "deeptools",
     "umap-learn",
     "polars",
     "igraph",
