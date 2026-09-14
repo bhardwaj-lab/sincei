@@ -11,6 +11,9 @@ cell and region.
 ``scCountReads`` has two subcommands and they share almost every flag, so the
 scenarios are declared once and the ones that apply to both are run twice.
 
+The SL2 tests at the end compare the output against manually computed matrices
+containing the intended output of scCountReads.
+
 Not covered: ``--motifFilter`` / ``--genome2bit`` need a 2bit genome that is not
 in ``testdata/``.
 
@@ -21,9 +24,11 @@ Run the tests::
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import anndata as ad
+import numpy as np
 import pytest
 from _cli_testing import (
     BAM1,
@@ -334,3 +339,138 @@ def test_a_barcode_tag_the_bam_lacks_fails_with_advice(tmp_path: Path) -> None:
     )
     assert proc.returncode != 0
     assert "ZZ" in proc.stdout + proc.stderr
+
+
+# Counts on the SL2 fixture: two BAMs, five barcodes, the Ogfrl1 locus on chr1.
+# Each matrix (regions in rows, cells in columns) intended output.
+
+SL2 = DATA / "scCountReads_data"
+SL2_BASE = [
+    "-b",
+    str(SL2 / "SL2-1.bam"),
+    str(SL2 / "SL2-2.bam"),
+    "-bc",
+    str(SL2 / "test_barcodes.txt"),
+    "-ct",
+    "BC",
+    "-p",
+    "1",
+]
+SL2_CELLS = [
+    f"{sample}::{barcode}"
+    for sample in ("SL2-1", "SL2-2")
+    for barcode in ("AAGGCTAC", "ACGTAGAT", "AGACTGTA", "AGCCAGAT", "AGCGTCTA")
+]
+OGFRL1_BINS = ["-r", "chr1:23360000-23385000", "-bs", "10000"]
+OGFRL1_BED = ["-r", "chr1:23365000-23385000", "--bed", str(SL2 / "test_regions.bed")]
+OGFRL1_GTF = [
+    "-r",
+    "chr1:23365000-23385000",
+    "--bed",
+    str(SL2 / "Ogfrl.gtf"),
+    "--featureID",
+    "transcript",
+    "--featureIDtag",
+    "transcript_id",
+]
+DEDUP = ["--duplicateFilter", "start_bc_umi"]
+
+BIN_REGIONS = [
+    "chr1_23360000_23370000::None",
+    "chr1_23370000_23380000::None",
+    "chr1_23380000_23385000::None",
+]
+BED_REGIONS = [
+    "chr1_23365000_23385000::Ogfrl1",
+    "chr1_23365000_23377000::Orfrl_left1 * +",
+    "chr1_23365000_23377000::Orfrl_right1",
+]
+GTF_REGIONS = [
+    "chr1_23366423_23383175::ENSMUST00000027343.5",
+    "chr1_23369723_23380801::ENSMUST00000186064.6",
+    "chr1_23370267_23397541::ENSMUST00000188677.1",
+]
+
+
+@dataclass(frozen=True)
+class CorrectCounts:
+    mode: str
+    args: list[str]
+    regions: list[str]
+    counts: list[list[int]]
+
+
+SL2_ORIGINAL: dict[str, CorrectCounts] = {
+    "bins": CorrectCounts(
+        "bins",
+        OGFRL1_BINS,
+        BIN_REGIONS,
+        [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [14, 0, 0, 32, 10, 2, 0, 22, 4, 3],
+            [0, 6, 4, 0, 0, 0, 6, 4, 0, 8],
+        ],
+    ),
+    "bins_dedup": CorrectCounts(
+        "bins",
+        [*OGFRL1_BINS, *DEDUP],
+        BIN_REGIONS,
+        [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [6, 0, 0, 10, 6, 2, 0, 6, 2, 2],
+            [0, 3, 2, 0, 0, 0, 3, 4, 0, 5],
+        ],
+    ),
+    "bed": CorrectCounts(
+        "features",
+        OGFRL1_BED,
+        BED_REGIONS,
+        [
+            [14, 6, 4, 32, 10, 2, 6, 26, 4, 10],
+            [0, 0, 0, 32, 10, 2, 0, 0, 0, 0],
+            [0, 0, 0, 32, 10, 2, 0, 0, 0, 0],
+        ],
+    ),
+    "bed_dedup": CorrectCounts(
+        "features",
+        [*OGFRL1_BED, *DEDUP],
+        BED_REGIONS,
+        [
+            [6, 3, 2, 10, 6, 2, 3, 10, 2, 6],
+            [0, 0, 0, 10, 6, 2, 0, 0, 0, 0],
+            [0, 0, 0, 10, 6, 2, 0, 0, 0, 0],
+        ],
+    ),
+    "gtf": CorrectCounts(
+        "features",
+        OGFRL1_GTF,
+        GTF_REGIONS,
+        [
+            [14, 6, 0, 32, 10, 2, 6, 26, 4, 10],
+            [14, 6, 0, 32, 10, 2, 0, 26, 4, 10],
+            [14, 6, 4, 32, 4, 2, 6, 26, 4, 10],
+        ],
+    ),
+    "gtf_dedup": CorrectCounts(
+        "features",
+        [*OGFRL1_GTF, *DEDUP],
+        GTF_REGIONS,
+        [
+            [6, 3, 0, 10, 6, 2, 3, 10, 2, 6],
+            [6, 3, 0, 10, 6, 2, 0, 10, 2, 6],
+            [6, 3, 2, 10, 4, 2, 3, 10, 2, 6],
+        ],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(SL2_ORIGINAL))
+def test_sl2_counts_match_the_original(name: str, tmp_path: Path) -> None:
+    expected = SL2_ORIGINAL[name]
+    out = tmp_path / "out.h5ad"
+    _count(expected.mode, SL2_BASE, expected.args, out)
+
+    adata = ad.read_h5ad(out)
+    assert list(adata.obs_names) == SL2_CELLS
+    assert list(adata.var_names) == expected.regions
+    np.testing.assert_array_equal(adata.to_df().to_numpy().T, expected.counts)

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from .scFilterBarcodes import app as scFilterBarcodes_app
     from .scFilterStats import app as scFilterStats_app
     from .scFindVCRs import app as scFindVCRs_app
-    from .scJSD import app as scJSD_app
     from .scPlotRegion import app as scPlotRegion_app
     from .scScoreFeatures import app as scScoreFeatures_app
 
