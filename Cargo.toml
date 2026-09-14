@@ -1,7 +1,7 @@
 [package]
 authors = ["Fernando Sanchó-Gómez <f.sanchogomez@uu.nl>"]
 name = "sincei"
-version = "0.7.0-dev"
+version = "1.0.0-dev"
 edition = "2024"
 description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
 license-file = "LICENCE.txt"
@@ -28,7 +28,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # PyO3 for Python interoperability.
-pyo3 = { version = "0.27", features = ["extension-module", "abi3-py310", "anyhow"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310", "anyhow"] }
 
 # Dataframes
 polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
