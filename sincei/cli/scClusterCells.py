@@ -1,21 +1,37 @@
 from __future__ import annotations
 
+import logging
+import warnings
+from pathlib import Path
 from typing import Annotated
 
+import anndata as ad
+import matplotlib as mpl
+
+mpl.use("Agg")
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import scanpy as sc
 import typer
+
+from sincei.tools.ExponentialFamily import GLMFamily
+from sincei.tools.GLMPCA import GLMPCA
+from sincei.tools.TopicModels import TOPICMODEL
 
 from ._common_args import (
     AVAILABLE_PROCESSORS,
+    CM_PER_INCH,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
     PLOT_OPTS,
     DimRed,
-    GLMPCAFamily,
     PlotFileFormat,
     configure_logging,
     log_parameters,
     preprocess_args,
 )
+from ._parsers import validate_anndata
 
 DESCRIPTION = (
     "Cluster cells from a cell-by-feature matrix.\n\n"
@@ -24,15 +40,16 @@ DESCRIPTION = (
     "2D projection (UMAP) of the cells. The result is an updated h5ad object, and "
     "(optionally) a plot file and a .tsv file with UMAP coordinates and the "
     "corresponding cluster id for each barcode.\n\n"
-    "If the input AnnData object already contains a dimensionality reduction of the "
-    "same type as requested, the existing reduction is used instead of computing a "
-    "new one.\n\n"
+    'Each dimensionality reduction is stored in ``obsm["X_<method>"]``. If the input '
+    "AnnData object already contains a reduction of the requested method, the "
+    "existing reduction is used instead of computing a new one, unless "
+    "``--recomputeReduction`` is given.\n\n"
     "``scClusterCells`` provides the following dimensionality reduction methods:\n"
-    "* LSA: Latent Semantic Analysis.\n"
-    "* LDA: Latent Dirichlet Allocation.\n"
-    "* logPCA: Principal Component Analysis preceded by a logarithm transform.\n"
     "* glmPCA: generalized PCA, with an exponential family distribution such as "
-    "Poisson, Bernoulli, etc."
+    "Poisson, Bernoulli, etc.\n"
+    "* logPCA: Principal Component Analysis preceded by a logarithm transform.\n"
+    "* LSA: Latent Semantic Analysis.\n"
+    "* LDA: Latent Dirichlet Allocation."
 )
 
 
@@ -67,10 +84,10 @@ def main(
                 "The dimensionality reduction method to use before clustering cells."
                 "\n\n"
                 "One of: "
-                "[bold yellow]LSA[/bold yellow], "
-                "[bold yellow]LDA[/bold yellow], "
+                "[bold yellow]glmPCA[/bold yellow],"
                 "[bold yellow]logPCA[/bold yellow], "
-                "[bold yellow]glmPCA[/bold yellow]."
+                "[bold yellow]LSA[/bold yellow], "
+                "[bold yellow]LDA[/bold yellow]. "
             ),
         ),
     ] = DimRed.LSA,
@@ -119,7 +136,9 @@ def main(
             rich_help_panel=_REDUCTION,
             help=(
                 "The output file for the trained model. The saved model can be used "
-                "later to embed/compare new cells to the existing cluster of cells."
+                "later to embed/compare new cells to the existing cluster of cells. "
+                "Only used with [bold yellow]LSA[/bold yellow] and "
+                "[bold yellow]LDA[/bold yellow]."
             ),
         ),
     ] = None,
@@ -152,11 +171,11 @@ def main(
             "--nIterations",
             rich_help_panel=_LDA,
             help=(
-                "Number of iterations per pass for LDA model fitting. Only used with "
-                "[bold yellow]LDA[/bold yellow]."
+                "Maximum number of iterations through the corpus when inferring the "
+                "topic distribution. Only used with [bold yellow]LDA[/bold yellow]."
             ),
         ),
-    ] = 50,
+    ] = 500,
     alpha: Annotated[
         float,
         typer.Option(
@@ -167,7 +186,7 @@ def main(
                 "[bold yellow]LDA[/bold yellow]."
             ),
         ),
-    ] = 1.0,
+    ] = 50.0,
     eta: Annotated[
         float,
         typer.Option(
@@ -180,20 +199,19 @@ def main(
         ),
     ] = 0.1,
     gamma_threshold: Annotated[
-        float | None,
+        float,
         typer.Option(
             "--gammaThreshold",
             rich_help_panel=_LDA,
             help=(
-                "Minimum change in the topic matrix to stop the LDA model fitting. If "
-                "not given, the model is fit for the number of passes and iterations "
-                "specified above. Only used with [bold yellow]LDA[/bold yellow]."
+                "Minimum change in the value of the gamma parameters to continue "
+                "iterating. Only used with [bold yellow]LDA[/bold yellow]."
             ),
         ),
-    ] = None,
+    ] = 0.001,
     # glmPCA options
     glmpca_family: Annotated[
-        GLMPCAFamily,
+        GLMFamily,
         typer.Option(
             "-gf",
             "--glmPCAfamily",
@@ -202,12 +220,16 @@ def main(
             help=(
                 "The choice of exponential family distribution to use for the glmPCA "
                 "method. Only used with [bold yellow]glmPCA[/bold yellow].\n\n"
-                "One of: [bold yellow]poisson[/bold yellow], "
-                "[bold yellow]nb[/bold yellow], [bold yellow]mult[/bold yellow], "
-                "[bold yellow]bern[/bold yellow]."
+                "One of: [bold yellow]gaussian[/bold yellow], "
+                "[bold yellow]poisson[/bold yellow], "
+                "[bold yellow]bernoulli[/bold yellow], "
+                "[bold yellow]beta[/bold yellow], "
+                "[bold yellow]gamma[/bold yellow], "
+                "[bold yellow]lognormal[/bold yellow], "
+                "[bold yellow]sigmoid_beta[/bold yellow]."
             ),
         ),
-    ] = GLMPCAFamily.poisson,
+    ] = GLMFamily.poisson,
     # Clustering options
     out_file_umap: Annotated[
         str | None,
@@ -248,29 +270,107 @@ def main(
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    log_parameters(
-        input=input,
-        out_file=out_file,
-        method=method,
-        n_prin_comps=n_prin_comps,
-        n_neighbors=n_neighbors,
-        binarize=binarize,
-        recompute_reduction=recompute_reduction,
-        out_file_trained_model=out_file_trained_model,
-        n_passes=n_passes,
-        n_iterations=n_iterations,
-        alpha=alpha,
-        eta=eta,
-        gamma_threshold=gamma_threshold,
-        glmpca_family=glmpca_family,
-        out_file_umap=out_file_umap,
-        cluster_resolution=cluster_resolution,
-        plot_width=plot_width,
-        plot_height=plot_height,
-        plot_file_format=plot_file_format,
-        number_of_processors=number_of_processors,
-        verbose=verbose,
-    )
+    if verbose:
+        log_parameters(
+            input=input,
+            out_file=out_file,
+            method=method,
+            n_prin_comps=n_prin_comps,
+            n_neighbors=n_neighbors,
+            binarize=binarize,
+            recompute_reduction=recompute_reduction,
+            out_file_trained_model=out_file_trained_model,
+            n_passes=n_passes,
+            n_iterations=n_iterations,
+            alpha=alpha,
+            eta=eta,
+            gamma_threshold=gamma_threshold,
+            glmpca_family=glmpca_family,
+            out_file_umap=out_file_umap,
+            cluster_resolution=cluster_resolution,
+            plot_width=plot_width,
+            plot_height=plot_height,
+            plot_file_format=plot_file_format,
+            number_of_processors=number_of_processors,
+        )
+    else:
+        warnings.filterwarnings("ignore")
+
+    adata = validate_anndata(ad.read_h5ad(input), input)
+    reduction = f"X_{method.value}"
+
+    model = None
+    if reduction in adata.obsm and not recompute_reduction:
+        logging.info("Using the existing reduction in obsm[%r].", reduction)
+    elif method is DimRed.logPCA:
+        normalized = adata.copy()
+        sc.pp.normalize_total(normalized, target_sum=1e4)
+        sc.pp.log1p(normalized)
+        sc.pp.pca(normalized, n_comps=n_prin_comps)
+        adata.obsm[reduction] = normalized.obsm["X_pca"]
+    elif method is DimRed.glmPCA:
+        glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
+        glmpca.fit(adata)
+        assert glmpca.saturated_loadings_ is not None
+        adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
+    else:
+        topics = TOPICMODEL(
+            adata,
+            n_topics=n_prin_comps,
+            binarize=binarize,
+            n_passes=n_passes,
+            n_workers=number_of_processors,
+        )
+        if method is DimRed.LSA:
+            topics.runLSA()
+            model = topics.lsi_model
+        else:
+            topics.runLDA(
+                iterations=n_iterations,
+                alpha=alpha,
+                eta=eta,
+                gamma_threshold=gamma_threshold,
+            )
+            model = topics.lda_model
+        # The first component is dropped.
+        adata.obsm[reduction] = topics.get_cell_topic().to_numpy()[:, 1:n_prin_comps]
+
+    sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
+    sc.tl.leiden(adata, resolution=cluster_resolution)
+    sc.tl.paga(adata)
+    sc.pl.paga(adata, plot=False, threshold=0.1)
+    sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
+
+    adata.write_h5ad(out_file)
+
+    if out_file_trained_model is not None:
+        if model is not None:
+            model.save(out_file_trained_model)
+        elif method in {DimRed.LSA, DimRed.LDA}:
+            logging.warning(
+                "No model was trained, because obsm[%r] was reused. Give "
+                "--recomputeReduction to train and save a model.",
+                reduction,
+            )
+
+    if out_file_umap is not None:
+        figure, axes = plt.subplots(
+            figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
+        )
+        sc.pl.umap(adata, color="leiden", legend_loc="on data", ax=axes, show=False)
+        figure.savefig(out_file_umap, dpi=300, format=plot_file_format.value)
+        plt.close(figure)
+
+        umap = pd.DataFrame(
+            adata.obsm["X_umap"],
+            index=adata.obs_names,
+            columns=pd.Index(["UMAP1", "UMAP2"]),
+        )
+        umap["cluster"] = adata.obs["leiden"]
+        umap.to_csv(
+            Path(out_file_umap).with_suffix(".tsv"), sep="\t", index_label="Cell_ID"
+        )
+
     return 0
 
 
