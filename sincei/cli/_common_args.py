@@ -105,7 +105,7 @@ def normalize_processors(value: str | int) -> int:
     return min(number_of_processors, AVAILABLE_PROCESSORS)
 
 
-def smart_labels(labels: list[str]) -> list[str]:
+def get_smart_labels(labels: list[str]) -> list[str]:
     inferred = [Path(label).stem for label in labels]
     if len(inferred) != len(set(inferred)):
         print(

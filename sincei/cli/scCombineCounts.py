@@ -14,11 +14,11 @@ from ._common_args import (
     OTHER_OPTS,
     CombineMethod,
     configure_logging,
+    get_smart_labels,
     log_parameters,
     override,
     preprocess_args,
 )
-from ._common_args import smart_labels as get_smart_labels
 from ._parsers import validate_anndata_list
 
 DESCRIPTION = (
