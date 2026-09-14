@@ -11,14 +11,8 @@
 > [!IMPORTANT]
 > This is a pre-release version of sincei. It is much faster and memory efficient
 > than the original Python implementation, but still needs some more testing.
-> If you are curious to try it out you can install it by running:
-> ```bash
-> conda conda create -n sincei -c conda-forge python=3.12 uv
-> conda activate sincei
-> uv pip install sincei-rust
-> ```
-> Or you can clone this repository and build sincei using
-> [maturin](https://github.com/pyo3/maturin):
+> If you are curious to try it out you can install it by cloning this repository
+> and build sincei using [maturin](https://github.com/pyo3/maturin):
 > ```
 > git clone -b rust_release https://github.com/bhardwaj-lab/sincei.git
 > conda conda create -n sincei -c conda-forge python=3.12 uv
