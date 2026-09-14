@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import warnings
 from typing import Annotated
 
+import anndata as ad
+import mudata as md
 import typer
 
 from ._common_args import (
     _IO,
-    AVAILABLE_PROCESSORS,
     BAM_OPTS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
@@ -16,6 +18,8 @@ from ._common_args import (
     override,
     preprocess_args,
 )
+from ._common_args import smart_labels as get_smart_labels
+from ._parsers import validate_anndata_list
 
 DESCRIPTION = (
     "Combine multiple count matrices into one.\n\n"
@@ -51,9 +55,31 @@ _GENERAL = "General options"
 def main(
     # Input / Output options
     input: Annotated[list[str], INPUT_OUTPUT_OPTS["h5ad_files"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".h5ad/.h5mu",
+            help=(
+                "The file to write results to. With [bold yellow]multi-sample[/bold "
+                "yellow] it is a .h5ad file, which the other sincei tools can use. "
+                "With [bold yellow]multi-modal[/bold yellow] it is a .h5mu file, which "
+                "only scClusterCells can use, for multi-modal clustering."
+            ),
+        ),
+    ],
     labels: Annotated[
-        list[str] | None, override(BAM_OPTS["labels"], rich_help_panel=_IO)
+        list[str] | None,
+        override(
+            BAM_OPTS["labels"],
+            rich_help_panel=_IO,
+            help=(
+                "User defined labels instead of default labels from file names, one "
+                "per input file, separated by spaces, e.g. ``--labels sample1 "
+                "sample2``. With [bold yellow]multi-modal[/bold yellow] the labels "
+                "name the data modalities (e.g. RNA, ATAC)."
+            ),
+        ),
     ] = None,
     smart_labels: Annotated[
         bool,
@@ -83,21 +109,44 @@ def main(
         ),
     ] = CombineMethod.multi_sample,
     # Other options
-    number_of_processors: Annotated[
-        int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    log_parameters(
-        input=input,
-        out_file=out_file,
-        labels=labels,
-        smart_labels=smart_labels,
-        method=method,
-        number_of_processors=number_of_processors,
-        verbose=verbose,
-    )
+    if verbose:
+        log_parameters(
+            input=input,
+            out_file=out_file,
+            labels=labels,
+            smart_labels=smart_labels,
+            method=method,
+        )
+    else:
+        warnings.filterwarnings("ignore")
+
+    if labels and len(labels) != len(input):
+        msg = (
+            f"got {len(labels)} labels for {len(input)} input files; give one label "
+            "per file, or omit --labels to use the file names"
+        )
+        raise typer.BadParameter(msg, param_hint="--labels")
+    names = labels or get_smart_labels(input)
+
+    adatas = validate_anndata_list([ad.read_h5ad(path) for path in input], input)
+
+    if method is CombineMethod.multi_sample:
+        for name, adata in zip(names, adatas, strict=True):
+            adata.obs_names = [f"{name}_{cell}" for cell in adata.obs_names]
+        combined = ad.concat(adatas, merge="first")
+        typer.echo(f"Combined cells: {combined.n_obs}")
+        typer.echo(f"Combined features: {combined.n_vars}")
+        combined.write_h5ad(out_file)
+    else:
+        mdata = md.MuData(dict(zip(names, adatas, strict=True)))
+        typer.echo(f"Combined modalities: {len(mdata.mod)}")
+        typer.echo(f"Combined cells: {mdata.n_obs}")
+        typer.echo(f"Combined features: {mdata.n_vars}")
+        mdata.write_h5mu(out_file)
+
     return 0
 
 
