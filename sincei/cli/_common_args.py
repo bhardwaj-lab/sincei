@@ -211,7 +211,6 @@ class Compression(str, Enum):
 class ExportFormat(str, Enum):
     bm = "bm"
     mtx = "mtx"
-    loom = "loom"
 
 
 class OverlapPolicy(str, Enum):
