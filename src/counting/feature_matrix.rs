@@ -471,6 +471,8 @@ pub fn count_bam_features(
         compression_level,
     )?;
 
+    println!("Number of cells found: {n_cells}\nNumber of features found: {n_features}");
+
     Ok(())
 }
 

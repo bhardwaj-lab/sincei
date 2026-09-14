@@ -406,6 +406,8 @@ pub fn count_bam_bins(
         compression_level,
     )?;
 
+    println!("Number of cells found: {n_cells}\nNumber of bins found: {n_features}");
+
     Ok(())
 }
 
