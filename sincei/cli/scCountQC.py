@@ -13,7 +13,7 @@ import scanpy as sc
 import typer
 from deeptoolsintervals import GTF
 
-from sincei.tools.Utilities import gini
+from sincei.utils import gini
 
 from ._common_args import (
     INPUT_OUTPUT_OPTS,

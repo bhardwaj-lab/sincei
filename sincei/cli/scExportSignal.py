@@ -11,7 +11,7 @@ import pandas as pd
 import typer
 from scipy import io, sparse
 
-from sincei.tools.Utilities import chromosome_to_numeric
+from sincei.utils import chromosome_to_numeric
 
 from ._common_args import (
     INPUT_OUTPUT_OPTS,
