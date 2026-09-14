@@ -192,10 +192,11 @@ class GLMPCA:
         ]
 
         # Select best model
-        training_cost = torch.Tensor([
-            self._optim_cost(loadings, intercept, X_fit, saturated_parameters)
-            for loadings, intercept in runs
-        ])
+        with torch.no_grad():
+            training_cost = torch.stack([
+                self._optim_cost(loadings, intercept, X_fit, saturated_parameters)
+                for loadings, intercept in runs
+            ])
         best_model_idx = int(torch.argmin(training_cost))
         self.saturated_loadings_, self.saturated_intercept_ = runs[best_model_idx]
 

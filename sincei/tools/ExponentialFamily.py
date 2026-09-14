@@ -301,8 +301,9 @@ class Beta(ExponentialFamily):
 
     def initialize_family_parameters(self, X: torch.Tensor) -> None:
         p = X.shape[1]
+        values = X.numpy()
 
-        def compute_beta_param(x: torch.Tensor) -> tuple[float, ...]:
+        def compute_beta_param(x: np.ndarray) -> tuple[float, ...]:
             y = x[x > self.family_params["eps"]]
             y = y[y < 1 - self.family_params["eps"]]
             return scipy.stats.beta.fit(
@@ -312,7 +313,7 @@ class Beta(ExponentialFamily):
         self.family_params["nu"] = torch.Tensor(
             Parallel(
                 n_jobs=self.family_params["n_jobs"], batch_size=100, backend="threading"
-            )(delayed(compute_beta_param)(X[:, idx]) for idx in tqdm(range(p)))
+            )(delayed(compute_beta_param)(values[:, idx]) for idx in tqdm(range(p)))
         )
         self.family_params["nu"] = torch.sum(self.family_params["nu"][:, :2], dim=1)
         assert self.family_params["nu"].shape[0] == p
@@ -502,10 +503,11 @@ class Gamma(ExponentialFamily):
 
     def initialize_family_parameters(self, X: torch.Tensor) -> None:
         p = X.shape[1]
+        values = X.numpy()
 
         self.family_params["nu"] = torch.Tensor(
             Parallel(n_jobs=self.family_params["n_jobs"])(
-                delayed(scipy.stats.gamma.fit)(X[:, idx], floc=0)
+                delayed(scipy.stats.gamma.fit)(values[:, idx], floc=0)
                 for idx in tqdm(range(p))
             )
         )
