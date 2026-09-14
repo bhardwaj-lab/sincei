@@ -227,6 +227,11 @@ class DimRed(str, Enum):
     glmPCA = "glmPCA"
 
 
+class SummaryMode(str, Enum):
+    sum = "sum"
+    mean = "mean"
+
+
 class CombineMethod(str, Enum):
     multi_sample = "multi-sample"
     multi_modal = "multi-modal"
@@ -703,6 +708,12 @@ PLOT_OPTS: dict[str, typer.models.OptionInfo] = {
             "One of: [bold yellow]png[/bold yellow], [bold yellow]jpg[/bold yellow], "
             "[bold yellow]svg[/bold yellow], [bold yellow]pdf[/bold yellow]."
         ),
+    ),
+    "dpi": typer.Option(
+        "--dpi",
+        metavar="INT",
+        rich_help_panel=_PLOT,
+        help="Resolution of the output image, in dots per inch.",
     ),
 }
 

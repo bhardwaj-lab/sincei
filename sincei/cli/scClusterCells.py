@@ -153,6 +153,27 @@ def main(
             ),
         ),
     ] = False,
+    # glmPCA options
+    glmpca_family: Annotated[
+        GLMFamily,
+        typer.Option(
+            "-gf",
+            "--glmPCAfamily",
+            metavar="FAMILY",
+            rich_help_panel=_GLMPCA,
+            help=(
+                "The choice of exponential family distribution to use for the glmPCA "
+                "method. Only used with [bold yellow]glmPCA[/bold yellow].\n\n"
+                "One of: [bold yellow]gaussian[/bold yellow], "
+                "[bold yellow]poisson[/bold yellow], "
+                "[bold yellow]bernoulli[/bold yellow], "
+                "[bold yellow]beta[/bold yellow], "
+                "[bold yellow]gamma[/bold yellow], "
+                "[bold yellow]lognormal[/bold yellow], "
+                "[bold yellow]sigmoid_beta[/bold yellow]."
+            ),
+        ),
+    ] = GLMFamily.poisson,
     # LDA options
     n_passes: Annotated[
         int,
@@ -209,27 +230,6 @@ def main(
             ),
         ),
     ] = 0.001,
-    # glmPCA options
-    glmpca_family: Annotated[
-        GLMFamily,
-        typer.Option(
-            "-gf",
-            "--glmPCAfamily",
-            metavar="FAMILY",
-            rich_help_panel=_GLMPCA,
-            help=(
-                "The choice of exponential family distribution to use for the glmPCA "
-                "method. Only used with [bold yellow]glmPCA[/bold yellow].\n\n"
-                "One of: [bold yellow]gaussian[/bold yellow], "
-                "[bold yellow]poisson[/bold yellow], "
-                "[bold yellow]bernoulli[/bold yellow], "
-                "[bold yellow]beta[/bold yellow], "
-                "[bold yellow]gamma[/bold yellow], "
-                "[bold yellow]lognormal[/bold yellow], "
-                "[bold yellow]sigmoid_beta[/bold yellow]."
-            ),
-        ),
-    ] = GLMFamily.poisson,
     # Clustering options
     out_file_umap: Annotated[
         str | None,
@@ -258,11 +258,12 @@ def main(
         ),
     ] = 1.0,
     # Plot options
-    plot_width: Annotated[float, PLOT_OPTS["plot_width"]] = 10.0,
-    plot_height: Annotated[float, PLOT_OPTS["plot_height"]] = 10.0,
+    plot_width: Annotated[float, PLOT_OPTS["plot_width"]] = 25.0,
+    plot_height: Annotated[float, PLOT_OPTS["plot_height"]] = 25.0,
     plot_file_format: Annotated[
         PlotFileFormat, PLOT_OPTS["plot_file_format"]
     ] = PlotFileFormat.png,
+    dpi: Annotated[int, PLOT_OPTS["dpi"]] = 300,
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
@@ -291,6 +292,7 @@ def main(
             plot_width=plot_width,
             plot_height=plot_height,
             plot_file_format=plot_file_format,
+            dpi=dpi,
             number_of_processors=number_of_processors,
         )
     else:
@@ -358,7 +360,7 @@ def main(
             figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
         )
         sc.pl.umap(adata, color="leiden", legend_loc="on data", ax=axes, show=False)
-        figure.savefig(out_file_umap, dpi=300, format=plot_file_format.value)
+        figure.savefig(out_file_umap, dpi=dpi, format=plot_file_format.value)
         plt.close(figure)
 
         umap = pd.DataFrame(
