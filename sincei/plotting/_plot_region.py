@@ -12,6 +12,7 @@ import numpy as np
 if TYPE_CHECKING:
     import anndata as ad
     import pandas as pd
+    from matplotlib.figure import Figure
     from scipy.sparse import csc_matrix, csr_matrix
 
     # The matrix layouts `anndata.AnnData.X` holds for a count matrix.
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def parse_region(region_str: str) -> tuple[str, int | None, int | None]:
-    """Parse region in either CHROM or CHROM:START-END format.
+    """Parse region in either CHROM, CHROM:START-END or CHROM:START:END format.
 
     Returns a tuple (chrom, start, end). For chromosome-only input `start` and
     `end` will be returned as None so every feature in the chromosome is
@@ -31,8 +32,8 @@ def parse_region(region_str: str) -> tuple[str, int | None, int | None]:
     if re.fullmatch(r"[^:]+", s):
         return s, None, None
 
-    # CHROM:START-END
-    match = re.fullmatch(r"([^:]+):(\d+)-(\d+)", s)
+    # CHROM:START-END or CHROM:START:END
+    match = re.fullmatch(r"([^:]+):(\d+)[-:](\d+)", s)
     if not match:
         msg = f"Invalid region '{region_str}'. Expected 'CHROM' or 'CHROM:START-END'"
         raise ValueError(msg)
@@ -114,9 +115,9 @@ def plot_region(
     signal_max: float | None = None,
     map_min: float | None = None,
     map_max: float | None = None,
-    figsize: tuple[int, int] = (10, 6),
+    figsize: tuple[float, float] = (10, 6),
     dpi: int = 100,
-) -> None:
+) -> Figure:
 
     chrom, region_start, region_end = parse_region(region)
     var: pd.DataFrame = cast("pd.DataFrame", adata.var)
@@ -249,3 +250,5 @@ def plot_region(
     cbar.ax.yaxis.set_label_position("left")
 
     plt.margins(x=0.1, y=0.1)
+
+    return fig
