@@ -273,15 +273,17 @@ def main(
         sys.stderr.write("Too few regions in the input file to perform QC.\n")
         raise typer.Exit(code=1) from exc
     adata.obs["gini_coefficient"] = [gini(i, adata.X) for i in range(adata.n_obs)]
+    obs = cast("pd.DataFrame", adata.obs)
+    var = cast("pd.DataFrame", adata.var)
 
     if out_metrics is not None:
         prefix = re.sub(r"\.(txt|tsv|csv)$", "", out_metrics)
-        adata.obs.to_csv(f"{prefix}.cells.tsv", sep="\t", index_label="Cell_ID")
-        adata.var.to_csv(f"{prefix}.regions.tsv", sep="\t", index_label="Feature_ID")
+        obs.to_csv(f"{prefix}.cells.tsv", sep="\t", index_label="Cell_ID")
+        var.to_csv(f"{prefix}.regions.tsv", sep="\t", index_label="Feature_ID")
 
     if describe:
-        describe_metrics(adata.obs, "Cell", "cells")
-        describe_metrics(adata.var, "Feature", "features")
+        describe_metrics(obs, "Cell", "cells")
+        describe_metrics(var, "Feature", "features")
         return 0
 
     if not filtering or out_file is None:
@@ -289,7 +291,7 @@ def main(
 
     bad_regions = None
     if region_blacklist:
-        bad_regions = blacklisted_regions(adata.var, region_blacklist)
+        bad_regions = blacklisted_regions(var, region_blacklist)
         logging.info("Found %d regions overlapping the blacklist.", len(bad_regions))
     bad_cells = None
     if cell_blacklist:
