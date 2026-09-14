@@ -1,15 +1,22 @@
-import matplotlib
+from __future__ import annotations
 
-matplotlib.use("Agg")
+from itertools import pairwise
+from typing import TYPE_CHECKING, cast
+
+import matplotlib as mpl
+
+mpl.use("Agg")
 import matplotlib.pyplot as plt
-
-import scipy as sp
 import numpy as np
 import pandas as pd
+import scipy as sp
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 ## Fast Fourier Transform
-def ffttable(selected):
+def ffttable(selected: np.ndarray) -> pd.DataFrame:
     r"""Computes the FFT of the fragment length distribution
 
     Parameters
@@ -28,7 +35,7 @@ def ffttable(selected):
     >>> test = Tester()
     >>> c = CountReadsPerBin([test.bamFile1, test.bamFile2], 50, 4)
     >>> num_reads_per_bin, regionList = c.run()
-    >>> selected = num_reads_per_bin[:,0]
+    >>> selected = num_reads_per_bin[:, 0]
     >>> ffttable(selected)
        freq         value
     0   0.0  7.812500e+06
@@ -39,17 +46,18 @@ def ffttable(selected):
     5   5.0  1.812500
     """
     selected = np.log2(selected + 1)
-    selected2 = [y - x for x, y in zip(selected, selected[1:])]
+    selected2 = [y - x for x, y in pairwise(selected)]
     fragment_fft = sp.fftpack.fft(selected2)
     fragment_psd = np.abs(fragment_fft) ** 2
     fftfreq = sp.fftpack.fftfreq(len(fragment_psd), 10.0)
     d = pd.DataFrame({"freq": fftfreq, "value": fragment_psd})
-    d2 = d[d.freq > 0]
-    return d2
+    return d[d["freq"] > 0]
 
 
 # get fragment size disribution and fft value from dict{barcode:fragment_size_list}
-def fragment_distribution(fragment_len_dict, length_plot):
+def fragment_distribution(
+    fragment_len_dict: Mapping[str, Sequence[int]], length_plot: str
+) -> dict[str, pd.DataFrame]:
     r"""Plot fragment length distribution
 
     Parameters
@@ -68,26 +76,28 @@ def fragment_distribution(fragment_len_dict, length_plot):
     Examples
     --------
     >>> test = Tester()
-    >>> fragment_len_dict = {'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
-    ...                      'AAACCTGAGAGGTTCT': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]}
+    >>> fragment_len_dict = {
+    ...     "AAACCTGAGAGGTTCT": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    ...     "AAACCTGAGAGGTTCT": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    ... }
     >>> fragment_distribution(fragment_len_dict, test.length_plot)
     """
     plt.style.use("classic")
     fig = plt.figure()
     ax1 = fig.add_subplot(1, 1, 1)
 
-    outdict = dict.fromkeys(fragment_len_dict.keys())
-    for barcode in outdict.keys():
-        fragment_len = fragment_len_dict[barcode]
-
-        n, bins, patches = ax1.hist(fragment_len, bins=100, color="orange", range=(0, 1000), alpha=0.3)
+    outdict: dict[str, pd.DataFrame] = {}
+    for barcode, fragment_len in fragment_len_dict.items():
+        n = cast(
+            "np.ndarray",
+            ax1.hist(
+                fragment_len, bins=100, color="orange", range=(0, 1000), alpha=0.3
+            )[0],
+        )
         # calculating fft
-        dflist = []
-        for num in range(80, 101, 1):
-            dflist.append(ffttable(n[10:num]))
+        dflist = [ffttable(n[10:num]) for num in range(80, 101, 1)]
         d2 = pd.concat(dflist, ignore_index=True)
-        d2 = d2.sort_values(by=["freq"], ascending=False)
-        outdict[barcode] = d2
+        outdict[barcode] = d2.sort_values(by=["freq"], ascending=False)
 
     # plot fragment sizes
     ax1.xaxis.set_ticks_position("bottom")
@@ -105,7 +115,7 @@ def fragment_distribution(fragment_len_dict, length_plot):
 
 
 ## plot the fragment periodicity per barcode using the output of
-def fftplot(outdict, plot):
+def fftplot(outdict: Mapping[str, pd.DataFrame], plot: str) -> dict[str, list[float]]:
     r"""Computes the periodicity of the fragment distribution
 
     Parameters
@@ -118,34 +128,36 @@ def fftplot(outdict, plot):
     Returns
     -------
     dict
-        Dictionary containing the periodicity of the fragment distribution for each barcode
+        Dictionary containing the periodicity of the fragment distribution for each
+        barcode
 
     Examples
     --------
     >>> test = Tester()
     >>> d = test.get_fragment_distribution()
-    >>> fftplot(d, 'test.png')
+    >>> fftplot(d, "test.png")
     """
 
     plt.style.use("classic")
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
 
-    periodicity = dict.fromkeys(outdict.keys())
-    for barcode in outdict.keys():
-        d2 = outdict[barcode]
-        max_y_pos = 1 / d2.loc[d2.value.idxmax(), "freq"]
-        mean_value = np.mean(d2.value)
-
-        ## color barcodes where max periodicity is not between 120 and 160, or 240 and 320
+    periodicity: dict[str, list[float]] = {}
+    for barcode, d2 in outdict.items():
+        ## color barcodes where max periodicity is not between 120 and 160, or 240 and
+        ## 320
         p1 = range(120, 160, 1)
         p2 = range(240, 320, 1)
 
-        mononuc_periodicity = np.mean(d2.loc[[int(x) in p1 for x in 1 / d2.freq], "value"])
-        dinuc_periodicity = np.mean(d2.loc[[int(x) in p2 for x in 1 / d2.freq], "value"])
+        mononuc_periodicity = np.mean(
+            d2.loc[[int(x) in p1 for x in 1 / d2["freq"]], "value"]
+        )
+        dinuc_periodicity = np.mean(
+            d2.loc[[int(x) in p2 for x in 1 / d2["freq"]], "value"]
+        )
 
         col = "grey"
-        ax.plot(1 / d2.freq, 10 * np.log10(d2.value + 1), color=col, alpha=0.2)
+        ax.plot(1 / d2["freq"], 10 * np.log10(d2["value"] + 1), color=col, alpha=0.2)
 
         periodicity[barcode] = [mononuc_periodicity, dinuc_periodicity]
 
