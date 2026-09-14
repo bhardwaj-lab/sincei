@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import warnings
 from typing import Annotated
 
+import anndata as ad
 import typer
+
+from sincei.tools.FeatureScorer import FeatureScorer
 
 from ._common_args import (
     AVAILABLE_PROCESSORS,
@@ -13,6 +17,7 @@ from ._common_args import (
     log_parameters,
     preprocess_args,
 )
+from ._parsers import validate_anndata
 
 DESCRIPTION = (
     "Aggregate region-level signal into gene-level scores.\n\n"
@@ -30,6 +35,21 @@ app = typer.Typer(
 )
 
 _SCORING = "Common options"
+
+
+def score_bounds(values: list[float] | None) -> tuple[float, float] | None:
+    """Turn ``--bedScoreFilter`` into a (min, max) range.
+
+    A single value is an upper limit, with 0 as the lower one.
+    """
+    if not values:
+        return None
+    if len(values) > 2:
+        msg = "give a single value (an upper limit) or two values (a range)"
+        raise typer.BadParameter(msg, param_hint="--bedScoreFilter")
+    if len(values) == 1:
+        return (0, values[0])
+    return (values[0], values[1])
 
 
 @app.callback(invoke_without_command=True)
@@ -73,7 +93,6 @@ def main(
     center_scores: Annotated[
         bool,
         typer.Option(
-            "-cs",
             "--centerScores",
             rich_help_panel=_SCORING,
             help=(
@@ -84,7 +103,6 @@ def main(
     bed_score_filter: Annotated[
         list[float] | None,
         typer.Option(
-            "-bsf",
             "--bedScoreFilter",
             metavar="FLOAT",
             rich_help_panel=_SCORING,
@@ -126,18 +144,45 @@ def main(
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    log_parameters(
-        input=input,
-        out_file=out_file,
-        features=features,
-        overlap_policy=overlap_policy,
+    if verbose:
+        log_parameters(
+            input=input,
+            out_file=out_file,
+            features=features,
+            overlap_policy=overlap_policy,
+            center_scores=center_scores,
+            bed_score_filter=bed_score_filter,
+            max_region=max_region,
+            normalize_gene_lengths=normalize_gene_lengths,
+            number_of_processors=number_of_processors,
+        )
+    else:
+        warnings.filterwarnings("ignore")
+
+    bounds = score_bounds(bed_score_filter)
+    adata = validate_anndata(ad.read_h5ad(input), input)
+
+    adata_out = FeatureScorer(
+        adata=adata,
+        gtf=features,
+        mode="aggregate",
+        overlap_policy=overlap_policy.value,
         center_scores=center_scores,
-        bed_score_filter=bed_score_filter,
+        bedFilter=bounds,
+        decay=None,
         max_region=max_region,
-        normalize_gene_lengths=normalize_gene_lengths,
-        number_of_processors=number_of_processors,
+        gene_body=True,
+        gene_size_factor=normalize_gene_lengths,
+        exclude_in_range=None,
+        n_threads=number_of_processors,
         verbose=verbose,
     )
+    adata_out.uns = adata.uns
+    adata_out.obsm = adata.obsm
+    adata_out.obsp = adata.obsp
+
+    adata_out.write_h5ad(out_file)
+    typer.echo(f"Output saved to {out_file}")
     return 0
 
 
