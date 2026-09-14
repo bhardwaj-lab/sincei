@@ -1,13 +1,13 @@
+import leidenalg as la
 import numpy as np
-import umap
 import pandas as pd
 import scanpy as sc
-
+import umap
 from scanpy._utils import get_igraph_from_adjacency
-import leidenalg as la
 
 # own modules
 from sincei.TopicModels import TOPICMODEL
+
 from sincei.ParserCommon import numberOfProcessors
 
 # umap.__version__ : should be >= 0.5.1
@@ -27,7 +27,7 @@ https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
 
-def multiModal_clustering(
+def MultiModalClustering(
     mdata,
     modalities=None,
     method="PCA",
@@ -78,7 +78,7 @@ def multiModal_clustering(
 
     # check if modalities are provided, otherwise use all
     if modalities is None:
-        raise ValueError(f"Choose modalities to use for clustering.")
+        raise ValueError("Choose modalities to use for clustering.")
     # check if modalities are in mudata object
     for mod in modalities:
         if mod not in mdata.mod.keys():
@@ -88,25 +88,31 @@ def multiModal_clustering(
         method = [method] * len(modalities)
     # check if modalities and method lists have the same length
     if len(modalities) != len(method):
-        raise ValueError(f"Modalities and method lists must have the same length.")
+        raise ValueError("Modalities and method lists must have the same length.")
     # check if modal_weights are provided, otherwise use equal weights
     if modal_weights is None:
         modal_weights = [1] * len(modalities)
     # check if modal_weights and modalities lists have the same length
     if len(modal_weights) != len(modalities):
-        raise ValueError(f"Modalities and modal_weights lists must have the same length.")
+        raise ValueError(
+            "Modalities and modal_weights lists must have the same length."
+        )
     # check if nPrinComps are provided, otherwise use default
     if np.array(nPrinComps).ndim == 0:
         nPrinComps = [nPrinComps] * len(modalities)
     # check if nPrinComps and modalities lists have the same length
     if len(nPrinComps) != len(modalities):
-        raise ValueError(f"Modalities and nPrinComps lists must have the same length.")
+        raise ValueError("Modalities and nPrinComps lists must have the same length.")
 
     # Find common barcodes in provided modalities
     if column_key is None:
-        barcodes = set.intersection(*(set(mdata.mod[mod].obs.index) for mod in modalities))
+        barcodes = set.intersection(
+            *(set(mdata.mod[mod].obs.index) for mod in modalities)
+        )
     else:
-        barcodes = set.intersection(*(set(mdata.mod[mod].obs[column_key]) for mod in modalities))
+        barcodes = set.intersection(
+            *(set(mdata.mod[mod].obs[column_key]) for mod in modalities)
+        )
     barcodes = list(barcodes)
 
     adatas = []
@@ -170,7 +176,9 @@ def multiModal_clustering(
         sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
         # get graph
-        graphs.append(get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True))
+        graphs.append(
+            get_igraph_from_adjacency(adata.obsp["connectivities"], directed=True)
+        )
         adatas.append(adata)
 
     # leiden multi-layer clustering
@@ -184,7 +192,9 @@ def multiModal_clustering(
         for i, graph in enumerate(graphs)
     ]
 
-    optimiser.optimise_partition_multiplex(parts, layer_weights=modal_weights, n_iterations=-1)
+    optimiser.optimise_partition_multiplex(
+        parts, layer_weights=modal_weights, n_iterations=-1
+    )
     print("Detected clusters: ", set(parts[0].membership))
     groups = np.array(parts[0].membership)
     mdata.obs["cluster_multi"] = pd.Categorical(values=groups.astype("U"))
@@ -193,7 +203,9 @@ def multiModal_clustering(
         mdata.mod[mod] = adata
 
 
-def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric="euclidean"):
+def umap_aligned(
+    mdata, modalities=None, column_key=None, nK=30, distance_metric="euclidean"
+):
     r"""
     Aligns the UMAP embeddings of the selected modalities in a mudata object using the UMAP AlignedUMAP
     class and stores them in mdata[mod].obsm["X_umap_aligned"], where mod is the modality. This produces
@@ -214,7 +226,7 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
     """
     # check if modalities are provided, otherwise use all
     if modalities is None:
-        raise ValueError(f"Choose modalities to use to align UMAP.")
+        raise ValueError("Choose modalities to use to align UMAP.")
     # check if modalities are in mudata object
     for mod in modalities:
         if mod not in mdata.mod.keys():
@@ -222,9 +234,13 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
 
     # Find common barcodes in provided modalities
     if column_key is None:
-        barcodes = set.intersection(*(set(mdata.mod[mod].obs.index) for mod in modalities))
+        barcodes = set.intersection(
+            *(set(mdata.mod[mod].obs.index) for mod in modalities)
+        )
     else:
-        barcodes = set.intersection(*(set(mdata.mod[mod].obs[column_key]) for mod in modalities))
+        barcodes = set.intersection(
+            *(set(mdata.mod[mod].obs[column_key]) for mod in modalities)
+        )
     barcodes = list(barcodes)
 
     adatas = []
@@ -234,7 +250,9 @@ def umap_aligned(mdata, modalities=None, column_key=None, nK=30, distance_metric
         try:
             um = adata.obsm["X_umap"]
         except KeyError:
-            raise KeyError(f"UMAP coordinates for modality {mod} not found. Please run UMAP first.")
+            raise KeyError(
+                f"UMAP coordinates for modality {mod} not found. Please run UMAP first."
+            )
 
         adatas.append(adata)
         umaps.append(um)
