@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import anndata as ad
+import h5py
 import numpy as np
 import pytest
 from _cli_testing import (
@@ -296,6 +297,35 @@ def test_group_tag_on_a_bam_without_read_groups_is_rejected(tmp_path: Path) -> N
     )
     assert proc.returncode != 0
     assert "@RG" in proc.stdout + proc.stderr
+
+
+# File format
+
+
+def encodings(path: Path) -> set[str]:
+    """The ``encoding-type`` of every element in an h5ad file."""
+    found: set[str] = set()
+    with h5py.File(path, "r") as handle:
+        handle.visititems(
+            lambda _, element: found.add(str(element.attrs.get("encoding-type", "")))
+        )
+    return found
+
+
+@pytest.mark.parametrize(
+    ("mode", "extra"),
+    [("bins", BINS), ("features", FEATURES), ("features", ["--bed", GTF])],
+    ids=["bins", "features_bed", "features_gtf"],
+)
+def test_strings_are_written_as_non_nullable_string_arrays(
+    mode: str, extra: list[str], tmp_path: Path
+) -> None:
+    out = tmp_path / "out.h5ad"
+    _run(mode, extra, out)
+
+    found = encodings(out)
+    assert "string-array" in found
+    assert "nullable-string-array" not in found
 
 
 # Error paths
