@@ -2,13 +2,13 @@ use std::path::{Path, PathBuf};
 
 use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
+use dist_whitelist::{HammingWhitelist, match_any_whitelist};
 use noodles::bam;
 use noodles::sam::alignment::Record as AlignmentRecord;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
-use triple_accel::hamming::hamming;
 
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
@@ -262,89 +262,44 @@ fn read_cell_barcode<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'
     }
 }
 
-/// Half-open bounds of block `b` when a string of `len` bytes is cut into
-/// `n_blocks` near-equal pieces.
-fn block_bounds(len: usize, n_blocks: usize, b: usize) -> (usize, usize) {
-    (len * b / n_blocks, len * (b + 1) / n_blocks)
-}
-
 /// Decides whether a read's barcode matches the whitelist.
 ///
 /// Exact matching is a single hash lookup. Fuzzy matching uses a pigeonhole
 /// index to match the barcode to the whitelist.
 enum WhitelistMatcher<'a> {
     Exact(AHashSet<&'a [u8]>),
-    Fuzzy(FuzzyWhitelist<'a>),
+    Fuzzy(FuzzyWhitelist),
 }
 
-/// Pigeonhole ("partition") index over the whitelist.
+/// One [`HammingWhitelist`] for each entry length.
 ///
-/// Two equal-length strings at Hamming distance `<= d` must agree on at least
-/// one of `d + 1` disjoint blocks, because `d` substitutions cannot touch every
-/// block. Indexing each entry under all of its blocks yields a candidate set
-/// that contains every true match, and the exact `hamming` check then runs on
-/// those candidates alone.
-///
-/// Entries are bucketed by length as well, since only equal-length entries are
-/// comparable and the block boundaries depend on the length.
-/// `(length, block position) -> block bytes -> entry indices`.
-///
-/// Nested rather than keyed by one `(usize, usize, &[u8])` tuple so a lookup
-/// can borrow the block straight out of the barcode.
-type BlockBuckets<'a> = AHashMap<(usize, usize), AHashMap<&'a [u8], Vec<u32>>>;
+/// A Hamming distance only exists between equal-length sequences, so a barcode
+/// is matched against the entries of its own length.
+struct FuzzyWhitelist(AHashMap<usize, HammingWhitelist>);
 
-struct FuzzyWhitelist<'a> {
-    max_dist: usize,
-    n_blocks: usize,
-    entries: &'a [String],
-    buckets: BlockBuckets<'a>,
-}
-
-impl<'a> FuzzyWhitelist<'a> {
-    fn build(entries: &'a [String], max_dist: usize) -> Self {
-        let n_blocks = max_dist + 1;
-        let mut buckets: BlockBuckets<'a> = AHashMap::new();
-
-        for (idx, entry) in entries.iter().enumerate() {
-            let bytes = entry.as_bytes();
-            for b in 0..n_blocks {
-                let (start, end) = block_bounds(bytes.len(), n_blocks, b);
-                buckets
-                    .entry((bytes.len(), b))
-                    .or_default()
-                    .entry(&bytes[start..end])
-                    .or_default()
-                    .push(idx as u32);
-            }
+impl FuzzyWhitelist {
+    fn build(entries: &[String], max_dist: usize) -> Self {
+        let mut by_length: AHashMap<usize, Vec<&[u8]>> = AHashMap::new();
+        for entry in entries {
+            by_length
+                .entry(entry.len())
+                .or_default()
+                .push(entry.as_bytes());
         }
 
-        Self {
-            max_dist,
-            n_blocks,
-            entries,
-            buckets,
-        }
+        let max_dist = u32::try_from(max_dist).unwrap_or(u32::MAX);
+        Self(
+            by_length
+                .into_iter()
+                .filter_map(|(len, group)| Some((len, HammingWhitelist::new(group, max_dist)?)))
+                .collect(),
+        )
     }
 
     fn matches(&self, barcode: &[u8]) -> bool {
-        let len = barcode.len();
-        for b in 0..self.n_blocks {
-            let (start, end) = block_bounds(len, self.n_blocks, b);
-            let Some(by_block) = self.buckets.get(&(len, b)) else {
-                continue;
-            };
-            let Some(candidates) = by_block.get(&barcode[start..end]) else {
-                continue;
-            };
-            for &idx in candidates {
-                // Same length by construction, which `hamming` requires.
-                if hamming(barcode, self.entries[idx as usize].as_bytes()) as usize <= self.max_dist
-                {
-                    return true;
-                }
-            }
-        }
-        false
+        self.0
+            .get(&barcode.len())
+            .is_some_and(|whitelist| match_any_whitelist(barcode, whitelist))
     }
 }
 
@@ -457,6 +412,7 @@ pub fn filter_barcodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dist_whitelist::hamming;
 
     fn wl(entries: &[&str]) -> Vec<String> {
         entries.iter().map(|s| s.to_string()).collect()
@@ -591,37 +547,6 @@ mod tests {
             read_cell_barcode(&record, &Tag::new(b'Z', b'Z')).unwrap(),
             None
         );
-    }
-
-    // Block splitting
-
-    #[test]
-    fn blocks_tile_the_whole_string_without_gaps_or_overlap() {
-        for (len, n_blocks) in [(8usize, 3usize), (10, 4), (7, 7), (5, 1)] {
-            let mut previous_end = 0;
-            for b in 0..n_blocks {
-                let (start, end) = block_bounds(len, n_blocks, b);
-                assert_eq!(start, previous_end, "gap or overlap at block {b}");
-                assert!(end >= start);
-                previous_end = end;
-            }
-            assert_eq!(previous_end, len, "blocks did not reach the end");
-        }
-    }
-
-    #[test]
-    fn blocks_of_an_evenly_divisible_string_are_equal() {
-        assert_eq!(block_bounds(9, 3, 0), (0, 3));
-        assert_eq!(block_bounds(9, 3, 1), (3, 6));
-        assert_eq!(block_bounds(9, 3, 2), (6, 9));
-    }
-
-    #[test]
-    fn a_string_shorter_than_its_block_count_leaves_empty_blocks() {
-        // Two bytes over three blocks: one block has to be empty.
-        let bounds: Vec<(usize, usize)> = (0..3).map(|b| block_bounds(2, 3, b)).collect();
-        assert_eq!(bounds.last().unwrap().1, 2);
-        assert!(bounds.iter().any(|(s, e)| s == e), "{bounds:?}");
     }
 
     // Whole run against the test BAM
