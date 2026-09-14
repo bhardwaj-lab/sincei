@@ -220,13 +220,6 @@ class OverlapPolicy(str, Enum):
     none = "none"
 
 
-class GLMPCAFamily(str, Enum):
-    poisson = "poisson"
-    nb = "nb"
-    mult = "mult"
-    bern = "bern"
-
-
 class DimRed(str, Enum):
     LSA = "LSA"
     LDA = "LDA"
@@ -235,8 +228,6 @@ class DimRed(str, Enum):
 
 
 class CombineMethod(str, Enum):
-    # Hyphens are not valid in identifiers, so the member names differ from the
-    # values the user types.
     multi_sample = "multi-sample"
     multi_modal = "multi-modal"
 
