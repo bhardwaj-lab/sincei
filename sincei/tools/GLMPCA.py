@@ -1,28 +1,24 @@
+from __future__ import annotations
+
+from typing import Any, Literal
+
+import anndata as ad
 import numpy as np
 import torch
 import torch.optim
-from torch.utils.data import TensorDataset, DataLoader
+from scipy.sparse import csc_array, csc_matrix, csr_array, csr_matrix
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-import anndata as ad
 
 try:
     import mctorch.nn as mnn
     import mctorch.optim as moptim
 except ImportError:
-    raise ImportError("Please install mctorch package via `pip install --user mctorch-lib")
+    msg = "Please install mctorch package via `pip install --user mctorch-lib"
+    raise ImportError(msg) from ImportError
 
-from sincei.ExponentialFamily import Gaussian, Poisson, Bernoulli, Beta, Gamma, LogNormal, SigmoidBeta
+from sincei.tools.ExponentialFamily import ExponentialFamily, GLMFamily
 
-EXPONENTIAL_FAMILY_DICT = {
-    "gaussian": Gaussian,
-    "poisson": Poisson,
-    "bernoulli": Bernoulli,
-    "beta": Beta,
-    "gamma": Gamma,
-    "lognormal": LogNormal,
-    "log_normal": LogNormal,
-    "sigmoid_beta": SigmoidBeta,
-}
 LEARNING_RATE_LIMIT = 10 ** (-10)
 
 
@@ -42,17 +38,17 @@ class GLMPCA:
     Another interesting feature of our implementation is that it does not require
     any cumbersome Lagrangian derivations. If you wish to test an exponential family
     distribution not present in our implementation, you may add it by creating a
-    subclass of `sincei.ExponentialFamily.ExponentialFamily`, with its corresponding
-    density function. This would suffice to use it for GLM-PCA.
+    subclass of `sincei.tools.ExponentialFamily.ExponentialFamily`, with its
+    corresponding density function. This would suffice to use it for GLM-PCA.
 
     Parameters
     ----------
     n_pc : int
         Number of principal components to compute.
 
-    family: str
+    family: str or ExponentialFamily
         Name of the exponential distribution to use. Possible families: "gaussian",
-        "poisson", "bernoulli", "beta", "gamma", "log_normal", "log_beta", "sigmoid_beta".
+        "poisson", "bernoulli", "beta", "gamma", "lognormal", "sigmoid_beta".
         Defaults to "gaussian".
 
     family_params : dict
@@ -80,7 +76,7 @@ class GLMPCA:
         Step size in optimiser scheduler. Defaults to 20.
         See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
 
-    gamma: int
+    gamma: float
         Reduction parameter for optimiser scheduler. Defaults to 0.5.
         See more: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html
 
@@ -90,9 +86,9 @@ class GLMPCA:
         random seeds and starting points. Defaults to 1.
 
     init: str
-        Method to initialize loadings. "spectral" performs SVD on  the saturated parameters from
-        a small random batch of the dataset, "random" performs a random initialization on the
-        Stiefel manifold. Defaults to "spectral".
+        Method to initialize loadings. "spectral" performs SVD on  the saturated
+        parameters from a small random batch of the dataset, "random" performs a random
+        initialization on the Stiefel manifold. Defaults to "spectral".
 
     n_jobs: int
         Number of jobs used in parallel operations. Defaults to 1.
@@ -101,18 +97,18 @@ class GLMPCA:
 
     def __init__(
         self,
-        n_pc,
-        family="gaussian",
-        family_params=None,
-        max_iter=100,
-        learning_rate=0.2,
-        batch_size=256,
-        step_size=20,
-        gamma=0.5,
-        n_init=1,
-        init="spectral",
-        n_jobs=1,
-    ):
+        n_pc: int,
+        family: str | ExponentialFamily = "gaussian",
+        family_params: dict[str, Any] | None = None,
+        max_iter: int = 100,
+        learning_rate: float = 0.2,
+        batch_size: int = 256,
+        step_size: int = 20,
+        gamma: float = 0.5,
+        n_init: int = 1,
+        init: Literal["spectral", "random"] = "spectral",
+        n_jobs: int = 1,
+    ) -> None:
         self.n_pc = n_pc
         self.family = family
         self.family_params = family_params
@@ -127,9 +123,9 @@ class GLMPCA:
         self.step_size = step_size
         self.init = init
 
-        self.saturated_loadings_ = None
+        self.saturated_loadings_: torch.Tensor | None = None
         # saturated_intercept_: before projecting
-        self.saturated_intercept_ = None
+        self.saturated_intercept_: torch.Tensor | None = None
         # reconstruction_intercept: after projecting
         self.reconstruction_intercept_ = None
 
@@ -144,12 +140,14 @@ class GLMPCA:
         self.device = None
 
         # Set up exponential family
-        if type(family) is str:
-            self.exponential_family = EXPONENTIAL_FAMILY_DICT[family](self.family_params)
+        if isinstance(family, str):
+            self.exponential_family = GLMFamily(family).distribution()(
+                self.family_params
+            )
         else:
             self.exponential_family = family
 
-    def fit(self, X):
+    def fit(self, X: torch.Tensor | np.ndarray | ad.AnnData) -> bool:
         r"""Fits a GLM-PCA to a specific dataset.
 
         Parameters
@@ -164,52 +162,51 @@ class GLMPCA:
 
         """
         if isinstance(X, ad.AnnData):
-            X_fit = torch.Tensor(X.X.transpose().toarray() if hasattr(X.X, "toarray") else X.X.transpose())
+            counts = X.X
+            if isinstance(counts, csr_matrix | csc_matrix | csr_array | csc_array):
+                counts = counts.toarray()
+            X_fit = torch.Tensor(np.asarray(counts).T)
         elif isinstance(X, np.ndarray):
             X_fit = torch.Tensor(X)
         elif isinstance(X, torch.Tensor):
             X_fit = X.clone()
         else:
-            raise ValueError("X format unrecognised: %s != np.ndarray or torch.Tensor" % (type(X)))
+            msg = f"X format unrecognised: {type(X)} != np.ndarray or torch.Tensor"
+            raise ValueError(msg)
 
         # Fit exponential family params (e.g., dispersion for negative binomial)
         self.exponential_family.initialize_family_parameters(X_fit)
 
-        # Compute saturated parameters, alongside exponential family parameters (if needed)
+        # Compute saturated parameters, alongside exponential family parameters
         saturated_parameters = self.exponential_family.invert_g(X_fit)
-
-        # Use saturated parameters to find loadings by projected gradient descent
-        self.saturated_loadings_ = []
-        self.saturated_intercept_ = []
 
         # Initialize the learning procedure
         self.learning_rate_ = self.initial_learning_rate_
         self.loadings_learning_scores_ = []
         self.loadings_learning_rates_ = []
 
-        # Compute loadings for different parameters
-        for _ in range(self.n_init):
-            self._compute_saturated_loadings(X_fit, saturated_parameters)
+        # Use saturated parameters to find loadings by projected gradient descent
+        runs = [
+            self._saturated_loading_iter(saturated_parameters, X_fit)
+            for _ in range(self.n_init)
+        ]
 
         # Select best model
-        training_cost = torch.Tensor(
-            [
-                self._optim_cost(loadings, intercept, X_fit, saturated_parameters)
-                for loadings, intercept in zip(self.saturated_loadings_, self.saturated_intercept_)
-            ]
-        )
-        best_model_idx = torch.argmin(training_cost)
-        self.saturated_intercept_ = self.saturated_intercept_[best_model_idx]
-        self.saturated_loadings_ = self.saturated_loadings_[best_model_idx]
+        training_cost = torch.Tensor([
+            self._optim_cost(loadings, intercept, X_fit, saturated_parameters)
+            for loadings, intercept in runs
+        ])
+        best_model_idx = int(torch.argmin(training_cost))
+        self.saturated_loadings_, self.saturated_intercept_ = runs[best_model_idx]
 
         return True
 
-    def transform(self, X):
+    def transform(self, X: torch.Tensor) -> torch.Tensor:
         r"""Transforms and projects dataset X onto the principal components.
 
         Parameters
         ----------
-        X : torch.Tensor or np.ndarray
+        X : torch.Tensor
             Dataset with cells in rows and features in columns.
 
         Returns
@@ -218,24 +215,25 @@ class GLMPCA:
             Projected saturated parameters.
 
         """
+        loadings, intercept = self.saturated_loadings_, self.saturated_intercept_
+        if loadings is None or intercept is None:
+            msg = "GLMPCA is not fitted. Call fit() before transform()."
+            raise RuntimeError(msg)
+
         saturated_parameters = self.exponential_family.invert_g(X)
 
         # Compute intercept term
         n = X.shape[0]
-        intercept_term = self.saturated_intercept_.unsqueeze(0).repeat(n, 1).to(self.device)
+        intercept_term = intercept.unsqueeze(0).repeat(n, 1).to(self.device)
 
         projected_parameters = saturated_parameters - intercept_term
-        projected_parameters = projected_parameters.matmul(self.saturated_loadings_)
+        projected_parameters = projected_parameters.matmul(loadings)
 
         return projected_parameters
 
-    def _compute_saturated_loadings(self, X, saturated_parameters):
-        # Runs one optimisation of the loadings, using mcTorch.
-        loadings_ = self._saturated_loading_iter(saturated_parameters, X)
-        self.saturated_loadings_.append(loadings_[0])
-        self.saturated_intercept_.append(loadings_[1])
-
-    def _saturated_loading_iter(self, saturated_parameters: torch.Tensor, X: torch.Tensor):
+    def _saturated_loading_iter(
+        self, saturated_parameters: torch.Tensor, X: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""Computes the loadings solution of the GLM-PCA optimisation problem.
 
         Parameters
@@ -252,7 +250,8 @@ class GLMPCA:
 
         """
         if self.learning_rate_ < LEARNING_RATE_LIMIT:
-            raise ValueError("LEARNING RATE IS TOO SMALL : DID NOT CONVERGE")
+            msg = "LEARNING RATE IS TOO SMALL : DID NOT CONVERGE"
+            raise ValueError(msg)
 
         # Set device for GPU usage
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -261,19 +260,22 @@ class GLMPCA:
         self.loadings_learning_scores_.append([])
         self.loadings_learning_rates_.append([])
 
-        _optimizer, _loadings, _intercept, _lr_scheduler = self._create_saturated_loading_optim(
-            parameters=saturated_parameters.data.clone(), X=X
+        _optimizer, _loadings, _intercept, _lr_scheduler = (
+            self._create_saturated_loading_optim(
+                parameters=saturated_parameters.data.clone(), X=X
+            )
         )
 
         # Load dataset
         train_data = TensorDataset(X, saturated_parameters.data.clone())
-        train_loader = DataLoader(dataset=train_data, batch_size=self.batch_size, shuffle=True, drop_last=True)
+        train_loader = DataLoader(
+            dataset=train_data, batch_size=self.batch_size, shuffle=True, drop_last=True
+        )
 
         # Run epoch in a for loop
         self._loadings_epochs = [_loadings.clone().detach()]
         self._intercept_epochs = [_intercept.clone().detach()]
         for _ in tqdm(range(self.max_iter)):
-            loss_val = []
             for batch_data, batch_parameters in train_loader:
                 cost_step = self._optim_cost(
                     loadings=_loadings,
@@ -283,9 +285,13 @@ class GLMPCA:
                 )
 
                 if "cuda" in str(self.device):
-                    self.loadings_learning_scores_[-1].append(cost_step.cpu().detach().numpy())
+                    self.loadings_learning_scores_[-1].append(
+                        cost_step.cpu().detach().numpy()
+                    )
                 else:
-                    self.loadings_learning_scores_[-1].append(cost_step.detach().numpy())
+                    self.loadings_learning_scores_[-1].append(
+                        cost_step.detach().numpy()
+                    )
                 cost_step.backward()
                 _optimizer.step()
                 _optimizer.zero_grad()
@@ -295,15 +301,25 @@ class GLMPCA:
             self._loadings_epochs.append(_loadings.clone().detach())
             self._intercept_epochs.append(_intercept.clone().detach())
 
-            # If NaN or Inf is found in the parameters, start over optimisation with reduced learning rate.
-            if np.isinf(self.loadings_learning_scores_[-1][-1]) or np.isnan(self.loadings_learning_scores_[-1][-1]):
+            # If NaN or Inf is found in the parameters, start over optimisation with
+            # reduced learning rate.
+            if np.isinf(self.loadings_learning_scores_[-1][-1]) or np.isnan(
+                self.loadings_learning_scores_[-1][-1]
+            ):
                 print("\tRESTART BECAUSE INF/NAN FOUND", flush=True)
                 self.learning_rate_ = self.learning_rate_ * self.gamma
                 self.loadings_learning_scores_ = self.loadings_learning_scores_[:-1]
                 self.loadings_learning_rates_ = self.loadings_learning_rates_[:-1]
 
                 # Remove memory
-                del train_data, train_loader, _optimizer, _loadings, _intercept, _lr_scheduler
+                del (
+                    train_data,
+                    train_loader,
+                    _optimizer,
+                    _loadings,
+                    _intercept,
+                    _lr_scheduler,
+                )
                 if "cuda" in str(self.device):
                     torch.cuda.empty_cache()
 
@@ -317,7 +333,14 @@ class GLMPCA:
 
         return (_loadings, _intercept)
 
-    def _create_saturated_loading_optim(self, parameters: torch.Tensor, X: torch.Tensor):
+    def _create_saturated_loading_optim(
+        self, parameters: torch.Tensor, X: torch.Tensor
+    ) -> tuple[
+        torch.optim.Optimizer,
+        torch.Tensor,
+        torch.Tensor,
+        torch.optim.lr_scheduler.StepLR,
+    ]:
         r"""Initializes the optimisation problem.
 
         Parameters
@@ -344,27 +367,36 @@ class GLMPCA:
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Initialize loadings with spectrum (2**13 as maximum value for SVD to be relatively fast)
+        # Initialize loadings with spectrum (2**13 as maximum value for SVD to be
+        # relatively fast)
         random_batch_size = min(X.shape[0], 2**13)
-        random_idx = np.random.choice(np.arange(parameters.shape[0]), replace=False, size=random_batch_size)
+        random_idx = np.random.choice(
+            np.arange(parameters.shape[0]), replace=False, size=random_batch_size
+        )
         if self.init == "spectral":
-            _, _, v = torch.linalg.svd(parameters[random_idx] - torch.mean(parameters[random_idx], axis=0))
+            _, _, v = torch.linalg.svd(
+                parameters[random_idx] - torch.mean(parameters[random_idx], dim=0)
+            )
             loadings = mnn.Parameter(
-                data=v[: self.n_pc, :].T, manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
+                data=v[: self.n_pc, :].T,
+                manifold=mnn.Stiefel(parameters.shape[1], self.n_pc),
+                requires_grad=True,
             )
         elif self.init == "random":
-            loadings = mnn.Parameter(manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True)
+            loadings = mnn.Parameter(
+                manifold=mnn.Stiefel(parameters.shape[1], self.n_pc), requires_grad=True
+            )
 
         # Initialize intercept
         if self.exponential_family.family_name in ["poisson"]:
             intercept = mnn.Parameter(
-                torch.median(parameters[random_idx], axis=0).values,
+                torch.median(parameters[random_idx], dim=0).values,
                 manifold=mnn.Euclidean(parameters.shape[1]),
                 requires_grad=True,
             )
         else:
             intercept = mnn.Parameter(
-                torch.mean(parameters[random_idx], axis=0),
+                torch.mean(parameters[random_idx], dim=0),
                 manifold=mnn.Euclidean(parameters.shape[1]),
                 requires_grad=True,
             )
@@ -375,20 +407,26 @@ class GLMPCA:
         # Create optimizer
         # TODO: allow for other optimizer to be used.
         # TODO: learning rate for intercept.
-        print("LEARNING RATE: %s" % (self.learning_rate_))
+        print(f"LEARNING RATE: {self.learning_rate_}")
         optimizer = moptim.rAdagrad(
             params=[
                 {"params": loadings, "lr": self.learning_rate_},
                 {"params": intercept, "lr": self.learning_rate_ * 0.01},
             ]
         )
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_size, gamma=self.gamma)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=self.step_size, gamma=self.gamma
+        )
 
         return optimizer, loadings, intercept, lr_scheduler
 
     def _optim_cost(
-        self, loadings: torch.Tensor, intercept: torch.Tensor, batch_data: torch.Tensor, batch_parameters: torch.Tensor
-    ):
+        self,
+        loadings: torch.Tensor,
+        intercept: torch.Tensor,
+        batch_data: torch.Tensor,
+        batch_parameters: torch.Tensor,
+    ) -> torch.Tensor:
         n = batch_data.shape[0]
         intercept_term = intercept.unsqueeze(0).repeat(n, 1)
 
