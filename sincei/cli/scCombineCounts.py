@@ -135,7 +135,11 @@ def main(
 
     if method is CombineMethod.multi_sample:
         for name, adata in zip(names, adatas, strict=True):
-            adata.obs_names = [f"{name}_{cell}" for cell in adata.obs_names]
+            prefix = f"{name}_"
+            adata.obs_names = [
+                cell if cell.startswith(prefix) else f"{prefix}{cell}"
+                for cell in adata.obs_names
+            ]
         combined = ad.concat(adatas, merge="first")
         typer.echo(f"Combined cells: {combined.n_obs}")
         typer.echo(f"Combined features: {combined.n_vars}")
