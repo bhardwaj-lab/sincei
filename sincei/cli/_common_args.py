@@ -678,6 +678,8 @@ OTHER_OPTS: dict[str, typer.models.OptionInfo] = {
 }
 
 
+CM_PER_INCH = 2.54
+
 PLOT_OPTS: dict[str, typer.models.OptionInfo] = {
     "plot_width": typer.Option(
         "--plotWidth",
