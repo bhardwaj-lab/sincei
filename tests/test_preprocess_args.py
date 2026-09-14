@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Tests for ``preprocess_args``, the argv rewrite every command runs first.
 
 Typer cannot express whitespace-separated multi-value options, so the CLI

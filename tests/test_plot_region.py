@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Tests for ``sincei.pl.plot_region``.
 
 The function is a plotting routine, so these check the parts that carry

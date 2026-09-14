@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Snapshot tests for ``scFilterBarcodes`` (rust sincei).
 
 Each scenario runs the tool on ``tests/testdata/`` and compares its TSV output
