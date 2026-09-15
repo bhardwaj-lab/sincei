@@ -204,15 +204,18 @@ def main(args=None):
 
     rows = list(regionList)
 
+    # check for multiple start/ends (in case counted on exons/metagene)
+    def parse_int_val(val):
+        return int(val.split(",")[0])
+
     adata.var = pd.DataFrame(
         {
             "chrom": [x.split("_")[0] for x in rows],
-            "start": [int(x.split("_")[1]) for x in rows],
-            "end": [int(y.split("::")[0]) for y in [x.split("_")[2] for x in rows]],
+            "start": [parse_int_val(x.split("_")[1]) for x in rows],
+            "end": [parse_int_val(y.split("::")[0]) for y in [x.split("_")[2] for x in rows]],
             "name": [x.split("::")[1] for x in rows],
         },
         index=rows,
     )
-
     # export as h5ad
     adata.write_h5ad(args.outFilePrefix + ".h5ad")

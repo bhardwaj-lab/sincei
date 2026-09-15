@@ -335,6 +335,7 @@ def main(args=None):
     final_df = pd.DataFrame(data=np.concatenate(final_array), index=rowLabels, columns=colLabels)
     final_df.index.name = "Cell_ID"
     ## since stats are approximate, present results as %
+    final_df = final_df.astype(float)
     final_df.iloc[:, 1:] = final_df.iloc[:, 1:].div(final_df.Total_sampled, axis=0) * 100
 
     if args.outFile is not None:
