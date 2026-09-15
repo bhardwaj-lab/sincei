@@ -43,7 +43,7 @@ DESCRIPTION = (
     'Each dimensionality reduction is stored in ``obsm["X_<method>"]``. If the input '
     "AnnData object already contains a reduction of the requested method, the "
     "existing reduction is used instead of computing a new one, unless "
-    "``--recomputeReduction`` is given.\n\n"
+    "``--recomputeDimRed`` is given.\n\n"
     "``scClusterCells`` provides the following dimensionality reduction methods:\n"
     "* glmPCA: generalized PCA, with an exponential family distribution such as "
     "Poisson, Bernoulli, etc.\n"
@@ -142,10 +142,10 @@ def main(
             ),
         ),
     ] = None,
-    recompute_reduction: Annotated[
+    recompute_dim_red: Annotated[
         bool,
         typer.Option(
-            "--recomputeReduction",
+            "--recomputeDimRed",
             rich_help_panel=_REDUCTION,
             help=(
                 "Recompute the dimensionality reduction even if a precomputed version "
@@ -279,7 +279,7 @@ def main(
             n_prin_comps=n_prin_comps,
             n_neighbors=n_neighbors,
             binarize=binarize,
-            recompute_reduction=recompute_reduction,
+            recompute_dim_red=recompute_dim_red,
             out_file_trained_model=out_file_trained_model,
             n_passes=n_passes,
             n_iterations=n_iterations,
@@ -302,7 +302,7 @@ def main(
     reduction = f"X_{method.value}"
 
     model = None
-    if reduction in adata.obsm and not recompute_reduction:
+    if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     elif method is DimRed.logPCA:
         normalized = adata.copy()
@@ -351,7 +351,7 @@ def main(
         elif method in {DimRed.LSA, DimRed.LDA}:
             logging.warning(
                 "No model was trained, because obsm[%r] was reused. Give "
-                "--recomputeReduction to train and save a model.",
+                "--recomputeDimRed to train and save a model.",
                 reduction,
             )
 
