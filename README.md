@@ -2,7 +2,7 @@
 <img align="right" src="./docs/content/images/sincei-logo.png">
 
 
-## sincei: A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data.
+## sincei: A toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data on a terminal.
 
  [![Documentation Status](https://readthedocs.org/projects/sincei/badge/?version=latest)](https://sincei.readthedocs.io/en/latest/?badge=latest) [![PyPI Version](https://img.shields.io/pypi/v/sincei.svg?style=plastic)](https://pypi.org/project/sincei/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![test](https://github.com/vivekbhr/sincei/actions/workflows/test.yml/badge.svg)](https://github.com/vivekbhr/sincei/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/vivekbhr/sincei/graph/badge.svg?token=VRTMITHHBI)](https://codecov.io/gh/vivekbhr/sincei) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/sincei/README.html)
 
@@ -41,6 +41,10 @@ conda create -n sincei -c conda-forge python=3.12
 conda activate sincei
 pip install --editable=git+https://github.com/bhardwaj-lab/sincei.git@develop#egg=sincei
 ```
+
+### (Upcoming) Rust-backed Release
+
+For the daring and impatient, we have an upcoming release of sincei with significantly faster tools thanks to the Rust backend, currently under testing. We encourage you to install sincei from the [rust_release branch](https://github.com/bhardwaj-lab/sincei/tree/rust_release) and give it a try. If you encounter any errors, please let us know by opening an issue and continue using the stable version from pypi/bioconda. Thanks!
 
 ## Usage
 
