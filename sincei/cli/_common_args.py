@@ -334,7 +334,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
             "A 4-column tsv file with cell grouping information in the format: "
             "`sample::barcode, UMAP1, UMAP2, group` (like the output from "
             "scClusterCells) or 3-column tsv file with format: `sample, barcode, "
-            "group`. Coverages will be computed per group."
+            "group`. It is used to compute read coverage per group."
         ),
     ),
     "bed_gff_file": typer.Option(

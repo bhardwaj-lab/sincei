@@ -53,8 +53,8 @@ def main(
     ctx: typer.Context,
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    group_info: Annotated[str, INPUT_OUTPUT_OPTS["group_info"]],
     out_prefix: Annotated[str, INPUT_OUTPUT_OPTS["out_prefix"]],
+    group_info: Annotated[str | None, INPUT_OUTPUT_OPTS["group_info"]] = None,
     # Coverage options
     out_file_format: Annotated[
         OutFileFormat,

@@ -319,7 +319,11 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
 /// `group_info_path`: TSV with a header line, in either of two layouts, told
 /// apart by the header's column count:
 /// `sample\tbarcode\tgroup`, or `sample::barcode\tUMAP1\tUMAP2\tgroup` as
-/// `scClusterCells` writes it.
+/// `scClusterCells` writes it. Without it the reads of every barcode are pooled
+/// into one track, `{output_prefix}.{ext}`.
+/// 
+/// Mean and Frequency normalization are rejected without a `group_info_path`,
+/// since they rely on the number of cells in each group for normalization.
 ///
 /// Normalization denominators (CPM, RPKM) are computed from the total reads
 /// over all bins, excluding chromosomes in `ignore_for_normalization`.
@@ -327,7 +331,7 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
 /// output.
 pub fn run_bulk_coverage(
     bam_paths: &[(&Path, &str)],
-    group_info_path: &Path,
+    group_info_path: Option<&Path>,
     output_prefix: &str,
     bin_size: usize,
     step_size: usize,
@@ -356,6 +360,15 @@ pub fn run_bulk_coverage(
     anyhow::ensure!(step_size > 0, "step_size must be greater than zero");
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
     anyhow::ensure!(!bam_paths.is_empty(), "at least one BAM file is required");
+    anyhow::ensure!(
+        group_info_path.is_some()
+            || !matches!(
+                normalize_using,
+                NormalizeMethod::Mean | NormalizeMethod::Frequency
+            ),
+        "Mean and Frequency normalization divide by the number of cells in a \
+        group, so they need a group info file"
+    );
 
     // With --groupTag the samples come from the reads' group tag rather than
     // from separate files, so the group-info `sample` column names @RG IDs and
@@ -383,7 +396,9 @@ pub fn run_bulk_coverage(
         Some(_) => group_names.iter().map(String::as_str).collect(),
         None => bam_paths.iter().map(|(_, l)| *l).collect(),
     };
-    let parsed = parse_group_info(group_info_path, &sample_labels)?;
+    let parsed = group_info_path
+        .map(|path| parse_group_info(path, &sample_labels))
+        .transpose()?;
 
     let group_index: AHashMap<&[u8], usize> = group_ids
         .iter()
@@ -392,24 +407,36 @@ pub fn run_bulk_coverage(
         .map(|(i, id)| (id.as_slice(), i))
         .collect();
 
-    let n_groups = parsed.groups.len();
-    let n_cells = parsed.cells.len();
-
-    if n_cells == 0 {
+    if parsed
+        .as_ref()
+        .is_some_and(|parsed| parsed.cells.is_empty())
+    {
         anyhow::bail!("no cells matched between group_info and BAM labels");
     }
 
-    // cell_global_idx -> group_idx
-    let cell_group: Vec<usize> = parsed.cells.iter().map(|(_, _, g)| *g).collect();
+    // Each group's name and size, and each cell's group. Without a group-info
+    // file every read counts toward one pooled group.
+    let (groups, n_cells_per_group, cell_group): (Vec<String>, Vec<usize>, Vec<usize>) =
+        match &parsed {
+            Some(parsed) => (
+                parsed.groups.clone(),
+                parsed.n_cells_per_group.clone(),
+                parsed.cells.iter().map(|(_, _, g)| *g).collect(),
+            ),
+            None => (vec![String::new()], vec![1], vec![0]),
+        };
+    let n_groups = groups.len();
 
     // (bam_idx, barcode bytes) -> cell_global_idx: keys borrow from parsed.cells.
     // Byte-keyed so the per-read lookup never allocates.
-    let cell_index: AHashMap<(usize, &[u8]), usize> = parsed
-        .cells
-        .iter()
-        .enumerate()
-        .map(|(i, (bam_idx, bc, _))| ((*bam_idx, bc.as_bytes()), i))
-        .collect();
+    let cell_index: Option<AHashMap<(usize, &[u8]), usize>> = parsed.as_ref().map(|parsed| {
+        parsed
+            .cells
+            .iter()
+            .enumerate()
+            .map(|(i, (bam_idx, bc, _))| ((*bam_idx, bc.as_bytes()), i))
+            .collect()
+    });
 
     // --mnase reads the fragment from the two mates, so a single-end library
     // has nothing to take a centre from. Checked before any counting, so the
@@ -667,8 +694,14 @@ pub fn run_bulk_coverage(
                         } else {
                             bam_idx
                         };
-                        let Some(&cell_idx) = cell_index.get(&(sample_idx, barcode)) else {
-                            continue;
+                        let cell_idx = match &cell_index {
+                            Some(index) => {
+                                let Some(&cell_idx) = index.get(&(sample_idx, barcode)) else {
+                                    continue;
+                                };
+                                cell_idx
+                            }
+                            None => 0,
                         };
 
                         if let Some(qc) = qc_filter
@@ -787,16 +820,20 @@ pub fn run_bulk_coverage(
                 // files finds them either way. The group name is still made
                 // safe to use as one path component, which the reference
                 // implementation does not do.
-                let group_name = &parsed.groups[group_idx];
-                let output_path = PathBuf::from(format!(
-                    "{}_{}.{}",
-                    output_prefix,
-                    sanitize_group_name(group_name),
-                    ext
-                ));
+                let group_name = &groups[group_idx];
+                let output_path = PathBuf::from(if parsed.is_some() {
+                    format!(
+                        "{}_{}.{}",
+                        output_prefix,
+                        sanitize_group_name(group_name),
+                        ext
+                    )
+                } else {
+                    format!("{output_prefix}.{ext}")
+                });
 
                 let total_reads = group_total[group_idx];
-                let n_cells_in_group = parsed.n_cells_per_group[group_idx] as f64;
+                let n_cells_in_group = n_cells_per_group[group_idx] as f64;
                 // Start of this group's dense row.
                 let group_base = group_idx * n_bins;
 
@@ -864,10 +901,14 @@ pub fn run_bulk_coverage(
                 }
 
                 if values.is_empty() {
+                    let whom = if parsed.is_some() {
+                        format!("group {group_name:?}")
+                    } else {
+                        "any cell".to_string()
+                    };
                     eprintln!(
-                        "WARNING: no reads were found for group {:?}.
+                        "WARNING: no reads were found for {whom}. \
                         {} contains no signal",
-                        group_name,
                         output_path.display()
                     );
                 }
@@ -1003,7 +1044,8 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
 /// `group_info` is the path to a TSV file with a header line, in either of two
 /// layouts, told apart by the header's column count: `sample`, `barcode`,
 /// `group`; or `sample::barcode`, `UMAP1`, `UMAP2`, `group` as
-/// `scClusterCells` writes it.
+/// `scClusterCells` writes it. `None` pools the reads of every barcode into one
+/// track, `{output_prefix}.{ext}`, and rejects Mean and Frequency normalization.
 ///
 /// Returns the list of output file paths created.
 #[pyfunction(signature = (
@@ -1045,7 +1087,7 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
 pub fn bulk_coverage(
     bam_files: Vec<PathBuf>,
     bam_labels: Vec<String>,
-    group_info: PathBuf,
+    group_info: Option<PathBuf>,
     output_prefix: String,
     bin_size: usize,
     step_size: usize,
@@ -1202,7 +1244,7 @@ pub fn bulk_coverage(
 
     run_bulk_coverage(
         &bam_path_refs,
-        group_info.as_path(),
+        group_info.as_deref(),
         &output_prefix,
         bin_size,
         step_size,
@@ -1752,7 +1794,7 @@ mod tests {
         let i2 = testdata().join("test_i2.bam");
         run_bulk_coverage(
             &[(i1.as_path(), labels.0), (i2.as_path(), labels.1)],
-            &testdata().join("test_group_info.tsv"),
+            Some(testdata().join("test_group_info.tsv").as_path()),
             prefix.to_str().unwrap(),
             bin_size,
             step_size,
@@ -1801,7 +1843,7 @@ mod tests {
         let i2 = testdata().join("test_i2.bam");
         run_bulk_coverage(
             &[(i1.as_path(), "test_i1"), (i2.as_path(), "test_i2")],
-            &testdata().join("test_group_info.tsv"),
+            Some(testdata().join("test_group_info.tsv").as_path()),
             prefix.to_str().unwrap(),
             100_000,
             100_000,
@@ -1868,6 +1910,69 @@ mod tests {
     }
 
     /// bedGraph rows, without the leading track line.
+    /// `run_default` without a group-info file.
+    fn run_pooled(prefix: &Path, normalize: NormalizeMethod) -> Result<Vec<PathBuf>> {
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+        run_bulk_coverage(
+            &[(i1.as_path(), "test_i1"), (i2.as_path(), "test_i2")],
+            None,
+            prefix.to_str().unwrap(),
+            100_000,
+            100_000,
+            "BC",
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            normalize,
+            1.0,
+            OutputFormat::BedGraph,
+            ReadMode::Normal,
+            1,
+            1_000_000,
+        )
+    }
+
+    #[test]
+    fn without_group_info_every_barcode_is_pooled_into_one_track() {
+        let dir = TempDir::new().unwrap();
+
+        let files = run_pooled(&dir.path().join("all"), NormalizeMethod::None).unwrap();
+        let grouped = run_default(&dir.path().join("cov")).unwrap();
+
+        assert_eq!(files, vec![dir.path().join("all.bedgraph")]);
+        let signal = |path: &PathBuf| bedgraph_rows(path).iter().map(|r| r.3).sum::<f64>();
+        let pooled = signal(&files[0]);
+        let listed: f64 = grouped.iter().map(signal).sum();
+        assert!(listed > 0.0, "the listed cells carry no signal");
+        assert!(
+            pooled >= listed,
+            "{pooled} < {listed}: a listed cell was not counted"
+        );
+    }
+
+    #[test]
+    fn without_group_info_mean_and_frequency_are_rejected() {
+        let dir = TempDir::new().unwrap();
+
+        for normalize in [NormalizeMethod::Mean, NormalizeMethod::Frequency] {
+            let err = run_pooled(&dir.path().join("all"), normalize)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("group info file"), "{err}");
+        }
+    }
+
     fn bedgraph_rows(path: &Path) -> Vec<(String, u32, u32, f64)> {
         std::fs::read_to_string(path)
             .unwrap()
@@ -1984,7 +2089,7 @@ mod tests {
 
         let err = run_bulk_coverage(
             &[(single_end.as_path(), "test_spliced")],
-            &group_info,
+            Some(group_info.as_path()),
             dir.path().join("cov").to_str().unwrap(),
             10_000,
             10_000,
@@ -2265,7 +2370,7 @@ mod tests {
 
         let err = run_bulk_coverage(
             &[],
-            &testdata().join("test_group_info.tsv"),
+            Some(testdata().join("test_group_info.tsv").as_path()),
             prefix.to_str().unwrap(),
             100_000,
             100_000,
