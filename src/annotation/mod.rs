@@ -5,7 +5,9 @@
 //! [`BinIndex`]).
 //! [`parse_annotation`] reads BED / GTF / GFF3 files into those
 //! structures.  The `counting` module consumes both to assign reads to features.
+//! [`annotation_py`] exposes the parsers and the overlap search to Python.
 
+pub mod annotation_py;
 pub mod parse_annotation;
 pub mod region_index;
 

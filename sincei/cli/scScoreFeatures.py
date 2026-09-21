@@ -37,21 +37,6 @@ app = typer.Typer(
 _SCORING = "Common options"
 
 
-def score_bounds(values: list[float] | None) -> tuple[float, float] | None:
-    """Turn ``--bedScoreFilter`` into a (min, max) range.
-
-    A single value is an upper limit, with 0 as the lower one.
-    """
-    if not values:
-        return None
-    if len(values) > 2:
-        msg = "give a single value (an upper limit) or two values (a range)"
-        raise typer.BadParameter(msg, param_hint="--bedScoreFilter")
-    if len(values) == 1:
-        return (0, values[0])
-    return (values[0], values[1])
-
-
 @app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
@@ -100,20 +85,6 @@ def main(
             ),
         ),
     ] = False,
-    bed_score_filter: Annotated[
-        list[float] | None,
-        typer.Option(
-            "--bedScoreFilter",
-            metavar="FLOAT",
-            rich_help_panel=_SCORING,
-            help=(
-                "Provide a range (two values separated by space), or a threshold "
-                "(upper limit) of score to determine which input features to consider "
-                "for scoring. Used only when the input is a BED file containing scores "
-                "(stored in the 5th column)."
-            ),
-        ),
-    ] = None,
     max_region: Annotated[
         int,
         typer.Option(
@@ -151,7 +122,6 @@ def main(
             features=features,
             overlap_policy=overlap_policy,
             center_scores=center_scores,
-            bed_score_filter=bed_score_filter,
             max_region=max_region,
             normalize_gene_lengths=normalize_gene_lengths,
             number_of_processors=number_of_processors,
@@ -159,7 +129,6 @@ def main(
     else:
         warnings.filterwarnings("ignore")
 
-    bounds = score_bounds(bed_score_filter)
     adata = validate_anndata(ad.read_h5ad(input), input)
 
     adata_out = FeatureScorer(
@@ -168,7 +137,6 @@ def main(
         mode="aggregate",
         overlap_policy=overlap_policy.value,
         center_scores=center_scores,
-        bedFilter=bounds,
         decay=None,
         max_region=max_region,
         gene_body=True,

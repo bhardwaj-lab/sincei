@@ -37,5 +37,12 @@ fn _sincei(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Export
     m.add_function(wrap_pyfunction!(counting::coverage::bulk_coverage, m)?)?;
 
+    // Genome annotation parsing
+    m.add_function(wrap_pyfunction!(
+        annotation::annotation_py::parse_annotation,
+        m
+    )?)?;
+    m.add_class::<annotation::annotation_py::GenomeAnnotation>()?;
+
     Ok(())
 }

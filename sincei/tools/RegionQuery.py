@@ -6,61 +6,56 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     import anndata as ad
     import pandas as pd
-    from deeptoolsintervals import GTF
+
+    from sincei._sincei import GenomeAnnotation
 
     Overlaps = dict[str, list[tuple[str, str]] | None]
 
 
-## get overlap of GTF object (deeptoolsintervals) with anndata object (from sincei)
-## output: dict (region->gene mapping)
-def get_gtf_adata_olaps(adata: ad.AnnData, gtf: GTF) -> Overlaps:
-    r"""Get overlaps between AnnData features and GTF regions.
+def get_gtf_adata_olaps(adata: ad.AnnData, annotation: GenomeAnnotation) -> Overlaps:
+    r"""Get overlaps between AnnData features and annotation regions.
 
     Parameters
     ----------
     adata : AnnData
         AnnData with regions to overlap.
 
-    gtf : GTF
-        GTF object with regions to overlap.
+    annotation : GenomeAnnotation
+        Parsed BED/GTF/GFF file, from ``sincei._sincei.parse_annotation``.
 
     Returns
     -------
     dict
-        Dictionary with overlaps for each feature in adata.
+        For each feature in adata, the (name, strand) of the overlapping annotation
+        features, or None if there are none.
 
     Examples
     --------
-    >>> test = Tester()
-    >>> gtf = GTF(test.gtfFile)
-    >>> adata = sc.read_10x_mtx(
-    ...     test.input_matrix_dir, var_names="gene_symbols", cache=True
-    ... )
-    >>> olaps = get_gtf_adata_olaps(adata, gtf)
-    >>> olaps["Gm37381"]
-    [('ENSMUSG00000064372', '+'), ('ENSMUSG00000064372', '-')]
+    >>> from sincei._sincei import parse_annotation
+    >>> annotation = parse_annotation(["Chrna9.gtf"])
+    >>> olaps = get_gtf_adata_olaps(adata, annotation)
+    >>> olaps["chr5_100000_200000::None"]
+    [('ENSMUSG00000029205', '+')]
     """
+    features = annotation.features()
+    names, strands = features["name"], features["strand"]
     var = cast("pd.DataFrame", adata.var)
     olaps: Overlaps = dict.fromkeys(var.index)
     for i, key in enumerate(var.index):
         try:
             chrom, start, end = (
-                var["chrom"].iloc[i],
+                str(var["chrom"].iloc[i]),
                 int(var["start"].iloc[i]),
                 int(var["end"].iloc[i]),
             )
-            ol = gtf.findOverlaps(chrom, start, end, includeStrand=True)
-            if ol:
-                genelist = [(x[2], x[5]) for x in ol]
-                olaps[key] = genelist
-        except ValueError:  # noqa: PERF203
-            olaps[key] = None
+        except ValueError:
             continue
+        hits = annotation.find_overlaps(chrom, start, end)
+        if hits:
+            olaps[key] = [(names[j], strands[j]) for j in hits]
     return olaps
 
 
-## Search for bins by gene name, return either the first bin (promoter) or all
-## overlapping bins
 def get_bins_by_gene(
     dict: Overlaps, gene: str, firstBin: bool = False
 ) -> str | list[str]:
@@ -103,8 +98,7 @@ def get_bins_by_gene(
             else:
                 strand = None
 
-    # if firstBin is asked, sort the bins by start pos and
-    # return only the firstBin by strand
+    # if firstBin, sort the bins by start pos and return only the firstBin by strand
     if klist and firstBin:
         spos = [x.split("_")[1] for x in klist]
         first_bin = spos.index(min(spos)) if strand == "+" else spos.index(max(spos))

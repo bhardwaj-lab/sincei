@@ -11,8 +11,8 @@ import anndata as ad
 import pandas as pd
 import scanpy as sc
 import typer
-from deeptoolsintervals import GTF
 
+from sincei import _sincei as internal
 from sincei.utils import gini
 
 from ._common_args import (
@@ -87,13 +87,13 @@ def within_bounds(frame: pd.DataFrame, bounds: Bounds) -> pd.Series:
 
 def blacklisted_regions(var: pd.DataFrame, blacklist: list[str]) -> list[str]:
     """Names of the regions in ``var`` that overlap a region of ``blacklist``."""
-    tree = GTF(blacklist)
+    annotation = internal.parse_annotation(blacklist)
     return [
         name
         for name, chrom, start, end in zip(
             var.index, var["chrom"].astype(str), var["start"], var["end"], strict=True
         )
-        if tree.findOverlaps(chrom, int(start), int(end))
+        if annotation.find_overlaps(chrom, int(start), int(end))
     ]
 
 

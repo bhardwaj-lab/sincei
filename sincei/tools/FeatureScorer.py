@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, cast
 import anndata as ad
 import numpy as np
 import pandas as pd
-from deeptoolsintervals import GTF
 from scipy import sparse
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
+
+from sincei import _sincei as internal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -31,42 +32,22 @@ def _var(adata: ad.AnnData) -> pd.DataFrame:
 
 def _parse_gtf_genes(gtf_path: str) -> pd.DataFrame:
     """
-    Parse a GTF/BED file using deeptoolsintervals and extract gene/feature
-    information.
+    Parse a BED/GTF/GFF file and extract gene/feature information.
 
-    Returns a DataFrame with name, chrom, start, end, strand, and score.
-    For BED files, score corresponds to the 5th column (e.g. bedFilter value).
-    For GTF files, score is typically the file name and can be ignored.
+    Returns a DataFrame with name, chrom, start, end and strand, in file order.
+    A GTF/GFF gives one row per gene. A BED region without a name is named
+    ``chrom:start-end``.
     """
-    gtf = GTF(
-        gtf_path,
-        exonID="exon",
-        transcriptID="transcript",
-        transcript_id_designator="transcript_id",
-        keepExons=False,
+    genes = pd.DataFrame(internal.parse_annotation([gtf_path]).features())
+    unnamed = genes["name"].isna()
+    genes.loc[unnamed, "name"] = (
+        genes["chrom"]
+        + ":"
+        + genes["start"].astype(str)
+        + "-"
+        + genes["end"].astype(str)
     )
-
-    genes = []
-    for chrom in gtf.chroms:
-        # Get all features on chromosome (avoid overflow for int32)
-        for i, gene in enumerate(gtf.findOverlaps(chrom, 0, 2**31 - 1)):
-            # gene is a tuple: (start, end, name, source/strand, exons, score)
-            gene_start = gene[0]
-            gene_end = gene[1]
-            gene_name = gene[2] if len(gene) > 2 else f"Feature_{i}"
-            gene_strand = gene[3] if len(gene) > 3 else "+"
-            gene_score = gene[5] if len(gene) > 5 else None
-
-            genes.append({
-                "name": gene_name,
-                "chrom": chrom,
-                "start": gene_start,
-                "end": gene_end,
-                "strand": gene_strand,
-                "score": gene_score,
-            })
-
-    return pd.DataFrame(genes)
+    return genes[["name", "chrom", "start", "end", "strand"]]
 
 
 def get_indices_overlapping(
@@ -387,7 +368,6 @@ def FeatureScorer(
     gtf: str,
     mode: str,
     overlap_policy: str = "partial",
-    bedFilter: Sequence[float] | None = None,
     decay: float | None = 0.75,
     max_region: int = 100,
     gene_body: bool | None = None,
@@ -435,9 +415,6 @@ def FeatureScorer(
         Whether to scale the scores to unit variance and center them around zero, by
         default False. This destroys the sparsity of the output matrix and can lead to
         increased memory usage. Use with caution for large datasets.
-    bedFilter : list, optional
-        Optional parameter to select features with a given "score", in case the input
-        BED file already has a `score` column (column 5).
     decay : float, optional
         Decay parameter for calculating the decay weights, by default 0.75. Higher
         values lead to faster decay. Weights are calculated as
@@ -483,19 +460,6 @@ def FeatureScorer(
     if genes_df.empty:
         msg = "No genes/features found in the input file."
         raise ValueError(msg)
-
-    # Filter VCR BED by bedFilter value
-    if bedFilter is not None:
-        genes_df = genes_df[
-            (pd.to_numeric(genes_df["score"], errors="coerce") >= bedFilter[0])
-            & (pd.to_numeric(genes_df["score"], errors="coerce") <= bedFilter[1])
-        ]
-        if genes_df.empty:
-            msg = (
-                f"No features found with score values {bedFilter} in the input BED "
-                "file. \nCheck the 5th column of the BED file for available scores."
-            )
-            raise ValueError(msg)
 
     # Ensure adata.var coordinate columns are numeric (may be categorical from h5ad)
     for col in ["start", "end"]:
