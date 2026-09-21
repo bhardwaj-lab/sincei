@@ -863,6 +863,15 @@ pub fn run_bulk_coverage(
                     }
                 }
 
+                if values.is_empty() {
+                    eprintln!(
+                        "WARNING: no reads were found for group {:?}.
+                        {} contains no signal",
+                        group_name,
+                        output_path.display()
+                    );
+                }
+
                 match out_format {
                     OutputFormat::BigWig => {
                         write_bigwig(&output_path, &chrom_sizes, values)?;
@@ -912,6 +921,24 @@ fn write_bigwig(
 
     let writer = BigWigWrite::create_file(path, chrom_map)
         .with_context(|| format!("failed to create bigWig file: {}", path.display()))?;
+
+    // bigtools rejects an empty input, and hangs on a source that yields no
+    // chromosome, so a group without signal gets one zero-valued base instead.
+    let values = if values.is_empty() {
+        let (chrom, _) = chrom_sizes
+            .first()
+            .context("no chromosome to write a bigWig for")?;
+        vec![(
+            chrom.clone(),
+            Value {
+                start: 0,
+                end: 1,
+                value: 0.0,
+            },
+        )]
+    } else {
+        values
+    };
 
     let iter = BedParserStreamingIterator::wrap_infallible_iter(values.into_iter(), false);
 
@@ -1987,6 +2014,19 @@ mod tests {
 
         assert!(err.contains("--mnase"), "{err}");
         assert!(err.contains("single-end"), "{err}");
+    }
+
+    #[test]
+    fn a_group_without_signal_gets_a_bigwig_without_data() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("empty.bw");
+
+        write_bigwig(&path, &[("chr1".to_string(), 1_000)], Vec::new()).unwrap();
+
+        assert!(
+            path.metadata().unwrap().len() > 0,
+            "no bigWig header written"
+        );
     }
 
     #[test]
