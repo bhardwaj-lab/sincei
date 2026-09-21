@@ -319,9 +319,10 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
 /// `group_info_path`: TSV with a header line, in either of two layouts, told
 /// apart by the header's column count:
 /// `sample\tbarcode\tgroup`, or `sample::barcode\tUMAP1\tUMAP2\tgroup` as
-/// `scClusterCells` writes it. Without it the reads of every barcode are pooled
-/// into one track, `{output_prefix}.{ext}`.
-/// 
+/// `scClusterCells` writes it. Without it every read that carries `bc_tag` is
+/// pooled into one track, `{output_prefix}.{ext}`, whatever its barcode. Reads
+/// lacking it are not counted.
+///
 /// Mean and Frequency normalization are rejected without a `group_info_path`,
 /// since they rely on the number of cells in each group for normalization.
 ///
@@ -438,17 +439,46 @@ pub fn run_bulk_coverage(
             .collect()
     });
 
+    // A BAM with no listed cell would be read only to drop every read, so it is
+    // not read at all.
+    let bam_is_read: Vec<bool> = match (&parsed, &group_ids) {
+        (Some(parsed), None) => {
+            let mut is_read = vec![false; bam_paths.len()];
+            for &(bam_idx, _, _) in &parsed.cells {
+                is_read[bam_idx] = true;
+            }
+            is_read
+        }
+        _ => vec![true; bam_paths.len()],
+    };
+    for (&(path, label), _) in bam_paths
+        .iter()
+        .zip(&bam_is_read)
+        .filter(|(_, is_read)| !**is_read)
+    {
+        eprintln!(
+            "WARNING: no cell of sample {label:?} is in the group info file; {} is not read",
+            path.display()
+        );
+    }
+    let read_bams: Vec<(&Path, &str)> = bam_paths
+        .iter()
+        .zip(&bam_is_read)
+        .filter(|(_, is_read)| **is_read)
+        .map(|(bam, _)| *bam)
+        .collect();
+
     // --mnase reads the fragment from the two mates, so a single-end library
     // has nothing to take a centre from. Checked before any counting, so the
     // run fails instead of writing an empty track.
     if matches!(read_mode, ReadMode::MNase) {
-        ensure_paired_end(bam_paths, "--mnase")?;
+        ensure_paired_end(&read_bams, "--mnase")?;
     }
 
     // Resolved before the record options, which ask it whether the gapless
     // blocks are worth computing.
     let adjust = AdjustRead {
-        extend_reads: resolve_extend_reads(extend_reads, bam_paths)?,
+        extend_reads: resolve_extend_reads(extend_reads, &read_bams)?,
         center_reads,
         max_paired_fragment_length: qc_filter.and_then(|f| f.max_fragment_length),
     };
@@ -458,7 +488,7 @@ pub fn run_bulk_coverage(
     let bc_tag_parsed = parse_tag(bc_tag)?;
     let umi_tag_parsed = umi_tag.map(parse_tag).transpose()?;
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
-    let all_bams: Vec<&Path> = bam_paths.iter().map(|(p, _)| *p).collect();
+    let all_bams: Vec<&Path> = read_bams.iter().map(|(p, _)| *p).collect();
     ensure_barcode_tags_present(&all_bams, bc_tag_parsed, umi_tag_parsed)?;
 
     // A genome from the wrong assembly makes every motif lookup wrong, so this
@@ -486,7 +516,7 @@ pub fn run_bulk_coverage(
 
     // Bin index from first BAM header.
     let chrom_sizes: Vec<(String, usize)> = {
-        let (first, _) = bam_paths[0];
+        let (first, _) = read_bams[0];
         let hdr = read_bam_header(first)?;
         hdr.reference_sequences()
             .iter()
@@ -538,6 +568,7 @@ pub fn run_bulk_coverage(
     let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
         .iter()
         .enumerate()
+        .filter(|&(bam_idx, _)| bam_is_read[bam_idx])
         .flat_map(|(bam_idx, &(bam_path, _))| {
             windows.iter().flat_map(move |(chrom, win_start, win_end)| {
                 (*win_start..*win_end)
@@ -1044,8 +1075,9 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
 /// `group_info` is the path to a TSV file with a header line, in either of two
 /// layouts, told apart by the header's column count: `sample`, `barcode`,
 /// `group`; or `sample::barcode`, `UMAP1`, `UMAP2`, `group` as
-/// `scClusterCells` writes it. `None` pools the reads of every barcode into one
-/// track, `{output_prefix}.{ext}`, and rejects Mean and Frequency normalization.
+/// `scClusterCells` writes it. `None` pools every read that carries `bc_tag`
+/// into one track, `{output_prefix}.{ext}`, whatever its barcode (a read without
+/// the tag is not counted), and rejects Mean and Frequency normalization.
 ///
 /// Returns the list of output file paths created.
 #[pyfunction(signature = (
@@ -1971,6 +2003,50 @@ mod tests {
                 .to_string();
             assert!(err.contains("group info file"), "{err}");
         }
+    }
+
+    #[test]
+    fn a_bam_without_listed_cells_is_not_read() {
+        let dir = TempDir::new().unwrap();
+        let group_info = write_group_info(&dir, "sample\tbarcode\tgroup\ntest_i1\tACGGTAAT\tg1\n");
+        let i1 = testdata().join("test_i1.bam");
+        // Reading it would fail, so the run only succeeds if it is skipped.
+        let missing = dir.path().join("missing.bam");
+
+        let files = run_bulk_coverage(
+            &[(i1.as_path(), "test_i1"), (missing.as_path(), "test_i2")],
+            Some(group_info.as_path()),
+            dir.path().join("cov").to_str().unwrap(),
+            100_000,
+            100_000,
+            "BC",
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            NormalizeMethod::None,
+            1.0,
+            OutputFormat::BedGraph,
+            ReadMode::Normal,
+            1,
+            1_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(files, vec![dir.path().join("cov_g1.bedgraph")]);
+        assert!(
+            !bedgraph_rows(&files[0]).is_empty(),
+            "the listed cell has no signal"
+        );
     }
 
     fn bedgraph_rows(path: &Path) -> Vec<(String, u32, u32, f64)> {
