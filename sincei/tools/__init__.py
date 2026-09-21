@@ -11,14 +11,11 @@ if TYPE_CHECKING:
         ExponentialFamily,
         FeatureScorer,
         FragmentFFT,
-        GetStats,
         MultiModalClustering,
         ReadCounter,
         RegionQuery,
         TopicModels,
-        Utilities,
         VCRfinder,
-        WriteBedGraph,
     )
 
 __all__ = [
@@ -26,14 +23,11 @@ __all__ = [
     "ExponentialFamily",
     "FeatureScorer",
     "FragmentFFT",
-    "GetStats",
     "MultiModalClustering",
     "ReadCounter",
     "RegionQuery",
     "TopicModels",
-    "Utilities",
     "VCRfinder",
-    "WriteBedGraph",
 ]
 
 
