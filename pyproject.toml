@@ -77,7 +77,8 @@ doc = [
     "ipywidgets",
 ]
 test = [
-    "pytest"
+    "pytest",
+    "pybigtools",
 ]
 
 # Maturin-specific configuration
