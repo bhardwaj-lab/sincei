@@ -228,6 +228,67 @@ pub(crate) fn warn_unknown_group(group: &[u8]) {
     }
 }
 
+/// The samples of a run: one per BAM, or under `--groupTag` one per `@RG` ID of
+/// a single merged BAM.
+pub(crate) struct Samples {
+    labels: Vec<String>,
+    /// `@RG` ID -> sample, under `--groupTag`. The keys are owned and looked up
+    /// by `&[u8]`, so a read's lookup does not allocate.
+    read_groups: Option<AHashMap<Vec<u8>, usize>>,
+}
+
+impl Samples {
+    /// One sample per `(path, label)`, or with `group_tag` one per `@RG` ID of
+    /// the one BAM allowed.
+    pub(crate) fn new(bam_paths: &[(&Path, &str)], group_tag: Option<&str>) -> Result<Self> {
+        if group_tag.is_none() {
+            return Ok(Self {
+                labels: bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
+                read_groups: None,
+            });
+        }
+        anyhow::ensure!(
+            bam_paths.len() == 1,
+            "--groupTag expects a single merged BAM, but {} were given",
+            bam_paths.len()
+        );
+        let (path, _) = bam_paths[0];
+        let ids = read_group_ids(&read_bam_header(path)?, path)?;
+        Ok(Self {
+            labels: ids
+                .iter()
+                .map(|id| String::from_utf8_lossy(id).into_owned())
+                .collect(),
+            read_groups: Some(ids.into_iter().enumerate().map(|(i, id)| (id, i)).collect()),
+        })
+    }
+
+    pub(crate) fn labels(&self) -> &[String] {
+        &self.labels
+    }
+
+    pub(crate) fn by_read_group(&self) -> bool {
+        self.read_groups.is_some()
+    }
+
+    /// A read's sample index: its read group under `--groupTag`, else its BAM.
+    ///
+    /// `None` for a read without the group tag, and, with a warning, for a read
+    /// whose group the header does not declare.
+    #[inline]
+    pub(crate) fn index(&self, bam_idx: usize, group: Option<&[u8]>) -> Option<usize> {
+        let Some(read_groups) = &self.read_groups else {
+            return Some(bam_idx);
+        };
+        let group = group?;
+        let sample = read_groups.get(group).copied();
+        if sample.is_none() {
+            warn_unknown_group(group);
+        }
+        sample
+    }
+}
+
 /// Read just the header of a BAM file, tolerating non-compliant SAM header.
 /// Builds an indexed reader so a missing `.bai` is reported as an error.
 pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
@@ -657,5 +718,49 @@ mod tests {
         let text = b"@RG\tID:same\n@RG\tID:same\n";
         let err = read_groups_from_text(text).unwrap_err().to_string();
         assert!(err.contains("duplicate read group"), "{err}");
+    }
+
+    // Samples
+
+    #[test]
+    fn without_group_tag_each_bam_is_a_sample() {
+        let (a, b) = (test_bam(), testdata().join("test_i2.bam"));
+        let samples = Samples::new(&[(a.as_path(), "s1"), (b.as_path(), "s2")], None).unwrap();
+
+        assert_eq!(samples.labels(), ["s1", "s2"]);
+        assert!(!samples.by_read_group());
+        assert_eq!(samples.index(1, None), Some(1));
+        assert_eq!(samples.index(1, Some(b"test_i1")), Some(1));
+    }
+
+    #[test]
+    fn with_group_tag_each_read_group_is_a_sample() {
+        let merged = testdata().join("test_i1_i2.bam");
+        let samples = Samples::new(&[(merged.as_path(), "merged")], Some("RG")).unwrap();
+
+        assert_eq!(samples.labels(), ["test_i1", "test_i2"]);
+        assert!(samples.by_read_group());
+        assert_eq!(samples.index(0, Some(b"test_i1")), Some(0));
+        assert_eq!(samples.index(0, Some(b"test_i2")), Some(1));
+    }
+
+    #[test]
+    fn a_read_without_or_with_an_undeclared_group_has_no_sample() {
+        let merged = testdata().join("test_i1_i2.bam");
+        let samples = Samples::new(&[(merged.as_path(), "merged")], Some("RG")).unwrap();
+
+        assert_eq!(samples.index(0, None), None);
+        assert_eq!(samples.index(0, Some(b"no_such_group")), None);
+    }
+
+    #[test]
+    fn group_tag_with_several_bams_is_rejected() {
+        let (a, b) = (test_bam(), testdata().join("test_i2.bam"));
+        let err = Samples::new(&[(a.as_path(), "s1"), (b.as_path(), "s2")], Some("RG"))
+            .err()
+            .unwrap()
+            .to_string();
+
+        assert!(err.contains("single merged BAM"), "{err}");
     }
 }

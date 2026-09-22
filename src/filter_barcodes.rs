@@ -10,8 +10,7 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, thread_pool,
-    warn_unknown_group,
+    BamWorker, Samples, ensure_barcode_tags_present, read_bam_header, thread_pool,
 };
 use crate::bam::filters::is_blacklisted;
 use crate::bam::sc_record::{get_tag_bytes, parse_tag};
@@ -63,11 +62,7 @@ fn run_filter_barcodes(
     // With --groupTag a barcode alone no longer names a cell, so the reported
     // unit becomes `group::barcode`. The valid groups are the BAM's own @RG IDs.
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
-    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
-        Some(_) => Some(read_group_ids(&header, bamfile)?),
-        None => None,
-    };
-    let known_groups: AHashSet<&[u8]> = group_ids.iter().flatten().map(Vec::as_slice).collect();
+    let samples = Samples::new(&[(bamfile, "")], group_tag)?;
 
     let chrom_sizes: Vec<(String, usize)> = header
         .reference_sequences()
@@ -182,8 +177,7 @@ fn run_filter_barcodes(
                                 let Some(group) = get_tag_bytes(&record, gtag)? else {
                                     continue;
                                 };
-                                if !known_groups.contains(group) {
-                                    warn_unknown_group(group);
+                                if samples.index(0, Some(group)).is_none() {
                                     continue;
                                 }
                                 composite.clear();

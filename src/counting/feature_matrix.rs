@@ -24,8 +24,8 @@ use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
 use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    read_group_ids, thread_pool, warn_unknown_group,
+    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -139,36 +139,9 @@ pub fn count_bam_features(
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let region_filter = params.region.as_deref().map(parse_region).transpose()?;
 
-    // With --groupTag the sample axis comes from the reads' group tag rather
-    // than from which BAM they were read out of, so exactly one input is
-    // allowed and the row space is the header's @RG IDs x barcodes.
-    let group_ids: Option<Vec<Vec<u8>>> = if group_tag.is_some() {
-        anyhow::ensure!(
-            bam_paths.len() == 1,
-            "--groupTag expects a single merged BAM, but {} were given",
-            bam_paths.len()
-        );
-        let (path, _) = bam_paths[0];
-        Some(read_group_ids(&read_bam_header(path)?, path)?)
-    } else {
-        None
-    };
-    let group_index: AHashMap<&[u8], usize> = group_ids
-        .iter()
-        .flatten()
-        .enumerate()
-        .map(|(i, id)| (id.as_slice(), i))
-        .collect();
-
-    // Row labels, and hence the row count: group IDs when grouping, otherwise
-    // one block per input BAM.
-    let sample_labels: Vec<String> = match &group_ids {
-        Some(ids) => ids
-            .iter()
-            .map(|id| String::from_utf8_lossy(id).into_owned())
-            .collect(),
-        None => bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
-    };
+    // With --groupTag the samples are the merged BAM's @RG IDs, else the BAMs.
+    let samples = Samples::new(bam_paths, group_tag)?;
+    let sample_labels = samples.labels();
     let n_samples = sample_labels.len();
 
     // `Vec<String>` -> `&[&str]` for the parser, which borrows the type names.
@@ -393,17 +366,8 @@ pub fn count_bam_features(
                         // Under --groupTag the read's own group tag picks the row
                         // block, so two reads sharing a barcode but coming from
                         // different source samples stay separate cells.
-                        let sample_idx = if group_tag_parsed.is_some() {
-                            let Some(group) = sc_rec.group else {
-                                continue;
-                            };
-                            let Some(&group_idx) = group_index.get(group) else {
-                                warn_unknown_group(group);
-                                continue;
-                            };
-                            group_idx
-                        } else {
-                            bam_idx
+                        let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
+                            continue;
                         };
                         // Without a list a barcode is numbered only now, so a
                         // barcode whose reads are all filtered out gets no row.
@@ -463,13 +427,13 @@ pub fn count_bam_features(
     // With a whitelist every sample x barcode is a row; without one, only the
     // (sample, barcode) pairs that have counts.
     let (global_acc, cells) = match barcodes {
-        Some(barcodes) => (global_acc, product_cells(&sample_labels, barcodes)),
+        Some(barcodes) => (global_acc, product_cells(sample_labels, barcodes)),
         None => {
             let found = run_barcodes
                 .into_inner()
                 .unwrap_or_else(PoisonError::into_inner)
                 .into_barcodes();
-            observed_rows(global_acc, &sample_labels, &found)
+            observed_rows(global_acc, sample_labels, &found)
         }
     };
     let n_cells = cells.len();

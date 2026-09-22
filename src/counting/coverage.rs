@@ -27,8 +27,8 @@ use crate::annotation::region_index::{
     bins_touched, build_bigwig_index, build_bigwig_index_in_window,
 };
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    read_group_ids, thread_pool, warn_unknown_group,
+    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -370,42 +370,13 @@ pub fn run_bulk_coverage(
         group, so they need a group info file"
     );
 
-    // With --groupTag the samples come from the reads' group tag rather than
-    // from separate files, so the group-info `sample` column names @RG IDs and
-    // exactly one BAM is accepted.
-    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
-        Some(_) => {
-            anyhow::ensure!(
-                bam_paths.len() == 1,
-                "--groupTag expects a single merged BAM, but {} were given",
-                bam_paths.len()
-            );
-            let (path, _) = bam_paths[0];
-            Some(read_group_ids(&read_bam_header(path)?, path)?)
-        }
-        None => None,
-    };
-    let group_names: Vec<String> = group_ids
-        .iter()
-        .flatten()
-        .map(|id| String::from_utf8_lossy(id).into_owned())
-        .collect();
-
-    // The sample axis the group-info file is matched against.
-    let sample_labels: Vec<&str> = match &group_ids {
-        Some(_) => group_names.iter().map(String::as_str).collect(),
-        None => bam_paths.iter().map(|(_, l)| *l).collect(),
-    };
+    // With --groupTag the samples are the merged BAM's @RG IDs, else the BAMs;
+    // the group-info `sample` column names them.
+    let samples = Samples::new(bam_paths, group_tag)?;
+    let sample_labels: Vec<&str> = samples.labels().iter().map(String::as_str).collect();
     let parsed = group_info_path
         .map(|path| parse_group_info(path, &sample_labels))
         .transpose()?;
-
-    let group_index: AHashMap<&[u8], usize> = group_ids
-        .iter()
-        .flatten()
-        .enumerate()
-        .map(|(i, id)| (id.as_slice(), i))
-        .collect();
 
     if parsed
         .as_ref()
@@ -440,8 +411,8 @@ pub fn run_bulk_coverage(
 
     // A BAM with no listed cell would be read only to drop every read, so it is
     // not read at all.
-    let bam_is_read: Vec<bool> = match (&parsed, &group_ids) {
-        (Some(parsed), None) => {
+    let bam_is_read: Vec<bool> = match (&parsed, samples.by_read_group()) {
+        (Some(parsed), false) => {
             let mut is_read = vec![false; bam_paths.len()];
             for &(bam_idx, _, _) in &parsed.cells {
                 is_read[bam_idx] = true;
@@ -704,17 +675,8 @@ pub fn run_bulk_coverage(
                         };
                         // Under --groupTag the read's own group picks the sample,
                         // so a barcode shared across source samples stays two cells.
-                        let sample_idx = if group_tag_parsed.is_some() {
-                            let Some(group) = sc_rec.group else {
-                                continue;
-                            };
-                            let Some(&group_i) = group_index.get(group) else {
-                                warn_unknown_group(group);
-                                continue;
-                            };
-                            group_i
-                        } else {
-                            bam_idx
+                        let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
+                            continue;
                         };
                         let cell_idx = match &cell_index {
                             Some(index) => {

@@ -9,8 +9,8 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    read_group_ids, thread_pool, warn_unknown_group,
+    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
+    thread_pool,
 };
 use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
@@ -133,16 +133,7 @@ pub fn run_filter_stats(
     // With --groupTag the row unit is `group::barcode`: a merged BAM's reads
     // carry their sample of origin, and the valid values are its @RG IDs.
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
-    let group_ids: Option<Vec<Vec<u8>>> = match group_tag {
-        Some(_) => Some(read_group_ids(&header, bam_path)?),
-        None => None,
-    };
-    let group_index: AHashMap<&[u8], usize> = group_ids
-        .iter()
-        .flatten()
-        .enumerate()
-        .map(|(i, id)| (id.as_slice(), i))
-        .collect();
+    let samples = Samples::new(&[(bam_path, "")], group_tag)?;
 
     let skip_set: AHashSet<&[u8]> = chr_to_skip.iter().map(|s| s.as_bytes()).collect();
     let chrom_sizes: Vec<(String, usize)> = header
@@ -159,7 +150,7 @@ pub fn run_filter_stats(
     let stride = bin_size.saturating_add(distance_between_bins).max(1);
     let n_barcodes = barcodes.len();
     // One row block per group when grouping, otherwise a single block.
-    let n_rows = group_ids.as_ref().map_or(1, Vec::len) * n_barcodes;
+    let n_rows = samples.labels().len() * n_barcodes;
 
     // Build chunk work list sorted by descending size.
     // Each chunk iterates the sampling bins whose start falls within it, and
@@ -268,18 +259,10 @@ pub fn run_filter_stats(
                             // Under --groupTag the read's own group picks the row
                             // block, so a barcode shared by two source samples
                             // stays two rows.
-                            let cell_i = if group_tag_parsed.is_some() {
-                                let Some(group) = sc_rec.group else {
-                                    continue;
-                                };
-                                let Some(&group_i) = group_index.get(group) else {
-                                    warn_unknown_group(group);
-                                    continue;
-                                };
-                                group_i * n_barcodes + local_bc
-                            } else {
-                                local_bc
+                            let Some(sample) = samples.index(0, sc_rec.group) else {
+                                continue;
                             };
+                            let cell_i = sample * n_barcodes + local_bc;
 
                             let raw_flags = u16::from(record.flags());
                             let s = &mut local_stats[cell_i];
@@ -394,15 +377,14 @@ pub fn run_filter_stats(
 
     // Row labels: bare barcodes normally, `group::barcode` when grouping, so the
     // caller can use them as Cell_IDs without knowing which mode ran.
-    let row_labels: Vec<String> = match &group_ids {
-        None => barcodes.to_vec(),
-        Some(ids) => ids
+    let row_labels: Vec<String> = if samples.by_read_group() {
+        samples
+            .labels()
             .iter()
-            .flat_map(|id| {
-                let group = String::from_utf8_lossy(id).into_owned();
-                barcodes.iter().map(move |bc| format!("{group}::{bc}"))
-            })
-            .collect(),
+            .flat_map(|group| barcodes.iter().map(move |bc| format!("{group}::{bc}")))
+            .collect()
+    } else {
+        barcodes.to_vec()
     };
     Ok((row_labels, stat_vecs))
 }
