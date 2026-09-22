@@ -237,6 +237,21 @@ pub(super) fn observed_rows(
     (acc, cells)
 }
 
+/// Add two chunks' `(cell, feature) -> count` maps together.
+///
+/// The smaller map is drained into the larger: merging costs one hash lookup
+/// per entry moved, so moving the shorter side does strictly less work.
+pub(super) fn merge_counts(
+    a: AHashMap<(usize, usize), u32>,
+    b: AHashMap<(usize, usize), u32>,
+) -> AHashMap<(usize, usize), u32> {
+    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
+    for (key, val) in drain {
+        *keep.entry(key).or_insert(0) += val;
+    }
+    keep
+}
+
 /// Build a sparse count matrix in CSR format from a HashMap COO accumulator.
 pub(super) fn build_csr(
     accumulator: &AHashMap<(usize, usize), u32>,

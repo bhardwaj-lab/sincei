@@ -22,6 +22,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use super::count_utils::merge_counts;
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{
@@ -762,20 +763,7 @@ pub fn run_bulk_coverage(
                     Ok(local_acc)
                 },
             )
-            .reduce(
-                || Ok(AHashMap::new()),
-                |a, b| {
-                    let (a, b) = (a?, b?);
-                    // Drain the smaller map into the larger. Merging costs one
-                    // hash lookup per entry moved, so moving the shorter side
-                    // does strictly less work.
-                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
-                    for (key, val) in drain {
-                        *keep.entry(key).or_insert(0) += val;
-                    }
-                    Ok(keep)
-                },
-            )
+            .reduce(|| Ok(AHashMap::new()), |a, b| Ok(merge_counts(a?, b?)))
     })?;
 
     // Aggregate per (group, bin)

@@ -17,7 +17,8 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 
 use super::count_utils::{
-    BarcodeNumbers, build_csr, observed_rows, product_cells, to_run_numbers, write_counts_anndata,
+    BarcodeNumbers, build_csr, merge_counts, observed_rows, product_cells, to_run_numbers,
+    write_counts_anndata,
 };
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
@@ -456,20 +457,7 @@ pub fn count_bam_features(
                     Ok(local_acc)
                 },
             )
-            .reduce(
-                || Ok(AHashMap::new()),
-                |a, b| {
-                    let (a, b) = (a?, b?);
-                    // Drain the smaller map into the larger. Merging costs one
-                    // hash lookup per entry moved, so moving the shorter side
-                    // does strictly less work.
-                    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
-                    for (key, val) in drain {
-                        *keep.entry(key).or_insert(0) += val;
-                    }
-                    Ok(keep)
-                },
-            )
+            .reduce(|| Ok(AHashMap::new()), |a, b| Ok(merge_counts(a?, b?)))
     })?;
 
     // With a whitelist every sample x barcode is a row; without one, only the
