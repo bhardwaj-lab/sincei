@@ -269,32 +269,31 @@ impl FromStr for DupMethod {
     }
 }
 
-// Key tuple: (barcode, umi, fragment_start, fragment_end, mate_reference, strand)
-//
-// Deduplication is per *fragment*, not per read: two reads that begin at the
-// same base can belong to different templates, so the key is built from TLEN
-// and the mate position rather than from this read's own alignment span.
-//
-// `fragment_start` and `fragment_end` are `Option` because the start-only
-// methods key on the 5' end alone (the fragment start for a forward read,
-// the fragment end for a reverse one) leaving the other side out of the key.
-//
-// The barcode/UMI bytes are copied into the key only here, when a record is
-// actually deduplicated. The hot path borrows them from the record.
-//
-// This read's own chromosome is deliberately *not* part of the key: each
-// `DuplicateFilter` lives for exactly one work chunk, and every chunk covers a
-// single chromosome, so it is constant for the filter's whole lifetime. Reads
-// sharing an alignment start always land in the same chunk, so duplicates are
-// never split across filters. The *mate's* reference does vary, and is keyed.
-type DupKey = (
-    Option<Vec<u8>>,
-    Option<Vec<u8>>,
-    Option<usize>,
-    Option<usize>,
-    Option<usize>,
-    bool,
-);
+/// Deduplication is per *fragment*, not per read: two reads that begin at the
+/// same base can belong to different templates, so the key is built from TLEN
+/// and the mate position rather than from this read's own alignment span.
+///
+/// `fragment_start` and `fragment_end` are `Option` because the start-only
+/// methods key on the 5' end alone (the fragment start for a forward read,
+/// the fragment end for a reverse one) leaving the other side out of the key.
+///
+/// The barcode/UMI bytes are copied into the key only here, when a record is
+/// actually deduplicated. The hot path borrows them from the record.
+///
+/// This read's own chromosome is deliberately *not* part of the key: each
+/// `DuplicateFilter` lives for exactly one work chunk, and every chunk covers a
+/// single chromosome, so it is constant for the filter's whole lifetime. Reads
+/// sharing an alignment start always land in the same chunk, so duplicates are
+/// never split across filters. The *mate's* reference does vary, and is keyed.
+#[derive(PartialEq, Eq, Hash)]
+struct DupKey {
+    barcode: Option<Vec<u8>>,
+    umi: Option<Vec<u8>>,
+    fragment_start: Option<usize>,
+    fragment_end: Option<usize>,
+    mate_reference: Option<usize>,
+    is_reverse: bool,
+}
 
 /// Signed observed template length, matching the reference implementation's
 /// `getTLen(read, notAbs=True)`: TLEN when it is set, and otherwise the read's
@@ -396,18 +395,18 @@ impl DuplicateFilter {
             }
         };
 
-        let key: DupKey = (
-            rec.barcode.map(<[u8]>::to_vec),
-            if uses_umi {
+        let key = DupKey {
+            barcode: rec.barcode.map(<[u8]>::to_vec),
+            umi: if uses_umi {
                 rec.umi.map(<[u8]>::to_vec)
             } else {
                 None
             },
-            start,
-            end,
+            fragment_start: start,
+            fragment_end: end,
             mate_reference,
-            rec.is_reverse,
-        );
+            is_reverse: rec.is_reverse,
+        };
         // insert returns true when a new key is inserted.
         self.seen.insert(key)
     }
