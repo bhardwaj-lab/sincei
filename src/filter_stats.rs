@@ -13,7 +13,8 @@ use crate::bam::bam_io::{
     ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
-    DupMethod, DuplicateFilter, RnaStrand, is_blacklisted, rna_strand_filter,
+    DupMethod, DuplicateFilter, RnaStrand, blacklist_chrom_index, read_is_blacklisted,
+    rna_strand_filter,
 };
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 use crate::to_py_err;
@@ -188,6 +189,9 @@ pub fn run_filter_stats(
 
                     let mut dup_filter: Option<DuplicateFilter> =
                         dup_method.map(DuplicateFilter::new);
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom));
 
                     let mut local_stats: Vec<BarcodeStat> =
                         (0..n_rows).map(|_| BarcodeStat::default()).collect();
@@ -267,10 +271,9 @@ pub fn run_filter_stats(
                             s.total += 1;
                             let mut fail = false;
 
-                            if let Some(ref bl) = blacklist
-                                && is_blacklisted(
-                                    bl,
-                                    chrom,
+                            if let Some(idx) = chunk_blacklist
+                                && read_is_blacklisted(
+                                    idx,
                                     sc_rec.alignment_start,
                                     sc_rec.alignment_end,
                                 )

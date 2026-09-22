@@ -522,26 +522,13 @@ impl MotifFilter {
 pub const BLACKLIST_MIN_OVERLAP_PERCENT: usize = 50;
 
 /// Returns `true` if at least [`BLACKLIST_MIN_OVERLAP_PERCENT`] of the read
-/// interval `[start, end)` is covered by blacklisted regions on `chromosome`.
+/// interval `[start, end)` is covered by the blacklisted regions in `idx`.
 ///
 /// Coordinates are 0-based half-open on both sides. The read interval is the
 /// full alignment span, CIGAR is not consulted.
-pub fn is_blacklisted(
-    blacklist_index: &GenomeIndex,
-    chromosome: &str,
-    start: usize,
-    end: usize,
-) -> bool {
-    let Some(idx) = blacklist_chrom_index(blacklist_index, chromosome) else {
-        return false;
-    };
-    read_is_blacklisted(idx, start, end)
-}
-
-/// [`is_blacklisted`] against a chromosome index the caller already holds.
 ///
-/// A work chunk covers one chromosome, so the counting loops resolve the index
-/// once per chunk and no read hashes a chromosome name.
+/// A work chunk covers one chromosome, so callers resolve `idx` once per chunk
+/// with [`blacklist_chrom_index`].
 pub fn read_is_blacklisted(idx: &ChromIndex, start: usize, end: usize) -> bool {
     let read_len = end.saturating_sub(start);
     if read_len == 0 {
@@ -688,6 +675,10 @@ mod tests {
         index
     }
 
+    fn is_blacklisted(bl: &GenomeIndex, chrom: &str, start: usize, end: usize) -> bool {
+        blacklist_chrom_index(bl, chrom).is_some_and(|idx| read_is_blacklisted(idx, start, end))
+    }
+
     #[test]
     fn a_read_inside_a_blacklisted_span_is_blacklisted() {
         let bl = genome_index("chr1", &[(100, 200)]);
@@ -761,20 +752,6 @@ mod tests {
     fn an_empty_read_interval_is_never_blacklisted() {
         let bl = genome_index("chr1", &[(100, 200)]);
         assert!(!is_blacklisted(&bl, "chr1", 150, 150));
-    }
-
-    #[test]
-    fn the_hoisted_call_answers_exactly_as_the_lookup_one() {
-        // What the counting loops call once the chromosome is resolved.
-        let bl = genome_index("chr1", &[(100, 200)]);
-        let idx = blacklist_chrom_index(&bl, "chr1").unwrap();
-        for (start, end) in [(150, 160), (150, 250), (151, 251), (199, 299), (150, 150)] {
-            assert_eq!(
-                read_is_blacklisted(idx, start, end),
-                is_blacklisted(&bl, "chr1", start, end),
-                "[{start}, {end})"
-            );
-        }
     }
 
     // SAM flag bits used below.

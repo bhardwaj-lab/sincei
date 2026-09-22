@@ -13,7 +13,7 @@ use crate::bam::bam_io::{
     BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present, read_bam_header,
     thread_pool,
 };
-use crate::bam::filters::is_blacklisted;
+use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::sc_record::{get_tag_bytes, parse_tag};
 use crate::to_py_err;
 
@@ -49,11 +49,8 @@ fn run_filter_barcodes(
     let whitelist = whitelist.unwrap_or_default();
     let whitelist_is_active = !whitelist.is_empty();
     let whitelist_matcher = WhitelistMatcher::build(&whitelist, min_hamming_dist);
-    let blacklist_index = if let Some(p) = blacklist_file_name {
-        parse_blacklist_bed(p)?
-    } else {
-        GenomeIndex::new()
-    };
+    let blacklist: Option<GenomeIndex> =
+        blacklist_file_name.map(parse_blacklist_bed).transpose()?;
 
     let tag = parse_tag(cell_tag)?;
     ensure_barcode_tags_present(&[bamfile], tag, None)?;
@@ -98,6 +95,9 @@ fn run_filter_barcodes(
                  -> Result<BinsByBarcode> {
                     // One reader per rayon thread rather than per chunk.
                     let (reader, header, _motif) = worker.prepare(bamfile, None)?;
+                    let chunk_blacklist = blacklist
+                        .as_ref()
+                        .and_then(|bl| blacklist_chrom_index(bl, chrom));
 
                     let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
                     let region: noodles::core::Region = region_str
@@ -157,7 +157,9 @@ fn run_filter_barcodes(
                             continue;
                         }
 
-                        if is_blacklisted(&blacklist_index, chrom, start, end) {
+                        if let Some(idx) = chunk_blacklist
+                            && read_is_blacklisted(idx, start, end)
+                        {
                             continue;
                         }
 
