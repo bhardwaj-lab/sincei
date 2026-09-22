@@ -44,6 +44,8 @@ from _cli_testing import (
     tool_path,
 )
 
+from sincei.tools.ReadCounter import count_reads
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -503,3 +505,59 @@ def test_sl2_counts_match_the_original(name: str, tmp_path: Path) -> None:
     assert list(adata.obs_names) == SL2_CELLS
     assert list(adata.var_names) == expected.regions
     np.testing.assert_array_equal(adata.to_df().to_numpy().T, expected.counts)
+
+
+# Without a whitelist: every barcode found in the reads, only the cells with
+# counts. SL2 holds only the five listed barcodes, so a whitelist run lists them
+# all and must give the same cells, apart from its all-zero rows.
+
+SL2_WITHOUT_WHITELIST = [
+    "-b",
+    str(SL2 / "SL2-1.bam"),
+    str(SL2 / "SL2-2.bam"),
+    "-ct",
+    "BC",
+    "-p",
+    "1",
+]
+
+
+def _counted_cells(path: Path) -> tuple[list[str], np.ndarray]:
+    """Names and counts of the cells with at least one count, sorted by name."""
+    counts = ad.read_h5ad(path).to_df()
+    counts = counts[counts.sum(axis=1) > 0].sort_index()
+    return list(counts.index), counts.to_numpy()
+
+
+@pytest.mark.parametrize(
+    ("mode", "args"), [("bins", OGFRL1_BINS), ("features", OGFRL1_BED)]
+)
+def test_without_a_whitelist_every_counted_barcode_is_a_cell(
+    mode: str, args: list[str], tmp_path: Path
+) -> None:
+    listed, found = tmp_path / "listed.h5ad", tmp_path / "found.h5ad"
+    _count(mode, SL2_BASE, args, listed)
+    _count(mode, SL2_WITHOUT_WHITELIST, args, found)
+
+    names, counts = _counted_cells(listed)
+    assert names, "the listed cells carry no counts"
+    adata = ad.read_h5ad(found)
+    assert list(adata.obs_names) == names
+    assert list(adata.var_names) == list(ad.read_h5ad(listed).var_names)
+    np.testing.assert_array_equal(adata.to_df().to_numpy(), counts)
+
+
+def test_count_reads_without_a_whitelist_matches_the_cli(tmp_path: Path) -> None:
+    found = tmp_path / "found.h5ad"
+    _count("bins", SL2_WITHOUT_WHITELIST, OGFRL1_BINS, found)
+
+    adata = count_reads(
+        [str(SL2 / "SL2-1.bam"), str(SL2 / "SL2-2.bam")],
+        binLength=10_000,
+        cellTag="BC",
+        region="chr1:23360000-23385000",
+    )
+
+    expected = ad.read_h5ad(found)
+    assert list(adata.obs_names) == list(expected.obs_names)
+    np.testing.assert_array_equal(adata.to_df().to_numpy(), expected.to_df().to_numpy())

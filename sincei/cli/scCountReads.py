@@ -28,10 +28,10 @@ DESCRIPTION = (
     "Counts reads for each cell barcode on genomic bins or user-defined features.\n\n"
     "``scCountReads`` computes the read coverages per cell barcode for genomic regions "
     "in the provided BAM file(s). The analysis can be performed for the entire genome "
-    "by running the program in ``bins`` mode. If you want to count the read coverage "
-    "for specific regions only, use the ``features`` mode instead. The standard output "
-    'of ``scCountReads`` is a ".h5ad" file with counts, along with rowName (features) '
-    "and colNames (cell barcodes)."
+    "by running the program in ``bins`` mode. To count the read coverage of specific "
+    "regions, use the ``features`` mode instead."
+    'The standard output of ``scCountReads`` is a ".h5ad" file containing the count '
+    "matrix with cell and feature IDs."
 )
 
 
@@ -78,8 +78,8 @@ VALUE_TAG = typer.Option(
         'Instead of counting each read/fragment as "1", add the values from a given '
         "BAM tag to the count matrix. For example, this can be used to count the "
         "number of methylated CpG per read. A read that does not carry the tag is not "
-        "counted at all. Negative values contribute their magnitude, so a tag of -3 "
-        "adds 3."
+        "counted at all. "
+        'Negative values contribute their magnitude, so a tag of "-3" adds "3".'
     ),
 )
 GENOME_CHUNK_SIZE = typer.Option(
@@ -87,8 +87,8 @@ GENOME_CHUNK_SIZE = typer.Option(
     metavar="INT",
     rich_help_panel=_COUNTING,
     help=(
-        "Manually specify the size of the genome provided to each processor. "
-        "(Default: 1Mb)"
+        "Manually specify the size (in bases) of the genome chunks processed at a time."
+        " (Default: 1Mb)"
     ),
 )
 COMPRESSION = typer.Option(
@@ -112,7 +112,7 @@ BED = typer.Option(
     "--bed",
     metavar=".bed/.gtf/.gff",
     rich_help_panel=_IO,
-    help="BED/GTF/GFF files to limit the coverage analysis to the regions in them.",
+    help="BED/GTF/GFF files with regions to count as features.",
 )
 
 
@@ -128,7 +128,7 @@ def _count_reads(
     *,
     mode: str,
     bam_files: list[str],
-    barcodes: str,
+    barcodes: str | None,
     out_file: str,
     bed: str | None = None,
     labels: list[str] | None,
@@ -185,7 +185,7 @@ def _count_reads(
     min_gc, max_gc = backend.parse_gc_content(gc_content_filter)
 
     shared = {
-        "barcodes": backend.read_barcodes(barcodes),
+        "barcodes": backend.read_barcodes(barcodes) if barcodes else None,
         "labels": sample_labels,
         "output_path": out_file,
         "bc_tag": cell_tag,
@@ -243,8 +243,8 @@ def _count_reads(
 def bins(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
     out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
     compression_level: Annotated[int, COMPRESSION_LEVEL] = 4,
@@ -330,9 +330,9 @@ def bins(
 def features(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
     out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
     bed: Annotated[str, BED],
+    barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
     compression_level: Annotated[int, COMPRESSION_LEVEL] = 4,

@@ -141,7 +141,7 @@ fn build_record_filter(
 ))]
 pub fn count_bins(
     bam_paths: Vec<PathBuf>,
-    barcodes: Vec<String>,
+    barcodes: Option<Vec<String>>,
     output_path: PathBuf,
     bin_size: usize,
     step_size: usize,
@@ -221,7 +221,7 @@ pub fn count_bins(
         &bam_path_refs,
         bin_size,
         step_size,
-        &barcodes,
+        barcodes.as_deref(),
         bc_tag,
         umi_tag.as_deref(),
         count_tag.as_deref(),
@@ -287,7 +287,7 @@ pub fn count_bins(
 pub fn count_features(
     bam_paths: Vec<PathBuf>,
     annotation_path: PathBuf,
-    barcodes: Vec<String>,
+    barcodes: Option<Vec<String>>,
     output_path: PathBuf,
     bc_tag: &str,
     labels: Vec<String>,
@@ -368,7 +368,7 @@ pub fn count_features(
     count_bam_features(
         &bam_path_refs,
         annotation_path.as_path(),
-        &barcodes,
+        barcodes.as_deref(),
         bc_tag,
         umi_tag.as_deref(),
         count_tag.as_deref(),

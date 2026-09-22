@@ -9,6 +9,7 @@
 //! count matrix yet.
 
 use std::path::Path;
+use std::sync::{Mutex, PoisonError};
 
 use ahash::AHashMap;
 
@@ -73,6 +74,32 @@ pub(crate) fn read_x_f64(adata: &AnnData<H5>) -> Result<CsrMatrix<f64>> {
     })
 }
 
+/// Obs names and dense rows of a written count matrix, in row order.
+///
+/// Test-only, like [`read_x_f64`].
+#[cfg(test)]
+pub(crate) fn read_rows(path: &Path) -> Vec<(String, Vec<f64>)> {
+    let adata = AnnData::<H5>::open(H5::open(path).unwrap()).unwrap();
+    let x = read_x_f64(&adata).unwrap();
+    let mut rows = vec![vec![0.0; x.ncols()]; x.nrows()];
+    for (row, col, &value) in x.triplet_iter() {
+        rows[row][col] = value;
+    }
+    adata.obs_names().into_vec().into_iter().zip(rows).collect()
+}
+
+/// The rows a count without a whitelist must give, from a count whose
+/// whitelist lists every barcode: the rows with counts, sorted by name.
+#[cfg(test)]
+pub(crate) fn observed_part(listed: Vec<(String, Vec<f64>)>) -> Vec<(String, Vec<f64>)> {
+    let mut rows: Vec<_> = listed
+        .into_iter()
+        .filter(|(_, row)| row.iter().any(|&v| v != 0.0))
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows
+}
+
 /// Read an integer column from a polars `DataFrame` (e.g. an AnnData `var`
 /// table), casting to `i64` and erroring on missing column or null values.
 #[cfg(test)]
@@ -106,6 +133,108 @@ pub(crate) fn df_str_col(df: &DataFrame, name: &str) -> Result<Vec<String>> {
                 .ok_or_else(|| anyhow::anyhow!("null value in var[{name:?}] at row {i}"))
         })
         .collect()
+}
+
+/// Counts keyed by `(cell, feature)`.
+pub(super) type CellCounts = AHashMap<(usize, usize), u32>;
+
+/// Every sample x barcode pair, samples varying slowest: the rows of a count
+/// with a barcode whitelist.
+pub(super) fn product_cells(samples: &[String], barcodes: &[String]) -> Vec<(String, String)> {
+    samples
+        .iter()
+        .flat_map(|sample| barcodes.iter().map(move |bc| (sample.clone(), bc.clone())))
+        .collect()
+}
+
+/// Barcodes numbered in the order they are met, for a count without a
+/// whitelist.
+///
+/// There is one per work chunk and one for the whole run: a chunk numbers its
+/// barcodes without a lock, and moves its counts to the run's numbers once, at
+/// its end ([`to_run_numbers`]).
+#[derive(Default)]
+pub(super) struct BarcodeNumbers {
+    numbers: AHashMap<Vec<u8>, usize>,
+}
+
+impl BarcodeNumbers {
+    pub(super) fn number(&mut self, barcode: &[u8]) -> usize {
+        if let Some(&number) = self.numbers.get(barcode) {
+            return number;
+        }
+        let number = self.numbers.len();
+        self.numbers.insert(barcode.to_vec(), number);
+        number
+    }
+
+    /// The barcodes, indexed by their number.
+    pub(super) fn into_barcodes(self) -> Vec<String> {
+        let mut barcodes = vec![String::new(); self.numbers.len()];
+        for (barcode, number) in self.numbers {
+            barcodes[number] = String::from_utf8_lossy(&barcode).into_owned();
+        }
+        barcodes
+    }
+}
+
+/// Move a chunk's counts, keyed `(barcode * n_samples + sample, feature)` by
+/// the chunk's barcode numbers, to the run's numbers.
+pub(super) fn to_run_numbers(
+    acc: CellCounts,
+    n_samples: usize,
+    chunk: &BarcodeNumbers,
+    run: &Mutex<BarcodeNumbers>,
+) -> CellCounts {
+    let mut to_run = vec![0usize; chunk.numbers.len()];
+    {
+        let mut run = run.lock().unwrap_or_else(PoisonError::into_inner);
+        for (barcode, &number) in &chunk.numbers {
+            to_run[number] = run.number(barcode);
+        }
+    }
+    acc.into_iter()
+        .map(|((cell, feature), count)| {
+            let (barcode, sample) = (cell / n_samples, cell % n_samples);
+            ((to_run[barcode] * n_samples + sample, feature), count)
+        })
+        .collect()
+}
+
+/// Keep only the rows with counts, ordered by sample, then barcode.
+///
+/// `acc` is keyed `(barcode * n_samples + sample, feature)` by the run's
+/// barcode numbers, and `barcodes` holds each number's barcode. Returns the
+/// counts keyed by the new row numbers, and the (sample, barcode) of each row.
+pub(super) fn observed_rows(
+    acc: CellCounts,
+    samples: &[String],
+    barcodes: &[String],
+) -> (CellCounts, Vec<(String, String)>) {
+    let n_samples = samples.len();
+    let mut keys: Vec<usize> = acc.keys().map(|&(key, _)| key).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut rows: Vec<(usize, &str, usize)> = keys
+        .into_iter()
+        .map(|key| (key % n_samples, barcodes[key / n_samples].as_str(), key))
+        .collect();
+    rows.sort_unstable();
+
+    let row_of: AHashMap<usize, usize> = rows
+        .iter()
+        .enumerate()
+        .map(|(row, &(_, _, key))| (key, row))
+        .collect();
+    let cells = rows
+        .iter()
+        .map(|&(sample, barcode, _)| (samples[sample].clone(), barcode.to_string()))
+        .collect();
+    let acc = acc
+        .into_iter()
+        .map(|((key, feature), count)| ((row_of[&key], feature), count))
+        .collect();
+    (acc, cells)
 }
 
 /// Build a sparse count matrix in CSR format from a HashMap COO accumulator.
@@ -162,17 +291,15 @@ fn tag_anndata_root(path: &Path) -> Result<()> {
 
 /// Write a cell × feature count matrix to an AnnData HDF5 file.
 ///
-/// Cells (`obs`) are the cartesian product of the input BAM samples and the
-/// barcode whitelist (`obs_names = "{sample}::{barcode}"`), with `sample` and
-/// `barcode` columns. Features (`var`) carry `chrom`, `start`, `end`, and
-/// `name` columns; `var_names` are the feature names.
+/// Cells (`obs`) are one `(sample, barcode)` per matrix row, in row order
+/// (`obs_names = "{sample}::{barcode}"`), with `sample` and `barcode` columns.
+/// The sample is an input BAM's label, or under `--groupTag` a merged BAM's
+/// `@RG` ID. Features (`var`) carry `chrom`, `start`, `end`, and `name`
+/// columns; `var_names` are the feature names.
 pub(crate) fn write_counts_anndata(
     output_path: &Path,
     matrix: CsrMatrix<u32>,
-    // One label per row block, in row order. Normally the input BAMs' labels;
-    // under `--groupTag` the merged BAM's `@RG` IDs.
-    samples: &[String],
-    barcodes: &[String],
+    cells: &[(String, String)],
     var: &[Feature],
     compression: &str,
     compression_level: u8,
@@ -192,16 +319,14 @@ pub(crate) fn write_counts_anndata(
     });
 
     // obs: one row per (sample, barcode), in the same order as the matrix rows.
-    let n_cells = samples.len() * barcodes.len();
+    let n_cells = cells.len();
     let mut obs_index: Vec<String> = Vec::with_capacity(n_cells);
     let mut sample_col: Vec<String> = Vec::with_capacity(n_cells);
     let mut barcode_col: Vec<String> = Vec::with_capacity(n_cells);
-    for sample in samples {
-        for bc in barcodes {
-            obs_index.push(format!("{}::{}", sample, bc));
-            sample_col.push(sample.clone());
-            barcode_col.push(bc.clone());
-        }
+    for (sample, bc) in cells {
+        obs_index.push(format!("{}::{}", sample, bc));
+        sample_col.push(sample.clone());
+        barcode_col.push(bc.clone());
     }
     let obs_df = DataFrame::new(
         n_cells,
@@ -387,8 +512,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &["s1".to_string()],
-            &barcodes,
+            &product_cells(&["s1".to_string()], &barcodes),
             &var,
             "none",
             0,
@@ -418,8 +542,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &["s1".to_string(), "s2".to_string()],
-            &barcodes,
+            &product_cells(&["s1".to_string(), "s2".to_string()], &barcodes),
             &[feature("chr1", 0, 100)],
             "none",
             0,
@@ -446,8 +569,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &["s1".to_string()],
-            &["AAA".to_string()],
+            &product_cells(&["s1".to_string()], &["AAA".to_string()]),
             &var,
             "none",
             0,
@@ -474,8 +596,7 @@ mod tests {
         write_counts_anndata(
             &path,
             matrix,
-            &["s1".to_string()],
-            &["AAA".to_string()],
+            &product_cells(&["s1".to_string()], &["AAA".to_string()]),
             &[feature("chr1", 0, 100)],
             "gzip",
             6,
@@ -495,8 +616,7 @@ mod tests {
         let err = write_counts_anndata(
             &path,
             build_csr(&AHashMap::new(), 1, 1).unwrap(),
-            &["s1".to_string()],
-            &["AAA".to_string()],
+            &product_cells(&["s1".to_string()], &["AAA".to_string()]),
             &[feature("chr1", 0, 100)],
             "blosc",
             0,

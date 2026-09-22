@@ -28,7 +28,7 @@ def _as_list(value: Sequence[str] | str | Path | None) -> list[str]:
 
 def count_reads(
     bamFiles: Sequence[str] | str | Path,
-    barcodes: Sequence[str] | str | Path,
+    barcodes: Sequence[str] | str | Path | None = None,
     binLength: int = 10_000,
     stepSize: int | None = None,
     bedFile: str | None = None,
@@ -71,8 +71,10 @@ def count_reads(
     ----------
     bamFiles : list of str or str
         Indexed BAM files, or one BAM file.
-    barcodes : list of str or str
+    barcodes : list of str or str, optional
         Cell barcodes to count, or the path to a file with one barcode per line.
+        If not given, every barcode found in the ``cellTag`` of the BAM files is
+        counted, and only the (sample, barcode) pairs with counts become cells.
     binLength : int
         Bin size in bp. Ignored when ``bedFile`` is given.
     stepSize : int, optional
@@ -148,6 +150,8 @@ def count_reads(
     >>> adata = count_reads("cells.bam", "bc.txt", binLength=5000)
     """
     bam_files = _as_list(bamFiles)
+    if isinstance(barcodes, str | Path):
+        barcodes = backend.read_barcodes(str(barcodes))
     backend.require_single_bam_for_group_tag(bam_files, groupTag)
 
     dup_filter = DuplicateFilter(duplicateFilter) if duplicateFilter else None
@@ -155,11 +159,7 @@ def count_reads(
     min_gc, max_gc = backend.parse_gc_content(GCcontentFilter)
 
     kwargs: dict[str, Any] = {
-        "barcodes": (
-            backend.read_barcodes(str(barcodes))
-            if isinstance(barcodes, str | Path)
-            else list(barcodes)
-        ),
+        "barcodes": list(barcodes) if barcodes is not None else None,
         "labels": [] if groupTag is not None else _as_list(groupLabels),
         "bc_tag": cellTag,
         "umi_tag": backend.umi_tag_if_used(umiTag, dup_filter),

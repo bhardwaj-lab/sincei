@@ -11,11 +11,14 @@
 
 use ahash::{AHashMap, AHashSet};
 use std::path::Path;
+use std::sync::{Mutex, PoisonError};
 
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::count_utils::{build_csr, write_counts_anndata};
+use super::count_utils::{
+    BarcodeNumbers, build_csr, observed_rows, product_cells, to_run_numbers, write_counts_anndata,
+};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
 use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
@@ -97,7 +100,7 @@ fn retain_features_in_region(
 pub fn count_bam_features(
     bam_paths: &[(&Path, &str)],
     annotation_path: &Path,
-    barcodes: &[String],
+    barcodes: Option<&[String]>,
     bc_tag: &str,
     umi_tag: Option<&str>,
     count_tag: Option<&str>,
@@ -135,14 +138,6 @@ pub fn count_bam_features(
     let group_tag_parsed = group_tag.map(parse_tag).transpose()?;
     let region_filter = params.region.as_deref().map(parse_region).transpose()?;
 
-    let n_barcodes = barcodes.len();
-    // Keyed by raw bytes so the per-read barcode lookup never allocates.
-    let barcode_index: AHashMap<&[u8], usize> = barcodes
-        .iter()
-        .enumerate()
-        .map(|(i, bc)| (bc.as_bytes(), i))
-        .collect();
-
     // With --groupTag the sample axis comes from the reads' group tag rather
     // than from which BAM they were read out of, so exactly one input is
     // allowed and the row space is the header's @RG IDs x barcodes.
@@ -173,7 +168,7 @@ pub fn count_bam_features(
             .collect(),
         None => bam_paths.iter().map(|(_, l)| (*l).to_string()).collect(),
     };
-    let n_cells = sample_labels.len() * n_barcodes;
+    let n_samples = sample_labels.len();
 
     // `Vec<String>` -> `&[&str]` for the parser, which borrows the type names.
     let feature_types: Option<Vec<&str>> = params
@@ -255,6 +250,18 @@ pub fn count_bam_features(
         .build()
         .context("failed to build thread pool")?;
 
+    let n_barcodes = barcodes.map_or(0, <[String]>::len);
+    // Keyed by raw bytes so the per-read barcode lookup never allocates.
+    // Without a whitelist the barcodes are numbered as they are counted.
+    let barcode_index: Option<AHashMap<&[u8], usize>> = barcodes.map(|barcodes| {
+        barcodes
+            .iter()
+            .enumerate()
+            .map(|(i, bc)| (bc.as_bytes(), i))
+            .collect()
+    });
+    let run_barcodes = Mutex::new(BarcodeNumbers::default());
+
     // Motif-filter ingredients, passed to each worker so it can build its own
     // filter once per thread (rather than once per chunk).
     let motif_ingredients = match (genome_path, motifs) {
@@ -312,10 +319,7 @@ pub fn count_bam_features(
                     // shares with each. Reused across reads so the counting loop
                     // does not allocate; cleared at the top of every read.
                     let mut hits: Vec<(usize, usize)> = Vec::new();
-                    // Without --groupTag the sample is fixed for the whole chunk, so
-                    // the row offset is hoisted; with it the sample varies per read
-                    // and the offset is resolved below.
-                    let cell_offset = bam_idx * n_barcodes;
+                    let mut chunk_barcodes = BarcodeNumbers::default();
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
@@ -367,8 +371,14 @@ pub fn count_bam_features(
                         let Some(barcode) = sc_rec.barcode else {
                             continue;
                         };
-                        let Some(&local_bc_idx) = barcode_index.get(barcode) else {
-                            continue;
+                        let listed_bc = match &barcode_index {
+                            Some(index) => {
+                                let Some(&bc_idx) = index.get(barcode) else {
+                                    continue;
+                                };
+                                Some(bc_idx)
+                            }
+                            None => None,
                         };
 
                         if let Some(qc) = qc_filter
@@ -390,7 +400,7 @@ pub fn count_bam_features(
                         // Under --groupTag the read's own group tag picks the row
                         // block, so two reads sharing a barcode but coming from
                         // different source samples stay separate cells.
-                        let cell_idx = if group_tag_parsed.is_some() {
+                        let sample_idx = if group_tag_parsed.is_some() {
                             let Some(group) = sc_rec.group else {
                                 continue;
                             };
@@ -398,9 +408,15 @@ pub fn count_bam_features(
                                 warn_unknown_group(group);
                                 continue;
                             };
-                            group_idx * n_barcodes + local_bc_idx
+                            group_idx
                         } else {
-                            cell_offset + local_bc_idx
+                            bam_idx
+                        };
+                        // Without a list a barcode is numbered only now, so a
+                        // barcode whose reads are all filtered out gets no row.
+                        let cell_idx = match listed_bc {
+                            Some(bc_idx) => sample_idx * n_barcodes + bc_idx,
+                            None => chunk_barcodes.number(barcode) * n_samples + sample_idx,
                         };
 
                         // A spliced read reaches a feature through its blocks, so
@@ -441,6 +457,10 @@ pub fn count_bam_features(
                         }
                     }
 
+                    if barcode_index.is_none() {
+                        local_acc =
+                            to_run_numbers(local_acc, n_samples, &chunk_barcodes, &run_barcodes);
+                    }
                     Ok(local_acc)
                 },
             )
@@ -460,12 +480,25 @@ pub fn count_bam_features(
             )
     })?;
 
+    // With a whitelist every sample x barcode is a row; without one, only the
+    // (sample, barcode) pairs that have counts.
+    let (global_acc, cells) = match barcodes {
+        Some(barcodes) => (global_acc, product_cells(&sample_labels, barcodes)),
+        None => {
+            let found = run_barcodes
+                .into_inner()
+                .unwrap_or_else(PoisonError::into_inner)
+                .into_barcodes();
+            observed_rows(global_acc, &sample_labels, &found)
+        }
+    };
+    let n_cells = cells.len();
+
     let matrix = build_csr(&global_acc, n_cells, n_features)?;
     write_counts_anndata(
         output_path,
         matrix,
-        &sample_labels,
-        barcodes,
+        &cells,
         &var_meta,
         compression,
         compression_level,
@@ -503,7 +536,7 @@ mod tests {
         count_bam_features(
             &[(bam.as_path(), "s1")],
             annotation,
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -815,7 +848,7 @@ mod tests {
         count_bam_features(
             &[(bam, "s1")],
             annotation,
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -898,7 +931,7 @@ mod tests {
         count_bam_features(
             &[(testdata().join("test_i1.bam").as_path(), "s1")],
             &bed,
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -944,7 +977,7 @@ mod tests {
         count_bam_features(
             &[(testdata().join("test_i1.bam").as_path(), "s1")],
             &bed,
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -1167,7 +1200,7 @@ mod tests {
         let err = count_bam_features(
             &[],
             &testdata().join("Chrna9.gtf"),
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -1200,7 +1233,7 @@ mod tests {
         let err = count_bam_features(
             &[(bam.as_path(), "s1")],
             &testdata().join("Chrna9.gtf"),
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "BC",
             None,
             None,
@@ -1233,7 +1266,7 @@ mod tests {
         let err = count_bam_features(
             &[(bam.as_path(), "s1")],
             &testdata().join("Chrna9.gtf"),
-            &test_barcodes(),
+            Some(&test_barcodes()),
             "ZZ",
             None,
             None,
@@ -1256,5 +1289,49 @@ mod tests {
 
         assert!(err.contains("ZZ"), "{err}");
         assert!(!out.exists());
+    }
+
+    #[test]
+    fn without_a_whitelist_every_counted_barcode_gets_a_row() {
+        // The two BAMs hold exactly the 14 barcodes of `test_barcodes.txt`.
+        let dir = TempDir::new().unwrap();
+        let i1 = testdata().join("test_i1.bam");
+        let i2 = testdata().join("test_i2.bam");
+        let annotation = testdata().join("Chrna9_regions.bed");
+        let count = |out: &Path, barcodes: Option<&[String]>| {
+            count_bam_features(
+                &[(i1.as_path(), "test_i1"), (i2.as_path(), "test_i2")],
+                &annotation,
+                barcodes,
+                "BC",
+                None,
+                None,
+                None,
+                &CountingParams::default(),
+                &AdjustRead::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                out,
+                "none",
+                0,
+                1,
+                1_000_000,
+            )
+            .unwrap();
+        };
+        let (listed, found) = (
+            dir.path().join("listed.h5ad"),
+            dir.path().join("found.h5ad"),
+        );
+        count(&listed, Some(&test_barcodes()));
+        count(&found, None);
+
+        let expected =
+            super::super::count_utils::observed_part(super::super::count_utils::read_rows(&listed));
+        assert!(!expected.is_empty(), "the listed cells carry no counts");
+        assert_eq!(super::super::count_utils::read_rows(&found), expected);
     }
 }
