@@ -12,7 +12,9 @@ use crate::bam::bam_io::{
     BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
     ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
-use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
+use crate::bam::filters::{
+    DupMethod, DuplicateFilter, RnaStrand, is_blacklisted, rna_strand_filter,
+};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
 use crate::to_py_err;
 
@@ -90,7 +92,7 @@ pub fn run_filter_stats(
     min_gc: Option<f32>,
     max_gc: Option<f32>,
     min_aligned_fraction: Option<f32>,
-    filter_rna_strand: Option<&str>,
+    filter_rna_strand: Option<RnaStrand>,
     num_threads: usize,
     chunk_size: usize,
 ) -> Result<(Vec<String>, Vec<Vec<u64>>)> {
@@ -436,6 +438,11 @@ pub fn filter_stats(
         .map(str::parse::<DupMethod>)
         .transpose()
         .map_err(to_py_err)?;
+    let filter_rna_strand = filter_rna_strand
+        .as_deref()
+        .map(str::parse::<RnaStrand>)
+        .transpose()
+        .map_err(to_py_err)?;
 
     run_filter_stats(
         bam_path.as_path(),
@@ -456,7 +463,7 @@ pub fn filter_stats(
         min_gc,
         max_gc,
         min_aligned_fraction,
-        filter_rna_strand.as_deref(),
+        filter_rna_strand,
         num_threads,
         chunk_size,
     )

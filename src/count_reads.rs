@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use pyo3::prelude::*;
 
-use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
+use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter, RnaStrand};
 use crate::bam::fragment_length::resolve_extend_reads;
 use crate::bam::sc_record::AdjustRead;
 use crate::counting::params::CountingParams;
@@ -130,6 +130,12 @@ pub fn count_bins(
         max_gc,
         min_aligned_fraction,
     );
+
+    let filter_rna_strand = filter_rna_strand
+        .as_deref()
+        .map(str::parse::<RnaStrand>)
+        .transpose()
+        .map_err(to_py_err)?;
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
@@ -277,6 +283,12 @@ pub fn count_features(
         max_gc,
         min_aligned_fraction,
     );
+
+    let filter_rna_strand = filter_rna_strand
+        .as_deref()
+        .map(str::parse::<RnaStrand>)
+        .transpose()
+        .map_err(to_py_err)?;
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,

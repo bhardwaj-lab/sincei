@@ -38,7 +38,7 @@ pub struct RawRecordFilter {
     /// Strand filter for RNA-seq reads (dUTP library protocol). The value names
     /// the strand of the *gene*, not of the read, so what it keeps differs
     /// between paired- and single-end data. See [`rna_strand_filter`].
-    pub filter_rna_strand: Option<String>,
+    pub filter_rna_strand: Option<RnaStrand>,
 }
 
 impl RawRecordFilter {
@@ -48,7 +48,7 @@ impl RawRecordFilter {
         min_mapq: Option<u8>,
         sam_flag_include: Option<u16>,
         sam_flag_exclude: Option<u16>,
-        filter_rna_strand: Option<String>,
+        filter_rna_strand: Option<RnaStrand>,
     ) -> Option<Self> {
         if min_mapq.is_none()
             && sam_flag_include.is_none()
@@ -87,7 +87,7 @@ impl RawRecordFilter {
             return false;
         }
 
-        if let Some(ref strand) = self.filter_rna_strand
+        if let Some(strand) = self.filter_rna_strand
             && rna_strand_filter(flags, strand)
         {
             return false;
@@ -604,6 +604,28 @@ pub fn blacklist_chrom_index<'a>(
         .or_else(|| blacklist_index.get(&format!("chr{chromosome}")))
 }
 
+/// Gene strand kept by the RNA strand filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RnaStrand {
+    Forward,
+    Reverse,
+}
+
+impl FromStr for RnaStrand {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "forward" => Ok(Self::Forward),
+            "reverse" => Ok(Self::Reverse),
+            _ => anyhow::bail!(
+                "unknown filter_rna_strand {:?}; expected one of: forward, reverse",
+                s
+            ),
+        }
+    }
+}
+
 /// Returns `true` if the read should be **excluded** based on the RNA strand filter.
 ///
 /// This assumes a dUTP-based paired-end library: "forward" keeps reads from genes
@@ -613,23 +635,21 @@ pub fn blacklist_chrom_index<'a>(
 ///
 /// `flags` is the raw SAM flag field (u16 little-endian bit pattern).
 #[inline]
-pub fn rna_strand_filter(flags: u16, strand: &str) -> bool {
+pub fn rna_strand_filter(flags: u16, strand: RnaStrand) -> bool {
     let paired = flags & 0x1 != 0;
     if paired {
         match strand {
             // Keep read2-on-forward (0x80 set, 0x10 clear) OR read1-with-forward-mate (0x40 set, 0x20 clear).
-            "forward" => !((flags & 0x90 == 0x80) || (flags & 0x60 == 0x40)),
+            RnaStrand::Forward => !((flags & 0x90 == 0x80) || (flags & 0x60 == 0x40)),
             // Keep read2-on-reverse (0x80 | 0x10 both set) OR read1-with-reverse-mate (0x40 | 0x20 both set).
-            "reverse" => !((flags & 0x90 == 0x90) || (flags & 0x60 == 0x60)),
-            _ => false,
+            RnaStrand::Reverse => !((flags & 0x90 == 0x90) || (flags & 0x60 == 0x60)),
         }
     } else {
         match strand {
             // dUTP single-end forward: keep reads on reverse strand (0x10 set).
-            "forward" => flags & 0x10 == 0,
+            RnaStrand::Forward => flags & 0x10 == 0,
             // dUTP single-end reverse: keep reads on forward strand (0x10 clear).
-            "reverse" => flags & 0x10 != 0,
-            _ => false,
+            RnaStrand::Reverse => flags & 0x10 != 0,
         }
     }
 }
@@ -816,38 +836,53 @@ mod tests {
     #[test]
     fn paired_end_rna_strand_filter_follows_the_dutp_convention() {
         // "forward" keeps read2-on-forward and read1-with-forward-mate.
-        assert!(!rna_strand_filter(PAIRED | READ2, "forward"));
-        assert!(!rna_strand_filter(PAIRED | READ1, "forward"));
-        assert!(rna_strand_filter(PAIRED | READ2 | REVERSE, "forward"));
-        assert!(rna_strand_filter(PAIRED | READ1 | MATE_REVERSE, "forward"));
+        assert!(!rna_strand_filter(PAIRED | READ2, RnaStrand::Forward));
+        assert!(!rna_strand_filter(PAIRED | READ1, RnaStrand::Forward));
+        assert!(rna_strand_filter(
+            PAIRED | READ2 | REVERSE,
+            RnaStrand::Forward
+        ));
+        assert!(rna_strand_filter(
+            PAIRED | READ1 | MATE_REVERSE,
+            RnaStrand::Forward
+        ));
 
         // "reverse" is the mirror image.
-        assert!(!rna_strand_filter(PAIRED | READ2 | REVERSE, "reverse"));
-        assert!(!rna_strand_filter(PAIRED | READ1 | MATE_REVERSE, "reverse"));
-        assert!(rna_strand_filter(PAIRED | READ2, "reverse"));
-        assert!(rna_strand_filter(PAIRED | READ1, "reverse"));
+        assert!(!rna_strand_filter(
+            PAIRED | READ2 | REVERSE,
+            RnaStrand::Reverse
+        ));
+        assert!(!rna_strand_filter(
+            PAIRED | READ1 | MATE_REVERSE,
+            RnaStrand::Reverse
+        ));
+        assert!(rna_strand_filter(PAIRED | READ2, RnaStrand::Reverse));
+        assert!(rna_strand_filter(PAIRED | READ1, RnaStrand::Reverse));
     }
 
     #[test]
     fn single_end_rna_strand_filter_inverts_the_paired_end_logic() {
         // dUTP single-end: a "forward" gene yields reads on the reverse strand.
-        assert!(!rna_strand_filter(REVERSE, "forward"));
-        assert!(rna_strand_filter(0, "forward"));
+        assert!(!rna_strand_filter(REVERSE, RnaStrand::Forward));
+        assert!(rna_strand_filter(0, RnaStrand::Forward));
 
-        assert!(!rna_strand_filter(0, "reverse"));
-        assert!(rna_strand_filter(REVERSE, "reverse"));
+        assert!(!rna_strand_filter(0, RnaStrand::Reverse));
+        assert!(rna_strand_filter(REVERSE, RnaStrand::Reverse));
     }
 
     #[test]
-    fn an_unrecognized_strand_name_excludes_nothing() {
-        assert!(!rna_strand_filter(PAIRED | READ2, "sideways"));
-        assert!(!rna_strand_filter(0, ""));
+    fn an_unknown_rna_strand_names_the_valid_ones() {
+        assert_eq!("forward".parse::<RnaStrand>().unwrap(), RnaStrand::Forward);
+        assert_eq!("reverse".parse::<RnaStrand>().unwrap(), RnaStrand::Reverse);
+        let err = "sideways".parse::<RnaStrand>().unwrap_err().to_string();
+        assert!(err.contains("forward, reverse"), "{err}");
+        assert!("".parse::<RnaStrand>().is_err());
     }
 
     #[test]
     fn record_filter_applies_the_rna_strand_filter() {
         let f = RawRecordFilter {
-            filter_rna_strand: Some("forward".to_string()),
+            filter_rna_strand: Some(RnaStrand::Forward),
             ..RawRecordFilter::default()
         };
 
@@ -1313,7 +1348,7 @@ mod tests {
             RawRecordFilter::from_options(Some(20), None, None, None),
             RawRecordFilter::from_options(None, Some(64), None, None),
             RawRecordFilter::from_options(None, None, Some(16), None),
-            RawRecordFilter::from_options(None, None, None, Some("forward".to_string())),
+            RawRecordFilter::from_options(None, None, None, Some(RnaStrand::Forward)),
         ] {
             assert!(filter.is_some());
         }
@@ -1321,18 +1356,14 @@ mod tests {
 
     #[test]
     fn the_record_filter_carries_every_option_through_unchanged() {
-        let filter = RawRecordFilter::from_options(
-            Some(20),
-            Some(64),
-            Some(16),
-            Some("reverse".to_string()),
-        )
-        .unwrap();
+        let filter =
+            RawRecordFilter::from_options(Some(20), Some(64), Some(16), Some(RnaStrand::Reverse))
+                .unwrap();
 
         assert_eq!(filter.min_mapq, Some(20));
         assert_eq!(filter.sam_flag_include, Some(64));
         assert_eq!(filter.sam_flag_exclude, Some(16));
-        assert_eq!(filter.filter_rna_strand.as_deref(), Some("reverse"));
+        assert_eq!(filter.filter_rna_strand, Some(RnaStrand::Reverse));
     }
 
     #[test]

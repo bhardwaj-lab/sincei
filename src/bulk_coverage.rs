@@ -4,7 +4,7 @@ use anyhow::Result;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
+use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter, RnaStrand};
 use crate::counting::coverage::{NormalizeMethod, OutputFormat, ReadMode, run_bulk_coverage};
 use crate::to_py_err;
 
@@ -143,16 +143,6 @@ pub fn bulk_coverage(
         max_fragment_length
     };
 
-    if let Some(strand) = filter_rna_strand.as_deref()
-        && strand != "forward"
-        && strand != "reverse"
-    {
-        return Err(PyRuntimeError::new_err(format!(
-            "filter_rna_strand must be 'forward' or 'reverse', got {:?}",
-            strand
-        )));
-    }
-
     let qc = QcFilter::from_bounds(
         min_fragment_length,
         max_fragment_length,
@@ -160,6 +150,12 @@ pub fn bulk_coverage(
         max_gc,
         min_aligned_fraction,
     );
+
+    let filter_rna_strand = filter_rna_strand
+        .as_deref()
+        .map(str::parse::<RnaStrand>)
+        .transpose()
+        .map_err(to_py_err)?;
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
