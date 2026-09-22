@@ -10,7 +10,8 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present, read_bam_header, thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present, read_bam_header,
+    thread_pool,
 };
 use crate::bam::filters::is_blacklisted;
 use crate::bam::sc_record::{get_tag_bytes, parse_tag};

@@ -69,10 +69,8 @@ pub(crate) fn chunk_windows<'a>(
     let mut chunks: Vec<Chunk<'a>> = bams
         .iter()
         .flat_map(|&(bam_idx, bam_path)| {
-            windows
-                .iter()
-                .enumerate()
-                .flat_map(move |(chrom_idx, (chrom, window_start, window_end))| {
+            windows.iter().enumerate().flat_map(
+                move |(chrom_idx, (chrom, window_start, window_end))| {
                     (*window_start..*window_end)
                         .step_by(chunk_size)
                         .map(move |start| Chunk {
@@ -84,7 +82,8 @@ pub(crate) fn chunk_windows<'a>(
                             end: (start + chunk_size).min(*window_end),
                             window_end: *window_end,
                         })
-                })
+                },
+            )
         })
         .collect();
     chunks.sort_unstable_by_key(|c| std::cmp::Reverse(c.end - c.start));
@@ -336,20 +335,9 @@ impl Samples {
 }
 
 /// Read just the header of a BAM file, tolerating non-compliant SAM header.
-/// Builds an indexed reader so a missing `.bai` is reported as an error.
+/// Opens an indexed reader so a missing `.bai` is reported as an error.
 pub(crate) fn read_bam_header(path: &Path) -> Result<Header> {
-    let mut reader = bam::io::indexed_reader::Builder::default()
-        .build_from_path(path)
-        .with_context(|| {
-            format!(
-                "failed to open indexed BAM (does the .bai index file exist?): {}",
-                path.display()
-            )
-        })?;
-    match reader.read_header() {
-        Ok(header) => Ok(header),
-        Err(_) => read_header_from_binary_dict(path),
-    }
+    open_indexed_bam(path).map(|(_, header)| header)
 }
 
 /// Open a BAI-indexed BAM reader together with its header, tolerating
