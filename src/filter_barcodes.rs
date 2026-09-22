@@ -41,9 +41,7 @@ fn run_filter_barcodes(
     num_threads: usize,
     chunk_size: usize,
 ) -> Result<Vec<(String, usize)>> {
-    if bin_size == 0 {
-        anyhow::bail!("bin_size must be greater than zero");
-    }
+    anyhow::ensure!(bin_size > 0, "bin_size must be greater than zero");
     anyhow::ensure!(chunk_size > 0, "chunk_size must be greater than zero");
 
     let whitelist = whitelist.unwrap_or_default();
@@ -65,7 +63,7 @@ fn run_filter_barcodes(
     let chrom_sizes: Vec<(String, usize)> = header
         .reference_sequences()
         .iter()
-        .filter(|(name, _)| !chr_to_skip.contains(&name.to_string()))
+        .filter(|(name, _)| !chr_to_skip.iter().any(|c| c.as_bytes() == name.as_slice()))
         .map(|(name, seq)| (name.to_string(), seq.length().get()))
         .collect();
 
