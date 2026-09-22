@@ -86,7 +86,7 @@ fn run_filter_barcodes(
         chunks
             .par_iter()
             .map_init(
-                BamWorker::new,
+                BamWorker::default,
                 |worker,
                  &Chunk {
                      chrom_idx,

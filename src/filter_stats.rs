@@ -172,7 +172,7 @@ pub fn run_filter_stats(
         chunks
             .par_iter()
             .map_init(
-                BamWorker::new,
+                BamWorker::default,
                 |worker,
                  &Chunk {
                      ref chrom,

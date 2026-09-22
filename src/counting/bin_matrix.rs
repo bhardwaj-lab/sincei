@@ -178,7 +178,7 @@ pub fn count_bam_bins(
     let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
         work.par_iter()
             .map_init(
-                BamWorker::new,
+                BamWorker::default,
                 |worker,
                  &Chunk {
                      bam_idx,

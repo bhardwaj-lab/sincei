@@ -27,6 +27,7 @@ use crate::annotation::region_index::{ChromIndex, GenomeIndex};
 ///
 /// Keeping this separate from [`QcFilter`] lets callers reject reads before
 /// paying for barcode/UMI tag lookups or sequence/CIGAR processing.
+#[derive(Default)]
 pub struct RawRecordFilter {
     /// Minimum mapping quality (MAPQ).
     pub min_mapq: Option<u8>,
@@ -41,15 +42,6 @@ pub struct RawRecordFilter {
 }
 
 impl RawRecordFilter {
-    pub fn new() -> Self {
-        Self {
-            min_mapq: None,
-            sam_flag_include: None,
-            sam_flag_exclude: None,
-            filter_rna_strand: None,
-        }
-    }
-
     /// A filter over the given options, or `None` when none is set: a filter
     /// that rejects nothing would still cost a check per read.
     pub fn from_options(
@@ -105,15 +97,10 @@ impl RawRecordFilter {
     }
 }
 
-impl Default for RawRecordFilter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Per-record quality-control filter.
 ///
 /// All active thresholds must pass; an unset threshold is always satisfied.
+#[derive(Default)]
 pub struct QcFilter {
     /// Minimum fragment length.
     ///
@@ -135,16 +122,6 @@ pub struct QcFilter {
 }
 
 impl QcFilter {
-    pub fn new() -> Self {
-        Self {
-            min_fragment_length: None,
-            max_fragment_length: None,
-            min_gc: None,
-            max_gc: None,
-            min_aligned_fraction: None,
-        }
-    }
-
     /// A filter over the given bounds, or `None` when none is set: a filter
     /// that rejects nothing would still cost a check per read.
     pub fn from_bounds(
@@ -224,15 +201,7 @@ impl QcFilter {
 
         true
     }
-}
 
-impl Default for QcFilter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl QcFilter {
     /// Returns whether GC content must be computed to evaluate this filter.
     pub(super) fn needs_gc(&self) -> bool {
         self.min_gc.is_some() || self.max_gc.is_some()
@@ -800,7 +769,7 @@ mod tests {
 
     #[test]
     fn a_filter_with_no_thresholds_keeps_everything() {
-        let f = RawRecordFilter::new();
+        let f = RawRecordFilter::default();
         assert!(f.passes(0, None));
         assert!(f.passes(DUPLICATE, Some(0)));
     }
@@ -809,7 +778,7 @@ mod tests {
     fn min_mapq_rejects_low_and_missing_mapping_qualities() {
         let f = RawRecordFilter {
             min_mapq: Some(30),
-            ..RawRecordFilter::new()
+            ..RawRecordFilter::default()
         };
 
         assert!(f.passes(0, Some(30)));
@@ -823,7 +792,7 @@ mod tests {
     fn sam_flag_include_requires_every_requested_bit() {
         let f = RawRecordFilter {
             sam_flag_include: Some(PAIRED | PROPER_PAIR),
-            ..RawRecordFilter::new()
+            ..RawRecordFilter::default()
         };
 
         assert!(f.passes(PAIRED | PROPER_PAIR, None));
@@ -837,7 +806,7 @@ mod tests {
     fn sam_flag_exclude_rejects_any_forbidden_bit() {
         let f = RawRecordFilter {
             sam_flag_exclude: Some(DUPLICATE | 0x200),
-            ..RawRecordFilter::new()
+            ..RawRecordFilter::default()
         };
 
         assert!(f.passes(PAIRED, None));
@@ -880,7 +849,7 @@ mod tests {
     fn record_filter_applies_the_rna_strand_filter() {
         let f = RawRecordFilter {
             filter_rna_strand: Some("forward".to_string()),
-            ..RawRecordFilter::new()
+            ..RawRecordFilter::default()
         };
 
         assert!(f.passes(PAIRED | READ2, None));
@@ -889,7 +858,7 @@ mod tests {
 
     #[test]
     fn qc_filter_with_no_thresholds_keeps_everything() {
-        assert!(QcFilter::new().passes(&test_record(100, 200)));
+        assert!(QcFilter::default().passes(&test_record(100, 200)));
     }
 
     #[test]
@@ -897,7 +866,7 @@ mod tests {
         let f = QcFilter {
             min_fragment_length: Some(50),
             max_fragment_length: Some(150),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         assert!(f.passes(&test_record(1000, 1100))); // span 100
@@ -911,7 +880,7 @@ mod tests {
     fn fragment_length_uses_the_insert_size_for_paired_end_reads() {
         let f = QcFilter {
             max_fragment_length: Some(150),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         // A 100 bp alignment on a 500 bp fragment is judged by |TLEN|, not the span.
@@ -937,7 +906,7 @@ mod tests {
         let f = QcFilter {
             min_gc: Some(0.3),
             max_gc: Some(0.7),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         let mut rec = test_record(0, 100);
@@ -960,7 +929,7 @@ mod tests {
         let f = QcFilter {
             min_gc: Some(0.9),
             min_aligned_fraction: Some(0.9),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         let rec = test_record(0, 100);
@@ -973,7 +942,7 @@ mod tests {
     fn min_aligned_fraction_rejects_poorly_matched_reads() {
         let f = QcFilter {
             min_aligned_fraction: Some(0.8),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         let mut rec = test_record(0, 100);
@@ -992,7 +961,7 @@ mod tests {
 
         let gc_only = QcFilter {
             max_gc: Some(0.6),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
         let opts = derive_record_opts(Some(&gc_only), false, false, &AdjustRead::default());
         assert!(opts.compute_gc);
@@ -1000,7 +969,7 @@ mod tests {
 
         let af_only = QcFilter {
             min_aligned_fraction: Some(0.5),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
         let opts = derive_record_opts(Some(&af_only), true, false, &AdjustRead::default());
         assert!(!opts.compute_gc);
@@ -1020,14 +989,14 @@ mod tests {
 
         let bounded = QcFilter {
             max_fragment_length: Some(500),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
         assert!(opts(Some(&bounded), false));
 
         // A filter that does not measure a fragment that does not need it.
         let gc_only = QcFilter {
             max_gc: Some(0.6),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
         assert!(!opts(Some(&gc_only), false));
     }
@@ -1037,7 +1006,7 @@ mod tests {
         // A 100 bp read over a 20 kb intron is a 100 bp fragment.
         let filter = QcFilter {
             max_fragment_length: Some(500),
-            ..QcFilter::new()
+            ..QcFilter::default()
         };
 
         let mut rec = test_record(1000, 21_100);

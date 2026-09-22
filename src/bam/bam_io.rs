@@ -464,6 +464,7 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
 ///
 /// The reader is keyed by path so a thread that alternates between input BAMs
 /// only reopens when the path actually changes.
+#[derive(Default)]
 pub(crate) struct BamWorker<'a> {
     path: Option<&'a Path>,
     reader: Option<BamReader>,
@@ -472,15 +473,6 @@ pub(crate) struct BamWorker<'a> {
 }
 
 impl<'a> BamWorker<'a> {
-    pub(crate) fn new() -> Self {
-        Self {
-            path: None,
-            reader: None,
-            header: None,
-            motif: None,
-        }
-    }
-
     /// Ensure the reader is open for `path` (reopening only on a path change)
     /// and, when `motif_ingredients` is supplied, that the motif filter has
     /// been constructed once for this worker, then borrow the reader, header,
@@ -648,7 +640,7 @@ mod tests {
     #[test]
     fn a_worker_reuses_its_reader_across_calls_for_the_same_path() {
         let bam = test_bam();
-        let mut worker = BamWorker::new();
+        let mut worker = BamWorker::default();
 
         let first_len = {
             let (_reader, header, motif) = worker.prepare(&bam, None).unwrap();
@@ -663,7 +655,7 @@ mod tests {
 
     #[test]
     fn a_fresh_worker_holds_nothing_until_it_is_prepared() {
-        let worker = BamWorker::new();
+        let worker = BamWorker::default();
         assert!(worker.path.is_none());
         assert!(worker.reader.is_none());
         assert!(worker.header.is_none());
@@ -672,7 +664,7 @@ mod tests {
 
     #[test]
     fn preparing_a_worker_on_a_missing_bam_fails() {
-        let mut worker = BamWorker::new();
+        let mut worker = BamWorker::default();
         let missing = Path::new("/nonexistent/reads.bam");
         assert!(worker.prepare(missing, None).is_err());
     }

@@ -14,6 +14,7 @@ use std::path::PathBuf;
 ///
 /// These control pre-counting filtering and fragment-interval adjustments that
 /// are independent of the per-record QC/duplicate/motif filters.
+#[derive(Default)]
 pub struct CountingParams {
     /// Chromosomes to exclude entirely (e.g. `["chrM", "chrUn"]`).
     pub chr_to_skip: Vec<String>,
@@ -71,26 +72,6 @@ pub struct CountingParams {
     /// its gene. Setting `name_attr` overrides this and groups on that
     /// attribute alone.
     pub metagene: bool,
-}
-
-impl CountingParams {
-    pub fn new() -> Self {
-        Self {
-            chr_to_skip: Vec::new(),
-            region: None,
-            blacklist_path: None,
-            feature_type: None,
-            exon_type: None,
-            name_attr: None,
-            metagene: false,
-        }
-    }
-}
-
-impl Default for CountingParams {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 /// Parse a region string into `(chrom, start, end)` using 0-based half-open
