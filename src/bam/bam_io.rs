@@ -29,6 +29,22 @@ use twobit::TwoBitFile;
 
 use super::filters::MotifFilter;
 
+/// A thread pool with `num_threads` threads, or with as many as rayon's global
+/// pool when `num_threads` is 0 (all logical CPUs unless `RAYON_NUM_THREADS`
+/// says otherwise). The count is resolved here rather than left to rayon, whose
+/// own default for 0 may become dynamic.
+pub(crate) fn thread_pool(num_threads: usize) -> Result<rayon::ThreadPool> {
+    let n_threads = if num_threads == 0 {
+        rayon::current_num_threads()
+    } else {
+        num_threads
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(n_threads)
+        .build()
+        .context("failed to build thread pool")
+}
+
 /// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 

@@ -24,7 +24,7 @@ use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklis
 use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
 use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    read_group_ids, warn_unknown_group,
+    read_group_ids, thread_pool, warn_unknown_group,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -240,15 +240,7 @@ pub fn count_bam_features(
     }
     work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
-    let n_threads = if num_threads == 0 {
-        rayon::current_num_threads()
-    } else {
-        num_threads
-    };
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(n_threads)
-        .build()
-        .context("failed to build thread pool")?;
+    let pool = thread_pool(num_threads)?;
 
     let n_barcodes = barcodes.map_or(0, <[String]>::len);
     // Keyed by raw bytes so the per-read barcode lookup never allocates.

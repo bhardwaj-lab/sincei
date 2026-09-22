@@ -12,7 +12,8 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
+    BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, thread_pool,
+    warn_unknown_group,
 };
 use crate::bam::filters::is_blacklisted;
 use crate::to_py_err;
@@ -94,15 +95,7 @@ fn run_filter_barcodes(
         .collect();
     chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.3 - b.2));
 
-    let n_threads = if num_threads == 0 {
-        rayon::current_num_threads()
-    } else {
-        num_threads
-    };
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(n_threads)
-        .build()
-        .context("failed to build thread pool")?;
+    let pool = thread_pool(num_threads)?;
 
     let partial_maps: Vec<BinsByBarcode> = pool.install(|| {
         chunks
