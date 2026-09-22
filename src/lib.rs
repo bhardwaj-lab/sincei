@@ -1,5 +1,6 @@
 pub mod annotation;
 pub mod bam;
+mod bulk_coverage;
 mod count_reads;
 pub mod counting;
 mod filter_barcodes;
@@ -42,7 +43,7 @@ fn _sincei(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_reads::count_features, m)?)?;
 
     // Export
-    m.add_function(wrap_pyfunction!(counting::coverage::bulk_coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(bulk_coverage::bulk_coverage, m)?)?;
 
     // Genome annotation parsing
     m.add_function(wrap_pyfunction!(
