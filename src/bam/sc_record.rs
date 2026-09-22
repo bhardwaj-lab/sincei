@@ -528,7 +528,7 @@ pub fn parse_tag(tag_str: &str) -> Result<Tag> {
 
 /// Borrow a string-valued auxiliary tag as raw bytes, tied to the record's
 /// lifetime. Returns `None` if the tag is absent or not a string.
-fn get_tag_bytes<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'a [u8]>> {
+pub(crate) fn get_tag_bytes<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'a [u8]>> {
     match record.data().get(tag) {
         Some(Ok(Value::String(v))) => Ok(Some(v.as_ref())),
         Some(Ok(_)) => Ok(None),

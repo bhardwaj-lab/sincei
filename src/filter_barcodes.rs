@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
 use dist_whitelist::{HammingWhitelist, match_any_whitelist};
-use noodles::bam;
 use noodles::sam::alignment::Record as AlignmentRecord;
-use noodles::sam::alignment::record::data::field::{Tag, Value};
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
@@ -16,6 +14,7 @@ use crate::bam::bam_io::{
     warn_unknown_group,
 };
 use crate::bam::filters::is_blacklisted;
+use crate::bam::sc_record::{get_tag_bytes, parse_tag};
 use crate::to_py_err;
 
 /// A map of barcodes stored as bytes in a `Vec<u8>` (directly read from the BAM
@@ -168,7 +167,7 @@ fn run_filter_barcodes(
                             continue;
                         }
 
-                        let Some(barcode) = read_cell_barcode(&record, &tag)? else {
+                        let Some(barcode) = get_tag_bytes(&record, &tag)? else {
                             continue;
                         };
 
@@ -180,7 +179,7 @@ fn run_filter_barcodes(
                         // when the reads carry their sample of origin.
                         let key: &[u8] = match &group_tag_parsed {
                             Some(gtag) => {
-                                let Some(group) = read_cell_barcode(&record, gtag)? else {
+                                let Some(group) = get_tag_bytes(&record, gtag)? else {
                                     continue;
                                 };
                                 if !known_groups.contains(group) {
@@ -234,25 +233,6 @@ fn run_filter_barcodes(
     barcode_counts.sort_by(|l, r| r.1.cmp(&l.1).then_with(|| l.0.cmp(&r.0)));
 
     Ok(barcode_counts)
-}
-
-fn parse_tag(cell_tag: &str) -> Result<Tag> {
-    let bytes = cell_tag.as_bytes();
-    if bytes.len() != 2 {
-        anyhow::bail!("barcode tag must be exactly two characters");
-    }
-    Ok(Tag::new(bytes[0], bytes[1]))
-}
-
-/// Borrow the barcode tag's bytes, tied to the record's lifetime, so the hot
-/// path never allocates. Returns `None` if the tag is absent or not a string.
-fn read_cell_barcode<'a>(record: &'a bam::Record, tag: &Tag) -> Result<Option<&'a [u8]>> {
-    match record.data().get(tag) {
-        Some(Ok(Value::String(value))) => Ok(Some(value.as_ref())),
-        Some(Ok(_)) => Ok(None),
-        Some(Err(error)) => Err(error.into()),
-        None => Ok(None),
-    }
 }
 
 /// Decides whether a read's barcode matches the whitelist.
@@ -499,47 +479,8 @@ mod tests {
         assert_eq!(pack_bin(2, u32::MAX as usize) >> 32, 2);
     }
 
-    // Tag parsing and barcode extraction
-
-    #[test]
-    fn a_barcode_tag_must_be_exactly_two_characters() {
-        assert_eq!(parse_tag("BC").unwrap(), Tag::new(b'B', b'C'));
-        assert!(parse_tag("B").is_err());
-        assert!(parse_tag("BCX").is_err());
-        assert!(parse_tag("").is_err());
-    }
-
     fn testdata() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata")
-    }
-
-    fn first_record() -> (bam::Record, ()) {
-        let path = testdata().join("test_i1.bam");
-        let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
-        reader.read_header().unwrap();
-        let record = reader.records().next().unwrap().unwrap();
-        (record, ())
-    }
-
-    #[test]
-    fn the_barcode_is_borrowed_from_the_record_when_the_tag_holds_a_string() {
-        let (record, _) = first_record();
-        let barcode = read_cell_barcode(&record, &Tag::new(b'B', b'C')).unwrap();
-        assert_eq!(barcode, Some(b"ATATAACT".as_slice()));
-    }
-
-    #[test]
-    fn a_tag_that_is_absent_or_not_a_string_yields_no_barcode() {
-        let (record, _) = first_record();
-        // NM is an integer, ZZ is not present at all.
-        assert_eq!(
-            read_cell_barcode(&record, &Tag::new(b'N', b'M')).unwrap(),
-            None
-        );
-        assert_eq!(
-            read_cell_barcode(&record, &Tag::new(b'Z', b'Z')).unwrap(),
-            None
-        );
     }
 
     // Whole run against the test BAM
