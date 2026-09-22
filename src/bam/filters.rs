@@ -14,6 +14,7 @@ use ahash::AHashSet;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::Result;
 use twobit::TwoBitFile;
@@ -279,6 +280,24 @@ pub enum DupMethod {
     BarcodeUmiStart,
     /// Duplicate key = barcode + UMI + alignment start + alignment end.
     BarcodeUmiStartEnd,
+}
+
+impl FromStr for DupMethod {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "barcode_start" => Ok(Self::BarcodeStart),
+            "barcode_start_end" => Ok(Self::BarcodeStartEnd),
+            "barcode_umi_start" => Ok(Self::BarcodeUmiStart),
+            "barcode_umi_start_end" => Ok(Self::BarcodeUmiStartEnd),
+            _ => anyhow::bail!(
+                "unknown dup_method {:?}; expected one of: \
+                 barcode_start, barcode_start_end, barcode_umi_start, barcode_umi_start_end",
+                s
+            ),
+        }
+    }
 }
 
 // Key tuple: (barcode, umi, fragment_start, fragment_end, mate_reference, strand)
@@ -1354,5 +1373,40 @@ mod tests {
         // confused with `None`.
         assert!(RawRecordFilter::from_options(Some(0), None, None, None).is_some());
         assert!(QcFilter::from_bounds(Some(0), None, None, None, None).is_some());
+    }
+
+    // Duplicate-method parsing
+
+    #[test]
+    fn every_documented_dup_method_parses() {
+        assert!(matches!(
+            "barcode_start".parse::<DupMethod>().unwrap(),
+            DupMethod::BarcodeStart
+        ));
+        assert!(matches!(
+            "barcode_start_end".parse::<DupMethod>().unwrap(),
+            DupMethod::BarcodeStartEnd
+        ));
+        assert!(matches!(
+            "barcode_umi_start".parse::<DupMethod>().unwrap(),
+            DupMethod::BarcodeUmiStart
+        ));
+        assert!(matches!(
+            "barcode_umi_start_end".parse::<DupMethod>().unwrap(),
+            DupMethod::BarcodeUmiStartEnd
+        ));
+    }
+
+    #[test]
+    fn an_unknown_dup_method_names_the_valid_ones() {
+        let err = "start_umi".parse::<DupMethod>().unwrap_err().to_string();
+        assert!(err.contains("barcode_start"), "{err}");
+        assert!(err.contains("barcode_umi_start_end"), "{err}");
+    }
+
+    #[test]
+    fn dup_method_parsing_is_case_sensitive() {
+        assert!("Barcode_Start".parse::<DupMethod>().is_err());
+        assert!("".parse::<DupMethod>().is_err());
     }
 }

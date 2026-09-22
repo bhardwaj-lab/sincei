@@ -41,20 +41,6 @@ fn sample_names(bam_paths: &[PathBuf], labels: Vec<String>) -> Result<Vec<(PathB
     Ok(bam_paths.iter().cloned().zip(labels).collect())
 }
 
-fn parse_dup_method(s: &str) -> Result<DupMethod> {
-    match s {
-        "barcode_start" => Ok(DupMethod::BarcodeStart),
-        "barcode_start_end" => Ok(DupMethod::BarcodeStartEnd),
-        "barcode_umi_start" => Ok(DupMethod::BarcodeUmiStart),
-        "barcode_umi_start_end" => Ok(DupMethod::BarcodeUmiStartEnd),
-        _ => anyhow::bail!(
-            "unknown dup_method {:?}; expected one of: \
-             barcode_start, barcode_start_end, barcode_umi_start, barcode_umi_start_end",
-            s
-        ),
-    }
-}
-
 /// Count reads into a cell × genomic-bin matrix and write the result as an
 /// AnnData HDF5 file.
 ///
@@ -154,7 +140,7 @@ pub fn count_bins(
 
     let dup = dup_method
         .as_deref()
-        .map(parse_dup_method)
+        .map(str::parse::<DupMethod>)
         .transpose()
         .map_err(to_py_err)?;
 
@@ -301,7 +287,7 @@ pub fn count_features(
 
     let dup = dup_method
         .as_deref()
-        .map(parse_dup_method)
+        .map(str::parse::<DupMethod>)
         .transpose()
         .map_err(to_py_err)?;
 
@@ -340,44 +326,4 @@ pub fn count_features(
         chunk_size,
     )
     .map_err(to_py_err)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Duplicate-method parsing
-
-    #[test]
-    fn every_documented_dup_method_parses() {
-        assert!(matches!(
-            parse_dup_method("barcode_start").unwrap(),
-            DupMethod::BarcodeStart
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_start_end").unwrap(),
-            DupMethod::BarcodeStartEnd
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_umi_start").unwrap(),
-            DupMethod::BarcodeUmiStart
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_umi_start_end").unwrap(),
-            DupMethod::BarcodeUmiStartEnd
-        ));
-    }
-
-    #[test]
-    fn an_unknown_dup_method_names_the_valid_ones() {
-        let err = parse_dup_method("start_umi").unwrap_err().to_string();
-        assert!(err.contains("barcode_start"), "{err}");
-        assert!(err.contains("barcode_umi_start_end"), "{err}");
-    }
-
-    #[test]
-    fn dup_method_parsing_is_case_sensitive() {
-        assert!(parse_dup_method("Barcode_Start").is_err());
-        assert!(parse_dup_method("").is_err());
-    }
 }

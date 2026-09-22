@@ -22,20 +22,6 @@ fn parse_normalize_method(s: &str) -> Result<NormalizeMethod> {
     }
 }
 
-fn parse_dup_method(s: &str) -> Result<DupMethod> {
-    match s {
-        "barcode_start" => Ok(DupMethod::BarcodeStart),
-        "barcode_start_end" => Ok(DupMethod::BarcodeStartEnd),
-        "barcode_umi_start" => Ok(DupMethod::BarcodeUmiStart),
-        "barcode_umi_start_end" => Ok(DupMethod::BarcodeUmiStartEnd),
-        _ => anyhow::bail!(
-            "unknown dup_method {:?}; expected one of: \
-             barcode_start, barcode_start_end, barcode_umi_start, barcode_umi_start_end",
-            s
-        ),
-    }
-}
-
 /// Compute pseudo-bulk coverage tracks, one bigWig (or bedGraph) per cell group.
 ///
 /// `bam_files` and `bam_labels` must be the same length; each label must match
@@ -141,7 +127,7 @@ pub fn bulk_coverage(
 
     let dup = dup_method
         .as_deref()
-        .map(parse_dup_method)
+        .map(str::parse::<DupMethod>)
         .transpose()
         .map_err(to_py_err)?;
 
@@ -293,31 +279,5 @@ mod tests {
         let err = parse_normalize_method("cpm").unwrap_err().to_string();
         assert!(err.contains("CPM"), "{err}");
         assert!(err.contains("RPKM"), "{err}");
-    }
-
-    #[test]
-    fn every_documented_dup_method_parses() {
-        assert!(matches!(
-            parse_dup_method("barcode_start").unwrap(),
-            DupMethod::BarcodeStart
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_start_end").unwrap(),
-            DupMethod::BarcodeStartEnd
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_umi_start").unwrap(),
-            DupMethod::BarcodeUmiStart
-        ));
-        assert!(matches!(
-            parse_dup_method("barcode_umi_start_end").unwrap(),
-            DupMethod::BarcodeUmiStartEnd
-        ));
-    }
-
-    #[test]
-    fn an_unknown_dup_method_names_the_valid_ones() {
-        let err = parse_dup_method("start_umi").unwrap_err().to_string();
-        assert!(err.contains("barcode_umi_start"), "{err}");
     }
 }

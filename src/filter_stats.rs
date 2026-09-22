@@ -71,20 +71,6 @@ impl AddAssign for BarcodeStat {
     }
 }
 
-fn parse_dup_method(s: &str) -> Result<DupMethod> {
-    match s {
-        "barcode_start" => Ok(DupMethod::BarcodeStart),
-        "barcode_start_end" => Ok(DupMethod::BarcodeStartEnd),
-        "barcode_umi_start" => Ok(DupMethod::BarcodeUmiStart),
-        "barcode_umi_start_end" => Ok(DupMethod::BarcodeUmiStartEnd),
-        _ => anyhow::bail!(
-            "unknown dup_method {:?}; expected one of: \
-             barcode_start, barcode_start_end, barcode_umi_start, barcode_umi_start_end",
-            s
-        ),
-    }
-}
-
 pub fn run_filter_stats(
     bam_path: &Path,
     barcodes: &[String],
@@ -469,7 +455,7 @@ pub fn filter_stats(
 ) -> PyResult<(Vec<String>, Vec<Vec<u64>>)> {
     let dup = dup_method
         .as_deref()
-        .map(parse_dup_method)
+        .map(str::parse::<DupMethod>)
         .transpose()
         .map_err(to_py_err)?;
 
