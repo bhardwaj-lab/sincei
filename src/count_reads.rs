@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter};
@@ -9,6 +8,7 @@ use crate::bam::fragment_length::resolve_extend_reads;
 use crate::bam::sc_record::AdjustRead;
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
+use crate::to_py_err;
 
 /// Pair each BAM with the sample name its matrix rows are labelled by.
 ///
@@ -201,18 +201,17 @@ pub fn count_bins(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        .map_err(to_py_err)?;
 
     let path_sample: Vec<(PathBuf, String)> =
-        sample_names(&bam_paths, labels).map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        sample_names(&bam_paths, labels).map_err(to_py_err)?;
     let bam_path_refs: Vec<(&std::path::Path, &str)> = path_sample
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))
         .collect();
 
     let adjust = AdjustRead {
-        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
-            .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
+        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
         max_paired_fragment_length: max_fragment_length,
     };
@@ -239,7 +238,7 @@ pub fn count_bins(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 /// Count reads into a cell × genomic-feature matrix and write the result as an
@@ -349,18 +348,17 @@ pub fn count_features(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        .map_err(to_py_err)?;
 
     let path_sample: Vec<(PathBuf, String)> =
-        sample_names(&bam_paths, labels).map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        sample_names(&bam_paths, labels).map_err(to_py_err)?;
     let bam_path_refs: Vec<(&std::path::Path, &str)> = path_sample
         .iter()
         .map(|(p, s)| (p.as_path(), s.as_str()))
         .collect();
 
     let adjust = AdjustRead {
-        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs)
-            .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?,
+        extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
         max_paired_fragment_length: max_fragment_length,
     };
@@ -386,7 +384,7 @@ pub fn count_features(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]

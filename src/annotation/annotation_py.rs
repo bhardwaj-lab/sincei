@@ -2,11 +2,11 @@
 
 use std::path::PathBuf;
 
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::annotation::{Feature, GenomeIndex, parse_annotation_files};
+use crate::to_py_err;
 
 /// A parsed genome annotation: its features, and an index to find them by
 /// position.
@@ -118,7 +118,7 @@ pub fn parse_annotation(
         )
     })
     .map(|(index, features)| GenomeAnnotation { index, features })
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]

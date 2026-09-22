@@ -5,6 +5,7 @@ pub mod counting;
 mod filter_barcodes;
 mod filter_stats;
 
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
@@ -15,6 +16,12 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
+/// Turn an error into a Python `RuntimeError` whose message holds the error and
+/// its causes on one line.
+pub(crate) fn to_py_err(error: anyhow::Error) -> PyErr {
+    PyRuntimeError::new_err(format!("{error:#}"))
+}
 
 // Version function
 #[pyfunction]

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
@@ -15,6 +14,7 @@ use crate::bam::bam_io::{
 };
 use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
+use crate::to_py_err;
 
 #[derive(Default, Clone)]
 struct BarcodeStat {
@@ -479,7 +479,7 @@ pub fn filter_stats(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        .map_err(to_py_err)?;
 
     run_filter_stats(
         bam_path.as_path(),
@@ -504,7 +504,7 @@ pub fn filter_stats(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]

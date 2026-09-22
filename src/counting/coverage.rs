@@ -37,6 +37,7 @@ use crate::bam::filters::{
 use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::fragment_length::{ensure_paired_end, resolve_extend_reads};
 use crate::bam::sc_record::{AdjustRead, EffectiveIntervals, ScRecord, parse_tag};
+use crate::to_py_err;
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {
@@ -1158,8 +1159,7 @@ pub fn bulk_coverage(
         ));
     }
 
-    let normalize = parse_normalize_method(normalize_using)
-        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+    let normalize = parse_normalize_method(normalize_using).map_err(to_py_err)?;
 
     let format = match out_format {
         "bigwig" | "bw" => OutputFormat::BigWig,
@@ -1175,7 +1175,7 @@ pub fn bulk_coverage(
         .as_deref()
         .map(parse_dup_method)
         .transpose()
-        .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))?;
+        .map_err(to_py_err)?;
 
     // MNase defaults: fragment length 130–200 bp unless explicitly overridden.
     let min_fragment_length = if mnase && min_fragment_length.is_none() {
@@ -1301,7 +1301,7 @@ pub fn bulk_coverage(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]

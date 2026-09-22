@@ -6,7 +6,6 @@ use dist_whitelist::{HammingWhitelist, match_any_whitelist};
 use noodles::bam;
 use noodles::sam::alignment::Record as AlignmentRecord;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
@@ -16,6 +15,7 @@ use crate::bam::bam_io::{
     BamWorker, ensure_barcode_tags_present, read_bam_header, read_group_ids, warn_unknown_group,
 };
 use crate::bam::filters::is_blacklisted;
+use crate::to_py_err;
 
 /// A map of barcodes stored as bytes in a `Vec<u8>` (directly read from the BAM
 /// record) to the bins is was detected in, stored as their index.
@@ -406,7 +406,7 @@ pub fn filter_barcodes(
         num_threads,
         chunk_size,
     )
-    .map_err(|e| PyRuntimeError::new_err(format!("{e:#}")))
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]
