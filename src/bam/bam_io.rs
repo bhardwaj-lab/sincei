@@ -45,6 +45,52 @@ pub(crate) fn thread_pool(num_threads: usize) -> Result<rayon::ThreadPool> {
         .context("failed to build thread pool")
 }
 
+/// One unit of parallel work: `[start, end)` of one window of one BAM.
+pub(crate) struct Chunk<'a> {
+    pub(crate) bam_idx: usize,
+    pub(crate) bam_path: &'a Path,
+    /// The window's position in the list the chunk was cut from.
+    pub(crate) chrom_idx: usize,
+    pub(crate) chrom: String,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    /// The end of that window.
+    pub(crate) window_end: usize,
+}
+
+/// Cut every `(chrom, start, end)` window of every `(bam_idx, path)` into chunks
+/// of at most `chunk_size` bp, largest first, so the longest work starts first
+/// and the last thread to finish is not left with a big chunk.
+pub(crate) fn chunk_windows<'a>(
+    bams: &[(usize, &'a Path)],
+    windows: &[(String, usize, usize)],
+    chunk_size: usize,
+) -> Vec<Chunk<'a>> {
+    let mut chunks: Vec<Chunk<'a>> = bams
+        .iter()
+        .flat_map(|&(bam_idx, bam_path)| {
+            windows
+                .iter()
+                .enumerate()
+                .flat_map(move |(chrom_idx, (chrom, window_start, window_end))| {
+                    (*window_start..*window_end)
+                        .step_by(chunk_size)
+                        .map(move |start| Chunk {
+                            bam_idx,
+                            bam_path,
+                            chrom_idx,
+                            chrom: chrom.clone(),
+                            start,
+                            end: (start + chunk_size).min(*window_end),
+                            window_end: *window_end,
+                        })
+                })
+        })
+        .collect();
+    chunks.sort_unstable_by_key(|c| std::cmp::Reverse(c.end - c.start));
+    chunks
+}
+
 /// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 

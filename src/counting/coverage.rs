@@ -27,8 +27,8 @@ use crate::annotation::region_index::{
     bins_touched, build_bigwig_index, build_bigwig_index_in_window,
 };
 use crate::bam::bam_io::{
-    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
+    ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
@@ -532,38 +532,15 @@ pub fn run_bulk_coverage(
         .map(parse_blacklist_bed)
         .transpose()?;
 
-    // Build chunk work list sorted by descending size. When a region is
-    // requested, only emit chunks on its chromosome that overlap it, so a
-    // multi-chromosome BAM doesn't enumerate (and later skip) every chunk.
-    let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
+    // Every BAM that is read, over the windows; they already cover only the
+    // region when one is given.
+    let bams: Vec<(usize, &Path)> = bam_paths
         .iter()
         .enumerate()
         .filter(|&(bam_idx, _)| bam_is_read[bam_idx])
-        .flat_map(|(bam_idx, &(bam_path, _))| {
-            windows.iter().flat_map(move |(chrom, win_start, win_end)| {
-                (*win_start..*win_end)
-                    .step_by(chunk_size)
-                    .map(move |start| {
-                        (
-                            bam_idx,
-                            bam_path,
-                            chrom.clone(),
-                            start,
-                            (start + chunk_size).min(*win_end),
-                        )
-                    })
-            })
-        })
-        .filter(
-            |(_, _, chrom, chunk_start, chunk_end)| match &region_filter {
-                Some((region_chrom, region_start, region_end)) => {
-                    chrom == region_chrom && chunk_start < region_end && chunk_end > region_start
-                }
-                None => true,
-            },
-        )
+        .map(|(i, &(p, _))| (i, p))
         .collect();
-    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
+    let work = chunk_windows(&bams, &windows, chunk_size);
 
     let pool = thread_pool(num_threads)?;
 
@@ -582,7 +559,14 @@ pub fn run_bulk_coverage(
             .map_init(
                 BamWorker::new,
                 |worker,
-                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 &Chunk {
+                     bam_idx,
+                     bam_path,
+                     ref chrom,
+                     start: chunk_start,
+                     end: chunk_end,
+                     ..
+                 }|
                  -> Result<AHashMap<(usize, usize), u32>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 

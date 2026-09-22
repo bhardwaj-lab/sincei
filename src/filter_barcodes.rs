@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, Samples, ensure_barcode_tags_present, read_bam_header, thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present, read_bam_header, thread_pool,
 };
 use crate::bam::filters::is_blacklisted;
 use crate::bam::sc_record::{get_tag_bytes, parse_tag};
@@ -71,23 +71,13 @@ fn run_filter_barcodes(
         .map(|(name, seq)| (name.to_string(), seq.length().get()))
         .collect();
 
-    // Build chunk work list sorted by descending size. Each chunk carries its
-    // chromosome's index so the per-read bin key needs no chromosome name.
-    let mut chunks: Vec<(usize, String, usize, usize)> = chrom_sizes
+    // Each chunk carries its chromosome's index, so the per-read bin key needs
+    // no chromosome name.
+    let windows: Vec<(String, usize, usize)> = chrom_sizes
         .iter()
-        .enumerate()
-        .flat_map(|(chrom_idx, (chrom, chrom_len))| {
-            (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                (
-                    chrom_idx,
-                    chrom.clone(),
-                    start,
-                    (start + chunk_size).min(*chrom_len),
-                )
-            })
-        })
+        .map(|(chrom, chrom_len)| (chrom.clone(), 0, *chrom_len))
         .collect();
-    chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.3 - b.2));
+    let chunks = chunk_windows(&[(0, bamfile)], &windows, chunk_size);
 
     let pool = thread_pool(num_threads)?;
 
@@ -96,7 +86,15 @@ fn run_filter_barcodes(
             .par_iter()
             .map_init(
                 BamWorker::new,
-                |worker, (chrom_idx, chrom, chunk_start, chunk_end)| -> Result<BinsByBarcode> {
+                |worker,
+                 &Chunk {
+                     chrom_idx,
+                     ref chrom,
+                     start: chunk_start,
+                     end: chunk_end,
+                     ..
+                 }|
+                 -> Result<BinsByBarcode> {
                     // One reader per rayon thread rather than per chunk.
                     let (reader, header, _motif) = worker.prepare(bamfile, None)?;
 
@@ -149,7 +147,7 @@ fn run_filter_barcodes(
                         // Ownership: a read belongs to the chunk that contains its
                         // alignment_start. The BAI query returns overlapping reads,
                         // so skip anything that started before this chunk.
-                        if start < *chunk_start {
+                        if start < chunk_start {
                             continue;
                         }
 
@@ -191,7 +189,7 @@ fn run_filter_barcodes(
 
                         // A read counts once, in the bin holding its start.
                         let bin_idx = start / bin_size;
-                        let bin_key = pack_bin(*chrom_idx, bin_idx);
+                        let bin_key = pack_bin(chrom_idx, bin_idx);
                         // Look up by the borrowed bytes first and only copy the
                         // key the first time this chunk sees it.
                         match local_bins.get_mut(key) {

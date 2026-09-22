@@ -23,8 +23,8 @@ use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{bins_touched, build_bin_index, build_bin_index_in_window};
 use crate::bam::bam_io::{
-    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
+    ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -144,29 +144,13 @@ pub fn count_bam_bins(
         .map(parse_blacklist_bed)
         .transpose()?;
 
-    // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
-    // Use chrom_sizes (from first BAM) as the master chromosome set.
-    // Sort by descending chunk size.
-    let mut work: Vec<(usize, &Path, String, usize, usize)> = bam_paths
+    // Every BAM over the windows of the first BAM's chromosomes.
+    let bams: Vec<(usize, &Path)> = bam_paths
         .iter()
         .enumerate()
-        .flat_map(|(bam_idx, &(bam_path, _))| {
-            windows.iter().flat_map(move |(chrom, win_start, win_end)| {
-                (*win_start..*win_end)
-                    .step_by(chunk_size)
-                    .map(move |start| {
-                        (
-                            bam_idx,
-                            bam_path,
-                            chrom.clone(),
-                            start,
-                            (start + chunk_size).min(*win_end),
-                        )
-                    })
-            })
-        })
+        .map(|(i, &(p, _))| (i, p))
         .collect();
-    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
+    let work = chunk_windows(&bams, &windows, chunk_size);
 
     let pool = thread_pool(num_threads)?;
 
@@ -196,7 +180,14 @@ pub fn count_bam_bins(
             .map_init(
                 BamWorker::new,
                 |worker,
-                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 &Chunk {
+                     bam_idx,
+                     bam_path,
+                     ref chrom,
+                     start: chunk_start,
+                     end: chunk_end,
+                     ..
+                 }|
                  -> Result<AHashMap<(usize, usize), u32>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 

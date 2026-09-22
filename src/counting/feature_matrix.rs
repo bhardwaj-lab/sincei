@@ -24,8 +24,8 @@ use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
 use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
 use crate::bam::bam_io::{
-    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
+    ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -188,31 +188,23 @@ pub fn count_bam_features(
     // Chromosomes to skip, as a byte-slice set for O(1) membership tests.
     let skip_set: AHashSet<&[u8]> = params.chr_to_skip.iter().map(|s| s.as_bytes()).collect();
 
-    // Build chunk work list: (bam_idx, bam_path, chrom, chunk_start, chunk_end).
-    // Only include chromosomes that appear in feature_index.
-    // Sort by descending chunk size.
-    let mut work: Vec<(usize, &Path, String, usize, usize)> = Vec::new();
+    // Each BAM over its own header's chromosomes that are not skipped and hold
+    // a feature.
+    let mut work: Vec<Chunk> = Vec::new();
     for (bam_idx, &(bam_path, _)) in bam_paths.iter().enumerate() {
         let hdr = read_bam_header(bam_path)?;
-        for (name, seq) in hdr.reference_sequences().iter() {
-            let name_bytes: &[u8] = name.as_ref();
-            if skip_set.contains(name_bytes) {
-                continue;
-            }
-            let chrom = name.to_string();
-            if !feature_index.contains_key(&chrom) {
-                continue;
-            }
-            let chrom_len = seq.length().get();
-            let mut start = 0;
-            while start < chrom_len {
-                let end = (start + chunk_size).min(chrom_len);
-                work.push((bam_idx, bam_path, chrom.clone(), start, end));
-                start += chunk_size;
-            }
-        }
+        let windows: Vec<(String, usize, usize)> = hdr
+            .reference_sequences()
+            .iter()
+            .filter(|(name, _)| {
+                let name_bytes: &[u8] = name.as_ref();
+                !skip_set.contains(name_bytes)
+            })
+            .map(|(name, seq)| (name.to_string(), 0, seq.length().get()))
+            .filter(|(chrom, _, _)| feature_index.contains_key(chrom))
+            .collect();
+        work.extend(chunk_windows(&[(bam_idx, bam_path)], &windows, chunk_size));
     }
-    work.sort_unstable_by_key(|b| std::cmp::Reverse(b.4 - b.3));
 
     let pool = thread_pool(num_threads)?;
 
@@ -242,7 +234,14 @@ pub fn count_bam_features(
             .map_init(
                 BamWorker::new,
                 |worker,
-                 &(bam_idx, bam_path, ref chrom, chunk_start, chunk_end)|
+                 &Chunk {
+                     bam_idx,
+                     bam_path,
+                     ref chrom,
+                     start: chunk_start,
+                     end: chunk_end,
+                     ..
+                 }|
                  -> Result<AHashMap<(usize, usize), u32>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 

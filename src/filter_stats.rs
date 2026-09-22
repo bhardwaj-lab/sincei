@@ -9,8 +9,8 @@ use rayon::prelude::*;
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::GenomeIndex;
 use crate::bam::bam_io::{
-    BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams, read_bam_header,
-    thread_pool,
+    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
+    ensure_genome_matches_bams, read_bam_header, thread_pool,
 };
 use crate::bam::filters::{DupMethod, DuplicateFilter, is_blacklisted, rna_strand_filter};
 use crate::bam::sc_record::{ScRecord, ScRecordOptions, parse_tag};
@@ -152,23 +152,13 @@ pub fn run_filter_stats(
     // One row block per group when grouping, otherwise a single block.
     let n_rows = samples.labels().len() * n_barcodes;
 
-    // Build chunk work list sorted by descending size.
-    // Each chunk iterates the sampling bins whose start falls within it, and
-    // carries its chromosome's length to bound the bins.
-    let mut chunks: Vec<(String, usize, usize, usize)> = chrom_sizes
+    // Each chunk iterates the sampling bins whose start falls within it; its
+    // window is the whole chromosome, whose end bounds the bins.
+    let windows: Vec<(String, usize, usize)> = chrom_sizes
         .iter()
-        .flat_map(|(chrom, chrom_len)| {
-            (0..*chrom_len).step_by(chunk_size).map(move |start| {
-                (
-                    chrom.clone(),
-                    start,
-                    (start + chunk_size).min(*chrom_len),
-                    *chrom_len,
-                )
-            })
-        })
+        .map(|(chrom, chrom_len)| (chrom.clone(), 0, *chrom_len))
         .collect();
-    chunks.sort_unstable_by_key(|b| std::cmp::Reverse(b.2 - b.1));
+    let chunks = chunk_windows(&[(0, bam_path)], &windows, chunk_size);
 
     let pool = thread_pool(num_threads)?;
 
@@ -184,7 +174,13 @@ pub fn run_filter_stats(
             .map_init(
                 BamWorker::new,
                 |worker,
-                 &(ref chrom, chunk_start, chunk_end, chrom_len)|
+                 &Chunk {
+                     ref chrom,
+                     start: chunk_start,
+                     end: chunk_end,
+                     window_end: chrom_len,
+                     ..
+                 }|
                  -> Result<Vec<BarcodeStat>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
