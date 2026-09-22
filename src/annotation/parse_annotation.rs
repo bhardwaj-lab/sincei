@@ -340,39 +340,39 @@ where
     Ok(parsed)
 }
 
-/// Parse a GTF file.
+/// Parse a GTF (`is_gtf`) or GFF3 file.
 ///
-/// `feature_types` filters by the feature-type column (e.g. `["gene"]`,
-/// `["exon", "CDS"]`); a record is kept when its type is any of them, and
-/// `None` includes every type. `name_attr` is the attribute key used as the
-/// feature name (e.g. `"gene_id"`, `"gene_name"`); falls back to
-/// `"chrom:start-end"` when a record lacks it, though a file where no kept
-/// record carries it is an error. Coordinates are converted from 1-based
-/// inclusive to 0-based half-open.
-fn parse_gtf_file(
-    path: &Path,
-    feature_types: Option<&[&str]>,
-    name_attr: &str,
-) -> Result<ParsedAnnotation> {
-    let mut reader = gtf::io::Reader::new(open_annotation(path)?);
-    build_annotation_index(reader.record_bufs(), feature_types, name_attr)
-}
-
-/// Parse a GFF3 file.
-///
-/// `feature_types` filters by the type column (e.g. `["mRNA", "lnc_RNA"]`); a
-/// record is kept when its type is any of them, and `None` includes every type.
-/// `name_attr` is the attribute tag used as the feature name (e.g. `"ID"`,
-/// `"Name"`); falls back to `"chrom:start-end"` when a record lacks it, though
-/// a file where no kept record carries it is an error. Coordinates are
-/// converted from 1-based inclusive to 0-based half-open.
+/// `feature_types` filters by the type column (e.g. `["gene"]`,
+/// `["mRNA", "lnc_RNA"]`); a record is kept when its type is any of them, and
+/// `None` includes every type. `name_attr` is the attribute used as the feature
+/// name (e.g. `"gene_id"`, `"ID"`); falls back to `"chrom:start-end"` when a
+/// record lacks it, though a file where no kept record carries it is an error.
+/// Coordinates are converted from 1-based inclusive to 0-based half-open.
 fn parse_gff_file(
     path: &Path,
+    is_gtf: bool,
     feature_types: Option<&[&str]>,
     name_attr: &str,
 ) -> Result<ParsedAnnotation> {
-    let mut reader = gff::io::Reader::new(open_annotation(path)?);
-    build_annotation_index(reader.record_bufs(), feature_types, name_attr)
+    with_gff_records(path, is_gtf, |records| {
+        build_annotation_index(records, feature_types, name_attr)
+    })
+}
+
+type GffRecords<'a> = dyn Iterator<Item = io::Result<gff::feature::RecordBuf>> + 'a;
+
+/// Hand the records of a GTF (`is_gtf`) or GFF3 file to `f`.
+fn with_gff_records<T>(
+    path: &Path,
+    is_gtf: bool,
+    f: impl FnOnce(&mut GffRecords) -> Result<T>,
+) -> Result<T> {
+    let inner = open_annotation(path)?;
+    if is_gtf {
+        f(&mut gtf::io::Reader::new(inner).record_bufs())
+    } else {
+        f(&mut gff::io::Reader::new(inner).record_bufs())
+    }
 }
 
 /// Fold one file's [`ParsedAnnotation`] into the running merge.
@@ -483,15 +483,10 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
         if metagene && (is_gtf || is_gff) {
             let exon_types = exon_types.unwrap_or(DEFAULT_EXON_TYPES);
             let offset = all_var.len();
-            let parsed = if is_gtf {
-                let group_attr = name_attr.unwrap_or(GENE_ATTR);
-                let mut reader = gtf::io::Reader::new(open_annotation(path)?);
-                build_metagene_index(reader.record_bufs(), exon_types, group_attr)
-            } else {
-                let group_attr = name_attr.unwrap_or(GENE_ATTR);
-                let mut reader = gff::io::Reader::new(open_annotation(path)?);
-                build_metagene_index(reader.record_bufs(), exon_types, group_attr)
-            }
+            let group_attr = name_attr.unwrap_or(GENE_ATTR);
+            let parsed = with_gff_records(path, is_gtf, |records| {
+                build_metagene_index(records, exon_types, group_attr)
+            })
             .with_context(|| format!("failed to parse annotation file: {}", path.display()))?;
 
             merge(parsed, offset, &mut all_var, &mut intervals_by_chrom);
@@ -507,24 +502,26 @@ pub fn parse_annotation_files<P: AsRef<Path>>(
         //
         // `detected` owns the type strings for as long as the borrowed slice
         // handed to the parser is alive.
-        let detected: Vec<String>;
-        let parsed = if is_gtf {
-            let region_types = feature_types.unwrap_or(&[GENCODE_GENE_TYPE]);
-            parse_gtf_file(path, Some(region_types), name_attr.unwrap_or(GENE_ATTR))
-        } else if is_gff {
-            let borrowed: Vec<&str>;
-            let region_types = match feature_types {
-                Some(types) => types,
+        let parsed = if is_gtf || is_gff {
+            let detected: Vec<String>;
+            let region_types: Vec<&str> = match feature_types {
+                Some(types) => types.to_vec(),
+                None if is_gtf => vec![GENCODE_GENE_TYPE],
                 None => {
                     detected = detect_gff_gene_types(path)?;
-                    borrowed = detected.iter().map(String::as_str).collect();
-                    &borrowed
+                    detected.iter().map(String::as_str).collect()
                 }
             };
             // `ID` rather than `gene_id`: an Ensembl-style GFF3 carries no
             // `gene_id` at all, and its `gene:` prefix is stripped, so both
             // styles come out as the bare gene id.
-            parse_gff_file(path, Some(region_types), name_attr.unwrap_or("ID"))
+            let default_name = if is_gtf { GENE_ATTR } else { "ID" };
+            parse_gff_file(
+                path,
+                is_gtf,
+                Some(&region_types),
+                name_attr.unwrap_or(default_name),
+            )
         } else {
             parse_bed_file(path)
         }
@@ -895,6 +892,7 @@ mod tests {
         // and transcript (1); asking for all three recovers the full set.
         let combined = parse_gff_file(
             &data(GFF_ENSEMBL),
+            false,
             Some(&["mRNA", "lnc_RNA", "transcript"]),
             "ID",
         )
@@ -903,16 +901,21 @@ mod tests {
         assert_eq!(combined.len(), N_TRANSCRIPTS);
 
         // The same mechanism selects unrelated types together.
-        let genes = parse_gff_file(&data(GFF_ENSEMBL), Some(&["gene", "ncRNA_gene"]), "gene_id")
-            .unwrap()
-            .features;
+        let genes = parse_gff_file(
+            &data(GFF_ENSEMBL),
+            false,
+            Some(&["gene", "ncRNA_gene"]),
+            "gene_id",
+        )
+        .unwrap()
+        .features;
         assert_eq!(genes.len(), 3);
     }
 
     #[test]
     fn ensembl_types_the_lncrna_gene_record_as_ncrna_gene() {
         // Asking only for "gene" misses it.
-        let only_gene = parse_gff_file(&data(GFF_ENSEMBL), Some(&["gene"]), "gene_id")
+        let only_gene = parse_gff_file(&data(GFF_ENSEMBL), false, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
         assert_eq!(only_gene.len(), 2);
@@ -920,7 +923,7 @@ mod tests {
 
         // The GTFs and the GENCODE GFF3 type all three the same way.
         for (file, ids) in [(GTF_GENCODE, GENCODE_IDS), (GTF_ENSEMBL, ENSEMBL_IDS)] {
-            let genes = parse_gtf_file(&data(file), Some(&["gene"]), "gene_id")
+            let genes = parse_gff_file(&data(file), true, Some(&["gene"]), "gene_id")
                 .unwrap()
                 .features;
             assert_eq!(names(&genes), ids, "{file}");
@@ -933,7 +936,7 @@ mod tests {
     #[test]
     fn gtf_transcripts_are_parsed_from_both_styles() {
         for (file, chrom) in [(GTF_GENCODE, "chr1"), (GTF_ENSEMBL, "chr1")] {
-            let var = parse_gtf_file(&data(file), Some(&["transcript"]), "transcript_id")
+            let var = parse_gff_file(&data(file), true, Some(&["transcript"]), "transcript_id")
                 .unwrap()
                 .features;
 
@@ -951,10 +954,10 @@ mod tests {
 
     #[test]
     fn gtf_gene_ids_are_versioned_in_gencode_but_not_in_ensembl() {
-        let gencode = parse_gtf_file(&data(GTF_GENCODE), Some(&["gene"]), "gene_id")
+        let gencode = parse_gff_file(&data(GTF_GENCODE), true, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
-        let ensembl = parse_gtf_file(&data(GTF_ENSEMBL), Some(&["gene"]), "gene_id")
+        let ensembl = parse_gff_file(&data(GTF_ENSEMBL), true, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
 
@@ -969,14 +972,14 @@ mod tests {
 
     #[test]
     fn gtf_name_attr_chooses_the_feature_name() {
-        let by_name = parse_gtf_file(&data(GTF_GENCODE), Some(&["gene"]), "gene_name")
+        let by_name = parse_gff_file(&data(GTF_GENCODE), true, Some(&["gene"]), "gene_name")
             .unwrap()
             .features;
         assert_eq!(names(&by_name), ["A930006A01Rik", "Prim2", "Rab23"]);
 
         // An attribute no record carries is an error, before any counting: the
         // alternative is a matrix whose every feature is named by coordinates.
-        let err = parse_gtf_file(&data(GTF_GENCODE), Some(&["gene"]), "no_such_attr")
+        let err = parse_gff_file(&data(GTF_GENCODE), true, Some(&["gene"]), "no_such_attr")
             .err()
             .expect("an attribute the file lacks should fail");
         assert!(format!("{err:#}").contains("no_such_attr"), "{err:#}");
@@ -1000,7 +1003,7 @@ mod tests {
         // Partial coverage is normal: a GENCODE GTF gives `gene_name` on its
         // genes, and anything without one keeps a coordinate name rather than
         // failing the whole file.
-        let var = parse_gtf_file(&data(GTF_GENCODE), None, "gene_name")
+        let var = parse_gff_file(&data(GTF_GENCODE), true, None, "gene_name")
             .unwrap()
             .features;
         assert!(var.iter().any(|v| v.name.as_deref() == Some("Prim2")));
@@ -1013,7 +1016,7 @@ mod tests {
 
     #[test]
     fn no_feature_type_filter_keeps_every_record() {
-        let all = parse_gtf_file(&data(GTF_GENCODE), None, "gene_id")
+        let all = parse_gff_file(&data(GTF_GENCODE), true, None, "gene_id")
             .unwrap()
             .features;
         // 391 exon + 269 CDS + 162 UTR + 48 transcript + 37 start + 37 stop + 3 gene
@@ -1024,7 +1027,7 @@ mod tests {
 
     #[test]
     fn gff_regions_are_named_by_id_and_agree_across_styles() {
-        let gencode = parse_gff_file(&data(GFF_GENCODE), Some(&["transcript"]), "ID")
+        let gencode = parse_gff_file(&data(GFF_GENCODE), false, Some(&["transcript"]), "ID")
             .unwrap()
             .features;
         assert_eq!(gencode.len(), N_TRANSCRIPTS);
@@ -1038,6 +1041,7 @@ mod tests {
         // styles name the same transcript the same way.
         let ensembl = parse_gff_file(
             &data(GFF_ENSEMBL),
+            false,
             Some(&["mRNA", "lnc_RNA", "transcript"]),
             "ID",
         )
@@ -1057,13 +1061,13 @@ mod tests {
         // and Rab23 come out on identical coordinates. (The lncRNA is excluded
         // only because its BED entry covers the transcript, not the gene.)
         let bed = parse_bed_file(&data(BED)).unwrap().features;
-        let gencode_gtf = parse_gtf_file(&data(GTF_GENCODE), Some(&["gene"]), "gene_id")
+        let gencode_gtf = parse_gff_file(&data(GTF_GENCODE), true, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
-        let ensembl_gtf = parse_gtf_file(&data(GTF_ENSEMBL), Some(&["gene"]), "gene_id")
+        let ensembl_gtf = parse_gff_file(&data(GTF_ENSEMBL), true, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
-        let ensembl_gff = parse_gff_file(&data(GFF_ENSEMBL), Some(&["gene"]), "gene_id")
+        let ensembl_gff = parse_gff_file(&data(GFF_ENSEMBL), false, Some(&["gene"]), "gene_id")
             .unwrap()
             .features;
 
@@ -1089,12 +1093,17 @@ mod tests {
             .write_all(&plain)
             .unwrap();
 
-        let from_plain = parse_gtf_file(&plain_path, Some(&["transcript"]), "transcript_id")
+        let from_plain = parse_gff_file(&plain_path, true, Some(&["transcript"]), "transcript_id")
             .unwrap()
             .features;
-        let from_bgzf = parse_gtf_file(&data(GTF_GENCODE), Some(&["transcript"]), "transcript_id")
-            .unwrap()
-            .features;
+        let from_bgzf = parse_gff_file(
+            &data(GTF_GENCODE),
+            true,
+            Some(&["transcript"]),
+            "transcript_id",
+        )
+        .unwrap()
+        .features;
 
         assert_eq!(from_plain.len(), N_TRANSCRIPTS);
         assert_eq!(names(&from_plain), names(&from_bgzf));
