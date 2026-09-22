@@ -49,6 +49,29 @@ impl RawRecordFilter {
         }
     }
 
+    /// A filter over the given options, or `None` when none is set: a filter
+    /// that rejects nothing would still cost a check per read.
+    pub fn from_options(
+        min_mapq: Option<u8>,
+        sam_flag_include: Option<u16>,
+        sam_flag_exclude: Option<u16>,
+        filter_rna_strand: Option<String>,
+    ) -> Option<Self> {
+        if min_mapq.is_none()
+            && sam_flag_include.is_none()
+            && sam_flag_exclude.is_none()
+            && filter_rna_strand.is_none()
+        {
+            return None;
+        }
+        Some(Self {
+            min_mapq,
+            sam_flag_include,
+            sam_flag_exclude,
+            filter_rna_strand,
+        })
+    }
+
     /// Returns `true` if the record passes all active thresholds.
     #[inline]
     pub fn passes(&self, flags: u16, mapq: Option<u8>) -> bool {
@@ -119,6 +142,32 @@ impl QcFilter {
             max_gc: None,
             min_aligned_fraction: None,
         }
+    }
+
+    /// A filter over the given bounds, or `None` when none is set: a filter
+    /// that rejects nothing would still cost a check per read.
+    pub fn from_bounds(
+        min_fragment_length: Option<usize>,
+        max_fragment_length: Option<usize>,
+        min_gc: Option<f32>,
+        max_gc: Option<f32>,
+        min_aligned_fraction: Option<f32>,
+    ) -> Option<Self> {
+        if min_fragment_length.is_none()
+            && max_fragment_length.is_none()
+            && min_gc.is_none()
+            && max_gc.is_none()
+            && min_aligned_fraction.is_none()
+        {
+            return None;
+        }
+        Some(Self {
+            min_fragment_length,
+            max_fragment_length,
+            min_gc,
+            max_gc,
+            min_aligned_fraction,
+        })
     }
 
     /// Returns `true` if the record passes all active thresholds.
@@ -1229,5 +1278,81 @@ mod tests {
         assert_eq!(complement(b'a'), b'T');
         assert_eq!(complement(b'N'), b'N');
         assert_eq!(complement(b'X'), b'N');
+    }
+
+    // QC filter construction
+
+    #[test]
+    fn no_qc_option_means_no_qc_filter_at_all() {
+        // Building a filter that rejects nothing would cost a check per read.
+        assert!(QcFilter::from_bounds(None, None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn a_single_qc_option_is_enough_to_build_the_filter() {
+        for filter in [
+            QcFilter::from_bounds(Some(50), None, None, None, None),
+            QcFilter::from_bounds(None, Some(500), None, None, None),
+            QcFilter::from_bounds(None, None, Some(0.3), None, None),
+            QcFilter::from_bounds(None, None, None, Some(0.7), None),
+            QcFilter::from_bounds(None, None, None, None, Some(0.9)),
+        ] {
+            assert!(filter.is_some());
+        }
+    }
+
+    #[test]
+    fn the_qc_filter_carries_every_option_through_unchanged() {
+        let filter =
+            QcFilter::from_bounds(Some(50), Some(500), Some(0.3), Some(0.7), Some(0.9)).unwrap();
+
+        assert_eq!(filter.min_fragment_length, Some(50));
+        assert_eq!(filter.max_fragment_length, Some(500));
+        assert_eq!(filter.min_gc, Some(0.3));
+        assert_eq!(filter.max_gc, Some(0.7));
+        assert_eq!(filter.min_aligned_fraction, Some(0.9));
+    }
+
+    // Raw-record filter construction
+
+    #[test]
+    fn no_record_option_means_no_record_filter_at_all() {
+        assert!(RawRecordFilter::from_options(None, None, None, None).is_none());
+    }
+
+    #[test]
+    fn a_single_record_option_is_enough_to_build_the_filter() {
+        for filter in [
+            RawRecordFilter::from_options(Some(20), None, None, None),
+            RawRecordFilter::from_options(None, Some(64), None, None),
+            RawRecordFilter::from_options(None, None, Some(16), None),
+            RawRecordFilter::from_options(None, None, None, Some("forward".to_string())),
+        ] {
+            assert!(filter.is_some());
+        }
+    }
+
+    #[test]
+    fn the_record_filter_carries_every_option_through_unchanged() {
+        let filter = RawRecordFilter::from_options(
+            Some(20),
+            Some(64),
+            Some(16),
+            Some("reverse".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(filter.min_mapq, Some(20));
+        assert_eq!(filter.sam_flag_include, Some(64));
+        assert_eq!(filter.sam_flag_exclude, Some(16));
+        assert_eq!(filter.filter_rna_strand.as_deref(), Some("reverse"));
+    }
+
+    #[test]
+    fn a_zero_valued_option_still_builds_a_filter() {
+        // Zero is a real threshold, not an absent one: `Some(0)` must not be
+        // confused with `None`.
+        assert!(RawRecordFilter::from_options(Some(0), None, None, None).is_some());
+        assert!(QcFilter::from_bounds(Some(0), None, None, None, None).is_some());
     }
 }

@@ -55,51 +55,6 @@ fn parse_dup_method(s: &str) -> Result<DupMethod> {
     }
 }
 
-fn build_qc_filter(
-    min_fragment_length: Option<usize>,
-    max_fragment_length: Option<usize>,
-    min_gc: Option<f32>,
-    max_gc: Option<f32>,
-    min_aligned_fraction: Option<f32>,
-) -> Option<QcFilter> {
-    if min_fragment_length.is_none()
-        && max_fragment_length.is_none()
-        && min_gc.is_none()
-        && max_gc.is_none()
-        && min_aligned_fraction.is_none()
-    {
-        return None;
-    }
-    Some(QcFilter {
-        min_fragment_length,
-        max_fragment_length,
-        min_gc,
-        max_gc,
-        min_aligned_fraction,
-    })
-}
-
-fn build_record_filter(
-    min_mapq: Option<u8>,
-    sam_flag_include: Option<u16>,
-    sam_flag_exclude: Option<u16>,
-    filter_rna_strand: Option<String>,
-) -> Option<RawRecordFilter> {
-    if min_mapq.is_none()
-        && sam_flag_include.is_none()
-        && sam_flag_exclude.is_none()
-        && filter_rna_strand.is_none()
-    {
-        return None;
-    }
-    Some(RawRecordFilter {
-        min_mapq,
-        sam_flag_include,
-        sam_flag_exclude,
-        filter_rna_strand,
-    })
-}
-
 /// Count reads into a cell × genomic-bin matrix and write the result as an
 /// AnnData HDF5 file.
 ///
@@ -182,7 +137,7 @@ pub fn count_bins(
         metagene: false,
     };
 
-    let qc = build_qc_filter(
+    let qc = QcFilter::from_bounds(
         min_fragment_length,
         max_fragment_length,
         min_gc,
@@ -190,7 +145,7 @@ pub fn count_bins(
         min_aligned_fraction,
     );
 
-    let record_filter = build_record_filter(
+    let record_filter = RawRecordFilter::from_options(
         min_mapq,
         sam_flag_include,
         sam_flag_exclude,
@@ -329,7 +284,7 @@ pub fn count_features(
         metagene,
     };
 
-    let qc = build_qc_filter(
+    let qc = QcFilter::from_bounds(
         min_fragment_length,
         max_fragment_length,
         min_gc,
@@ -337,7 +292,7 @@ pub fn count_features(
         min_aligned_fraction,
     );
 
-    let record_filter = build_record_filter(
+    let record_filter = RawRecordFilter::from_options(
         min_mapq,
         sam_flag_include,
         sam_flag_exclude,
@@ -424,75 +379,5 @@ mod tests {
     fn dup_method_parsing_is_case_sensitive() {
         assert!(parse_dup_method("Barcode_Start").is_err());
         assert!(parse_dup_method("").is_err());
-    }
-
-    // QC filter construction
-
-    #[test]
-    fn no_qc_option_means_no_qc_filter_at_all() {
-        // Building a filter that rejects nothing would cost a check per read.
-        assert!(build_qc_filter(None, None, None, None, None).is_none());
-    }
-
-    #[test]
-    fn a_single_qc_option_is_enough_to_build_the_filter() {
-        for filter in [
-            build_qc_filter(Some(50), None, None, None, None),
-            build_qc_filter(None, Some(500), None, None, None),
-            build_qc_filter(None, None, Some(0.3), None, None),
-            build_qc_filter(None, None, None, Some(0.7), None),
-            build_qc_filter(None, None, None, None, Some(0.9)),
-        ] {
-            assert!(filter.is_some());
-        }
-    }
-
-    #[test]
-    fn the_qc_filter_carries_every_option_through_unchanged() {
-        let filter = build_qc_filter(Some(50), Some(500), Some(0.3), Some(0.7), Some(0.9)).unwrap();
-
-        assert_eq!(filter.min_fragment_length, Some(50));
-        assert_eq!(filter.max_fragment_length, Some(500));
-        assert_eq!(filter.min_gc, Some(0.3));
-        assert_eq!(filter.max_gc, Some(0.7));
-        assert_eq!(filter.min_aligned_fraction, Some(0.9));
-    }
-
-    // Raw-record filter construction
-
-    #[test]
-    fn no_record_option_means_no_record_filter_at_all() {
-        assert!(build_record_filter(None, None, None, None).is_none());
-    }
-
-    #[test]
-    fn a_single_record_option_is_enough_to_build_the_filter() {
-        for filter in [
-            build_record_filter(Some(20), None, None, None),
-            build_record_filter(None, Some(64), None, None),
-            build_record_filter(None, None, Some(16), None),
-            build_record_filter(None, None, None, Some("forward".to_string())),
-        ] {
-            assert!(filter.is_some());
-        }
-    }
-
-    #[test]
-    fn the_record_filter_carries_every_option_through_unchanged() {
-        let filter =
-            build_record_filter(Some(20), Some(64), Some(16), Some("reverse".to_string())).unwrap();
-
-        assert_eq!(filter.min_mapq, Some(20));
-        assert_eq!(filter.sam_flag_include, Some(64));
-        assert_eq!(filter.sam_flag_exclude, Some(16));
-        assert_eq!(filter.filter_rna_strand.as_deref(), Some("reverse"));
-    }
-
-    #[test]
-    fn a_zero_valued_option_still_builds_a_filter() {
-        // Zero is a real threshold, not an absent one: `Some(0)` must not be
-        // confused with `None`.
-        assert!(build_record_filter(Some(0), None, None, None).is_some());
-        assert!(build_qc_filter(Some(0), None, None, None, None).is_some());
     }
 }

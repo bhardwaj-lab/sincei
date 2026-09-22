@@ -1179,33 +1179,20 @@ pub fn bulk_coverage(
         )));
     }
 
-    let qc = {
-        let needs = min_fragment_length.is_some()
-            || max_fragment_length.is_some()
-            || min_gc.is_some()
-            || max_gc.is_some()
-            || min_aligned_fraction.is_some();
-        needs.then_some(QcFilter {
-            min_fragment_length,
-            max_fragment_length,
-            min_gc,
-            max_gc,
-            min_aligned_fraction,
-        })
-    };
+    let qc = QcFilter::from_bounds(
+        min_fragment_length,
+        max_fragment_length,
+        min_gc,
+        max_gc,
+        min_aligned_fraction,
+    );
 
-    let record_filter = {
-        let needs = min_mapq.is_some()
-            || sam_flag_include.is_some()
-            || sam_flag_exclude.is_some()
-            || filter_rna_strand.is_some();
-        needs.then_some(RawRecordFilter {
-            min_mapq,
-            sam_flag_include,
-            sam_flag_exclude,
-            filter_rna_strand,
-        })
-    };
+    let record_filter = RawRecordFilter::from_options(
+        min_mapq,
+        sam_flag_include,
+        sam_flag_exclude,
+        filter_rna_strand,
+    );
 
     // Validate and parse offset.
     let parsed_offset: Option<(i32, Option<i32>)> = match offset.as_deref() {
