@@ -158,9 +158,36 @@ fn gff_strand_to_char(s: gff::feature::record::Strand) -> char {
 /// shifting each file's `var_idx` by a running offset means the buckets are
 /// still growing. Building the [`ChromIndex`] once at the end sorts each
 /// chromosome exactly once, rather than sorting per file and re-sorting on merge.
+#[derive(Default)]
 struct ParsedAnnotation {
     intervals: AHashMap<String, Vec<Interval>>,
     features: Vec<Feature>,
+}
+
+impl ParsedAnnotation {
+    /// Add one feature, and the interval that points at it.
+    fn push(
+        &mut self,
+        chrom: String,
+        start: usize,
+        end: usize,
+        name: Option<String>,
+        strand: char,
+    ) {
+        let var_idx = self.features.len();
+        self.features.push(Feature {
+            chrom: chrom.clone(),
+            start,
+            end,
+            name,
+            strand,
+        });
+        self.intervals.entry(chrom).or_default().push(Interval {
+            start,
+            end,
+            var_idx,
+        });
+    }
 }
 
 /// Load a BED file of blacklisted regions into a searchable [`GenomeIndex`].
@@ -187,9 +214,7 @@ fn parse_bed_file(path: &Path) -> Result<ParsedAnnotation> {
     let mut reader = bed::io::Reader::<3, _>::new(open_annotation(path)?);
     let mut record = bed::Record::<3>::default();
 
-    let mut intervals_by_chrom: AHashMap<String, Vec<Interval>> = AHashMap::new();
-    let mut var: Vec<Feature> = Vec::new();
-    let mut region_idx: usize = 0;
+    let mut parsed = ParsedAnnotation::default();
 
     loop {
         match reader.read_record(&mut record) {
@@ -237,25 +262,10 @@ fn parse_bed_file(path: &Path) -> Result<ParsedAnnotation> {
             .map(|c| if c == '+' || c == '-' { c } else { '*' })
             .unwrap_or('*');
 
-        var.push(Feature {
-            chrom: chrom.clone(),
-            start,
-            end,
-            name: name.clone(),
-            strand,
-        });
-        intervals_by_chrom.entry(chrom).or_default().push(Interval {
-            start,
-            end,
-            var_idx: region_idx,
-        });
-        region_idx += 1;
+        parsed.push(chrom, start, end, name, strand);
     }
 
-    Ok(ParsedAnnotation {
-        intervals: intervals_by_chrom,
-        features: var,
-    })
+    Ok(parsed)
 }
 
 /// Build a [`GenomeIndex`] from per-chromosome unsorted interval lists,
@@ -278,9 +288,7 @@ fn build_annotation_index<I>(
 where
     I: Iterator<Item = io::Result<gff::feature::RecordBuf>>,
 {
-    let mut intervals_by_chrom: AHashMap<String, Vec<Interval>> = AHashMap::new();
-    let mut var: Vec<Feature> = Vec::new();
-    let mut region_idx: usize = 0;
+    let mut parsed = ParsedAnnotation::default();
     // A key the file does not use is reported before anything is counted,
     // rather than turning every feature into a coordinate string.
     let mut n_kept = 0usize;
@@ -319,19 +327,7 @@ where
 
         let strand = gff_strand_to_char(record.strand());
 
-        var.push(Feature {
-            chrom: chrom.clone(),
-            start,
-            end,
-            name: name.clone(),
-            strand,
-        });
-        intervals_by_chrom.entry(chrom).or_default().push(Interval {
-            start,
-            end,
-            var_idx: region_idx,
-        });
-        region_idx += 1;
+        parsed.push(chrom, start, end, name, strand);
     }
 
     // Naming every feature by its coordinates is never what was asked for, so a
@@ -341,10 +337,7 @@ where
         "no record carries the attribute {name_attr:?}"
     );
 
-    Ok(ParsedAnnotation {
-        intervals: intervals_by_chrom,
-        features: var,
-    })
+    Ok(parsed)
 }
 
 /// Parse a GTF file.
