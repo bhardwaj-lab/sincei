@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 
 use super::count_utils::{
-    BarcodeNumbers, build_csr, merge_counts, observed_rows, product_cells, to_run_numbers,
+    BarcodeNumbers, Entry, build_csr, observed_rows, product_cells, to_entries, to_run_numbers,
     write_counts_anndata,
 };
 use super::params::{CountingParams, parse_region};
@@ -173,9 +173,8 @@ pub fn count_bam_bins(
         _ => None,
     };
 
-    // Count each chunk into its own map, then combine them with a parallel
-    // tree reduction.
-    let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
+    // Count each chunk into its own map, and keep its counts as matrix entries.
+    let mut entries: Vec<Vec<Entry>> = pool.install(|| {
         work.par_iter()
             .map_init(
                 BamWorker::default,
@@ -188,14 +187,14 @@ pub fn count_bam_bins(
                      end: chunk_end,
                      ..
                  }|
-                 -> Result<AHashMap<(usize, usize), u32>> {
+                 -> Result<Vec<Entry>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
                     // Each work chunk covers a single chromosome, so its bin
                     // geometry is looked up once here rather than per read.
                     let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
                     else {
-                        return Ok(AHashMap::new());
+                        return Ok(Vec::new());
                     };
                     // Bin 0 of this chromosome starts here: 0 unless a region
                     // restricted the tiling to a window.
@@ -211,7 +210,7 @@ pub fn count_bam_bins(
                     let region_bounds = match &region_filter {
                         Some((region_chrom, region_start, region_end)) => {
                             if region_chrom.as_str() != chrom.as_str() {
-                                return Ok(AHashMap::new());
+                                return Ok(Vec::new());
                             }
                             Some((*region_start, *region_end))
                         }
@@ -224,7 +223,7 @@ pub fn count_bam_bins(
                         .with_context(|| format!("failed to parse region: {}", region_str))?;
                     let query = match reader.query(header, &region) {
                         Ok(q) => q,
-                        Err(_) => return Ok(AHashMap::new()),
+                        Err(_) => return Ok(Vec::new()),
                     };
 
                     let mut dup_filter: Option<DuplicateFilter> =
@@ -340,30 +339,34 @@ pub fn count_bam_bins(
                     }
 
                     if barcode_index.is_none() {
-                        local_acc =
-                            to_run_numbers(local_acc, n_samples, &chunk_barcodes, &run_barcodes);
+                        return to_run_numbers(
+                            local_acc,
+                            n_samples,
+                            &chunk_barcodes,
+                            &run_barcodes,
+                        );
                     }
-                    Ok(local_acc)
+                    to_entries(local_acc, |cell| cell)
                 },
             )
-            .reduce(|| Ok(AHashMap::new()), |a, b| Ok(merge_counts(a?, b?)))
+            .collect::<Result<_>>()
     })?;
 
     // With a whitelist every sample x barcode is a row; without one, only the
     // (sample, barcode) pairs that have counts.
-    let (global_acc, cells) = match barcodes {
-        Some(barcodes) => (global_acc, product_cells(sample_labels, barcodes)),
+    let cells = match barcodes {
+        Some(barcodes) => product_cells(sample_labels, barcodes),
         None => {
             let found = run_barcodes
                 .into_inner()
                 .unwrap_or_else(PoisonError::into_inner)
                 .into_barcodes();
-            observed_rows(global_acc, sample_labels, &found)
+            observed_rows(&mut entries, sample_labels, &found)
         }
     };
     let n_cells = cells.len();
 
-    let matrix = build_csr(&global_acc, n_cells, n_features)?;
+    let matrix = build_csr(entries, n_cells, n_features)?;
 
     write_counts_anndata(
         output_path,

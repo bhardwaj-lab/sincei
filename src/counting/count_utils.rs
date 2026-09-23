@@ -1,7 +1,7 @@
 //! Builds the count matrix, and moves it in and out of AnnData.
 //!
-//! `build_csr` turns the counting loops' sparse (cell, feature) accumulator
-//! into a CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
+//! `build_csr` turns the counting loops' (cell, feature, count) entries into a
+//! CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
 //! tables naming its cells and regions.
 //!
 //! The readers (`read_x_f64` and the column helpers) go the other way, reading
@@ -138,6 +138,22 @@ pub(crate) fn df_str_col(df: &DataFrame, name: &str) -> Result<Vec<String>> {
 /// Counts keyed by `(cell, feature)`.
 pub(super) type CellCounts = AHashMap<(usize, usize), u32>;
 
+/// One count matrix entry: `(cell, feature, count)`.
+pub(super) type Entry = (u32, u32, u32);
+
+fn to_u32(index: usize) -> Result<u32> {
+    u32::try_from(index).context("the count matrix has more than 2^32 rows or columns")
+}
+
+/// A chunk's counts as matrix entries, with each cell moved to `row(cell)`.
+pub(super) fn to_entries(acc: CellCounts, row: impl Fn(usize) -> usize) -> Result<Vec<Entry>> {
+    let mut entries = Vec::with_capacity(acc.len());
+    for ((cell, feature), count) in acc {
+        entries.push((to_u32(row(cell))?, to_u32(feature)?, count));
+    }
+    Ok(entries)
+}
+
 /// Every sample x barcode pair, samples varying slowest: the rows of a count
 /// with a barcode whitelist.
 pub(super) fn product_cells(samples: &[String], barcodes: &[String]) -> Vec<(String, String)> {
@@ -179,13 +195,13 @@ impl BarcodeNumbers {
 }
 
 /// Move a chunk's counts, keyed `(barcode * n_samples + sample, feature)` by
-/// the chunk's barcode numbers, to the run's numbers.
+/// the chunk's barcode numbers, to the run's numbers, as matrix entries.
 pub(super) fn to_run_numbers(
     acc: CellCounts,
     n_samples: usize,
     chunk: &BarcodeNumbers,
     run: &Mutex<BarcodeNumbers>,
-) -> CellCounts {
+) -> Result<Vec<Entry>> {
     let mut to_run = vec![0usize; chunk.numbers.len()];
     {
         let mut run = run.lock().unwrap_or_else(PoisonError::into_inner);
@@ -193,48 +209,42 @@ pub(super) fn to_run_numbers(
             to_run[number] = run.number(barcode);
         }
     }
-    acc.into_iter()
-        .map(|((cell, feature), count)| {
-            let (barcode, sample) = (cell / n_samples, cell % n_samples);
-            ((to_run[barcode] * n_samples + sample, feature), count)
-        })
-        .collect()
+    to_entries(acc, |cell| {
+        to_run[cell / n_samples] * n_samples + cell % n_samples
+    })
 }
 
 /// Keep only the rows with counts, ordered by sample, then barcode.
 ///
-/// `acc` is keyed `(barcode * n_samples + sample, feature)` by the run's
-/// barcode numbers, and `barcodes` holds each number's barcode. Returns the
-/// counts keyed by the new row numbers, and the (sample, barcode) of each row.
+/// The entries' cells are `barcode * n_samples + sample` by the run's barcode
+/// numbers, and `barcodes` holds each number's barcode. Moves the entries to
+/// the new row numbers, and returns the (sample, barcode) of each row.
 pub(super) fn observed_rows(
-    acc: CellCounts,
+    entries: &mut [Vec<Entry>],
     samples: &[String],
     barcodes: &[String],
-) -> (CellCounts, Vec<(String, String)>) {
+) -> Vec<(String, String)> {
     let n_samples = samples.len();
-    let mut keys: Vec<usize> = acc.keys().map(|&(key, _)| key).collect();
-    keys.sort_unstable();
-    keys.dedup();
-    let mut rows: Vec<(usize, &str, usize)> = keys
-        .into_iter()
+    let mut seen = vec![false; barcodes.len() * n_samples];
+    for &(key, _, _) in entries.iter().flatten() {
+        seen[key as usize] = true;
+    }
+    let mut rows: Vec<(usize, &str, usize)> = (0..seen.len())
+        .filter(|&key| seen[key])
         .map(|key| (key % n_samples, barcodes[key / n_samples].as_str(), key))
         .collect();
     rows.sort_unstable();
 
-    let row_of: AHashMap<usize, usize> = rows
-        .iter()
-        .enumerate()
-        .map(|(row, &(_, _, key))| (key, row))
-        .collect();
-    let cells = rows
-        .iter()
+    let mut row_of = vec![0u32; seen.len()];
+    for (row, &(_, _, key)) in rows.iter().enumerate() {
+        row_of[key] = row as u32;
+    }
+    for entry in entries.iter_mut().flatten() {
+        entry.0 = row_of[entry.0 as usize];
+    }
+    rows.iter()
         .map(|&(sample, barcode, _)| (samples[sample].clone(), barcode.to_string()))
-        .collect();
-    let acc = acc
-        .into_iter()
-        .map(|((key, feature), count)| ((row_of[&key], feature), count))
-        .collect();
-    (acc, cells)
+        .collect()
 }
 
 /// Add two chunks' `(cell, feature) -> count` maps together.
@@ -252,31 +262,66 @@ pub(super) fn merge_counts(
     keep
 }
 
-/// Build a sparse count matrix in CSR format from a HashMap COO accumulator.
+/// Build a sparse count matrix in CSR format from the chunks' entries.
+///
+/// Two chunks can each hold an entry for the same cell and feature, as a read
+/// can reach past the end of its chunk; such entries are added together. Each
+/// chunk's entries are freed as soon as they are placed.
 pub(super) fn build_csr(
-    accumulator: &AHashMap<(usize, usize), u32>,
+    entries: Vec<Vec<Entry>>,
     n_rows: usize,
     n_cols: usize,
 ) -> Result<CsrMatrix<u32>> {
-    let mut row_data: Vec<Vec<(usize, u32)>> = vec![vec![]; n_rows];
-    for (&(row, col), &val) in accumulator {
-        row_data[row].push((col, val));
-    }
-    for row in &mut row_data {
-        row.sort_unstable_by_key(|&(col, _)| col);
-    }
-
     let mut row_offsets = vec![0usize; n_rows + 1];
-    let mut col_indices: Vec<usize> = Vec::new();
-    let mut values: Vec<u32> = Vec::new();
+    for &(row, _, _) in entries.iter().flatten() {
+        row_offsets[row as usize + 1] += 1;
+    }
+    for i in 0..n_rows {
+        row_offsets[i + 1] += row_offsets[i];
+    }
 
-    for (i, row) in row_data.iter().enumerate() {
-        row_offsets[i + 1] = row_offsets[i] + row.len();
-        for &(col, val) in row {
-            col_indices.push(col);
-            values.push(val);
+    let n_entries = row_offsets[n_rows];
+    let mut col_indices = vec![0usize; n_entries];
+    let mut values = vec![0u32; n_entries];
+    let mut next = row_offsets.clone();
+    for chunk in entries {
+        for (row, col, count) in chunk {
+            let slot = &mut next[row as usize];
+            col_indices[*slot] = col as usize;
+            values[*slot] = count;
+            *slot += 1;
         }
     }
+    drop(next);
+
+    let mut row: Vec<(usize, u32)> = Vec::new();
+    let mut nnz = 0;
+    for r in 0..n_rows {
+        let (start, end) = (row_offsets[r], row_offsets[r + 1]);
+        row.clear();
+        row.extend(
+            col_indices[start..end]
+                .iter()
+                .copied()
+                .zip(values[start..end].iter().copied()),
+        );
+        row.sort_unstable_by_key(|&(col, _)| col);
+        row_offsets[r] = nnz;
+        for &(col, count) in &row {
+            if nnz > row_offsets[r] && col_indices[nnz - 1] == col {
+                values[nnz - 1] += count;
+            } else {
+                col_indices[nnz] = col;
+                values[nnz] = count;
+                nnz += 1;
+            }
+        }
+    }
+    row_offsets[n_rows] = nnz;
+    col_indices.truncate(nnz);
+    col_indices.shrink_to_fit();
+    values.truncate(nnz);
+    values.shrink_to_fit();
 
     CsrMatrix::try_from_csr_data(n_rows, n_cols, row_offsets, col_indices, values)
         .map_err(|e| anyhow::anyhow!("failed to build CSR matrix: {:?}", e))
@@ -404,11 +449,7 @@ mod tests {
 
     #[test]
     fn build_csr_places_every_entry_at_its_coordinate() {
-        let acc: AHashMap<(usize, usize), u32> = [((0, 1), 5), ((1, 0), 3), ((1, 2), 7)]
-            .into_iter()
-            .collect();
-
-        let m = build_csr(&acc, 2, 3).unwrap();
+        let m = build_csr(vec![vec![(0, 1, 5), (1, 0, 3)], vec![(1, 2, 7)]], 2, 3).unwrap();
 
         assert_eq!((m.nrows(), m.ncols()), (2, 3));
         assert_eq!(m.nnz(), 3);
@@ -417,11 +458,11 @@ mod tests {
 
     #[test]
     fn build_csr_sorts_column_indices_within_each_row() {
-        // CSR requires ascending column indices per row; the accumulator is an
-        // unordered hash map, so the sort has to happen in build_csr.
-        let acc: AHashMap<(usize, usize), u32> = (0..8).map(|c| ((0, 7 - c), 1u32)).collect();
+        // CSR requires ascending column indices per row; the entries come from
+        // unordered hash maps, so the sort has to happen in build_csr.
+        let entries = vec![(0..8).map(|c| (0, 7 - c, 1)).collect()];
 
-        let m = build_csr(&acc, 1, 8).unwrap();
+        let m = build_csr(entries, 1, 8).unwrap();
 
         let cols: Vec<usize> = m.col_indices().to_vec();
         assert_eq!(cols, (0..8).collect::<Vec<_>>());
@@ -431,9 +472,7 @@ mod tests {
     fn build_csr_keeps_empty_rows_and_the_declared_shape() {
         // Cells with no counts must still occupy a row: obs is the full
         // sample × barcode product regardless of coverage.
-        let acc: AHashMap<(usize, usize), u32> = [((2, 0), 4)].into_iter().collect();
-
-        let m = build_csr(&acc, 4, 2).unwrap();
+        let m = build_csr(vec![vec![(2, 0, 4)]], 4, 2).unwrap();
 
         assert_eq!((m.nrows(), m.ncols()), (4, 2));
         assert_eq!(m.nnz(), 1);
@@ -446,10 +485,21 @@ mod tests {
 
     #[test]
     fn build_csr_on_an_empty_accumulator_yields_an_all_zero_matrix() {
-        let m = build_csr(&AHashMap::new(), 3, 5).unwrap();
+        let m = build_csr(vec![], 3, 5).unwrap();
 
         assert_eq!((m.nrows(), m.ncols()), (3, 5));
         assert_eq!(m.nnz(), 0);
+    }
+
+    #[test]
+    fn build_csr_adds_entries_of_one_cell_and_feature_from_two_chunks() {
+        let entries = vec![vec![(0, 2, 1), (1, 0, 3)], vec![(0, 2, 4), (0, 1, 2)]];
+
+        let m = build_csr(entries, 2, 3).unwrap();
+
+        assert_eq!(m.nnz(), 3);
+        assert_eq!(m.row_offsets(), &[0, 2, 3]);
+        assert_eq!(dense(&m), vec![vec![0, 2, 5], vec![3, 0, 0]]);
     }
 
     #[test]
@@ -512,10 +562,7 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("counts.h5ad");
 
-        let acc: AHashMap<(usize, usize), u32> = [((0, 0), 1), ((0, 2), 5), ((1, 1), 3)]
-            .into_iter()
-            .collect();
-        let matrix = build_csr(&acc, 2, 3).unwrap();
+        let matrix = build_csr(vec![vec![(0, 0, 1), (0, 2, 5), (1, 1, 3)]], 2, 3).unwrap();
 
         let var = vec![
             feature("chr1", 0, 100),
@@ -551,7 +598,7 @@ mod tests {
         let path = dir.path().join("counts.h5ad");
 
         // Two samples x two barcodes = four rows, samples varying slowest.
-        let matrix = build_csr(&AHashMap::new(), 4, 1).unwrap();
+        let matrix = build_csr(vec![], 4, 1).unwrap();
         let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
 
         write_counts_anndata(
@@ -579,7 +626,7 @@ mod tests {
         let path = dir.path().join("counts.h5ad");
 
         let var = vec![feature("chr1", 0, 100), feature("chr2", 500, 750)];
-        let matrix = build_csr(&AHashMap::new(), 1, 2).unwrap();
+        let matrix = build_csr(vec![], 1, 2).unwrap();
 
         write_counts_anndata(
             &path,
@@ -605,8 +652,7 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("gzipped.h5ad");
 
-        let acc: AHashMap<(usize, usize), u32> = [((0, 0), 42)].into_iter().collect();
-        let matrix = build_csr(&acc, 1, 1).unwrap();
+        let matrix = build_csr(vec![vec![(0, 0, 42)]], 1, 1).unwrap();
 
         write_counts_anndata(
             &path,
@@ -630,7 +676,7 @@ mod tests {
         // blosc-zstd is anndata-rs's own default but h5py cannot read it.
         let err = write_counts_anndata(
             &path,
-            build_csr(&AHashMap::new(), 1, 1).unwrap(),
+            build_csr(vec![], 1, 1).unwrap(),
             &product_cells(&["s1".to_string()], &["AAA".to_string()]),
             &[feature("chr1", 0, 100)],
             "blosc",
