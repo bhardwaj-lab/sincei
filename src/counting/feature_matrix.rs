@@ -11,21 +11,17 @@
 
 use ahash::{AHashMap, AHashSet};
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use rayon::prelude::*;
 
-use super::count_utils::{
-    BarcodeNumbers, Entry, build_csr, observed_rows, product_cells, to_entries, to_run_numbers,
-    write_counts_anndata,
-};
+use super::count_utils::{BarcodeNumbers, Entry, count_into_anndata, to_entries, to_run_numbers};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::{parse_annotation_files, parse_blacklist_bed};
 use crate::annotation::region_index::{ChromIndex, Feature, GenomeIndex, Interval};
 use crate::bam::bam_io::{
-    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
-    ensure_genome_matches_bams, read_bam_header, thread_pool,
+    Chunk, Samples, chunk_windows, ensure_barcode_tags_present, ensure_genome_matches_bams,
+    read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -228,226 +224,198 @@ pub fn count_bam_features(
     };
 
     // Count each chunk into its own map, and keep its counts as matrix entries.
-    let mut entries: Vec<Vec<Entry>> = pool.install(|| {
-        work.par_iter()
-            .map_init(
-                BamWorker::default,
-                |worker,
-                 &Chunk {
-                     bam_idx,
-                     bam_path,
-                     ref chrom,
-                     start: chunk_start,
-                     end: chunk_end,
-                     ..
-                 }|
-                 -> Result<Vec<Entry>> {
-                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
-
-                    // Each work chunk covers a single chromosome, so its feature
-                    // index is looked up once here rather than per read.
-                    let Some(chrom_index) = feature_index.get(chrom.as_str()) else {
-                        return Ok(Vec::new());
-                    };
-                    // Likewise the blacklist: one chromosome per chunk, so a
-                    // read costs an interval query and no name hashing.
-                    let chunk_blacklist = blacklist
-                        .as_ref()
-                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
-
-                    // Hoisted region filter: if a region was requested on a
-                    // different chromosome, the whole chunk is skipped.
-                    let region_bounds = match &region_filter {
-                        Some((region_chrom, region_start, region_end)) => {
-                            if region_chrom.as_str() != chrom.as_str() {
-                                return Ok(Vec::new());
-                            }
-                            Some((*region_start, *region_end))
-                        }
-                        None => None,
-                    };
-
-                    let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
-                    let region: noodles::core::Region = region_str
-                        .parse()
-                        .with_context(|| format!("failed to parse region: {}", region_str))?;
-                    let query = match reader.query(header, &region) {
-                        Ok(q) => q,
-                        Err(_) => return Ok(Vec::new()),
-                    };
-
-                    let mut dup_filter: Option<DuplicateFilter> =
-                        dup_method.map(DuplicateFilter::new);
-                    let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
-                    // The distinct features one read reaches, with the bases it
-                    // shares with each. Reused across reads so the counting loop
-                    // does not allocate; cleared at the top of every read.
-                    let mut hits: Vec<(usize, usize)> = Vec::new();
-                    let mut chunk_barcodes = BarcodeNumbers::default();
-
-                    for result in query.records() {
-                        let record = result.context("failed to read BAM record")?;
-
-                        if let Some(rf) = record_filter {
-                            let flags = u16::from(record.flags());
-                            let mapq = record.mapping_quality().map(|q| q.get());
-                            if !rf.passes(flags, mapq) {
-                                continue;
-                            }
-                        }
-
-                        let Some(sc_rec) = ScRecord::from_bam_record(
-                            &record,
-                            header,
-                            &bc_tag_parsed,
-                            umi_tag_parsed.as_ref(),
-                            count_tag_parsed.as_ref(),
-                            group_tag_parsed.as_ref(),
-                            &record_opts,
-                        )?
-                        else {
-                            continue;
-                        };
-
-                        // Ownership: a read belongs to the chunk containing its
-                        // alignment_start. Reads that started before this chunk are
-                        // handled by the previous work chunk.
-                        if sc_rec.alignment_start < chunk_start {
-                            continue;
-                        }
-
-                        if let Some((region_start, region_end)) = region_bounds
-                            && (sc_rec.alignment_end <= region_start
-                                || sc_rec.alignment_start >= region_end)
-                        {
-                            continue;
-                        }
-
-                        // Judged on the read's own alignment span, as the filter
-                        // tools judge it, and before --extendReads / --centerReads
-                        // move the interval that is counted.
-                        if let Some(bl) = chunk_blacklist
-                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
-                        {
-                            continue;
-                        }
-
-                        let Some(barcode) = sc_rec.barcode else {
-                            continue;
-                        };
-                        let listed_bc = match &barcode_index {
-                            Some(index) => {
-                                let Some(&bc_idx) = index.get(barcode) else {
-                                    continue;
-                                };
-                                Some(bc_idx)
-                            }
-                            None => None,
-                        };
-
-                        if let Some(qc) = qc_filter
-                            && !qc.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(ref mut dup) = dup_filter
-                            && !dup.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(mf) = motif.as_mut()
-                            && !mf.passes(&sc_rec, chrom)?
-                        {
-                            continue;
-                        }
-
-                        // Under --groupTag the read's own group tag picks the row
-                        // block, so two reads sharing a barcode but coming from
-                        // different source samples stay separate cells.
-                        let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
-                            continue;
-                        };
-                        // Without a list a barcode is numbered only now, so a
-                        // barcode whose reads are all filtered out gets no row.
-                        let cell_idx = match listed_bc {
-                            Some(bc_idx) => sample_idx * n_barcodes + bc_idx,
-                            None => chunk_barcodes.number(barcode) * n_samples + sample_idx,
-                        };
-
-                        // A spliced read reaches a feature through its blocks, so
-                        // the intron between them credits nothing.
-                        let intervals = sc_rec.effective_intervals(adjust);
-
-                        // Gather the features this read overlaps. A read is counted
-                        // once per feature, regardless of the number of overlaps. In
-                        // `metagene` mode reads are only counted once, so the feature
-                        // with the most bases in common gets the count.
-                        hits.clear();
-                        for (start, end) in intervals {
-                            for sub in chrom_index.find(start, end) {
-                                let overlap = end.min(sub.end) - start.max(sub.start);
-                                match hits.iter_mut().find(|hit| hit.0 == sub.var_idx) {
-                                    Some(hit) => hit.1 += overlap,
-                                    None => hits.push((sub.var_idx, overlap)),
-                                }
-                            }
-                        }
-
-                        if metagene {
-                            // One gene per read: the gene sharing the most bases
-                            // with it wins. A read spanning two exons of gene A
-                            // counts once for A, not twice.
-                            if let Some(&(best_val, _)) =
-                                hits.iter().max_by_key(|&&(_, overlap)| overlap)
-                            {
-                                *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
-                            }
-                        } else {
-                            // A read counts once for every feature it overlaps, so
-                            // overlapping annotations each get their own count and
-                            // the  count matrix sum may exceed the read count.
-                            for &(var_idx, _) in hits.iter() {
-                                *local_acc.entry((cell_idx, var_idx)).or_insert(0) += sc_rec.count;
-                            }
-                        }
-                    }
-
-                    if barcode_index.is_none() {
-                        return to_run_numbers(
-                            local_acc,
-                            n_samples,
-                            &chunk_barcodes,
-                            &run_barcodes,
-                        );
-                    }
-                    to_entries(local_acc, |cell| cell)
-                },
-            )
-            .collect::<Result<_>>()
-    })?;
-
-    // With a whitelist every sample x barcode is a row; without one, only the
-    // (sample, barcode) pairs that have counts.
-    let cells = match barcodes {
-        Some(barcodes) => product_cells(sample_labels, barcodes),
-        None => {
-            let found = run_barcodes
-                .into_inner()
-                .unwrap_or_else(PoisonError::into_inner)
-                .into_barcodes();
-            observed_rows(&mut entries, sample_labels, &found)
-        }
-    };
-    let n_cells = cells.len();
-
-    let matrix = build_csr(entries, n_cells, n_features)?;
-    write_counts_anndata(
+    let n_cells = count_into_anndata(
         output_path,
-        matrix,
-        &cells,
-        &var_meta,
         compression,
         compression_level,
+        &var_meta,
+        &pool,
+        &work,
+        &samples,
+        barcodes,
+        &run_barcodes,
+        |worker,
+         &Chunk {
+             bam_idx,
+             bam_path,
+             ref chrom,
+             start: chunk_start,
+             end: chunk_end,
+             ..
+         }|
+         -> Result<Vec<Entry>> {
+            let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
+
+            // Each work chunk covers a single chromosome, so its feature
+            // index is looked up once here rather than per read.
+            let Some(chrom_index) = feature_index.get(chrom.as_str()) else {
+                return Ok(Vec::new());
+            };
+            // Likewise the blacklist: one chromosome per chunk, so a
+            // read costs an interval query and no name hashing.
+            let chunk_blacklist = blacklist
+                .as_ref()
+                .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
+
+            // Hoisted region filter: if a region was requested on a
+            // different chromosome, the whole chunk is skipped.
+            let region_bounds = match &region_filter {
+                Some((region_chrom, region_start, region_end)) => {
+                    if region_chrom.as_str() != chrom.as_str() {
+                        return Ok(Vec::new());
+                    }
+                    Some((*region_start, *region_end))
+                }
+                None => None,
+            };
+
+            let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
+            let region: noodles::core::Region = region_str
+                .parse()
+                .with_context(|| format!("failed to parse region: {}", region_str))?;
+            let query = match reader.query(header, &region) {
+                Ok(q) => q,
+                Err(_) => return Ok(Vec::new()),
+            };
+
+            let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+            let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+            // The distinct features one read reaches, with the bases it
+            // shares with each. Reused across reads so the counting loop
+            // does not allocate; cleared at the top of every read.
+            let mut hits: Vec<(usize, usize)> = Vec::new();
+            let mut chunk_barcodes = BarcodeNumbers::default();
+
+            for result in query.records() {
+                let record = result.context("failed to read BAM record")?;
+
+                if let Some(rf) = record_filter {
+                    let flags = u16::from(record.flags());
+                    let mapq = record.mapping_quality().map(|q| q.get());
+                    if !rf.passes(flags, mapq) {
+                        continue;
+                    }
+                }
+
+                let Some(sc_rec) = ScRecord::from_bam_record(
+                    &record,
+                    header,
+                    &bc_tag_parsed,
+                    umi_tag_parsed.as_ref(),
+                    count_tag_parsed.as_ref(),
+                    group_tag_parsed.as_ref(),
+                    &record_opts,
+                )?
+                else {
+                    continue;
+                };
+
+                // Ownership: a read belongs to the chunk containing its
+                // alignment_start. Reads that started before this chunk are
+                // handled by the previous work chunk.
+                if sc_rec.alignment_start < chunk_start {
+                    continue;
+                }
+
+                if let Some((region_start, region_end)) = region_bounds
+                    && (sc_rec.alignment_end <= region_start
+                        || sc_rec.alignment_start >= region_end)
+                {
+                    continue;
+                }
+
+                // Judged on the read's own alignment span, as the filter
+                // tools judge it, and before --extendReads / --centerReads
+                // move the interval that is counted.
+                if let Some(bl) = chunk_blacklist
+                    && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+                {
+                    continue;
+                }
+
+                let Some(barcode) = sc_rec.barcode else {
+                    continue;
+                };
+                let listed_bc = match &barcode_index {
+                    Some(index) => {
+                        let Some(&bc_idx) = index.get(barcode) else {
+                            continue;
+                        };
+                        Some(bc_idx)
+                    }
+                    None => None,
+                };
+
+                if let Some(qc) = qc_filter
+                    && !qc.passes(&sc_rec)
+                {
+                    continue;
+                }
+                if let Some(ref mut dup) = dup_filter
+                    && !dup.passes(&sc_rec)
+                {
+                    continue;
+                }
+                if let Some(mf) = motif.as_mut()
+                    && !mf.passes(&sc_rec, chrom)?
+                {
+                    continue;
+                }
+
+                // Under --groupTag the read's own group tag picks the row
+                // block, so two reads sharing a barcode but coming from
+                // different source samples stay separate cells.
+                let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
+                    continue;
+                };
+                // Without a list a barcode is numbered only now, so a
+                // barcode whose reads are all filtered out gets no row.
+                let cell_idx = match listed_bc {
+                    Some(bc_idx) => sample_idx * n_barcodes + bc_idx,
+                    None => chunk_barcodes.number(barcode) * n_samples + sample_idx,
+                };
+
+                // A spliced read reaches a feature through its blocks, so
+                // the intron between them credits nothing.
+                let intervals = sc_rec.effective_intervals(adjust);
+
+                // Gather the features this read overlaps. A read is counted
+                // once per feature, regardless of the number of overlaps. In
+                // `metagene` mode reads are only counted once, so the feature
+                // with the most bases in common gets the count.
+                hits.clear();
+                for (start, end) in intervals {
+                    for sub in chrom_index.find(start, end) {
+                        let overlap = end.min(sub.end) - start.max(sub.start);
+                        match hits.iter_mut().find(|hit| hit.0 == sub.var_idx) {
+                            Some(hit) => hit.1 += overlap,
+                            None => hits.push((sub.var_idx, overlap)),
+                        }
+                    }
+                }
+
+                if metagene {
+                    // One gene per read: the gene sharing the most bases
+                    // with it wins. A read spanning two exons of gene A
+                    // counts once for A, not twice.
+                    if let Some(&(best_val, _)) = hits.iter().max_by_key(|&&(_, overlap)| overlap) {
+                        *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
+                    }
+                } else {
+                    // A read counts once for every feature it overlaps, so
+                    // overlapping annotations each get their own count and
+                    // the  count matrix sum may exceed the read count.
+                    for &(var_idx, _) in hits.iter() {
+                        *local_acc.entry((cell_idx, var_idx)).or_insert(0) += sc_rec.count;
+                    }
+                }
+            }
+
+            if barcode_index.is_none() {
+                return to_run_numbers(local_acc, n_samples, &chunk_barcodes, &run_barcodes);
+            }
+            to_entries(local_acc, |cell| cell)
+        },
     )?;
 
     println!("Number of cells found: {n_cells}\nNumber of features found: {n_features}");

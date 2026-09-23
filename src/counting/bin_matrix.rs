@@ -9,22 +9,18 @@
 //! spills into the next chunk is still counted exactly once per bin.
 
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
-use rayon::prelude::*;
 
-use super::count_utils::{
-    BarcodeNumbers, Entry, build_csr, observed_rows, product_cells, to_entries, to_run_numbers,
-    write_counts_anndata,
-};
+use super::count_utils::{BarcodeNumbers, Entry, count_into_anndata, to_entries, to_run_numbers};
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{bins_touched, build_bin_index, build_bin_index_in_window};
 use crate::bam::bam_io::{
-    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
-    ensure_genome_matches_bams, read_bam_header, thread_pool,
+    Chunk, Samples, chunk_windows, ensure_barcode_tags_present, ensure_genome_matches_bams,
+    read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
     DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, blacklist_chrom_index,
@@ -174,207 +170,178 @@ pub fn count_bam_bins(
     };
 
     // Count each chunk into its own map, and keep its counts as matrix entries.
-    let mut entries: Vec<Vec<Entry>> = pool.install(|| {
-        work.par_iter()
-            .map_init(
-                BamWorker::default,
-                |worker,
-                 &Chunk {
-                     bam_idx,
-                     bam_path,
-                     ref chrom,
-                     start: chunk_start,
-                     end: chunk_end,
-                     ..
-                 }|
-                 -> Result<Vec<Entry>> {
-                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
-
-                    // Each work chunk covers a single chromosome, so its bin
-                    // geometry is looked up once here rather than per read.
-                    let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
-                    else {
-                        return Ok(Vec::new());
-                    };
-                    // Bin 0 of this chromosome starts here: 0 unless a region
-                    // restricted the tiling to a window.
-                    let window_start = bin_index.window_start(chrom.as_str());
-                    // Likewise the blacklist: one chromosome per chunk, so a
-                    // read costs an interval query and no name hashing.
-                    let chunk_blacklist = blacklist
-                        .as_ref()
-                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
-
-                    // Hoisted region filter: if a region was requested on a
-                    // different chromosome, the whole chunk is skipped.
-                    let region_bounds = match &region_filter {
-                        Some((region_chrom, region_start, region_end)) => {
-                            if region_chrom.as_str() != chrom.as_str() {
-                                return Ok(Vec::new());
-                            }
-                            Some((*region_start, *region_end))
-                        }
-                        None => None,
-                    };
-
-                    let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
-                    let region: noodles::core::Region = region_str
-                        .parse()
-                        .with_context(|| format!("failed to parse region: {}", region_str))?;
-                    let query = match reader.query(header, &region) {
-                        Ok(q) => q,
-                        Err(_) => return Ok(Vec::new()),
-                    };
-
-                    let mut dup_filter: Option<DuplicateFilter> =
-                        dup_method.map(DuplicateFilter::new);
-                    let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
-                    let mut chunk_barcodes = BarcodeNumbers::default();
-
-                    for result in query.records() {
-                        let record = result.context("failed to read BAM record")?;
-
-                        if let Some(rf) = record_filter {
-                            let flags = u16::from(record.flags());
-                            let mapq = record.mapping_quality().map(|q| q.get());
-                            if !rf.passes(flags, mapq) {
-                                continue;
-                            }
-                        }
-
-                        let Some(sc_rec) = ScRecord::from_bam_record(
-                            &record,
-                            header,
-                            &bc_tag_parsed,
-                            umi_tag_parsed.as_ref(),
-                            count_tag_parsed.as_ref(),
-                            group_tag_parsed.as_ref(),
-                            &record_opts,
-                        )?
-                        else {
-                            continue;
-                        };
-
-                        // Ownership: a read belongs to the chunk containing its
-                        // alignment_start. Skip reads owned by a previous chunk.
-                        if sc_rec.alignment_start < chunk_start {
-                            continue;
-                        }
-
-                        if let Some((region_start, region_end)) = region_bounds
-                            && (sc_rec.alignment_end <= region_start
-                                || sc_rec.alignment_start >= region_end)
-                        {
-                            continue;
-                        }
-
-                        // Judged on the read's own alignment span, as the filter
-                        // tools judge it, and before --extendReads / --centerReads
-                        // move the interval that is counted.
-                        if let Some(bl) = chunk_blacklist
-                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
-                        {
-                            continue;
-                        }
-
-                        let Some(barcode) = sc_rec.barcode else {
-                            continue;
-                        };
-                        let listed_bc = match &barcode_index {
-                            Some(index) => {
-                                let Some(&bc_idx) = index.get(barcode) else {
-                                    continue;
-                                };
-                                Some(bc_idx)
-                            }
-                            None => None,
-                        };
-
-                        if let Some(qc) = qc_filter
-                            && !qc.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(ref mut dup) = dup_filter
-                            && !dup.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(mf) = motif.as_mut()
-                            && !mf.passes(&sc_rec, chrom)?
-                        {
-                            continue;
-                        }
-
-                        // Under --groupTag the read's own group tag picks the row
-                        // block, so two reads sharing a barcode but coming from
-                        // different source samples stay separate cells.
-                        let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
-                            continue;
-                        };
-                        // Without a list a barcode is numbered only now, so a
-                        // barcode whose reads are all filtered out gets no row.
-                        let cell_idx = match listed_bc {
-                            Some(bc_idx) => sample_idx * n_barcodes + bc_idx,
-                            None => chunk_barcodes.number(barcode) * n_samples + sample_idx,
-                        };
-
-                        // A read counts once in every bin it overlaps, so a read
-                        // straddling a boundary adds to both sides. The column
-                        // sums therefore exceed the read count, which is what the
-                        // reference implementation reports. A spliced read
-                        // contributes its blocks, not the intron between them,
-                        // and a bin reached by two of its blocks is still counted
-                        // once.
-                        for bin in bins_touched(
-                            sc_rec.effective_intervals(adjust),
-                            window_start,
-                            bin_size,
-                            step_size,
-                            n_bins,
-                        ) {
-                            *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
-                                sc_rec.count;
-                        }
-                    }
-
-                    if barcode_index.is_none() {
-                        return to_run_numbers(
-                            local_acc,
-                            n_samples,
-                            &chunk_barcodes,
-                            &run_barcodes,
-                        );
-                    }
-                    to_entries(local_acc, |cell| cell)
-                },
-            )
-            .collect::<Result<_>>()
-    })?;
-
-    // With a whitelist every sample x barcode is a row; without one, only the
-    // (sample, barcode) pairs that have counts.
-    let cells = match barcodes {
-        Some(barcodes) => product_cells(sample_labels, barcodes),
-        None => {
-            let found = run_barcodes
-                .into_inner()
-                .unwrap_or_else(PoisonError::into_inner)
-                .into_barcodes();
-            observed_rows(&mut entries, sample_labels, &found)
-        }
-    };
-    let n_cells = cells.len();
-
-    let matrix = build_csr(entries, n_cells, n_features)?;
-
-    write_counts_anndata(
+    let n_cells = count_into_anndata(
         output_path,
-        matrix,
-        &cells,
-        &var_meta,
         compression,
         compression_level,
+        &var_meta,
+        &pool,
+        &work,
+        &samples,
+        barcodes,
+        &run_barcodes,
+        |worker,
+         &Chunk {
+             bam_idx,
+             bam_path,
+             ref chrom,
+             start: chunk_start,
+             end: chunk_end,
+             ..
+         }|
+         -> Result<Vec<Entry>> {
+            let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
+
+            // Each work chunk covers a single chromosome, so its bin
+            // geometry is looked up once here rather than per read.
+            let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str()) else {
+                return Ok(Vec::new());
+            };
+            // Bin 0 of this chromosome starts here: 0 unless a region
+            // restricted the tiling to a window.
+            let window_start = bin_index.window_start(chrom.as_str());
+            // Likewise the blacklist: one chromosome per chunk, so a
+            // read costs an interval query and no name hashing.
+            let chunk_blacklist = blacklist
+                .as_ref()
+                .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
+
+            // Hoisted region filter: if a region was requested on a
+            // different chromosome, the whole chunk is skipped.
+            let region_bounds = match &region_filter {
+                Some((region_chrom, region_start, region_end)) => {
+                    if region_chrom.as_str() != chrom.as_str() {
+                        return Ok(Vec::new());
+                    }
+                    Some((*region_start, *region_end))
+                }
+                None => None,
+            };
+
+            let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
+            let region: noodles::core::Region = region_str
+                .parse()
+                .with_context(|| format!("failed to parse region: {}", region_str))?;
+            let query = match reader.query(header, &region) {
+                Ok(q) => q,
+                Err(_) => return Ok(Vec::new()),
+            };
+
+            let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+            let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+            let mut chunk_barcodes = BarcodeNumbers::default();
+
+            for result in query.records() {
+                let record = result.context("failed to read BAM record")?;
+
+                if let Some(rf) = record_filter {
+                    let flags = u16::from(record.flags());
+                    let mapq = record.mapping_quality().map(|q| q.get());
+                    if !rf.passes(flags, mapq) {
+                        continue;
+                    }
+                }
+
+                let Some(sc_rec) = ScRecord::from_bam_record(
+                    &record,
+                    header,
+                    &bc_tag_parsed,
+                    umi_tag_parsed.as_ref(),
+                    count_tag_parsed.as_ref(),
+                    group_tag_parsed.as_ref(),
+                    &record_opts,
+                )?
+                else {
+                    continue;
+                };
+
+                // Ownership: a read belongs to the chunk containing its
+                // alignment_start. Skip reads owned by a previous chunk.
+                if sc_rec.alignment_start < chunk_start {
+                    continue;
+                }
+
+                if let Some((region_start, region_end)) = region_bounds
+                    && (sc_rec.alignment_end <= region_start
+                        || sc_rec.alignment_start >= region_end)
+                {
+                    continue;
+                }
+
+                // Judged on the read's own alignment span, as the filter
+                // tools judge it, and before --extendReads / --centerReads
+                // move the interval that is counted.
+                if let Some(bl) = chunk_blacklist
+                    && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+                {
+                    continue;
+                }
+
+                let Some(barcode) = sc_rec.barcode else {
+                    continue;
+                };
+                let listed_bc = match &barcode_index {
+                    Some(index) => {
+                        let Some(&bc_idx) = index.get(barcode) else {
+                            continue;
+                        };
+                        Some(bc_idx)
+                    }
+                    None => None,
+                };
+
+                if let Some(qc) = qc_filter
+                    && !qc.passes(&sc_rec)
+                {
+                    continue;
+                }
+                if let Some(ref mut dup) = dup_filter
+                    && !dup.passes(&sc_rec)
+                {
+                    continue;
+                }
+                if let Some(mf) = motif.as_mut()
+                    && !mf.passes(&sc_rec, chrom)?
+                {
+                    continue;
+                }
+
+                // Under --groupTag the read's own group tag picks the row
+                // block, so two reads sharing a barcode but coming from
+                // different source samples stay separate cells.
+                let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
+                    continue;
+                };
+                // Without a list a barcode is numbered only now, so a
+                // barcode whose reads are all filtered out gets no row.
+                let cell_idx = match listed_bc {
+                    Some(bc_idx) => sample_idx * n_barcodes + bc_idx,
+                    None => chunk_barcodes.number(barcode) * n_samples + sample_idx,
+                };
+
+                // A read counts once in every bin it overlaps, so a read
+                // straddling a boundary adds to both sides. The column
+                // sums therefore exceed the read count, which is what the
+                // reference implementation reports. A spliced read
+                // contributes its blocks, not the intron between them,
+                // and a bin reached by two of its blocks is still counted
+                // once.
+                for bin in bins_touched(
+                    sc_rec.effective_intervals(adjust),
+                    window_start,
+                    bin_size,
+                    step_size,
+                    n_bins,
+                ) {
+                    *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) += sc_rec.count;
+                }
+            }
+
+            if barcode_index.is_none() {
+                return to_run_numbers(local_acc, n_samples, &chunk_barcodes, &run_barcodes);
+            }
+            to_entries(local_acc, |cell| cell)
+        },
     )?;
 
     println!("Number of cells found: {n_cells}\nNumber of bins found: {n_features}");
@@ -1336,6 +1303,76 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("no @RG"), "{err}");
+    }
+
+    #[test]
+    fn a_bam_without_counted_reads_adds_no_rows_between_the_others() {
+        // In this region only test_cigars.bam has reads.
+        use super::super::count_utils::{observed_part, read_rows};
+        let dir = TempDir::new().unwrap();
+        let (i1, cigars, i2) = (
+            testdata().join("test_i1.bam"),
+            testdata().join("test_cigars.bam"),
+            testdata().join("test_i2.bam"),
+        );
+        let params = CountingParams {
+            region: Some("5:1000000-1100000".to_string()),
+            ..CountingParams::default()
+        };
+        let count = |out: &Path, bams: &[(&Path, &str)], barcodes: Option<&[String]>| {
+            count_bam_bins(
+                bams,
+                100_000,
+                100_000,
+                barcodes,
+                "BC",
+                None,
+                None,
+                None,
+                &params,
+                &AdjustRead::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                out,
+                "none",
+                0,
+                1,
+                1_000_000,
+            )
+            .unwrap();
+        };
+        let three = [
+            (i1.as_path(), "i1"),
+            (cigars.as_path(), "cigars"),
+            (i2.as_path(), "i2"),
+        ];
+        let (all, alone, listed) = (
+            dir.path().join("all.h5ad"),
+            dir.path().join("alone.h5ad"),
+            dir.path().join("listed.h5ad"),
+        );
+        count(&all, &three, None);
+        count(&alone, &[(cigars.as_path(), "cigars")], None);
+        let alone_rows = read_rows(&alone);
+        assert!(!alone_rows.is_empty(), "test_cigars.bam has no reads here");
+        assert_eq!(read_rows(&all), alone_rows);
+
+        // With a whitelist every BAM keeps its block of rows, counted or not.
+        let barcodes = test_barcodes();
+        let n = barcodes.len();
+        count(&listed, &three, Some(&barcodes));
+        let rows = read_rows(&listed);
+        assert_eq!(rows.len(), 3 * n);
+        assert!(
+            rows[..n]
+                .iter()
+                .chain(&rows[2 * n..])
+                .all(|(_, row)| row.iter().all(|&v| v == 0.0))
+        );
+        assert_eq!(observed_part(rows[n..2 * n].to_vec()), alone_rows);
     }
 
     #[test]

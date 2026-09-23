@@ -61,6 +61,10 @@ pub(crate) struct Chunk<'a> {
 /// Cut every `(chrom, start, end)` window of every `(bam_idx, path)` into chunks
 /// of at most `chunk_size` bp, largest first, so the longest work starts first
 /// and the last thread to finish is not left with a big chunk.
+///
+/// Chunks of one size are taken in turn from every window, so reads packed
+/// into one stretch of the genome are spread over the threads, not left in the
+/// one run of neighbouring chunks that a single thread is given.
 pub(crate) fn chunk_windows<'a>(
     bams: &[(usize, &'a Path)],
     windows: &[(String, usize, usize)],
@@ -86,7 +90,14 @@ pub(crate) fn chunk_windows<'a>(
             )
         })
         .collect();
-    chunks.sort_unstable_by_key(|c| std::cmp::Reverse(c.end - c.start));
+    chunks.sort_unstable_by_key(|c| {
+        (
+            std::cmp::Reverse(c.end - c.start),
+            (c.start - windows[c.chrom_idx].1) / chunk_size,
+            c.chrom_idx,
+            c.bam_idx,
+        )
+    });
     chunks
 }
 

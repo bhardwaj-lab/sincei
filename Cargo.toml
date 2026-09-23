@@ -35,6 +35,7 @@ polars = { version = "0.53", features = ["ndarray", "dtype-categorical"] }
 
 # Dense and sparse linear algebra
 nalgebra-sparse = { version = "0.11" }
+ndarray = { version = "0.17" }
 
 # Error handling with context and chaining
 anyhow = { version = "1.0" }

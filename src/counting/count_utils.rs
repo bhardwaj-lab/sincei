@@ -1,14 +1,16 @@
 //! Builds the count matrix, and moves it in and out of AnnData.
 //!
-//! `build_csr` turns the counting loops' (cell, feature, count) entries into a
-//! CSR matrix, and `write_counts_anndata` writes it alongside the obs/var
+//! `count_into_anndata` counts one BAM at a time: `build_csr` turns the
+//! counting loops' (cell, feature, count) entries into a CSR block, and
+//! `CountsWriter` adds each block to the output file, then writes the obs/var
 //! tables naming its cells and regions.
 //!
 //! The readers (`read_x_f64` and the column helpers) go the other way, reading
 //! a written matrix back. They are test-only: nothing in the crate reads a
 //! count matrix yet.
 
-use std::path::Path;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use ahash::AHashMap;
@@ -16,19 +18,25 @@ use ahash::AHashMap;
 #[cfg(test)]
 use anndata::ArrayElemOp;
 use anndata::backend::{
-    AttributeOp, Backend, Compression, GroupOp, WriteConfig, set_default_write_config,
+    AttributeOp, Backend, Compression, DatasetOp, GroupOp, StoreOp, WriteConfig,
+    set_default_write_config,
 };
 #[cfg(test)]
 use anndata::data::DynCsrMatrix;
+use anndata::data::SelectInfoElem;
 use anndata::{AnnData, AnnDataOp};
 use anndata_hdf5::H5;
 #[cfg(test)]
 use anyhow::bail;
 use anyhow::{Context, Result};
 use nalgebra_sparse::CsrMatrix;
+use ndarray::{Array1, CowArray};
 use polars::prelude::*;
+use rayon::ThreadPool;
+use rayon::prelude::*;
 
 use crate::annotation::region_index::Feature;
+use crate::bam::bam_io::{BamWorker, Chunk, Samples};
 
 /// Read `adata.X` as `f64`, regardless of its on-disk numeric dtype.
 ///
@@ -349,13 +357,209 @@ fn tag_anndata_root(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Write a cell × feature count matrix to an AnnData HDF5 file.
+/// Rows per HDF5 chunk of the growing `data` and `indices` datasets.
+const X_BLOCK: usize = 16384;
+
+/// Writes a cell × feature count matrix to a new AnnData HDF5 file, one block
+/// of rows at a time, so only the block being added has to be in memory.
+pub(crate) struct CountsWriter {
+    path: PathBuf,
+    store: <H5 as Backend>::Store,
+    x: <H5 as Backend>::Group,
+    data: <H5 as Backend>::Dataset,
+    indices: <H5 as Backend>::Dataset,
+    indptr: Vec<usize>,
+    n_cols: usize,
+    compression: Option<Compression>,
+}
+
+impl CountsWriter {
+    /// Create the file, with an empty `X` of `n_cols` columns.
+    pub(crate) fn create(
+        output_path: &Path,
+        n_cols: usize,
+        compression: &str,
+        compression_level: u8,
+    ) -> Result<Self> {
+        // Choose the HDF5 dataset compression. anndata-rs defaults to blosc-zstd,
+        // which standard h5py / scanpy cannot read without an external filter
+        // plugin, so only support `none` (anndata's modern default) or gzip
+        // (built-in deflate, universally readable).
+        let compression = match compression {
+            "none" => None,
+            "gzip" => Some(Compression::Gzip(compression_level)),
+            other => anyhow::bail!("unknown compression {:?}; expected 'none' or 'gzip'", other),
+        };
+        set_default_write_config(WriteConfig {
+            compression: compression.clone(),
+            block_size: None,
+        });
+        anyhow::ensure!(
+            i32::try_from(n_cols.saturating_sub(1)).is_ok(),
+            "the count matrix has more than 2^31 columns"
+        );
+
+        let store = H5::new(output_path)
+            .with_context(|| format!("failed to create AnnData file: {}", output_path.display()))?;
+        let mut x = store.new_group("X")?;
+        x.new_attr("encoding-type", "csr_matrix")?;
+        x.new_attr("encoding-version", "0.1.0")?;
+        let growing = || WriteConfig {
+            compression: compression.clone(),
+            block_size: Some(X_BLOCK.into()),
+        };
+        let data = x.new_empty_dataset::<u32>("data", &0.into(), growing())?;
+        let indices = x.new_empty_dataset::<i32>("indices", &0.into(), growing())?;
+        Ok(Self {
+            path: output_path.to_path_buf(),
+            store,
+            x,
+            data,
+            indices,
+            indptr: vec![0],
+            n_cols,
+            compression,
+        })
+    }
+
+    /// Add `block`'s rows below the rows already written.
+    pub(crate) fn append(&mut self, block: CsrMatrix<u32>) -> Result<()> {
+        anyhow::ensure!(
+            block.ncols() == self.n_cols,
+            "a block of {} columns cannot be added to a matrix of {}",
+            block.ncols(),
+            self.n_cols
+        );
+        let start = self.indptr[self.indptr.len() - 1];
+        let (offsets, indices, values) = block.disassemble();
+        self.indptr
+            .extend(offsets[1..].iter().map(|&offset| start + offset));
+        let end = start + values.len();
+        if end == start {
+            return Ok(());
+        }
+
+        let slice = [SelectInfoElem::from(start..end)];
+        self.data.reshape(&end.into())?;
+        self.data
+            .write_array_slice(CowArray::from(Array1::from_vec(values)), &slice)?;
+        let indices: Array1<i32> = indices.into_iter().map(|col| col as i32).collect();
+        self.indices.reshape(&end.into())?;
+        self.indices
+            .write_array_slice(CowArray::from(indices), &slice)?;
+        Ok(())
+    }
+
+    /// Write the rest of `X` and the obs/var tables, and close the file.
+    ///
+    /// Cells (`obs`) are one `(sample, barcode)` per matrix row, in row order
+    /// (`obs_names = "{sample}::{barcode}"`), with `sample` and `barcode` columns.
+    /// The sample is an input BAM's label, or under `--groupTag` a merged BAM's
+    /// `@RG` ID. Features (`var`) carry `chrom`, `start`, `end`, and `name`
+    /// columns; `var_names` are the feature names.
+    pub(crate) fn finish(mut self, cells: &[(String, String)], var: &[Feature]) -> Result<()> {
+        let n_rows = self.indptr.len() - 1;
+        anyhow::ensure!(
+            cells.len() == n_rows,
+            "{} cells were given for a matrix of {} rows",
+            cells.len(),
+            n_rows
+        );
+        anyhow::ensure!(
+            var.len() == self.n_cols,
+            "{} features were given for a matrix of {} columns",
+            var.len(),
+            self.n_cols
+        );
+
+        // Use i32 or i64 as indptr type in order to be compatible with scipy
+        let config = WriteConfig {
+            compression: self.compression.clone(),
+            block_size: None,
+        };
+        if i32::try_from(self.indptr[n_rows]).is_ok() {
+            let indptr: Array1<i32> = self.indptr.iter().map(|&o| o as i32).collect();
+            self.x
+                .new_array_dataset("indptr", CowArray::from(indptr), config)?;
+        } else {
+            let indptr: Array1<i64> = self.indptr.iter().map(|&o| o as i64).collect();
+            self.x
+                .new_array_dataset("indptr", CowArray::from(indptr), config)?;
+        }
+        self.x
+            .new_attr("shape", [n_rows as u64, self.n_cols as u64].as_slice())?;
+        let Self {
+            path,
+            store,
+            x,
+            data,
+            indices,
+            ..
+        } = self;
+        drop((x, data, indices));
+        store.close()?;
+
+        // obs: one row per (sample, barcode), in the same order as the matrix rows.
+        let n_cells = cells.len();
+        let mut obs_index: Vec<String> = Vec::with_capacity(n_cells);
+        let mut sample_col: Vec<String> = Vec::with_capacity(n_cells);
+        let mut barcode_col: Vec<String> = Vec::with_capacity(n_cells);
+        for (sample, bc) in cells {
+            obs_index.push(format!("{}::{}", sample, bc));
+            sample_col.push(sample.clone());
+            barcode_col.push(bc.clone());
+        }
+        let obs_df = DataFrame::new(
+            n_cells,
+            vec![
+                Column::new("sample".into(), sample_col)
+                    .cast(&DataType::from_categories(Categories::global()))?,
+                Column::new("barcode".into(), barcode_col)
+                    .cast(&DataType::from_categories(Categories::global()))?,
+            ],
+        )?;
+
+        // var: chrom, start, end, name, in feature-index order.
+        //
+        // `var_names` are `{chrom}_{start}_{end}::{name}`. Bins and unnamed
+        // features render the name as the literal `None`.
+        let locus = |v: &Feature| format!("{}_{}_{}", v.chrom, v.start, v.end);
+        let var_index: Vec<String> = var
+            .iter()
+            .map(|v| format!("{}::{}", locus(v), v.name.as_deref().unwrap_or("None")))
+            .collect();
+        let chrom_col: Vec<String> = var.iter().map(|v| v.chrom.clone()).collect();
+        let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();
+        let end_col: Vec<i64> = var.iter().map(|v| v.end as i64).collect();
+        let name_col: Vec<String> = var.iter().map(locus).collect();
+        let var_df = DataFrame::new(
+            var.len(),
+            vec![
+                Column::new("chrom".into(), chrom_col),
+                Column::new("start".into(), start_col),
+                Column::new("end".into(), end_col),
+                Column::new("name".into(), name_col),
+            ],
+        )?;
+
+        let adata = AnnData::<H5>::open(H5::open_rw(&path)?)
+            .with_context(|| format!("failed to reopen AnnData file: {}", path.display()))?;
+        // Index first (creates the obs/var elements), then the columns.
+        adata.set_obs_names(obs_index.into_iter().collect())?;
+        adata.set_obs(obs_df)?;
+        adata.set_var_names(var_index.into_iter().collect())?;
+        adata.set_var(var_df)?;
+        adata.close()?;
+        tag_anndata_root(&path)?;
+        Ok(())
+    }
+}
+
+/// Write a whole cell × feature count matrix to an AnnData HDF5 file.
 ///
-/// Cells (`obs`) are one `(sample, barcode)` per matrix row, in row order
-/// (`obs_names = "{sample}::{barcode}"`), with `sample` and `barcode` columns.
-/// The sample is an input BAM's label, or under `--groupTag` a merged BAM's
-/// `@RG` ID. Features (`var`) carry `chrom`, `start`, `end`, and `name`
-/// columns; `var_names` are the feature names.
+/// Test-only: the counting commands add one block per BAM through
+/// [`count_into_anndata`].
+#[cfg(test)]
 pub(crate) fn write_counts_anndata(
     output_path: &Path,
     matrix: CsrMatrix<u32>,
@@ -364,74 +568,83 @@ pub(crate) fn write_counts_anndata(
     compression: &str,
     compression_level: u8,
 ) -> Result<()> {
-    // Choose the HDF5 dataset compression. anndata-rs defaults to blosc-zstd,
-    // which standard h5py / scanpy cannot read without an external filter
-    // plugin, so only support `none` (anndata's modern default) or gzip
-    // (built-in deflate, universally readable).
-    let compression = match compression {
-        "none" => None,
-        "gzip" => Some(Compression::Gzip(compression_level)),
-        other => anyhow::bail!("unknown compression {:?}; expected 'none' or 'gzip'", other),
+    let mut writer = CountsWriter::create(output_path, var.len(), compression, compression_level)?;
+    writer.append(matrix)?;
+    writer.finish(cells, var)
+}
+
+/// Count the chunks of one BAM at a time, and add that BAM's rows to the
+/// output before the next BAM starts, so only one BAM's counts are in memory.
+///
+/// The rows are ordered by sample, and a BAM holds one sample, or under
+/// `--groupTag` all of them, so the BAMs' rows follow each other in BAM order.
+/// `count_chunk` counts one chunk into entries whose cells are numbered as for
+/// the whole run. Returns the number of cells written.
+pub(super) fn count_into_anndata<'a, F>(
+    output_path: &Path,
+    compression: &str,
+    compression_level: u8,
+    var: &[Feature],
+    pool: &ThreadPool,
+    work: &[Chunk<'a>],
+    samples: &Samples,
+    barcodes: Option<&[String]>,
+    run_barcodes: &Mutex<BarcodeNumbers>,
+    count_chunk: F,
+) -> Result<usize>
+where
+    F: Fn(&mut BamWorker<'a>, &Chunk<'a>) -> Result<Vec<Entry>> + Sync,
+{
+    let mut writer = CountsWriter::create(output_path, var.len(), compression, compression_level)?;
+    let labels = samples.labels();
+    let blocks: Vec<(usize, Range<usize>)> = if samples.by_read_group() {
+        vec![(0, 0..labels.len())]
+    } else {
+        (0..labels.len())
+            .map(|bam_idx| (bam_idx, bam_idx..bam_idx + 1))
+            .collect()
     };
-    set_default_write_config(WriteConfig {
-        compression,
-        block_size: None,
+
+    let mut cells: Vec<(String, String)> = Vec::new();
+    let counted = blocks.into_iter().try_for_each(|(bam_idx, bam_samples)| {
+        let chunks: Vec<&Chunk<'a>> = work.iter().filter(|c| c.bam_idx == bam_idx).collect();
+        let mut entries: Vec<Vec<Entry>> = pool.install(|| {
+            chunks
+                .par_iter()
+                .map_init(BamWorker::default, |worker, chunk| {
+                    count_chunk(worker, chunk)
+                })
+                .collect::<Result<_>>()
+        })?;
+
+        // With a whitelist every sample x barcode is a row; without one, only
+        // the (sample, barcode) pairs that have counts.
+        let bam_cells = match barcodes {
+            Some(barcodes) => {
+                let first_row = (bam_samples.start * barcodes.len()) as u32;
+                for entry in entries.iter_mut().flatten() {
+                    entry.0 -= first_row;
+                }
+                product_cells(&labels[bam_samples], barcodes)
+            }
+            None => {
+                let found = std::mem::take(
+                    &mut *run_barcodes.lock().unwrap_or_else(PoisonError::into_inner),
+                )
+                .into_barcodes();
+                observed_rows(&mut entries, labels, &found)
+            }
+        };
+        writer.append(build_csr(entries, bam_cells.len(), var.len())?)?;
+        cells.extend(bam_cells);
+        Ok(())
     });
 
-    // obs: one row per (sample, barcode), in the same order as the matrix rows.
-    let n_cells = cells.len();
-    let mut obs_index: Vec<String> = Vec::with_capacity(n_cells);
-    let mut sample_col: Vec<String> = Vec::with_capacity(n_cells);
-    let mut barcode_col: Vec<String> = Vec::with_capacity(n_cells);
-    for (sample, bc) in cells {
-        obs_index.push(format!("{}::{}", sample, bc));
-        sample_col.push(sample.clone());
-        barcode_col.push(bc.clone());
+    let written = counted.and_then(|()| writer.finish(&cells, var));
+    if written.is_err() {
+        let _ = std::fs::remove_file(output_path);
     }
-    let obs_df = DataFrame::new(
-        n_cells,
-        vec![
-            Column::new("sample".into(), sample_col)
-                .cast(&DataType::from_categories(Categories::global()))?,
-            Column::new("barcode".into(), barcode_col)
-                .cast(&DataType::from_categories(Categories::global()))?,
-        ],
-    )?;
-
-    // var: chrom, start, end, name, in feature-index order.
-    //
-    // `var_names` are `{chrom}_{start}_{end}::{name}`. Bins and unnamed
-    // features render the name as the literal `None`.
-    let locus = |v: &Feature| format!("{}_{}_{}", v.chrom, v.start, v.end);
-    let var_index: Vec<String> = var
-        .iter()
-        .map(|v| format!("{}::{}", locus(v), v.name.as_deref().unwrap_or("None")))
-        .collect();
-    let chrom_col: Vec<String> = var.iter().map(|v| v.chrom.clone()).collect();
-    let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();
-    let end_col: Vec<i64> = var.iter().map(|v| v.end as i64).collect();
-    let name_col: Vec<String> = var.iter().map(locus).collect();
-    let var_df = DataFrame::new(
-        var.len(),
-        vec![
-            Column::new("chrom".into(), chrom_col),
-            Column::new("start".into(), start_col),
-            Column::new("end".into(), end_col),
-            Column::new("name".into(), name_col),
-        ],
-    )?;
-
-    let adata = AnnData::<H5>::new(output_path)
-        .with_context(|| format!("failed to create AnnData file: {}", output_path.display()))?;
-    adata.set_x(matrix)?;
-    // Index first (creates the obs/var elements), then the columns.
-    adata.set_obs_names(obs_index.into_iter().collect())?;
-    adata.set_obs(obs_df)?;
-    adata.set_var_names(var_index.into_iter().collect())?;
-    adata.set_var(var_df)?;
-    adata.close()?;
-    tag_anndata_root(output_path)?;
-    Ok(())
+    written.map(|()| cells.len())
 }
 
 #[cfg(test)]
@@ -590,6 +803,72 @@ mod tests {
             got[r][c] = v;
         }
         assert_eq!(got, vec![vec![1.0, 0.0, 5.0], vec![0.0, 3.0, 0.0]]);
+    }
+
+    #[test]
+    fn blocks_added_one_after_another_read_back_as_one_matrix() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("blocks.h5ad");
+        let var = vec![
+            feature("chr1", 0, 100),
+            feature("chr1", 100, 200),
+            feature("chr2", 0, 100),
+        ];
+        let barcodes = vec!["AAA".to_string(), "CCC".to_string()];
+
+        let mut writer = CountsWriter::create(&path, 3, "none", 0).unwrap();
+        writer
+            .append(build_csr(vec![vec![(0, 2, 5), (1, 0, 1)]], 2, 3).unwrap())
+            .unwrap();
+        writer.append(build_csr(vec![], 0, 3).unwrap()).unwrap();
+        writer.append(build_csr(vec![], 1, 3).unwrap()).unwrap();
+        writer
+            .append(build_csr(vec![vec![(0, 1, 7)]], 1, 3).unwrap())
+            .unwrap();
+        writer
+            .finish(
+                &product_cells(&["s1".to_string(), "s2".to_string()], &barcodes),
+                &var,
+            )
+            .unwrap();
+
+        let x = read_back(&path);
+        let mut got = vec![vec![0.0f64; 3]; x.nrows()];
+        for (r, c, &v) in x.triplet_iter() {
+            got[r][c] = v;
+        }
+        assert_eq!(
+            got,
+            vec![
+                vec![0.0, 0.0, 5.0],
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 0.0, 0.0],
+                vec![0.0, 7.0, 0.0]
+            ]
+        );
+        let adata = AnnData::<H5>::open(H5::open(&path).unwrap()).unwrap();
+        assert_eq!(
+            adata.obs_names().into_vec(),
+            vec!["s1::AAA", "s1::CCC", "s2::AAA", "s2::CCC"]
+        );
+    }
+
+    #[test]
+    fn a_writer_rejects_cells_that_do_not_match_its_rows() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut writer =
+            CountsWriter::create(&dir.path().join("short.h5ad"), 1, "none", 0).unwrap();
+        writer.append(build_csr(vec![], 2, 1).unwrap()).unwrap();
+
+        let err = writer
+            .finish(
+                &product_cells(&["s1".to_string()], &["AAA".to_string()]),
+                &[feature("chr1", 0, 100)],
+            )
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("1 cells") && err.contains("2 rows"), "{err}");
     }
 
     #[test]
