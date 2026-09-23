@@ -160,7 +160,8 @@ pub fn count_bam_bins(
             .map(|(i, bc)| (bc.as_bytes(), i))
             .collect()
     });
-    let run_barcodes = Mutex::new(BarcodeNumbers::default());
+    let run_barcodes: Vec<Mutex<BarcodeNumbers>> =
+        bam_paths.iter().map(|_| Mutex::default()).collect();
 
     // Motif-filter ingredients, passed to each worker so it can build its own
     // filter once per thread (rather than once per chunk).
@@ -338,7 +339,12 @@ pub fn count_bam_bins(
             }
 
             if barcode_index.is_none() {
-                return to_run_numbers(local_acc, n_samples, &chunk_barcodes, &run_barcodes);
+                return to_run_numbers(
+                    local_acc,
+                    n_samples,
+                    &chunk_barcodes,
+                    &run_barcodes[bam_idx],
+                );
             }
             to_entries(local_acc, |cell| cell)
         },

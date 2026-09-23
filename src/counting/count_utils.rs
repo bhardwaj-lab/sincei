@@ -11,7 +11,8 @@
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ahash::AHashMap;
 
@@ -33,7 +34,6 @@ use nalgebra_sparse::CsrMatrix;
 use ndarray::{Array1, CowArray};
 use polars::prelude::*;
 use rayon::ThreadPool;
-use rayon::prelude::*;
 
 use crate::annotation::region_index::Feature;
 use crate::bam::bam_io::{BamWorker, Chunk, Samples};
@@ -573,13 +573,19 @@ pub(crate) fn write_counts_anndata(
     writer.finish(cells, var)
 }
 
-/// Count the chunks of one BAM at a time, and add that BAM's rows to the
-/// output before the next BAM starts, so only one BAM's counts are in memory.
+/// Count every BAM, and add each BAM's rows to the output in BAM order.
+///
+/// The threads take the chunks BAM after BAM, so the next BAM starts as soon
+/// as the last chunk of the one before it is taken. The thread that counts the
+/// last chunk of a BAM adds that BAM's rows, while the other threads count the
+/// next BAM, so usually only two BAMs' counts are in memory.
 ///
 /// The rows are ordered by sample, and a BAM holds one sample, or under
 /// `--groupTag` all of them, so the BAMs' rows follow each other in BAM order.
 /// `count_chunk` counts one chunk into entries whose cells are numbered as for
-/// the whole run. Returns the number of cells written.
+/// the whole run, except that without a whitelist each BAM numbers its
+/// barcodes in its own `run_barcodes[bam_idx]`. Returns the number of cells
+/// written.
 pub(super) fn count_into_anndata<'a, F>(
     output_path: &Path,
     compression: &str,
@@ -589,13 +595,13 @@ pub(super) fn count_into_anndata<'a, F>(
     work: &[Chunk<'a>],
     samples: &Samples,
     barcodes: Option<&[String]>,
-    run_barcodes: &Mutex<BarcodeNumbers>,
+    run_barcodes: &[Mutex<BarcodeNumbers>],
     count_chunk: F,
 ) -> Result<usize>
 where
     F: Fn(&mut BamWorker<'a>, &Chunk<'a>) -> Result<Vec<Entry>> + Sync,
 {
-    let mut writer = CountsWriter::create(output_path, var.len(), compression, compression_level)?;
+    let writer = CountsWriter::create(output_path, var.len(), compression, compression_level)?;
     let labels = samples.labels();
     let blocks: Vec<(usize, Range<usize>)> = if samples.by_read_group() {
         vec![(0, 0..labels.len())]
@@ -605,18 +611,25 @@ where
             .collect()
     };
 
-    let mut cells: Vec<(String, String)> = Vec::new();
-    let counted = blocks.into_iter().try_for_each(|(bam_idx, bam_samples)| {
-        let chunks: Vec<&Chunk<'a>> = work.iter().filter(|c| c.bam_idx == bam_idx).collect();
-        let mut entries: Vec<Vec<Entry>> = pool.install(|| {
-            chunks
-                .par_iter()
-                .map_init(BamWorker::default, |worker, chunk| {
-                    count_chunk(worker, chunk)
-                })
-                .collect::<Result<_>>()
-        })?;
+    let chunks: Vec<(usize, &Chunk<'a>)> = blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(block, &(bam_idx, _))| {
+            work.iter()
+                .filter(move |c| c.bam_idx == bam_idx)
+                .map(move |c| (block, c))
+        })
+        .collect();
+    let mut left = vec![0usize; blocks.len()];
+    for &(block, _) in &chunks {
+        left[block] += 1;
+    }
 
+    let add_block = |(writer, cells): &mut (CountsWriter, Vec<(String, String)>),
+                     block: usize,
+                     mut entries: Vec<Vec<Entry>>|
+     -> Result<()> {
+        let (bam_idx, bam_samples) = blocks[block].clone();
         // With a whitelist every sample x barcode is a row; without one, only
         // the (sample, barcode) pairs that have counts.
         let bam_cells = match barcodes {
@@ -628,23 +641,96 @@ where
                 product_cells(&labels[bam_samples], barcodes)
             }
             None => {
-                let found = std::mem::take(
-                    &mut *run_barcodes.lock().unwrap_or_else(PoisonError::into_inner),
-                )
-                .into_barcodes();
+                let found = std::mem::take(&mut *lock(&run_barcodes[bam_idx])).into_barcodes();
                 observed_rows(&mut entries, labels, &found)
             }
         };
         writer.append(build_csr(entries, bam_cells.len(), var.len())?)?;
         cells.extend(bam_cells);
         Ok(())
-    });
+    };
 
-    let written = counted.and_then(|()| writer.finish(&cells, var));
+    let next = AtomicUsize::new(0);
+    let progress = Mutex::new(Progress {
+        counts: vec![Vec::new(); blocks.len()],
+        left,
+        first: 0,
+        adding: false,
+        failed: None,
+    });
+    let output = Mutex::new((writer, Vec::new()));
+    // Add every BAM whose chunks are all counted, in BAM order. One thread at
+    // a time does this, while the others count on.
+    let add_ready = || {
+        let mut state = lock(&progress);
+        if state.adding {
+            return;
+        }
+        state.adding = true;
+        while state.failed.is_none() && state.first < blocks.len() && state.left[state.first] == 0 {
+            let block = state.first;
+            let entries = std::mem::take(&mut state.counts[block]);
+            drop(state);
+            let added = add_block(&mut lock(&output), block, entries);
+            state = lock(&progress);
+            state.first += 1;
+            if let Err(err) = added {
+                state.failed = Some(err);
+                next.store(chunks.len(), Ordering::Relaxed);
+            }
+        }
+        state.adding = false;
+    };
+
+    pool.broadcast(|_| {
+        let mut worker = BamWorker::default();
+        while let Some(&(block, chunk)) = chunks.get(next.fetch_add(1, Ordering::Relaxed)) {
+            let counted = count_chunk(&mut worker, chunk);
+            let mut state = lock(&progress);
+            match counted {
+                Ok(entries) => {
+                    state.counts[block].push(entries);
+                    state.left[block] -= 1;
+                }
+                Err(err) => {
+                    state.failed.get_or_insert(err);
+                    next.store(chunks.len(), Ordering::Relaxed);
+                }
+            }
+            drop(state);
+            add_ready();
+        }
+    });
+    // A run whose BAMs have no chunks at all is added here.
+    add_ready();
+
+    let (writer, cells) = output.into_inner().unwrap_or_else(PoisonError::into_inner);
+    let written = match progress
+        .into_inner()
+        .unwrap_or_else(PoisonError::into_inner)
+        .failed
+    {
+        Some(err) => Err(err),
+        None => writer.finish(&cells, var),
+    };
     if written.is_err() {
         let _ = std::fs::remove_file(output_path);
     }
     written.map(|()| cells.len())
+}
+
+/// Counted chunks waiting for the rest of their BAM, with the number of chunks
+/// each BAM still waits for, and the first BAM whose rows are not written yet.
+struct Progress {
+    counts: Vec<Vec<Vec<Entry>>>,
+    left: Vec<usize>,
+    first: usize,
+    adding: bool,
+    failed: Option<anyhow::Error>,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]
