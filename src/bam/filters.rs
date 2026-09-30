@@ -235,6 +235,7 @@ pub(crate) fn derive_record_opts(
         store_sequence: has_motif,
         compute_covered_span: dedup || qc.is_some_and(|f| f.needs_covered_span()),
         compute_blocks: adjust.extend_reads.is_none() && !adjust.center_reads,
+        atac_shift: adjust.atac_shift,
     }
 }
 

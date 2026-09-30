@@ -48,6 +48,7 @@ def count_reads(
     filterRNAstrand: FilterRNAStrand | str | None = None,
     extendReads: int | None = None,
     center_read: bool = False,
+    atac: bool = False,
     duplicateFilter: DuplicateFilter | str | None = None,
     motifFilter: Sequence[str] | str | None = None,
     genome2bit: str | None = None,
@@ -111,6 +112,12 @@ def count_reads(
         Extend reads to this fragment length.
     center_read : bool
         Count only the centre of each fragment.
+    atac : bool
+        Correct each read for the 9-base duplication Tn5 leaves behind: a
+        forward read is trimmed to ``start+4, end-5`` and a reverse read to
+        ``start+5, end-4``, so both ends sit on the cut site. Reads of. 9 bases
+        or less are dropped. The correction is applied before everything else,
+        so the filters and deduplication use the corrected read as well.
     duplicateFilter : DuplicateFilter or str, optional
         Remove duplicates with this method: ``"start_bc"``, ``"start_bc_umi"``,
         ``"start_end_bc"`` or ``"start_end_bc_umi"``.
@@ -173,6 +180,7 @@ def count_reads(
         "blacklist_path": blackListFileName,
         "extend_reads": extendReads,
         "center_reads": center_read,
+        "atac_shift": atac,
         "dup_method": backend.dup_method(dup_filter),
         "filter_rna_strand": rna_strand.value if rna_strand else None,
         "genome_2bit": genome2bit,

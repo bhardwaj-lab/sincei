@@ -66,6 +66,7 @@ fn sample_names(bam_paths: &[PathBuf], labels: Vec<String>) -> Result<Vec<(PathB
     blacklist_path = None,
     extend_reads = None,
     center_reads = false,
+    atac_shift = false,
     dup_method = None,
     genome_2bit = None,
     motif_filter = None,
@@ -99,6 +100,7 @@ pub fn count_bins(
     blacklist_path: Option<PathBuf>,
     extend_reads: Option<usize>,
     center_reads: bool,
+    atac_shift: bool,
     dup_method: Option<String>,
     genome_2bit: Option<PathBuf>,
     motif_filter: Option<Vec<(String, String)>>,
@@ -160,6 +162,7 @@ pub fn count_bins(
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
+        atac_shift,
         max_paired_fragment_length: max_fragment_length,
     };
 
@@ -212,6 +215,7 @@ pub fn count_bins(
     blacklist_path = None,
     extend_reads = None,
     center_reads = false,
+    atac_shift = false,
     feature_type = None,
     exon_type = None,
     name_attr = None,
@@ -248,6 +252,7 @@ pub fn count_features(
     blacklist_path: Option<PathBuf>,
     extend_reads: Option<usize>,
     center_reads: bool,
+    atac_shift: bool,
     feature_type: Option<Vec<String>>,
     exon_type: Option<Vec<String>>,
     name_attr: Option<String>,
@@ -313,6 +318,7 @@ pub fn count_features(
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
+        atac_shift,
         max_paired_fragment_length: max_fragment_length,
     };
 

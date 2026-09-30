@@ -120,6 +120,7 @@ pub fn run_filter_stats(
         // This tool counts reads, not intervals, so an alignment's shape does
         // not matter to it.
         compute_blocks: false,
+        atac_shift: false,
     };
 
     let blacklist: Option<GenomeIndex> = blacklist_path.map(parse_blacklist_bed).transpose()?;

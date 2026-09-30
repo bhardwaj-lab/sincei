@@ -152,6 +152,7 @@ def _count_reads(
     filter_rna_strand: FilterRNAStrand | None,
     extend_reads: int | None,
     center_reads: bool,
+    atac: bool,
     duplicate_filter: DuplicateFilter | None,
     motif_filter: list[str] | None,
     genome_2bit: str | None,
@@ -200,6 +201,7 @@ def _count_reads(
         "blacklist_path": backend.first_blacklist(blacklist),
         "extend_reads": extend_reads,
         "center_reads": center_reads,
+        "atac_shift": atac,
         "dup_method": backend.dup_method(duplicate_filter),
         "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
         "genome_2bit": genome_2bit,
@@ -269,6 +271,7 @@ def bins(
     ] = None,
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
+    atac: Annotated[bool, READ_OPTS["atac"]] = False,
     # Filtering options
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
@@ -312,6 +315,7 @@ def bins(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
+        atac=atac,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,
@@ -355,6 +359,7 @@ def features(
     ] = None,
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
+    atac: Annotated[bool, READ_OPTS["atac"]] = False,
     # Filtering options
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
@@ -402,6 +407,7 @@ def features(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
+        atac=atac,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,

@@ -27,6 +27,8 @@ pub(crate) struct ScRecordOptions {
     /// Split the alignment into its gapless blocks, so a spliced read credits
     /// its exons and not the intron between them.
     pub(crate) compute_blocks: bool,
+    /// Move both ends of the read onto the Tn5 cut sites ([`tn5_shift`]).
+    pub(crate) atac_shift: bool,
 }
 
 /// How a read's position can be adjusted.
@@ -41,6 +43,9 @@ pub struct AdjustRead {
     /// After extension, replace the interval with a `read_length` window
     /// centered on its midpoint.
     pub center_reads: bool,
+    /// Correct each read for the 9 bp Tn5 duplication before it is counted,
+    /// deduplicated or measured ([`tn5_shift`]).
+    pub atac_shift: bool,
     /// Largest insert size that may be accepted as a fragment. `None` means
     /// `4 × extend_reads`. If`--maxFragmentLength` is given, that value
     /// replaces it.
@@ -152,6 +157,19 @@ impl<'a> ScRecord<'a> {
         }
 
         let is_reverse = flags.is_reverse_complemented();
+        // The read is carried forward on its Tn5-corrected span, so every filter
+        // and every count sees the cut sites rather than the read's own ends.
+        let (span_start, span_end) = if opts.atac_shift {
+            let (shifted_start, shifted_end) = tn5_shift(start, end, is_reverse);
+            // A read of 9 bases or less has no span left after the correction.
+            if shifted_end <= shifted_start {
+                return Ok(None);
+            }
+            (shifted_start, shifted_end)
+        } else {
+            (start, end)
+        };
+
         let is_proper_pair = flags.is_properly_segmented();
         let is_paired = flags.is_segmented();
         let is_read1 = flags.is_first_segment();
@@ -308,6 +326,22 @@ impl<'a> ScRecord<'a> {
             None
         };
 
+        // The blocks are walked from the read's own start, so they keep their
+        // true positions and only the outermost ones are cut by the correction.
+        let blocks = match blocks {
+            Some(blocks) if opts.atac_shift => {
+                let clipped: Vec<(usize, usize)> = blocks
+                    .into_iter()
+                    .map(|(block_start, block_end)| {
+                        (block_start.max(span_start), block_end.min(span_end))
+                    })
+                    .filter(|&(block_start, block_end)| block_start < block_end)
+                    .collect();
+                (clipped.len() > 1).then_some(clipped)
+            }
+            blocks => blocks,
+        };
+
         // Aligned fraction: the aligned operations over the length of the read
         // as it was sequenced.
         //
@@ -347,8 +381,8 @@ impl<'a> ScRecord<'a> {
         };
 
         Ok(Some(Self {
-            alignment_start: start,
-            alignment_end: end,
+            alignment_start: span_start,
+            alignment_end: span_end,
             is_reverse,
             is_proper_pair,
             is_paired,
@@ -501,6 +535,17 @@ impl ExactSizeIterator for EffectiveIntervals<'_> {
             Self::Blocks(blocks) => blocks.len(),
             Self::Selected(intervals) => intervals.len(),
         }
+    }
+}
+
+/// The read's span moved onto the Tn5 cut sites, as deeptools' `--ATACshift`
+/// does: a forward read becomes `[start + 4, end - 5)` and a reverse read
+/// `[start + 5, end - 4)`, so both ends lose the 9 bp duplication Tn5 leaves.
+fn tn5_shift(start: usize, end: usize, is_reverse: bool) -> (usize, usize) {
+    if is_reverse {
+        (start + 5, end.saturating_sub(4))
+    } else {
+        (start + 4, end.saturating_sub(5))
     }
 }
 
@@ -736,16 +781,16 @@ mod tests {
         // and falls back to the fixed extension.
         let bounded = AdjustRead {
             extend_reads: Some(200),
-            center_reads: false,
             max_paired_fragment_length: Some(500),
+            ..AdjustRead::default()
         };
         assert_eq!(rec.effective_interval(&bounded), (1000, 1200));
 
         // It replaces rather than tightens: a bound above 4x widens what counts.
         let widened = AdjustRead {
             extend_reads: Some(200),
-            center_reads: false,
             max_paired_fragment_length: Some(2000),
+            ..AdjustRead::default()
         };
         let long = proper_pair(1000, 1050, 1500, 2450);
         assert_eq!(long.effective_interval(&widened), (1000, 2500));
@@ -954,6 +999,7 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
+            atac_shift: false,
         }
     }
 
@@ -1031,6 +1077,7 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
+            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1052,6 +1099,7 @@ mod tests {
             store_sequence: true,
             compute_covered_span: false,
             compute_blocks: false,
+            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1079,6 +1127,7 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
+            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1102,6 +1151,7 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
+            atac_shift: false,
         };
         let shapes = cigar_shapes(&opts);
         let fraction = |name: &str| shapes[name].aligned_fraction.unwrap();
@@ -1120,6 +1170,69 @@ mod tests {
         // `=` and `X` are aligned ops like `M`, so 5=5X10N5= is 15 aligned
         // bases of a 15-base read. The intron consumes none of it.
         assert_eq!(fraction("eqx"), 1.0);
+    }
+
+    #[test]
+    fn the_tn5_correction_trims_each_end_by_its_own_offset() {
+        // deeptools --ATACshift: 4 and 5 bases, the larger one at the 3' end.
+        assert_eq!(tn5_shift(1000, 1050, false), (1004, 1045));
+        assert_eq!(tn5_shift(1000, 1050, true), (1005, 1046));
+
+        // A read of 9 bases or less has nothing left, which the caller drops.
+        let (start, end) = tn5_shift(1000, 1009, false);
+        assert!(end <= start, "{start}..{end}");
+    }
+
+    #[test]
+    fn a_tn5_corrected_record_carries_the_shifted_span() {
+        let plain_with_blocks = ScRecordOptions {
+            compute_blocks: true,
+            ..plain_opts()
+        };
+        let shifted_with_blocks = ScRecordOptions {
+            compute_blocks: true,
+            atac_shift: true,
+            ..plain_opts()
+        };
+        let plain = cigar_shapes(&plain_with_blocks);
+        let shifted = cigar_shapes(&shifted_with_blocks);
+
+        for (name, rec) in &plain {
+            let corrected = &shifted[name];
+            let (head, tail) = if rec.is_reverse { (5, 4) } else { (4, 5) };
+            assert_eq!(
+                (corrected.alignment_start, corrected.alignment_end),
+                (rec.alignment_start + head, rec.alignment_end - tail),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_tn5_correction_cuts_the_blocks_it_shortens() {
+        // An intron keeps its true position: only the outermost bases go, so
+        // the block a corrected end falls in is cut rather than moved.
+        let plain_with_blocks = ScRecordOptions {
+            compute_blocks: true,
+            ..plain_opts()
+        };
+        let shifted_with_blocks = ScRecordOptions {
+            compute_blocks: true,
+            atac_shift: true,
+            ..plain_opts()
+        };
+        let plain = cigar_shapes(&plain_with_blocks);
+        let shifted = cigar_shapes(&shifted_with_blocks);
+
+        let intron = &plain["intron"];
+        let blocks = intron.blocks.as_ref().expect("an intron has two blocks");
+        let corrected = &shifted["intron"];
+        let (head, tail) = if intron.is_reverse { (5, 4) } else { (4, 5) };
+        let expected: Vec<(usize, usize)> = vec![
+            (blocks[0].0 + head, blocks[0].1),
+            (blocks[1].0, blocks[1].1 - tail),
+        ];
+        assert_eq!(corrected.blocks.as_deref(), Some(expected.as_slice()));
     }
 
     #[test]

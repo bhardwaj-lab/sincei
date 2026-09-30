@@ -626,6 +626,18 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "single-end read instead."
         ),
     ),
+    "atac": typer.Option(
+        "--atac",
+        rich_help_panel=_READ,
+        help=(
+            "Correct each read for the 9-base duplication Tn5 leaves behind: a "
+            "forward read is trimmed to ``start+4, end-5`` and a reverse read "
+            "to ``start+5, end-4``, so both ends sit on the cut site. Reads of "
+            "9 bases or less are dropped. The correction is applied before "
+            "everything else, so the filters and deduplication use the "
+            "corrected read as well.\n\n"
+        ),
+    ),
     "center_reads": typer.Option(
         "--centerReads",
         rich_help_panel=_READ,
