@@ -250,6 +250,9 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
     let mut group_index: AHashMap<String, usize> = AHashMap::new();
     let mut groups: Vec<String> = Vec::new();
     let mut cells: Vec<(usize, String, usize)> = Vec::new();
+    // What group each cell was first listed in, to raise an error in case a
+    // cell appears multiple times in the group info file.
+    let mut first_listed: AHashMap<(usize, String), (usize, usize)> = AHashMap::new();
 
     let mut lines = reader.lines();
     // The header names the columns rather than holding data, and its width is
@@ -290,6 +293,21 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
             groups.push(group.to_string());
             idx
         });
+
+        if let Some(&(first_line, first_group)) = first_listed.get(&(bam_idx, barcode.to_string()))
+        {
+            anyhow::bail!(
+                "group info line {} lists cell {}::{} again: line {} already puts it in group \
+                 {:?}, this line puts it in group {:?}. Each cell must appear once.",
+                line_no,
+                sample,
+                barcode,
+                first_line,
+                groups[first_group],
+                groups[group_idx]
+            );
+        }
+        first_listed.insert((bam_idx, barcode.to_string()), (line_no, group_idx));
 
         cells.push((bam_idx, barcode.to_string(), group_idx));
     }
@@ -1251,6 +1269,45 @@ mod tests {
                 (0, "CCC".to_string(), 1),
                 (1, "GGG".to_string(), 0),
             ]
+        );
+    }
+
+    #[test]
+    fn a_cell_in_two_groups_is_an_error_naming_both_lines() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(
+            &dir,
+            "sample\tbarcode\tgroup\ns1\tAAA\tB\ns1\tCCC\tA\ns1\tAAA\tA\n",
+        );
+
+        let err = parse_group_info(&path, &["s1"]).unwrap_err().to_string();
+
+        assert!(err.contains("line 4"), "{err}");
+        assert!(err.contains("line 2"), "{err}");
+        assert!(err.contains("s1::AAA"), "{err}");
+        assert!(err.contains("\"B\"") && err.contains("\"A\""), "{err}");
+    }
+
+    #[test]
+    fn a_cell_listed_twice_in_one_group_is_an_error_as_well() {
+        // The reads would be counted once but the cell twice, so a Mean track
+        // would divide by a cell count the reads cannot match.
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(&dir, "sample\tbarcode\tgroup\ns1\tAAA\tB\ns1\tAAA\tB\n");
+
+        let err = parse_group_info(&path, &["s1"]).unwrap_err().to_string();
+        assert!(err.contains("s1::AAA"), "{err}");
+    }
+
+    #[test]
+    fn one_barcode_in_two_samples_is_two_cells() {
+        let dir = TempDir::new().unwrap();
+        let path = write_group_info(&dir, "sample\tbarcode\tgroup\ns1\tAAA\tB\ns2\tAAA\tA\n");
+
+        let parsed = parse_group_info(&path, &["s1", "s2"]).unwrap();
+        assert_eq!(
+            parsed.cells,
+            vec![(0, "AAA".to_string(), 0), (1, "AAA".to_string(), 1)]
         );
     }
 
