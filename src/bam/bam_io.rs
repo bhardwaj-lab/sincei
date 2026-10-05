@@ -104,6 +104,9 @@ pub(crate) fn chunk_windows<'a>(
 /// Alias for a BAI-indexed BAM reader opened from a file path.
 pub(crate) type BamReader = bam::io::IndexedReader<bgzf::io::Reader<File>>;
 
+/// A BAM read from start to end, rather than by region ([`BamReader`]).
+pub(crate) type SequentialBamReader = bam::io::Reader<bgzf::io::Reader<File>>;
+
 /// Records inspected when checking that the BAM tags a run depends on are present.
 ///
 /// Large enough that a tag used by the file will certainly appear, small enough
@@ -374,6 +377,36 @@ pub(crate) fn open_indexed_bam(path: &Path) -> Result<(BamReader, Header)> {
         Err(_) => read_header_from_binary_dict(path)?,
     };
     Ok((reader, header))
+}
+
+/// Open a BAM for reading from its first record, skipping the SAM header text
+/// rather than parsing it.
+///
+/// For the same reason as [`open_indexed_bam`]: a 10x `@HD` line carries no
+/// `VN` field, which noodles rejects. Here the text is not needed at all, so it
+/// is discarded unparsed, and only the binary reference dictionary after it is
+/// read, which leaves the stream on the first record.
+pub(crate) fn open_bam_records(path: &Path) -> Result<SequentialBamReader> {
+    let mut reader = bam::io::reader::Builder
+        .build_from_path(path)
+        .with_context(|| format!("failed to open BAM: {}", path.display()))?;
+
+    {
+        let mut header_reader = reader.header_reader();
+        let magic = header_reader
+            .read_magic_number()
+            .with_context(|| format!("failed to read BAM magic number: {}", path.display()))?;
+        anyhow::ensure!(&magic == b"BAM\x01", "not a BAM file: {}", path.display());
+        header_reader
+            .raw_sam_header_reader()
+            .and_then(|mut text| text.discard_to_end())
+            .with_context(|| format!("failed to read BAM header text: {}", path.display()))?;
+        header_reader
+            .read_reference_sequences()
+            .with_context(|| format!("failed to read BAM reference list: {}", path.display()))?;
+    }
+
+    Ok(reader)
 }
 
 /// Reconstruct a [`Header`] from the BAM binary reference dictionary, rather

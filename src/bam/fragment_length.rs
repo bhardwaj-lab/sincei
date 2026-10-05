@@ -7,7 +7,8 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use noodles::bam;
+
+use super::bam_io::open_bam_records;
 
 /// `extend_reads` value meaning "estimate from the data".
 ///
@@ -171,14 +172,9 @@ pub(crate) fn sample_library_layouts(bam_paths: &[(&Path, &str)]) -> Result<Vec<
 }
 
 fn sample_library_layout(path: &Path) -> Result<LibraryLayout> {
-    let mut reader = bam::io::reader::Builder
-        .build_from_path(path)
-        .with_context(|| format!("failed to open BAM: {}", path.display()))?;
-    // The record iterator starts just past the header, so it must be consumed
-    // first even though the layout does not depend on it.
-    reader
-        .read_header()
-        .with_context(|| format!("failed to read BAM header: {}", path.display()))?;
+    // The header is skipped rather than parsed. A non-compliant one would
+    // panic otherwise.
+    let mut reader = open_bam_records(path)?;
 
     let mut any_paired = false;
     let mut fragment_lengths: Vec<usize> = Vec::new();
@@ -234,6 +230,20 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/testdata")
             .join(name)
+    }
+
+    #[test]
+    fn a_header_the_strict_parser_rejects_is_still_sampled() {
+        // test_i1_i2_badheader.bam has an @HD line with no VN field, like in a
+        // 10x BAM. The layout does not depend on the header, so the sample must
+        // come through rather than panicking.
+        let bad = data("test_i1_i2_badheader.bam");
+        let clean = data("test_i1_i2.bam");
+
+        assert_eq!(
+            sample_library_layout(&bad).unwrap(),
+            sample_library_layout(&clean).unwrap()
+        );
     }
 
     #[test]
