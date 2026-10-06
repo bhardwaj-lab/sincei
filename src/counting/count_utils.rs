@@ -9,7 +9,7 @@
 //! a written matrix back. They are test-only: nothing in the crate reads a
 //! count matrix yet.
 
-use std::ops::Range;
+use std::ops::{AddAssign, Range};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -144,10 +144,10 @@ pub(crate) fn df_str_col(df: &DataFrame, name: &str) -> Result<Vec<String>> {
 }
 
 /// Counts keyed by `(cell, feature)`.
-pub(super) type CellCounts = AHashMap<(usize, usize), u32>;
+pub(super) type CellCounts = AHashMap<(usize, usize), f32>;
 
 /// One count matrix entry: `(cell, feature, count)`.
-pub(super) type Entry = (u32, u32, u32);
+pub(super) type Entry = (u32, u32, f32);
 
 fn to_u32(index: usize) -> Result<u32> {
     u32::try_from(index).context("the count matrix has more than 2^32 rows or columns")
@@ -259,13 +259,13 @@ pub(super) fn observed_rows(
 ///
 /// The smaller map is drained into the larger: merging costs one hash lookup
 /// per entry moved, so moving the shorter side does strictly less work.
-pub(super) fn merge_counts(
-    a: AHashMap<(usize, usize), u32>,
-    b: AHashMap<(usize, usize), u32>,
-) -> AHashMap<(usize, usize), u32> {
+pub(super) fn merge_counts<V: Copy + Default + AddAssign>(
+    a: AHashMap<(usize, usize), V>,
+    b: AHashMap<(usize, usize), V>,
+) -> AHashMap<(usize, usize), V> {
     let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
     for (key, val) in drain {
-        *keep.entry(key).or_insert(0) += val;
+        *keep.entry(key).or_default() += val;
     }
     keep
 }
@@ -279,7 +279,7 @@ pub(super) fn build_csr(
     entries: Vec<Vec<Entry>>,
     n_rows: usize,
     n_cols: usize,
-) -> Result<CsrMatrix<u32>> {
+) -> Result<CsrMatrix<f32>> {
     let mut row_offsets = vec![0usize; n_rows + 1];
     for &(row, _, _) in entries.iter().flatten() {
         row_offsets[row as usize + 1] += 1;
@@ -290,7 +290,7 @@ pub(super) fn build_csr(
 
     let n_entries = row_offsets[n_rows];
     let mut col_indices = vec![0usize; n_entries];
-    let mut values = vec![0u32; n_entries];
+    let mut values = vec![0f32; n_entries];
     let mut next = row_offsets.clone();
     for chunk in entries {
         for (row, col, count) in chunk {
@@ -302,7 +302,7 @@ pub(super) fn build_csr(
     }
     drop(next);
 
-    let mut row: Vec<(usize, u32)> = Vec::new();
+    let mut row: Vec<(usize, f32)> = Vec::new();
     let mut nnz = 0;
     for r in 0..n_rows {
         let (start, end) = (row_offsets[r], row_offsets[r + 1]);
@@ -408,7 +408,7 @@ impl CountsWriter {
             compression: compression.clone(),
             block_size: Some(X_BLOCK.into()),
         };
-        let data = x.new_empty_dataset::<u32>("data", &0.into(), growing())?;
+        let data = x.new_empty_dataset::<f32>("data", &0.into(), growing())?;
         let indices = x.new_empty_dataset::<i32>("indices", &0.into(), growing())?;
         Ok(Self {
             path: output_path.to_path_buf(),
@@ -423,7 +423,7 @@ impl CountsWriter {
     }
 
     /// Add `block`'s rows below the rows already written.
-    pub(crate) fn append(&mut self, block: CsrMatrix<u32>) -> Result<()> {
+    pub(crate) fn append(&mut self, block: CsrMatrix<f32>) -> Result<()> {
         anyhow::ensure!(
             block.ncols() == self.n_cols,
             "a block of {} columns cannot be added to a matrix of {}",
@@ -562,7 +562,7 @@ impl CountsWriter {
 #[cfg(test)]
 pub(crate) fn write_counts_anndata(
     output_path: &Path,
-    matrix: CsrMatrix<u32>,
+    matrix: CsrMatrix<f32>,
     cells: &[(String, String)],
     var: &[Feature],
     compression: &str,
@@ -738,8 +738,8 @@ mod tests {
     use super::*;
 
     /// Dense view of a CSR matrix, for readable assertions.
-    fn dense(m: &CsrMatrix<u32>) -> Vec<Vec<u32>> {
-        let mut out = vec![vec![0u32; m.ncols()]; m.nrows()];
+    fn dense(m: &CsrMatrix<f32>) -> Vec<Vec<f32>> {
+        let mut out = vec![vec![0f32; m.ncols()]; m.nrows()];
         for (r, c, &v) in m.triplet_iter() {
             out[r][c] = v;
         }
@@ -748,18 +748,23 @@ mod tests {
 
     #[test]
     fn build_csr_places_every_entry_at_its_coordinate() {
-        let m = build_csr(vec![vec![(0, 1, 5), (1, 0, 3)], vec![(1, 2, 7)]], 2, 3).unwrap();
+        let m = build_csr(
+            vec![vec![(0, 1, 5.0), (1, 0, 3.0)], vec![(1, 2, 7.0)]],
+            2,
+            3,
+        )
+        .unwrap();
 
         assert_eq!((m.nrows(), m.ncols()), (2, 3));
         assert_eq!(m.nnz(), 3);
-        assert_eq!(dense(&m), vec![vec![0, 5, 0], vec![3, 0, 7]]);
+        assert_eq!(dense(&m), vec![vec![0.0, 5.0, 0.0], vec![3.0, 0.0, 7.0]]);
     }
 
     #[test]
     fn build_csr_sorts_column_indices_within_each_row() {
         // CSR requires ascending column indices per row; the entries come from
         // unordered hash maps, so the sort has to happen in build_csr.
-        let entries = vec![(0..8).map(|c| (0, 7 - c, 1)).collect()];
+        let entries = vec![(0..8).map(|c| (0, 7 - c, 1.0)).collect()];
 
         let m = build_csr(entries, 1, 8).unwrap();
 
@@ -771,14 +776,19 @@ mod tests {
     fn build_csr_keeps_empty_rows_and_the_declared_shape() {
         // Cells with no counts must still occupy a row: obs is the full
         // sample × barcode product regardless of coverage.
-        let m = build_csr(vec![vec![(2, 0, 4)]], 4, 2).unwrap();
+        let m = build_csr(vec![vec![(2, 0, 4.0)]], 4, 2).unwrap();
 
         assert_eq!((m.nrows(), m.ncols()), (4, 2));
         assert_eq!(m.nnz(), 1);
         assert_eq!(m.row_offsets(), &[0, 0, 0, 1, 1]);
         assert_eq!(
             dense(&m),
-            vec![vec![0, 0], vec![0, 0], vec![4, 0], vec![0, 0]]
+            vec![
+                vec![0.0, 0.0],
+                vec![0.0, 0.0],
+                vec![4.0, 0.0],
+                vec![0.0, 0.0]
+            ]
         );
     }
 
@@ -792,13 +802,16 @@ mod tests {
 
     #[test]
     fn build_csr_adds_entries_of_one_cell_and_feature_from_two_chunks() {
-        let entries = vec![vec![(0, 2, 1), (1, 0, 3)], vec![(0, 2, 4), (0, 1, 2)]];
+        let entries = vec![
+            vec![(0, 2, 1.0), (1, 0, 3.0)],
+            vec![(0, 2, 4.0), (0, 1, 2.0)],
+        ];
 
         let m = build_csr(entries, 2, 3).unwrap();
 
         assert_eq!(m.nnz(), 3);
         assert_eq!(m.row_offsets(), &[0, 2, 3]);
-        assert_eq!(dense(&m), vec![vec![0, 2, 5], vec![3, 0, 0]]);
+        assert_eq!(dense(&m), vec![vec![0.0, 2.0, 5.0], vec![3.0, 0.0, 0.0]]);
     }
 
     #[test]
@@ -861,7 +874,7 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("counts.h5ad");
 
-        let matrix = build_csr(vec![vec![(0, 0, 1), (0, 2, 5), (1, 1, 3)]], 2, 3).unwrap();
+        let matrix = build_csr(vec![vec![(0, 0, 1.0), (0, 2, 5.0), (1, 1, 3.0)]], 2, 3).unwrap();
 
         let var = vec![
             feature("chr1", 0, 100),
@@ -904,12 +917,12 @@ mod tests {
 
         let mut writer = CountsWriter::create(&path, 3, "none", 0).unwrap();
         writer
-            .append(build_csr(vec![vec![(0, 2, 5), (1, 0, 1)]], 2, 3).unwrap())
+            .append(build_csr(vec![vec![(0, 2, 5.0), (1, 0, 1.0)]], 2, 3).unwrap())
             .unwrap();
         writer.append(build_csr(vec![], 0, 3).unwrap()).unwrap();
         writer.append(build_csr(vec![], 1, 3).unwrap()).unwrap();
         writer
-            .append(build_csr(vec![vec![(0, 1, 7)]], 1, 3).unwrap())
+            .append(build_csr(vec![vec![(0, 1, 7.0)]], 1, 3).unwrap())
             .unwrap();
         writer
             .finish(
@@ -1013,11 +1026,38 @@ mod tests {
     }
 
     #[test]
+    fn the_written_matrix_is_float32() {
+        // Every read-back in these tests widens to f64, so only a direct look
+        // at the stored variant catches a return to an integer matrix.
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("counts.h5ad");
+
+        write_counts_anndata(
+            &path,
+            build_csr(vec![vec![(0, 0, -2.5), (0, 1, 3.0)]], 1, 2).unwrap(),
+            &product_cells(&["s1".to_string()], &["AAA".to_string()]),
+            &[feature("chr1", 0, 100), feature("chr1", 100, 200)],
+            "none",
+            0,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&path).unwrap()).unwrap();
+        let x: DynCsrMatrix = adata.x().get::<DynCsrMatrix>().unwrap().unwrap();
+        assert!(matches!(x, DynCsrMatrix::F32(_)), "X is not float32");
+
+        // A negative value survives the round trip, which an unsigned matrix
+        // could not hold.
+        let values = read_x_f64(&adata).unwrap();
+        assert_eq!(values.values(), &[-2.5, 3.0]);
+    }
+
+    #[test]
     fn gzip_is_accepted_and_produces_a_readable_file() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("gzipped.h5ad");
 
-        let matrix = build_csr(vec![vec![(0, 0, 42)]], 1, 1).unwrap();
+        let matrix = build_csr(vec![vec![(0, 0, 42.0)]], 1, 1).unwrap();
 
         write_counts_anndata(
             &path,

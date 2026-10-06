@@ -79,7 +79,6 @@ VALUE_TAG = typer.Option(
         "BAM tag to the count matrix. For example, this can be used to count the "
         "number of methylated CpG per read. A read that does not carry the tag is not "
         "counted at all. "
-        'Negative values contribute their magnitude, so a tag of "-3" adds "3".'
     ),
 )
 GENOME_CHUNK_SIZE = typer.Option(

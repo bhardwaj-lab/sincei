@@ -229,7 +229,7 @@ pub fn count_bam_bins(
             };
 
             let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
-            let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+            let mut local_acc: AHashMap<(usize, usize), f32> = AHashMap::new();
             let mut chunk_barcodes = BarcodeNumbers::default();
 
             for result in query.records() {
@@ -334,7 +334,9 @@ pub fn count_bam_bins(
                     step_size,
                     n_bins,
                 ) {
-                    *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) += sc_rec.count;
+                    *local_acc
+                        .entry((cell_idx, chrom_offset + bin))
+                        .or_insert(0.0) += sc_rec.count;
                 }
             }
 

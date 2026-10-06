@@ -84,7 +84,7 @@ def write_matrix_market(adata: ad.AnnData, prefix: str) -> None:
     Path(f"{prefix}.rownames.txt").write_text("\n".join(adata.obs_names) + "\n")
     Path(f"{prefix}.colnames.txt").write_text("\n".join(adata.var_names) + "\n")
     counts = sparse.csr_matrix(dense_counts(adata))
-    io.mmwrite(f"{prefix}.counts.mtx", counts, field="integer")
+    io.mmwrite(f"{prefix}.counts.mtx", counts, field="real")
 
 
 @app.callback(invoke_without_command=True)

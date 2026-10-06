@@ -96,9 +96,8 @@ pub struct ScRecord<'a> {
     /// from the record. `None` unless a group tag was asked for.
     pub group: Option<&'a [u8]>,
     /// Value to add to the count matrix. One per read unless a count tag was
-    /// asked for, in which case it is that tag's value, by magnitude: the
-    /// matrix is unsigned, so a negative tag contributes its absolute value.
-    pub count: u32,
+    /// asked for, in which case it is that tag's value.
+    pub count: f32,
     /// GC fraction in `[0, 1]`. `None` if not requested.
     pub gc_content: Option<f32>,
     /// Fraction of read bases in aligned CIGAR ops (`M`, `=`, `X`).
@@ -215,7 +214,7 @@ impl<'a> ScRecord<'a> {
                 Some(value) => value,
                 None => return Ok(None),
             },
-            None => 1,
+            None => 1.0,
         };
 
         // Sequence handling. Only materialize a `Vec` when the motif filter
@@ -605,7 +604,7 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
         barcode: None,
         umi: None,
         group: None,
-        count: 1,
+        count: 1.0,
         gc_content: None,
         aligned_fraction: None,
         read_sequence: None,
@@ -619,30 +618,27 @@ pub(crate) fn test_record<'a>(start: usize, end: usize) -> ScRecord<'a> {
 /// as a number; the caller drops the read. A string that is not a number is an
 /// error instead, since it names a tag the caller asked for by name.
 ///
-/// Signed values come back by magnitude, whether the tag is an integer or a
-/// string spelling one. The count matrix is `u32`, so a negative tag cannot be
-/// represented: `-3` contributes 3.
-fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<u32>> {
+/// A signed value keeps its sign, whether the tag is an integer or a string
+/// spelling one: `-3` contributes -3.
+fn get_count_tag(record: &bam::Record, tag: &Tag) -> Result<Option<f32>> {
     match record.data().get(tag) {
         Some(Ok(value)) => match value {
             Value::String(v) => {
                 let s = String::from_utf8_lossy(v.as_ref()).into_owned();
-                // Read wide, then folded, so a string tag behaves like an integer
-                // one: `"-3"` is 3 rather than an error, and the accepted range is
-                // the same on both paths.
+                // Read wide, so a string tag behaves like an integer.
                 let signed = s
                     .parse::<i64>()
                     .with_context(|| format!("failed to parse count tag as a number: {s:?}"))?;
-                let value = u32::try_from(signed.unsigned_abs())
+                u32::try_from(signed.unsigned_abs())
                     .with_context(|| format!("count tag {s:?} is too large to count"))?;
-                Ok(Some(value))
+                Ok(Some(signed as f32))
             }
-            Value::Int8(v) => Ok(Some(v.unsigned_abs() as u32)),
-            Value::UInt8(v) => Ok(Some(v as u32)),
-            Value::Int16(v) => Ok(Some(v.unsigned_abs() as u32)),
-            Value::UInt16(v) => Ok(Some(v as u32)),
-            Value::Int32(v) => Ok(Some(v.unsigned_abs())),
-            Value::UInt32(v) => Ok(Some(v)),
+            Value::Int8(v) => Ok(Some(f32::from(v))),
+            Value::UInt8(v) => Ok(Some(f32::from(v))),
+            Value::Int16(v) => Ok(Some(f32::from(v))),
+            Value::UInt16(v) => Ok(Some(f32::from(v))),
+            Value::Int32(v) => Ok(Some(v as f32)),
+            Value::UInt32(v) => Ok(Some(v as f32)),
             _ => Ok(None),
         },
         Some(Err(e)) => Err(e).context("failed to decode count tag"),
@@ -955,7 +951,7 @@ mod tests {
     }
 
     /// The `XC` count tag each of `reads` produces, in the order written.
-    fn count_tags_of(reads: &[(&str, Value<'_>)]) -> Vec<(String, u32)> {
+    fn count_tags_of(reads: &[(&str, Value<'_>)]) -> Vec<(String, f32)> {
         let path = write_bam_with_count_tags(reads);
         let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
         let _ = reader.read_header().unwrap();
@@ -1019,7 +1015,7 @@ mod tests {
         );
         assert_eq!(rec.barcode, Some(b"ATATAACT".as_slice()));
         assert_eq!(rec.umi, None, "no UMI tag was requested");
-        assert_eq!(rec.count, 1, "no count tag means one read");
+        assert_eq!(rec.count, 1.0, "no count tag means one read");
         assert!(rec.read_length > 0);
 
         // Nothing optional was switched on.
@@ -1275,7 +1271,7 @@ mod tests {
         let (_header, records) = read_test_bam(1);
         // NM:i:1 on the first record of the test file.
         let count = get_count_tag(&records[0], &Tag::new(b'N', b'M')).unwrap();
-        assert_eq!(count, Some(1));
+        assert_eq!(count, Some(1.0));
     }
 
     #[test]
@@ -1288,22 +1284,27 @@ mod tests {
         ]);
         assert_eq!(
             counts,
-            vec![("typed".to_string(), 7), ("spelled".to_string(), 7)]
+            vec![("typed".to_string(), 7.0), ("spelled".to_string(), 7.0)]
         );
     }
 
     #[test]
-    fn a_negative_count_tag_contributes_its_magnitude() {
-        // The count matrix is unsigned, so the sign is dropped rather than the
-        // read. The integer and string paths have to agree on that.
+    fn a_negative_count_tag_keeps_its_sign() {
+        // The count matrix is float, so a negative tag contributes a negative
+        // value. The integer and string paths have to agree on that.
         let counts = count_tags_of(&[
             ("neg_int", Value::Int32(-3)),
             ("neg_str", Value::String(b"-3".as_slice().into())),
             ("positive", Value::Int32(3)),
         ]);
-        for (name, count) in counts {
-            assert_eq!(count, 3, "{name} did not contribute 3");
-        }
+        assert_eq!(
+            counts,
+            vec![
+                ("neg_int".to_string(), -3.0),
+                ("neg_str".to_string(), -3.0),
+                ("positive".to_string(), 3.0),
+            ]
+        );
     }
 
     #[test]
@@ -1341,6 +1342,28 @@ mod tests {
         )
         .unwrap();
         assert!(dropped.is_none(), "a read without the count tag was kept");
+    }
+
+    #[test]
+    fn a_record_carries_the_signed_value_of_its_count_tag() {
+        let path = write_bam_with_count_tags(&[("neg", Value::Int32(-3))]);
+        let mut reader = bam::io::reader::Builder.build_from_path(&path).unwrap();
+        let header = reader.read_header().unwrap();
+        let record = reader.records().next().unwrap().unwrap();
+        let xc = Tag::new(b'X', b'C');
+
+        let rec = ScRecord::from_bam_record(
+            &record,
+            &header,
+            &Tag::new(b'B', b'C'),
+            None,
+            Some(&xc),
+            None,
+            &plain_opts(),
+        )
+        .unwrap();
+
+        assert_eq!(rec.map(|rec| rec.count), Some(-3.0));
     }
 
     #[test]

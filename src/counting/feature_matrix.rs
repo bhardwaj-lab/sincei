@@ -280,7 +280,7 @@ pub fn count_bam_features(
             };
 
             let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
-            let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+            let mut local_acc: AHashMap<(usize, usize), f32> = AHashMap::new();
             // The distinct features one read reaches, with the bases it
             // shares with each. Reused across reads so the counting loop
             // does not allocate; cleared at the top of every read.
@@ -400,14 +400,14 @@ pub fn count_bam_features(
                     // with it wins. A read spanning two exons of gene A
                     // counts once for A, not twice.
                     if let Some(&(best_val, _)) = hits.iter().max_by_key(|&&(_, overlap)| overlap) {
-                        *local_acc.entry((cell_idx, best_val)).or_insert(0) += sc_rec.count;
+                        *local_acc.entry((cell_idx, best_val)).or_insert(0.0) += sc_rec.count;
                     }
                 } else {
                     // A read counts once for every feature it overlaps, so
                     // overlapping annotations each get their own count and
                     // the  count matrix sum may exceed the read count.
                     for &(var_idx, _) in hits.iter() {
-                        *local_acc.entry((cell_idx, var_idx)).or_insert(0) += sc_rec.count;
+                        *local_acc.entry((cell_idx, var_idx)).or_insert(0.0) += sc_rec.count;
                     }
                 }
             }

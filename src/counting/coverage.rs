@@ -574,7 +574,7 @@ pub fn run_bulk_coverage(
     // the per-chunk maps with a parallel tree reduction. Collecting them all and
     // merging on one thread instead cost ~15% of wall-clock time in the bin
     // counter (see `bin_matrix.rs`), and held every partial map in memory at once.
-    let global_acc: AHashMap<(usize, usize), u32> = pool.install(|| {
+    let global_acc: AHashMap<(usize, usize), f32> = pool.install(|| {
         work.par_iter()
             .map_init(
                 BamWorker::default,
@@ -587,7 +587,7 @@ pub fn run_bulk_coverage(
                      end: chunk_end,
                      ..
                  }|
-                 -> Result<AHashMap<(usize, usize), u32>> {
+                 -> Result<AHashMap<(usize, usize), f32>> {
                     let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
 
                     // Each work chunk covers a single chromosome, so its bin
@@ -628,7 +628,7 @@ pub fn run_bulk_coverage(
 
                     let mut dup_filter: Option<DuplicateFilter> =
                         dup_method.map(DuplicateFilter::new);
-                    let mut local_acc: AHashMap<(usize, usize), u32> = AHashMap::new();
+                    let mut local_acc: AHashMap<(usize, usize), f32> = AHashMap::new();
 
                     for result in query.records() {
                         let record = result.context("failed to read BAM record")?;
@@ -718,8 +718,9 @@ pub fn run_bulk_coverage(
                             step_size,
                             n_bins,
                         ) {
-                            *local_acc.entry((cell_idx, chrom_offset + bin)).or_insert(0) +=
-                                sc_rec.count;
+                            *local_acc
+                                .entry((cell_idx, chrom_offset + bin))
+                                .or_insert(0.0) += sc_rec.count;
                         }
                     }
 
@@ -766,7 +767,7 @@ pub fn run_bulk_coverage(
     for (&(cell_idx, bin_idx), &count) in &global_acc {
         let group_idx = cell_group[cell_idx];
         let slot = group_idx * n_bins + bin_idx;
-        group_bin_sum[slot] += count as f64;
+        group_bin_sum[slot] += f64::from(count);
         if let Some(n_cells) = group_bin_n_cells.as_mut() {
             n_cells[slot] += 1;
         }
@@ -775,7 +776,7 @@ pub fn run_bulk_coverage(
             .iter()
             .any(|&(start, end)| bin_idx >= start && bin_idx < end);
         if !is_ignored {
-            group_total[group_idx] += count as f64;
+            group_total[group_idx] += f64::from(count);
         }
     }
 
