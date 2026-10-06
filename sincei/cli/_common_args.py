@@ -326,7 +326,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
         ),
     ),
     "group_info": typer.Option(
-        "-gi",
+        "-i",
         "--groupInfo",
         metavar=".tsv",
         rich_help_panel=_IO,
