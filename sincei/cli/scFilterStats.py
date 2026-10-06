@@ -14,7 +14,6 @@ from ._common_args import (
     FILTER_OPTS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
-    READ_OPTS,
     DuplicateFilter,
     FilterRNAStrand,
     configure_logging,
@@ -102,6 +101,14 @@ def main(
     distance_between_bins: Annotated[
         int | None, BAM_OPTS["distance_between_bins"]
     ] = 1_000_000,
+    min_mapping_quality: Annotated[
+        int | None, FILTER_OPTS["min_mapping_quality"]
+    ] = None,
+    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, FILTER_OPTS["filter_rna_strand"]
+    ] = None,
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
     ] = None,
@@ -110,12 +117,6 @@ def main(
     gc_content_filter: Annotated[str | None, FILTER_OPTS["gc_content_filter"]] = None,
     min_aligned_fraction: Annotated[
         float | None, FILTER_OPTS["min_aligned_fraction"]
-    ] = None,
-    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
-    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
-    filter_rna_strand: Annotated[
-        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
     ] = None,
     group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,

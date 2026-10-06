@@ -113,37 +113,6 @@ def main(
             ),
         ),
     ] = 1.0,
-    mnase: Annotated[
-        bool,
-        typer.Option(
-            "--mnase",
-            rich_help_panel=_COVERAGE,
-            help=(
-                "Determine nucleosome positions from MNase-seq/CUTnRUN data. The 2-3 "
-                "central bases of each fragment are counted: 3 when the fragment "
-                "length is odd, 2 when it is even. Only the forward mate of a proper "
-                "pair contributes, so each fragment is counted once. Unless you set "
-                "them yourself, ``--minFragmentLength`` becomes 130 and "
-                "``--maxFragmentLength`` becomes 200, which avoids dinucleosomes and "
-                "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 "
-                "is recommended."
-            ),
-        ),
-    ] = False,
-    offset: Annotated[
-        list[int] | None,
-        typer.Option(
-            "--offset",
-            rich_help_panel=_COVERAGE,
-            help=(
-                "Uses this offset inside of each read as the signal. This is useful in "
-                "cases like RiboSeq or GROseq. Negative values indicate offsets from "
-                "the end of each read. A value of 1 indicates the first base of the "
-                "alignment; -1 is the last base. An offset of 0 is not permitted. If "
-                "two values are specified, they define a range of positions."
-            ),
-        ),
-    ] = None,
     # BAM options
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
     umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
@@ -155,6 +124,16 @@ def main(
     chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
     bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100,
     # Filter options
+    min_mapping_quality: Annotated[
+        int | None, FILTER_OPTS["min_mapping_quality"]
+    ] = None,
+    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, FILTER_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, FILTER_OPTS["max_fragment_length"]] = 0,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, FILTER_OPTS["filter_rna_strand"]
+    ] = None,
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
     ] = None,
@@ -165,17 +144,11 @@ def main(
         float | None, FILTER_OPTS["min_aligned_fraction"]
     ] = None,
     # Read options
-    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
-    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
-    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
-    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
-    filter_rna_strand: Annotated[
-        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
-    ] = None,
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
+    offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]

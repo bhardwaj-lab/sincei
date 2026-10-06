@@ -156,7 +156,7 @@ def override(
 
     Used to reuse a centrally defined option (flags, help, metavar) while giving it
     a command-specific panel or help text, e.g.
-    ``override(READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE)``.
+    ``override(FILTER_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE)``.
 
     A command-specific *default* needs no override: in ``Annotated`` style the
     default lives in the function signature, so ``bin_size: BinSize = 100`` is all
@@ -460,6 +460,80 @@ BAM_OPTS: dict[str, typer.models.OptionInfo] = {
 
 
 FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
+    "min_mapping_quality": typer.Option(
+        "-mq",
+        "--minMappingQuality",
+        metavar="INT",
+        rich_help_panel=_FILTER,
+        help=(
+            "If set, only reads that have a mapping quality score of at least this are "
+            "considered. A read whose MAPQ is unavailable (255) has no score to "
+            "compare and is dropped, so passing 0 keeps every scored read and drops "
+            "the unscored ones rather than turning the filter off."
+        ),
+    ),
+    "sam_flag_include": typer.Option(
+        "--samFlagInclude",
+        metavar="INT",
+        rich_help_panel=_FILTER,
+        help=(
+            "Include reads based on SAM flag. For example, to get only reads that are "
+            "the first mate, use a flag of 64. This is useful to count properly paired "
+            "reads only once."
+        ),
+    ),
+    "sam_flag_exclude": typer.Option(
+        "--samFlagExclude",
+        metavar="INT",
+        rich_help_panel=_FILTER,
+        help=(
+            "Exclude reads based on the SAM flag. For example, to get only reads that "
+            "map to the forward strand, use ``--samFlagExclude 16``, where 16 is the "
+            "SAM flag for reads that map to the reverse strand."
+        ),
+    ),
+    "min_fragment_length": typer.Option(
+        "--minFragmentLength",
+        metavar="INT",
+        show_default=False,
+        rich_help_panel=_FILTER,
+        help=(
+            "The minimum fragment length needed for read/pair inclusion. Useful in "
+            "ATAC-seq experiments for filtering mono- or di-nucleosome fragments."
+        ),
+    ),
+    "max_fragment_length": typer.Option(
+        "--maxFragmentLength",
+        metavar="INT",
+        show_default=False,
+        rich_help_panel=_FILTER,
+        help=(
+            "The maximum fragment length accepted for read/pair inclusion. When "
+            "``--extendReads`` is also given, this value replaces the 4x read pairing "
+            "limit described there."
+        ),
+    ),
+    "filter_rna_strand": typer.Option(
+        "--filterRNAstrand",
+        metavar="STRAND",
+        rich_help_panel=_FILTER,
+        help=(
+            "Selects RNA-seq reads (single-end or paired-end) originating from genes "
+            "on the given strand. The value names the strand of the gene, not of the "
+            "read. This assumes a standard dUTP-based library preparation, in which "
+            "read2 has the sense of the transcript and read1 is its complement.\n\n"
+            "For paired-end data, ``--filterRNAstrand forward`` keeps read2 on the "
+            "plus strand together with read1 whose mate is on the plus strand. "
+            "Single-end data carries the read1 orientation only, so the same value "
+            "keeps minus-strand reads instead. ``reverse`` keeps the opposite set in "
+            "each case.\n\n"
+            "Consider using ``--samFlagExclude`` instead for filtering by strand in "
+            "other contexts.\n\n"
+            "One of: "
+            "[bold yellow]forward[/bold yellow], "
+            "[bold yellow]reverse[/bold yellow]."
+        ),
+    ),
     "duplicate_filter": typer.Option(
         "--duplicateFilter",
         metavar="FILTER",
@@ -531,78 +605,6 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
 
 
 READ_OPTS: dict[str, typer.models.OptionInfo] = {
-    "min_mapping_quality": typer.Option(
-        "-mq",
-        "--minMappingQuality",
-        metavar="INT",
-        rich_help_panel=_READ,
-        help=(
-            "If set, only reads that have a mapping quality score of at least this are "
-            "considered. A read whose MAPQ is unavailable (255) has no score to "
-            "compare and is dropped, so passing 0 keeps every scored read and drops "
-            "the unscored ones rather than turning the filter off."
-        ),
-    ),
-    "sam_flag_include": typer.Option(
-        "--samFlagInclude",
-        metavar="INT",
-        rich_help_panel=_READ,
-        help=(
-            "Include reads based on SAM flag. For example, to get only reads that are "
-            "the first mate, use a flag of 64. This is useful to count properly paired "
-            "reads only once."
-        ),
-    ),
-    "sam_flag_exclude": typer.Option(
-        "--samFlagExclude",
-        metavar="INT",
-        rich_help_panel=_READ,
-        help=(
-            "Exclude reads based on the SAM flag. For example, to get only reads that "
-            "map to the forward strand, use ``--samFlagExclude 16``, where 16 is the "
-            "SAM flag for reads that map to the reverse strand."
-        ),
-    ),
-    "min_fragment_length": typer.Option(
-        "--minFragmentLength",
-        metavar="INT",
-        rich_help_panel=_READ,
-        help=(
-            "The minimum fragment length needed for read/pair inclusion. Useful in "
-            "ATAC-seq experiments for filtering mono- or di-nucleosome fragments."
-        ),
-    ),
-    "max_fragment_length": typer.Option(
-        "--maxFragmentLength",
-        metavar="INT",
-        rich_help_panel=_READ,
-        help=(
-            "The maximum fragment length accepted for read/pair inclusion. When "
-            "``--extendReads`` is also given, this value replaces the 4x read pairing "
-            "limit described there."
-        ),
-    ),
-    "filter_rna_strand": typer.Option(
-        "--filterRNAstrand",
-        metavar="STRAND",
-        rich_help_panel=_READ,
-        help=(
-            "Selects RNA-seq reads (single-end or paired-end) originating from genes "
-            "on the given strand. The value names the strand of the gene, not of the "
-            "read. This assumes a standard dUTP-based library preparation, in which "
-            "read2 has the sense of the transcript and read1 is its complement.\n\n"
-            "For paired-end data, ``--filterRNAstrand forward`` keeps read2 on the "
-            "plus strand together with read1 whose mate is on the plus strand. "
-            "Single-end data carries the read1 orientation only, so the same value "
-            "keeps minus-strand reads instead. ``reverse`` keeps the opposite set in "
-            "each case.\n\n"
-            "Consider using ``--samFlagExclude`` instead for filtering by strand in "
-            "other contexts.\n\n"
-            "One of: "
-            "[bold yellow]forward[/bold yellow], "
-            "[bold yellow]reverse[/bold yellow]."
-        ),
-    ),
     "extend_reads": typer.Option(
         "-e",
         "--extendReads",
@@ -648,6 +650,31 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "to get a sharper signal around enriched regions."
             "*NOTE*: generally NOT recommended for spliced-read data such as RNA-seq, "
             "as it would make reads cover skipped regions.\n\n"
+        ),
+    ),
+    "mnase": typer.Option(
+        "--mnase",
+        rich_help_panel=_READ,
+        help=(
+            "Determine nucleosome positions from MNase-seq/CUTnRUN data. The 2-3 "
+            "central bases of each fragment are counted: 3 when the fragment "
+            "length is odd, 2 when it is even. Only the forward mate of a proper "
+            "pair contributes, so each fragment is counted once. Unless you set "
+            "them yourself, ``--minFragmentLength`` becomes 130 and "
+            "``--maxFragmentLength`` becomes 200, which avoids dinucleosomes and "
+            "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 "
+            "is recommended."
+        ),
+    ),
+    "offset": typer.Option(
+        "--offset",
+        rich_help_panel=_READ,
+        help=(
+            "Uses this offset inside of each read as the signal. This is useful in "
+            "cases like RiboSeq or GROseq. Negative values indicate offsets from "
+            "the end of each read. A value of 1 indicates the first base of the "
+            "alignment; -1 is the last base. An offset of 0 is not permitted. If "
+            "two values are specified, they define a range of positions."
         ),
     ),
 }

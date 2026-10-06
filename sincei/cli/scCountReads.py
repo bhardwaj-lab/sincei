@@ -21,6 +21,7 @@ from ._common_args import (
     FilterRNAStrand,
     configure_logging,
     log_parameters,
+    override,
     preprocess_args,
 )
 
@@ -249,29 +250,38 @@ def bins(
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
     compression_level: Annotated[int, COMPRESSION_LEVEL] = 4,
+    # Counting options
+    bin_size: Annotated[
+        int, override(BAM_OPTS["bin_size"], rich_help_panel=_COUNTING)
+    ] = 10000,
+    distance_between_bins: Annotated[
+        int, override(BAM_OPTS["distance_between_bins"], rich_help_panel=_COUNTING)
+    ] = 0,
+    value_tag: Annotated[str | None, VALUE_TAG] = None,
+    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
     # BAM options
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
     blacklist: Annotated[list[str] | None, BAM_OPTS["blacklist"]] = None,
     chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
-    bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 10000,
-    distance_between_bins: Annotated[int, BAM_OPTS["distance_between_bins"]] = 0,
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
     umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
     # Read options
-    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
-    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
-    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
-    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
-    filter_rna_strand: Annotated[
-        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
-    ] = None,
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     atac: Annotated[bool, READ_OPTS["atac"]] = False,
     # Filtering options
+    min_mapping_quality: Annotated[
+        int | None, FILTER_OPTS["min_mapping_quality"]
+    ] = None,
+    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, FILTER_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, FILTER_OPTS["max_fragment_length"]] = 0,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, FILTER_OPTS["filter_rna_strand"]
+    ] = None,
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
     ] = None,
@@ -281,9 +291,6 @@ def bins(
     min_aligned_fraction: Annotated[
         float | None, FILTER_OPTS["min_aligned_fraction"]
     ] = None,
-    # Counting options
-    value_tag: Annotated[str | None, VALUE_TAG] = None,
-    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
@@ -339,6 +346,9 @@ def features(
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
     compression_level: Annotated[int, COMPRESSION_LEVEL] = 4,
+    # Counting options
+    value_tag: Annotated[str | None, VALUE_TAG] = None,
+    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
     # BAM options
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
@@ -348,18 +358,20 @@ def features(
     umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     group_tag: Annotated[str | None, BAM_OPTS["group_tag"]] = None,
     # Read options
-    min_mapping_quality: Annotated[int | None, READ_OPTS["min_mapping_quality"]] = None,
-    sam_flag_include: Annotated[int | None, READ_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, READ_OPTS["sam_flag_exclude"]] = None,
-    min_fragment_length: Annotated[int, READ_OPTS["min_fragment_length"]] = 0,
-    max_fragment_length: Annotated[int, READ_OPTS["max_fragment_length"]] = 0,
-    filter_rna_strand: Annotated[
-        FilterRNAStrand | None, READ_OPTS["filter_rna_strand"]
-    ] = None,
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     atac: Annotated[bool, READ_OPTS["atac"]] = False,
     # Filtering options
+    min_mapping_quality: Annotated[
+        int | None, FILTER_OPTS["min_mapping_quality"]
+    ] = None,
+    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
+    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    min_fragment_length: Annotated[int, FILTER_OPTS["min_fragment_length"]] = 0,
+    max_fragment_length: Annotated[int, FILTER_OPTS["max_fragment_length"]] = 0,
+    filter_rna_strand: Annotated[
+        FilterRNAStrand | None, FILTER_OPTS["filter_rna_strand"]
+    ] = None,
     duplicate_filter: Annotated[
         DuplicateFilter | None, FILTER_OPTS["duplicate_filter"]
     ] = None,
@@ -369,9 +381,6 @@ def features(
     min_aligned_fraction: Annotated[
         float | None, FILTER_OPTS["min_aligned_fraction"]
     ] = None,
-    # Counting options
-    value_tag: Annotated[str | None, VALUE_TAG] = None,
-    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
     # GTF / GFF options (only affect GTF/GFF inputs, ignored for BED)
     feature_id: Annotated[list[str] | None, GTF_GFF_OPTS["feature_id"]] = None,
     exon_id: Annotated[list[str] | None, GTF_GFF_OPTS["exon_id"]] = None,

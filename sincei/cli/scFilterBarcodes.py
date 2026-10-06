@@ -12,9 +12,9 @@ from . import _parsers as backend
 from ._common_args import (
     AVAILABLE_PROCESSORS,
     BAM_OPTS,
+    FILTER_OPTS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
-    READ_OPTS,
     configure_logging,
     log_parameters,
     override,
@@ -92,7 +92,7 @@ def main(
     ] = None,
     min_mapping_quality: Annotated[
         int | None,
-        override(READ_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE),
+        override(FILTER_OPTS["min_mapping_quality"], rich_help_panel=_BARCODE),
     ] = None,
     # BAM options
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
