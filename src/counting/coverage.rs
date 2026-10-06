@@ -929,8 +929,13 @@ fn sanitize_group_name(s: &str) -> String {
 fn write_bigwig(
     path: &Path,
     chrom_sizes: &[(String, usize)],
-    values: Vec<(String, Value)>,
+    mut values: Vec<(String, Value)>,
 ) -> Result<()> {
+    // bigtools takes the chromosomes in name order ("10" before "2"), while the
+    // bins come in BAM header order. The sort is stable, so each chromosome's
+    // bins keep their position order.
+    values.sort_by(|(a, _), (b, _)| a.cmp(b));
+
     let chrom_map: HashMap<String, u32> = chrom_sizes
         .iter()
         .map(|(c, l)| (c.clone(), *l as u32))
@@ -1870,6 +1875,29 @@ mod tests {
             path.metadata().unwrap().len() > 0,
             "no bigWig header written"
         );
+    }
+
+    #[test]
+    fn a_bigwig_is_written_whatever_order_the_bam_header_gives() {
+        // BAM headers order chromosomes numerically, so "2" comes before "10";
+        // as text, "2" sorts after "10".
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("two_chroms.bw");
+        let chrom_sizes = [("2".to_string(), 1_000), ("10".to_string(), 1_000)];
+        let value = |start| Value {
+            start,
+            end: start + 100,
+            value: 1.0,
+        };
+        let values = vec![
+            ("2".to_string(), value(0)),
+            ("2".to_string(), value(100)),
+            ("10".to_string(), value(0)),
+        ];
+
+        write_bigwig(&path, &chrom_sizes, values).unwrap();
+
+        assert!(path.metadata().unwrap().len() > 0, "no bigWig written");
     }
 
     #[test]
