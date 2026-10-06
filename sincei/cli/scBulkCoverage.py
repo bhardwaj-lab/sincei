@@ -127,8 +127,12 @@ def main(
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
     ] = None,
-    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    sam_flag_include: Annotated[
+        list[int] | None, FILTER_OPTS["sam_flag_include"]
+    ] = None,
+    sam_flag_exclude: Annotated[
+        list[int] | None, FILTER_OPTS["sam_flag_exclude"]
+    ] = None,
     min_fragment_length: Annotated[int, FILTER_OPTS["min_fragment_length"]] = 0,
     max_fragment_length: Annotated[int, FILTER_OPTS["max_fragment_length"]] = 0,
     filter_rna_strand: Annotated[
@@ -188,8 +192,8 @@ def main(
             group_tag=group_tag,
             region=region,
             min_mapq=min_mapping_quality,
-            sam_flag_include=sam_flag_include,
-            sam_flag_exclude=sam_flag_exclude,
+            sam_flag_include=backend.sam_flags(sam_flag_include),
+            sam_flag_exclude=backend.sam_flags(sam_flag_exclude),
             chr_to_skip=chr_to_skip or [],
             ignore_for_normalization=ignore_for_normalization or [],
             blacklist_path=backend.first_blacklist(blacklist),

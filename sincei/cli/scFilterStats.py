@@ -104,8 +104,12 @@ def main(
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
     ] = None,
-    sam_flag_include: Annotated[int | None, FILTER_OPTS["sam_flag_include"]] = None,
-    sam_flag_exclude: Annotated[int | None, FILTER_OPTS["sam_flag_exclude"]] = None,
+    sam_flag_include: Annotated[
+        list[int] | None, FILTER_OPTS["sam_flag_include"]
+    ] = None,
+    sam_flag_exclude: Annotated[
+        list[int] | None, FILTER_OPTS["sam_flag_exclude"]
+    ] = None,
     filter_rna_strand: Annotated[
         FilterRNAStrand | None, FILTER_OPTS["filter_rna_strand"]
     ] = None,
@@ -152,8 +156,8 @@ def main(
         "bin_size": bin_size,
         "distance_between_bins": distance_between_bins or 0,
         "min_mapq": min_mapping_quality,
-        "sam_flag_include": sam_flag_include,
-        "sam_flag_exclude": sam_flag_exclude,
+        "sam_flag_include": backend.sam_flags(sam_flag_include),
+        "sam_flag_exclude": backend.sam_flags(sam_flag_exclude),
         "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
         "chr_to_skip": chr_to_skip or [],
         "blacklist_path": backend.first_blacklist(blacklist),

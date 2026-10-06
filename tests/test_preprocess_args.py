@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from sincei.cli._parsers import preprocess_args
+from sincei.cli._parsers import preprocess_args, sam_flags
 
 if TYPE_CHECKING:
     import pytest
@@ -81,3 +81,11 @@ def test_a_bare_extend_reads_gets_its_sentinel(monkeypatch: pytest.MonkeyPatch) 
 
 def test_a_boolean_flag_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     assert rewrite(["--mnase", "-p", "2"], monkeypatch) == ["--mnase", "-p", "2"]
+
+
+def test_repeated_sam_flags_combine_into_one_mask() -> None:
+    assert sam_flags([64, 2]) == 66
+    # A bit given twice is still one bit, so this is an OR rather than a sum.
+    assert sam_flags([2048, 256, 256]) == 2304
+    assert sam_flags(64) == 64
+    assert sam_flags(None) is None

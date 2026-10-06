@@ -41,8 +41,8 @@ def count_reads(
     blackListFileName: str | None = None,
     chrsToSkip: Sequence[str] | str | None = None,
     minMappingQuality: int | None = None,
-    samFlag_include: int | None = None,
-    samFlag_exclude: int | None = None,
+    samFlag_include: int | Sequence[int] | None = None,
+    samFlag_exclude: int | Sequence[int] | None = None,
     minFragmentLength: int = 0,
     maxFragmentLength: int = 0,
     filterRNAstrand: FilterRNAStrand | str | None = None,
@@ -102,8 +102,9 @@ def count_reads(
         Chromosomes to exclude.
     minMappingQuality : int, optional
         Minimum mapping quality of a read.
-    samFlag_include, samFlag_exclude : int, optional
-        SAM flag bits a read must have / must not have.
+    samFlag_include, samFlag_exclude : int or list of int, optional
+        SAM flag bits a read must have / must not have. A list is combined with
+        a bitwise OR: ``[64, 2]`` is the same as ``66``.
     minFragmentLength, maxFragmentLength : int
         Fragment length limits. 0 means no limit.
     filterRNAstrand : {"forward", "reverse"}, optional
@@ -173,8 +174,8 @@ def count_reads(
         "count_tag": valueTag,
         "group_tag": groupTag,
         "min_mapq": minMappingQuality,
-        "sam_flag_include": samFlag_include,
-        "sam_flag_exclude": samFlag_exclude,
+        "sam_flag_include": backend.sam_flags(samFlag_include),
+        "sam_flag_exclude": backend.sam_flags(samFlag_exclude),
         "chr_to_skip": _as_list(chrsToSkip),
         "region": region,
         "blacklist_path": blackListFileName,

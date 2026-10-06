@@ -479,7 +479,9 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "Include reads based on SAM flag. For example, to get only reads that are "
             "the first mate, use a flag of 64. This is useful to count properly paired "
-            "reads only once."
+            "reads only once. A read is kept only if it has every bit given. Repeat "
+            "the option to give several: ``--samFlagInclude 64 --samFlagInclude 2`` "
+            "is the same as ``--samFlagInclude 66``."
         ),
     ),
     "sam_flag_exclude": typer.Option(
@@ -489,7 +491,10 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         help=(
             "Exclude reads based on the SAM flag. For example, to get only reads that "
             "map to the forward strand, use ``--samFlagExclude 16``, where 16 is the "
-            "SAM flag for reads that map to the reverse strand."
+            "SAM flag for reads that map to the reverse strand. A read is dropped if "
+            "it has any bit given. Repeat the option to give several: "
+            "``--samFlagExclude 2048 --samFlagExclude 256`` is the same as "
+            "``--samFlagExclude 2304``."
         ),
     ),
     "min_fragment_length": typer.Option(

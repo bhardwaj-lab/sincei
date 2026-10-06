@@ -80,6 +80,20 @@ def parse_gc_content(value: str | None) -> tuple[float | None, float | None]:
     return float(parts[0]), float(parts[1])
 
 
+def sam_flags(values: Sequence[int] | int | None) -> int | None:
+    """One SAM flag mask from the values of a repeated flag option.
+
+    ``--samFlagInclude 64 --samFlagInclude 2`` asks for both bits, as
+    ``--samFlagInclude 66`` does, so the values are combined with a bitwise OR.
+    """
+    if values is None or isinstance(values, int):
+        return values
+    mask = None
+    for value in values:
+        mask = value if mask is None else mask | value
+    return mask
+
+
 def optional_length(value: int | None) -> int | None:
     """CLI fragment-length options use 0 to mean "no limit"; map that to ``None``."""
     return value if value and value > 0 else None

@@ -338,6 +338,21 @@ def test_umi_tag_selects_the_umi_source(tmp_path: Path) -> None:
     assert norm(with_mi) == norm(with_rx)
 
 
+def test_a_repeated_flag_option_combines_its_values(tmp_path: Path) -> None:
+    # Click keeps only the last value of a plain option, which used to drop the
+    # 16 here without a word. Repeated, the values must act as one mask. In this
+    # BAM, 16 and 32 together keep 1 read, 32 alone keeps 8.
+    repeated = _run(
+        [*SAMPLING, "--samFlagInclude", "16", "--samFlagInclude", "32"],
+        tmp_path / "r.tsv",
+    )
+    combined = _run([*SAMPLING, "--samFlagInclude", "48"], tmp_path / "c.tsv")
+    last_only = _run([*SAMPLING, "--samFlagInclude", "32"], tmp_path / "l.tsv")
+
+    assert repeated == combined
+    assert repeated != last_only
+
+
 # Error paths
 
 
