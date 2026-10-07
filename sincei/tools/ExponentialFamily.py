@@ -46,7 +46,7 @@ class ExponentialFamily:
         - log_partition (:math:`A`)
         - invert_g (:math:`g^{-1}`)
         - initialize_family_parameters: computes parameters used in other methods, e.g.,
-        gene-level dispersion for Negative Binomial.
+          gene-level dispersion for Negative Binomial.
 
     We added a "base_measure" for the sake of completeness, but this method is not
     necessary for running GLM-PCA.
@@ -154,7 +154,7 @@ class Bernoulli(ExponentialFamily):
 
     family_params of interest:
         - "max_val" (int) corresponding to the max value (replaces infinity).
-        Empirically, values above 10 yield similar results.
+          Empirically, values above 10 yield similar results.
 
     """
 
@@ -234,11 +234,11 @@ class Beta(ExponentialFamily):
         - "min_val" (int): min data value (replaces 0 and 1).
         - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
         - "method" (str): method use to compute the "nu" parameter per feature.
-        Two possibles: "MLE" and "MM". Defaults to "MLE".
+          Two possibles: "MLE" and "MM". Defaults to "MLE".
         - "eps" (float): minimum difference used for inverting the g function.
-        Defaults to 1e-4
+          Defaults to 1e-4
         - "maxiter" (int): maximum number of iterations for the inversion of the
-        g function. Defaults to 100.
+          g function. Defaults to 100.
 
     """
 
@@ -357,11 +357,11 @@ class SigmoidBeta(Beta):
         - "min_val" (int): min data value (replaces 0 and 1).
         - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
         - "method" (str): method use to compute the "nu" parameter per feature.
-        Two possibles: "MLE" and "MM". Defaults to "MLE".
+          Two possibles: "MLE" and "MM". Defaults to "MLE".
         - "eps" (float): minimum difference used for inverting the g function.
-        Defaults to 1e-4
+          Defaults to 1e-4
         - "maxiter" (int): maximum number of iterations for the inversion of the
-        g function. Defaults to 100.
+          g function. Defaults to 100.
 
     """
 
@@ -421,11 +421,11 @@ class Gamma(ExponentialFamily):
         - "max_val" (int): max data value. Defaults to 1e7.
         - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
         - "method" (str): method use to compute the "nu" parameter per feature.
-        Two possibles: "MLE" and "MM". Defaults to "MLE".
+          Two possibles: "MLE" and "MM". Defaults to "MLE".
         - "eps" (float): minimum difference used for inverting the g function.
-        Defaults to 1e-4
+          Defaults to 1e-4
         - "maxiter" (int): maximum number of iterations for the inversion of the
-        g function. Defaults to 100.
+          g function. Defaults to 100.
 
     """
 
@@ -525,11 +525,11 @@ class LogNormal(ExponentialFamily):
         - "max_val" (int): max data value. Defaults to 1e7.
         - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
         - "method" (str): method use to compute the "nu" parameter per feature.
-        Two possibles: "MLE" and "MM". Defaults to "MLE".
+          Two possibles: "MLE" and "MM". Defaults to "MLE".
         - "eps" (float): minimum difference used for inverting the g function.
-        Defaults to 1e-4
+          Defaults to 1e-4
         - "maxiter" (int): maximum number of iterations for the inversion of the
-        g function. Defaults to 100.
+          g function. Defaults to 100.
 
     """
 

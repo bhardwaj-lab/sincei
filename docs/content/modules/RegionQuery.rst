@@ -1,7 +1,7 @@
-sincei.RegionQuery module
-=========================
+sincei.tools.RegionQuery module
+===============================
 
-.. automodule:: sincei.RegionQuery
+.. automodule:: sincei.tools.RegionQuery
    :members:
    :undoc-members:
    :show-inheritance:

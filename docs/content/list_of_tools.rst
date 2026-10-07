@@ -7,7 +7,6 @@ Command Line tools
 
     tools/scFilterBarcodes
     tools/scFilterStats
-    tools/scJSD
     tools/scCountReads
     tools/scCountQC
     tools/scCombineCounts
@@ -24,7 +23,6 @@ The following tools use **BAM files** as input. These BAM files could can from a
 * :doc:`tools/scFilterStats`
 * :doc:`tools/scCountReads`
 * :doc:`tools/scBulkCoverage`
-* :doc:`tools/scJSD`
 
 The following tools use the `AnnData <https://anndata.readthedocs.io/>`_ output produced within the sincei analysis workflow, with file extension **.h5ad**.
 

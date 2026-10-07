@@ -84,7 +84,7 @@ def main(
                 "The dimensionality reduction method to use before clustering cells."
                 "\n\n"
                 "One of: "
-                "[bold yellow]glmPCA[/bold yellow],"
+                "[bold yellow]glmPCA[/bold yellow], "
                 "[bold yellow]logPCA[/bold yellow], "
                 "[bold yellow]LSA[/bold yellow], "
                 "[bold yellow]LDA[/bold yellow]. "

@@ -1,9 +1,7 @@
 .. _scCountQC:
 
 scCountQC
-====================
+=========
 
-.. argparse::
-   :ref: sincei.scCountQC.parseArguments
+.. typer-cli:: sincei.cli.scCountQC
    :prog: scCountQC
-   :nodefault:

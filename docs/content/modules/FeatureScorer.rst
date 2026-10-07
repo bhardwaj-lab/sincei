@@ -1,7 +1,7 @@
-sincei.FeatureScorer module
-===========================
+sincei.tools.FeatureScorer module
+=================================
 
-.. automodule:: sincei.FeatureScorer
+.. automodule:: sincei.tools.FeatureScorer
    :members:
    :undoc-members:
    :show-inheritance:

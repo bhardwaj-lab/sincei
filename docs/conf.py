@@ -1,7 +1,9 @@
 # Configuration file for the Sphinx documentation builder.
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import sys
 from importlib import metadata
+from pathlib import Path
 
 # -- Project information -----------------------------------------------------
 
@@ -11,6 +13,9 @@ author = metadata.metadata(project).get("Author")
 
 # The full version, including alpha/beta/rc tags
 release = metadata.version(project)
+
+# Local extensions: typer_cli renders the command line tool pages.
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 
 # -- General configuration ---------------------------------------------------
@@ -28,10 +33,11 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
-    "sphinxarg.ext",
+    "sphinx.ext.napoleon",
     "sphinx_toolbox.collapse",
     "sphinx_copybutton",
-    "nbsphinx",
+    "myst_nb",
+    "typer_cli",
 ]
 
 # Ignore prompts when coppying code blocks.
@@ -39,10 +45,10 @@ copybutton_prompt_text = r">>> |\.\.\. |\$ |\(sincei\): "
 copybutton_prompt_is_regexp = True
 
 # Capture codeblocks (bash, Python, R).
-copybutton_selector = "div:not(.prompt):not(.output_area) > div.highlight > pre"
+copybutton_selector = "div:not(.output) > div.highlight > pre"
 
 # Do not execute tutorial notebooks
-nbsphinx_execute = "never"
+nb_execution_mode = "off"
 
 # Order members by source order instead of alphabetically
 autodoc_member_order = "bysource"

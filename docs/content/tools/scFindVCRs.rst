@@ -1,9 +1,7 @@
 .. _scFindVCRs:
 
 scFindVCRs
-====================
+==========
 
-.. argparse::
-   :ref: sincei.scFindVCRs.parseArguments
+.. typer-cli:: sincei.cli.scFindVCRs
    :prog: scFindVCRs
-   :nodefault:

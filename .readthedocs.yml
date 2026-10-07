@@ -10,8 +10,6 @@ build:
         # hdf5-metno-src, blosc-src, zstd-sys and lz4-sys each compile their C
         # library from source.
         - cmake
-        # nbsphinx shells out to pandoc for the tutorial notebooks.
-        - pandoc
 
 sphinx:
     configuration: docs/conf.py

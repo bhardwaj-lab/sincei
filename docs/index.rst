@@ -18,7 +18,7 @@ sincei provides a flexible, easy-to-use command-line interface to work with sing
 - Create coverage files (bigwigs) for visualization.
 - Along with additional tools for visualization, and interpretation/annotation of cells.
 
-sincei is also part of the `scVerse ecosystem <https://scverse.org/>`_, and it's command-line tools can easily be combined with other Python or R packages for further analysis.
+sincei is also part of the `scverse <https://scverse.org/>`_ ecosystem, and it's command-line tools can easily be combined with other Python or R packages for further analysis.
 
 For details, please `read our preprint <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`_ describing sincei.
 

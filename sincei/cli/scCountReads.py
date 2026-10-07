@@ -88,7 +88,6 @@ GENOME_CHUNK_SIZE = typer.Option(
     rich_help_panel=_COUNTING,
     help=(
         "Manually specify the size (in bases) of the genome chunks processed at a time."
-        " (Default: 1Mb)"
     ),
 )
 COMPRESSION = typer.Option(
@@ -159,7 +158,7 @@ def _count_reads(
     gc_content_filter: str | None,
     min_aligned_fraction: float | None,
     value_tag: str | None,
-    genome_chunk_size: int | None,
+    genome_chunk_size: int,
     feature_id: list[str] | None = None,
     exon_id: list[str] | None = None,
     feature_id_tag: str | None = None,
@@ -214,9 +213,8 @@ def _count_reads(
         "compression": compression.value,
         "compression_level": compression_level,
         "num_threads": number_of_processors,
+        "chunk_size": genome_chunk_size,
     }
-    if genome_chunk_size:
-        shared["chunk_size"] = genome_chunk_size
 
     if mode == "bins":
         # stepSize = binSize + gap; a zero gap yields contiguous bins.
@@ -258,7 +256,7 @@ def bins(
         int, override(BAM_OPTS["distance_between_bins"], rich_help_panel=_COUNTING)
     ] = 0,
     value_tag: Annotated[str | None, VALUE_TAG] = None,
-    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
+    genome_chunk_size: Annotated[int, GENOME_CHUNK_SIZE] = 1_000_000,
     # BAM options
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,
@@ -352,7 +350,7 @@ def features(
     compression_level: Annotated[int, COMPRESSION_LEVEL] = 4,
     # Counting options
     value_tag: Annotated[str | None, VALUE_TAG] = None,
-    genome_chunk_size: Annotated[int | None, GENOME_CHUNK_SIZE] = None,
+    genome_chunk_size: Annotated[int, GENOME_CHUNK_SIZE] = 1_000_000,
     # BAM options
     labels: Annotated[list[str] | None, BAM_OPTS["labels"]] = None,
     smart_labels: Annotated[bool, BAM_OPTS["smart_labels"]] = False,

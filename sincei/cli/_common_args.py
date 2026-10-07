@@ -548,7 +548,7 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
             "Default (none) considers all reads as passing the filter. Note that for "
             "paired end data both reads in the fragment are considered (and kept) so, "
             "to keep only read1 combine this with ``--samFlagInclude``.\n\n"
-            "One of:"
+            "One of: "
             "[bold yellow]start_bc[/bold yellow], "
             "[bold yellow]start_bc_umi[/bold yellow], "
             "[bold yellow]start_end_bc[/bold yellow], "
@@ -693,8 +693,7 @@ OTHER_OPTS: dict[str, typer.models.OptionInfo] = {
         rich_help_panel=_OTHER,
         help=(
             'Number of processors to use. You can also type "max/2" to use half the '
-            'maximum number of processors or "max" to use all available processors. '
-            '(Default: "max")'
+            'maximum number of processors or "max" to use all available processors.'
         ),
     ),
     "verbose": typer.Option(
@@ -767,8 +766,8 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
             "When a GFF/GTF file is used to provide regions, count reads only on the "
             "combined exons of a gene or transcript rather than on the genomic "
             "interval defined by the 5-prime and 3-prime gene/transcript bound, and "
-            "count each read only once. Exons are the records whose column-3 type"
-            "matches  ``--exonID``; what they are grouped into is set by "
+            "count each read only once. Exons are the records whose column-3 type "
+            "matches ``--exonID``; what they are grouped into is set by "
             "``--featureIDtag``: one feature per gene (the default) or one per "
             "transcript (``--featureIDtag transcript_id`` for GTF, ``Parent`` for "
             "GFF3). A read meeting several exons of one group is counted once, against "
@@ -788,12 +787,13 @@ GTF_GFF_OPTS: dict[str, typer.models.OptionInfo] = {
     "exon_id": typer.Option(
         "--exonID",
         metavar="STR",
+        show_default="exon",
         rich_help_panel=_GTF,
         help=(
             "When a GTF/GFF file is used to provide regions, entries with this value "
             "as their feature (column 3) are treated as exons. May be given more than "
             "once, e.g. ``--exonID exon --exonID CDS``. "
-            "NOTE: only used in metagene mode. (Default: ``exon``)"
+            "NOTE: only used in metagene mode."
         ),
     ),
     "feature_id_tag": typer.Option(

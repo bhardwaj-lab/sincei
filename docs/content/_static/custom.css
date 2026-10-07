@@ -15,3 +15,26 @@ main img {
     margin-top: 0rem;
     margin-bottom: 2rem;
 }
+
+/* Required and default marks on the command line tool pages, in the green of
+   the sincei logo (the same in the light and the dark logo). */
+.cli-required,
+.cli-default {
+    display: inline-block;
+    color: #339999;
+    margin-left: 0.2em;
+    padding: 0 0.45em;
+    border: 1px solid;
+    border-radius: 0.25rem;
+    font-size: 0.8em;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.cli-required {
+    font-weight: 600;
+}
+
+.cli-default {
+    font-family: var(--pst-font-family-monospace);
+}
