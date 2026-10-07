@@ -33,6 +33,7 @@ import pytest
 from _cli_testing import (
     BAM1,
     BAM2,
+    BAM_MAPQ255,
     BAM_MERGED,
     BARCODES,
     BED,
@@ -563,3 +564,14 @@ def test_count_reads_without_a_whitelist_matches_the_cli(tmp_path: Path) -> None
     expected = ad.read_h5ad(found)
     assert list(adata.obs_names) == list(expected.obs_names)
     np.testing.assert_array_equal(adata.to_df().to_numpy(), expected.to_df().to_numpy())
+
+
+def test_a_mapq_of_255_is_the_number_not_a_missing_value(tmp_path: Path) -> None:
+    # STAR writes 255 for every uniquely mapped read. Taken as "not available",
+    # any --minMappingQuality dropped them all and the matrix came out zero.
+    base = ["-b", BAM_MAPQ255, "-bc", BARCODES, "-ct", "BC", "-p", "1", *BINS]
+    unfiltered = _count("bins", base, [], tmp_path / "all.h5ad")
+    filtered = _count("bins", base, ["--minMappingQuality", "10"], tmp_path / "mq.h5ad")
+
+    assert len(unfiltered.splitlines()) > 1, "the fixture yields no counts"
+    assert filtered == unfiltered

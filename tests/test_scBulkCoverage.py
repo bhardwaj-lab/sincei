@@ -36,6 +36,7 @@ import pytest
 from _cli_testing import (
     BAM1,
     BAM2,
+    BAM_MAPQ255,
     BAM_MERGED,
     DATA,
     Scenario,
@@ -317,3 +318,21 @@ def test_a_merged_bam_grouped_by_tag_matches_its_separate_sources(
 
     assert parse(separate)[1], "the sources produced no coverage at all"
     assert grouped == separate
+
+
+def test_a_mapq_of_255_passes_the_mapq_filter(tmp_path: Path) -> None:
+    base = [
+        "-b",
+        BAM_MAPQ255,
+        "--cellTag",
+        "BC",
+        "--numberOfProcessors",
+        "1",
+        "--normalizeUsing",
+        "None",
+    ]
+    unfiltered = run_port(base, tmp_path / "all")
+    filtered = run_port([*base, "--minMappingQuality", "10"], tmp_path / "mq")
+
+    assert len(unfiltered.splitlines()) > 1, "the fixture yields no coverage"
+    assert filtered == unfiltered

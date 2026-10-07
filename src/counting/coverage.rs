@@ -635,7 +635,7 @@ pub fn run_bulk_coverage(
 
                         if let Some(rf) = record_filter {
                             let flags = u16::from(record.flags());
-                            let mapq = record.mapping_quality().map(|q| q.get());
+                            let mapq = record.mapping_quality().map_or(255, |q| q.get());
                             if !rf.passes(flags, mapq) {
                                 continue;
                             }

@@ -29,7 +29,8 @@ use crate::annotation::region_index::{ChromIndex, GenomeIndex};
 /// paying for barcode/UMI tag lookups or sequence/CIGAR processing.
 #[derive(Default)]
 pub struct RawRecordFilter {
-    /// Minimum mapping quality (MAPQ).
+    /// Minimum mapping quality (MAPQ). The SAM spec reserves MAPQ = 255 for
+    /// "not available", such as for perfectly mapped reads.
     pub min_mapq: Option<u8>,
     /// Only keep reads for which `flags & include == include`.
     pub sam_flag_include: Option<u16>,
@@ -67,12 +68,11 @@ impl RawRecordFilter {
 
     /// Returns `true` if the record passes all active thresholds.
     #[inline]
-    pub fn passes(&self, flags: u16, mapq: Option<u8>) -> bool {
-        if let Some(min_q) = self.min_mapq {
-            match mapq {
-                Some(q) if q >= min_q => {}
-                _ => return false,
-            }
+    pub fn passes(&self, flags: u16, mapq: u8) -> bool {
+        if let Some(min_q) = self.min_mapq
+            && mapq < min_q
+        {
+            return false;
         }
 
         if let Some(include) = self.sam_flag_include
@@ -767,22 +767,22 @@ mod tests {
     #[test]
     fn a_filter_with_no_thresholds_keeps_everything() {
         let f = RawRecordFilter::default();
-        assert!(f.passes(0, None));
-        assert!(f.passes(DUPLICATE, Some(0)));
+        assert!(f.passes(0, 255));
+        assert!(f.passes(DUPLICATE, 0));
     }
 
     #[test]
-    fn min_mapq_rejects_low_and_missing_mapping_qualities() {
+    fn min_mapq_rejects_low_mapping_qualities_and_keeps_255() {
         let f = RawRecordFilter {
             min_mapq: Some(30),
             ..RawRecordFilter::default()
         };
 
-        assert!(f.passes(0, Some(30)));
-        assert!(f.passes(0, Some(60)));
-        assert!(!f.passes(0, Some(29)));
-        // An absent MAPQ cannot clear the bar.
-        assert!(!f.passes(0, None));
+        assert!(f.passes(0, 30));
+        assert!(f.passes(0, 60));
+        assert!(!f.passes(0, 29));
+        // STAR writes 255 for every unique read; dropping it would drop them all.
+        assert!(f.passes(0, 255));
     }
 
     #[test]
@@ -792,11 +792,11 @@ mod tests {
             ..RawRecordFilter::default()
         };
 
-        assert!(f.passes(PAIRED | PROPER_PAIR, None));
-        assert!(f.passes(PAIRED | PROPER_PAIR | REVERSE, None));
+        assert!(f.passes(PAIRED | PROPER_PAIR, 255));
+        assert!(f.passes(PAIRED | PROPER_PAIR | REVERSE, 255));
         // Only one of the two required bits is set.
-        assert!(!f.passes(PAIRED, None));
-        assert!(!f.passes(0, None));
+        assert!(!f.passes(PAIRED, 255));
+        assert!(!f.passes(0, 255));
     }
 
     #[test]
@@ -806,9 +806,9 @@ mod tests {
             ..RawRecordFilter::default()
         };
 
-        assert!(f.passes(PAIRED, None));
-        assert!(!f.passes(DUPLICATE, None));
-        assert!(!f.passes(0x200, None));
+        assert!(f.passes(PAIRED, 255));
+        assert!(!f.passes(DUPLICATE, 255));
+        assert!(!f.passes(0x200, 255));
     }
 
     #[test]
@@ -864,8 +864,8 @@ mod tests {
             ..RawRecordFilter::default()
         };
 
-        assert!(f.passes(PAIRED | READ2, None));
-        assert!(!f.passes(PAIRED | READ2 | REVERSE, None));
+        assert!(f.passes(PAIRED | READ2, 255));
+        assert!(!f.passes(PAIRED | READ2 | REVERSE, 255));
     }
 
     #[test]

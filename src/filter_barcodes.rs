@@ -120,11 +120,10 @@ fn run_filter_barcodes(
                             continue;
                         }
 
-                        if let Some(min_mq) = min_mapping_quality {
-                            match record.mapping_quality() {
-                                Some(mq) if mq.get() >= min_mq => {}
-                                _ => continue,
-                            }
+                        if let Some(min_mq) = min_mapping_quality
+                            && record.mapping_quality().is_some_and(|mq| mq.get() < min_mq)
+                        {
+                            continue;
                         }
 
                         let Some(aln_start) = record

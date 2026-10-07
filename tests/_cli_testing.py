@@ -33,6 +33,8 @@ DATA = Path(__file__).resolve().parent / "testdata"
 BAM1 = str(DATA / "test_i1.bam")
 BAM2 = str(DATA / "test_i2.bam")
 BAM_MERGED = str(DATA / "test_i1_i2.bam")
+# test_i1.bam with every MAPQ set to 255, as STAR writes it for unique reads.
+BAM_MAPQ255 = str(DATA / "test_i1_mapq255.bam")
 BARCODES = str(DATA / "test_barcodes.txt")
 BARCODES_1MIS = str(DATA / "test_barcodes_1mis.txt")
 BED = str(DATA / "Chrna9_regions.bed")

@@ -466,10 +466,8 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="INT",
         rich_help_panel=_FILTER,
         help=(
-            "If set, only reads that have a mapping quality score of at least this are "
-            "considered. A read whose MAPQ is unavailable (255) has no score to "
-            "compare and is dropped, so passing 0 keeps every scored read and drops "
-            "the unscored ones rather than turning the filter off."
+            "If set, only reads that have a mapping quality score above this threshold "
+            "are kept."
         ),
     ),
     "sam_flag_include": typer.Option(

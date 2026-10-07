@@ -25,6 +25,7 @@ import pytest
 from _cli_testing import (
     BAM1,
     BAM2,
+    BAM_MAPQ255,
     BAM_MERGED,
     BARCODES,
     BED,
@@ -379,3 +380,15 @@ def test_a_barcode_tag_the_bam_lacks_fails_with_advice(tmp_path: Path) -> None:
     )
     assert proc.returncode != 0, "an absent tag should not exit 0"
     assert "ZZ" in proc.stdout + proc.stderr
+
+
+def test_a_mapq_of_255_is_not_counted_as_low(tmp_path: Path) -> None:
+    base = ["-b", BAM_MAPQ255, "-bc", BARCODES, "-ct", "BC", "-p", "1", *SAMPLING]
+    unfiltered = run_ok(tool_path(TOOL), base, [], str(tmp_path / "all.tsv"))
+    filtered = run_ok(
+        tool_path(TOOL), base, ["--minMappingQuality", "10"], str(tmp_path / "mq.tsv")
+    )
+
+    sampled = [line.split("\t")[1] for line in unfiltered.splitlines()[1:]]
+    assert any(n not in ("", "0") for n in sampled), "the fixture yields no reads"
+    assert filtered == unfiltered

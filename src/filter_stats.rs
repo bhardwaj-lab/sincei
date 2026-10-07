@@ -284,7 +284,7 @@ pub fn run_filter_stats(
                             }
 
                             if let Some(min_q) = min_mapq
-                                && record.mapping_quality().is_none_or(|q| q.get() < min_q)
+                                && record.mapping_quality().is_some_and(|q| q.get() < min_q)
                             {
                                 s.low_mapq += 1;
                                 fail = true;

@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 import pytest
 from _cli_testing import (
     BAM1,
+    BAM_MAPQ255,
     BAM_MERGED,
     BARCODES,
     BARCODES_1MIS,
@@ -199,3 +200,14 @@ def test_a_barcode_tag_the_bam_lacks_fails_with_advice(tmp_path: Path) -> None:
     )
     assert proc.returncode != 0, "an absent tag should not exit 0"
     assert "ZZ" in proc.stdout + proc.stderr
+
+
+def test_a_mapq_of_255_passes_the_mapq_filter(tmp_path: Path) -> None:
+    base = ["-b", BAM_MAPQ255, "-w", BARCODES, "-ct", "BC", "-p", "1"]
+    unfiltered = run_ok(tool_path(TOOL), base, [], str(tmp_path / "all.txt"))
+    filtered = run_ok(
+        tool_path(TOOL), base, ["--minMappingQuality", "10"], str(tmp_path / "mq.txt")
+    )
+
+    assert unfiltered.strip(), "the fixture yields no barcodes"
+    assert filtered == unfiltered
