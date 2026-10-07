@@ -371,6 +371,8 @@ pub(crate) struct CountsWriter {
     indptr: Vec<usize>,
     n_cols: usize,
     compression: Option<Compression>,
+    /// Whether any value written so far is non-zero.
+    has_counts: bool,
 }
 
 impl CountsWriter {
@@ -419,6 +421,7 @@ impl CountsWriter {
             indptr: vec![0],
             n_cols,
             compression,
+            has_counts: false,
         })
     }
 
@@ -439,6 +442,7 @@ impl CountsWriter {
             return Ok(());
         }
 
+        self.has_counts |= values.iter().any(|&value| value != 0.0);
         let slice = [SelectInfoElem::from(start..end)];
         self.data.reshape(&end.into())?;
         self.data
@@ -589,7 +593,7 @@ pub(crate) fn write_counts_anndata(
 /// `count_chunk` counts one chunk into entries whose cells are numbered as for
 /// the whole run, except that without a whitelist each BAM numbers its
 /// barcodes in its own `run_barcodes[bam_idx]`. Returns the number of cells
-/// written.
+/// written, and whether any of their counts is non-zero.
 pub(super) fn count_into_anndata<'a, F>(
     output_path: &Path,
     compression: &str,
@@ -601,7 +605,7 @@ pub(super) fn count_into_anndata<'a, F>(
     barcodes: Option<&[String]>,
     run_barcodes: &[Mutex<BarcodeNumbers>],
     count_chunk: F,
-) -> Result<usize>
+) -> Result<(usize, bool)>
 where
     F: Fn(&mut BamWorker<'a>, &Chunk<'a>) -> Result<Vec<Entry>> + Sync,
 {
@@ -709,6 +713,7 @@ where
     add_ready();
 
     let (writer, cells) = output.into_inner().unwrap_or_else(PoisonError::into_inner);
+    let has_counts = writer.has_counts;
     let written = match progress
         .into_inner()
         .unwrap_or_else(PoisonError::into_inner)
@@ -720,7 +725,7 @@ where
     if written.is_err() {
         let _ = std::fs::remove_file(output_path);
     }
-    written.map(|()| cells.len())
+    written.map(|()| (cells.len(), has_counts))
 }
 
 /// Counted chunks waiting for the rest of their BAM, with the number of chunks
@@ -1059,6 +1064,22 @@ mod tests {
             adata.var_names().into_vec(),
             vec!["chr1_1000_2000::NM_003189", "chr2_500_750::None"]
         );
+    }
+
+    #[test]
+    fn the_writer_tells_explicit_zeros_from_counts() {
+        // A value tag of 0 writes explicit zeros, which are entries but no counts.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut writer = CountsWriter::create(&dir.path().join("x.h5ad"), 2, "none", 0).unwrap();
+        writer
+            .append(build_csr(vec![vec![(0, 0, 0.0), (0, 1, 0.0)]], 1, 2).unwrap())
+            .unwrap();
+        assert!(!writer.has_counts);
+
+        writer
+            .append(build_csr(vec![vec![(0, 1, 2.0)]], 1, 2).unwrap())
+            .unwrap();
+        assert!(writer.has_counts);
     }
 
     #[test]

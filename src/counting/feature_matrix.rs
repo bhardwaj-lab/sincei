@@ -225,7 +225,7 @@ pub fn count_bam_features(
     };
 
     // Count each chunk into its own map, and keep its counts as matrix entries.
-    let n_cells = count_into_anndata(
+    let (n_cells, has_counts) = count_into_anndata(
         output_path,
         compression,
         compression_level,
@@ -425,6 +425,15 @@ pub fn count_bam_features(
     )?;
 
     println!("Number of cells found: {n_cells}\nNumber of features found: {n_features}");
+
+    if !has_counts {
+        eprintln!(
+            "WARNING: no reads were counted, so every value in {} is 0. Check that \
+             --cellTag corresponds to the BAM's barcode tag and the filters do not \
+             affect all the reads.",
+            output_path.display()
+        );
+    }
 
     Ok(())
 }

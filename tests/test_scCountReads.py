@@ -575,3 +575,27 @@ def test_a_mapq_of_255_is_the_number_not_a_missing_value(tmp_path: Path) -> None
 
     assert len(unfiltered.splitlines()) > 1, "the fixture yields no counts"
     assert filtered == unfiltered
+
+
+def test_a_count_without_any_reads_warns_after_the_summary(tmp_path: Path) -> None:
+    # Every read of the test BAM has a MAPQ below 254, so none is counted.
+    empty = run(
+        tool_path(TOOL),
+        [
+            "bins",
+            *BASE,
+            *BINS,
+            "--minMappingQuality",
+            "254",
+            "-o",
+            str(tmp_path / "e.h5ad"),
+        ],
+    )
+    counted = run(
+        tool_path(TOOL), ["bins", *BASE, *BINS, "-o", str(tmp_path / "c.h5ad")]
+    )
+
+    assert empty.returncode == 0, empty.stderr
+    assert "Number of bins found" in empty.stdout
+    assert "WARNING: no reads were counted" in empty.stderr
+    assert "WARNING: no reads were counted" not in counted.stderr
