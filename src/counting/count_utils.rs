@@ -522,7 +522,8 @@ impl CountsWriter {
         // var: chrom, start, end, name, in feature-index order.
         //
         // `var_names` are `{chrom}_{start}_{end}::{name}`. Bins and unnamed
-        // features render the name as the literal `None`.
+        // features render the name as the literal `None` there, and take their
+        // locus as the `name` column.
         let locus = |v: &Feature| format!("{}_{}_{}", v.chrom, v.start, v.end);
         let var_index: Vec<String> = var
             .iter()
@@ -531,7 +532,10 @@ impl CountsWriter {
         let chrom_col: Vec<String> = var.iter().map(|v| v.chrom.clone()).collect();
         let start_col: Vec<i64> = var.iter().map(|v| v.start as i64).collect();
         let end_col: Vec<i64> = var.iter().map(|v| v.end as i64).collect();
-        let name_col: Vec<String> = var.iter().map(locus).collect();
+        let name_col: Vec<String> = var
+            .iter()
+            .map(|v| v.name.clone().unwrap_or_else(|| locus(v)))
+            .collect();
         let var_df = DataFrame::new(
             var.len(),
             vec![
@@ -1023,6 +1027,38 @@ mod tests {
         assert_eq!(df_str_col(&var_df, "chrom").unwrap(), vec!["chr1", "chr2"]);
         assert_eq!(df_i64_col(&var_df, "start").unwrap(), vec![0, 500]);
         assert_eq!(df_i64_col(&var_df, "end").unwrap(), vec![100, 750]);
+    }
+
+    #[test]
+    fn the_name_column_holds_the_feature_name_or_else_its_locus() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("counts.h5ad");
+
+        let transcript = Feature {
+            name: Some("NM_003189".to_string()),
+            ..feature("chr1", 1000, 2000)
+        };
+        let var = vec![transcript, feature("chr2", 500, 750)];
+
+        write_counts_anndata(
+            &path,
+            build_csr(vec![], 1, 2).unwrap(),
+            &product_cells(&["s1".to_string()], &["AAA".to_string()]),
+            &var,
+            "none",
+            0,
+        )
+        .unwrap();
+
+        let adata = AnnData::<H5>::open(H5::open(&path).unwrap()).unwrap();
+        assert_eq!(
+            df_str_col(&adata.read_var().unwrap(), "name").unwrap(),
+            vec!["NM_003189", "chr2_500_750"]
+        );
+        assert_eq!(
+            adata.var_names().into_vec(),
+            vec!["chr1_1000_2000::NM_003189", "chr2_500_750::None"]
+        );
     }
 
     #[test]
