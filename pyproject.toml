@@ -1,12 +1,13 @@
 [build-system]
-requires = ["maturin>=1.15,<2.0"]
-build-backend = "maturin"
+build-backend = "hatchling.build"
+requires = ["hatchling==1.31.0"]
+
 
 [project]
 name = "sincei"
-description = "A command-line toolkit for exploring single-cell (epi)genomics data."
+description = "A user-friendly toolkit for QC, counting, clustering and plotting of single-cell (epi)genomics data."
 readme = "README.md"
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.12"
 dynamic = ["version"]
 license = {file = "LICENCE.txt"}
 authors = [
@@ -20,85 +21,84 @@ maintainers = [
 classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
 ]
-
+urls.Documentation = "https://sincei.readthedocs.io/"
+urls.Source = "https://github.com/bhardwaj-lab/sincei"
+urls.Home-page = "https://sincei.readthedocs.io/"
 dependencies = [
     "anndata",
     "mudata",
     "scanpy",
     "umap-learn",
-    "polars",
-    "igraph",
+    "pandas",
+    "deeptools",
     "leidenalg",
-    "click",
-    "typer",
+    "networkx",
+    "python-igraph",
     # for debug logging (referenced from the issue template)
     "session-info",
-    # mctorch-lib calls torch.qr, which torch 2.14 removed.
-    "torch<2.14",
+    "torch",
     "mctorch-lib",
     "gensim",
     "ruptures",
-    "tqdm",
     ]
 
-[project.urls]
-Documentation = "https://sincei.readthedocs.io/"
-Source = "https://github.com/bhardwaj-lab/sincei"
-Home-page = "https://github.com/bhardwaj-lab/sincei"
-Issues = "https://github.com/bhardwaj-lab/sincei/issues"
-
 [project.scripts]
-sincei = "sincei.cli.main:cli"
-scFilterBarcodes = "sincei.cli.scFilterBarcodes:cli"
-scFilterStats = "sincei.cli.scFilterStats:cli"
-scCountReads = "sincei.cli.scCountReads:cli"
-scCountQC = "sincei.cli.scCountQC:cli"
-scFindVCRs = "sincei.cli.scFindVCRs:cli"
-scScoreFeatures = "sincei.cli.scScoreFeatures:cli"
-scCombineCounts = "sincei.cli.scCombineCounts:cli"
-scClusterCells = "sincei.cli.scClusterCells:cli"
-scPlotRegion = "sincei.cli.scPlotRegion:cli"
-scBulkCoverage = "sincei.cli.scBulkCoverage:cli"
-scExportSignal = "sincei.cli.scExportSignal:cli"
+scBulkCoverage = "sincei.scBulkCoverage:main"
+scClusterCells = "sincei.scClusterCells:main"
+scCombineCounts = "sincei.scCombineCounts:main"
+scCountQC = "sincei.scCountQC:main"
+scCountReads = "sincei.scCountReads:main"
+scFindVCRs = "sincei.scFindVCRs:main"
+scFilterBarcodes = "sincei.scFilterBarcodes:main"
+scFilterStats = "sincei.scFilterStats:main"
+scJSD = "sincei.scJSD:main"
+scScoreFeatures = "sincei.scScoreFeatures:main"
+scExportSignal = "sincei.scExportSignal:main"
+scPlotRegion = "sincei.scPlotRegion:main"
+sincei = "sincei.sincei:main"
+
 
 [project.optional-dependencies]
+dev = [
+    # CLI for bumping the version number
+    "bump2version",
+    "pre-commit",
+    "twine>=6.2.0"
+]
 doc = [
-    "sphinx>=9.1.0",
-    "sphinx-book-theme",
-    "sphinxcontrib-bibtex",
-    "readthedocs-sphinx-ext",
-    "sphinx-copybutton",
-    "sphinx_toolbox",
+    "sphinx>=8,<9",
+    "sphinx-book-theme>=1.1.4",
     "myst-nb",
-    "ipywidgets",
+    "sphinxcontrib-bibtex>=2.6.5",
+    "sphinx-autodoc-typehints",
+    "readthedocs-sphinx-ext",
+    "sphinx-argparse",
+    "sphinx_toolbox",
+    "IPython",
+    # For notebooks
+ #   "ipykernel",
+ #   "ipython",
+ #   "sphinx-copybutton",
 ]
 test = [
-    "pytest",
-    "pybigtools",
+    "pytest"
 ]
 
-# Maturin-specific configuration
-[tool.maturin]
-python-source = "."
-module-name = "sincei._sincei"
-strip = true
-bindings = "pyo3"
-features = ["pyo3/extension-module"]
+[tool.hatch.build.targets.sdist]
+include = [
+  "/sincei",
+]
 
-[tool.coverage.run]
-source = ["sincei"]
-parallel = true
-omit = ["*/__pycache__/*"]
+[tool.hatch.build.targets.wheel]
+packages = ['sincei']
 
-[tool.coverage.report]
-exclude_also = ["if TYPE_CHECKING:"]
+[tool.hatch.version]
+path = "sincei/_version.py"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["sincei/test"]
 xfail_strict = true
 addopts = [
     "--import-mode=importlib",  # allow using test files with same name
@@ -110,46 +110,23 @@ multi_line_output = 3
 profile = "black"
 skip_glob = ["docs/*"]
 
-[tool.ruff]
-src = ["."]
-include = [
-    "sincei/**/*.py",
-    "tests/**/*.py",
-    "pyproject.toml",
-]
-
-format.preview = true
-format.docstring-code-format = true
-lint.select = [
-    "ANN",  # Annotations
-    "B",    # Likely bugs and design issues
-    "BLE",  # Blind except
-    "C4",   # Comprehensions
-    "E",    # Error detected by Pycodestyle
-    "EM",   # Traceback-friendly error messages
-    "F",    # Errors detected by Pyflakes
-    "I",    # isort
-    "ICN",  # Follow import conventions
-    "ISC",  # Implicit string concatenation
-    "PERF", # Performance
-    "PIE",  # Syntax simplifications
-    "PL",   # Pylint
-    "PT",   # Pytest conventions
-    "PTH",  # Pathlib instead of os.path
-    "PYI",  # Typing
-    "RUF",  # Unused noqa
-    "SIM",  # Code simplifications
-    "TC",   # manage type checking blocks
-    "TID",  # Banned imports
-    "UP",   # pyupgrade
-    "W",    # Warning detected by Pycodestyle
-]
-
-lint.ignore = [
-    "FBT", # Boolean positional arguments
-    "PLR2004", # Magic numbers
-    "PLR0913", # Too many arguments
-    "PLR0912", # Too many branches
-    "PLR0915", # Too many statements
-    "PLR0917", # Too many positional arguments
-]
+[tool.black]
+line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+  )/
+)
+'''
