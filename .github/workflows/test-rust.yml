@@ -3,6 +3,12 @@ name: test-rust
 on:
   pull_request:
     branches: [master, develop]
+    paths:
+      - "src/**"
+      - "tests/testdata/**"
+      - "Cargo.toml"
+      - ".github/workflows/test-rust.yml"
+      - ".github/actions/**"
   workflow_dispatch:
 
 permissions:
