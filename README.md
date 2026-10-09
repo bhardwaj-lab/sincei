@@ -15,7 +15,7 @@
 > and build sincei using [maturin](https://github.com/pyo3/maturin):
 > ```
 > git clone -b rust_release https://github.com/bhardwaj-lab/sincei.git
-> conda conda create -n sincei -c conda-forge python=3.12 uv
+> conda create -n sincei -c conda-forge python=3.12 uv maturin
 > conda activate sincei
 > maturin develop --release
 > ```
