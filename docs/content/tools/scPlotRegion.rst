@@ -1,9 +1,7 @@
 .. _scPlotRegion:
 
 scPlotRegion
-====================
+============
 
-.. argparse::
-   :ref: sincei.scPlotRegion.parseArguments
+.. typer-cli:: sincei.cli.scPlotRegion
    :prog: scPlotRegion
-   :nodefault:

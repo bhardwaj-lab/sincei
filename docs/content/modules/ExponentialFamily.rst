@@ -1,7 +1,7 @@
-sincei.ExponentialFamily module
-===============================
+sincei.tools.ExponentialFamily module
+=====================================
 
-.. automodule:: sincei.ExponentialFamily
+.. automodule:: sincei.tools.ExponentialFamily
    :members:
    :undoc-members:
    :show-inheritance:

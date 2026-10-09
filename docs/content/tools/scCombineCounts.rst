@@ -1,9 +1,7 @@
 .. _scCombineCounts:
 
 scCombineCounts
-====================
+===============
 
-.. argparse::
-   :ref: sincei.scCombineCounts.parseArguments
+.. typer-cli:: sincei.cli.scCombineCounts
    :prog: scCombineCounts
-   :nodefault:

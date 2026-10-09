@@ -1,7 +1,7 @@
-sincei.TopicModels module
-=========================
+sincei.tools.TopicModels module
+===============================
 
-.. automodule:: sincei.TopicModels
+.. automodule:: sincei.tools.TopicModels
    :members:
    :undoc-members:
    :show-inheritance:

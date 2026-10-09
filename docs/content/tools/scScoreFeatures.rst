@@ -1,9 +1,7 @@
 .. _scScoreFeatures:
 
 scScoreFeatures
-====================
+===============
 
-.. argparse::
-   :ref: sincei.scScoreFeatures.parseArguments
+.. typer-cli:: sincei.cli.scScoreFeatures
    :prog: scScoreFeatures
-   :nodefault:

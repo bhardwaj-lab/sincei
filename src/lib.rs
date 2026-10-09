@@ -1,0 +1,56 @@
+pub mod annotation;
+pub mod bam;
+mod bulk_coverage;
+mod count_reads;
+pub mod counting;
+mod filter_barcodes;
+mod filter_stats;
+
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::*;
+use pyo3::types::PyModule;
+
+// Use jemalloc on non-MSVC targets
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
+/// Turn an error into a Python `RuntimeError` whose message holds the error and
+/// its causes on one line.
+pub(crate) fn to_py_err(error: anyhow::Error) -> PyErr {
+    PyRuntimeError::new_err(format!("{error:#}"))
+}
+
+// Version function
+#[pyfunction]
+fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+#[pymodule]
+fn _sincei(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(version, m)?)?;
+
+    // Preprocessing
+    m.add_function(wrap_pyfunction!(filter_barcodes::filter_barcodes, m)?)?;
+    m.add_function(wrap_pyfunction!(filter_stats::filter_stats, m)?)?;
+
+    // Counting
+    m.add_function(wrap_pyfunction!(count_reads::count_bins, m)?)?;
+    m.add_function(wrap_pyfunction!(count_reads::count_features, m)?)?;
+
+    // Export
+    m.add_function(wrap_pyfunction!(bulk_coverage::bulk_coverage, m)?)?;
+
+    // Genome annotation parsing
+    m.add_function(wrap_pyfunction!(
+        annotation::annotation_py::parse_annotation,
+        m
+    )?)?;
+    m.add_class::<annotation::annotation_py::GenomeAnnotation>()?;
+
+    Ok(())
+}

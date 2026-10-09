@@ -1,0 +1,22 @@
+name: 'Setup native build dependencies'
+description: >
+  Install the C toolchain that the vendored dependencies need. hdf5-metno-src,
+  blosc-src, zstd-sys, lz4-sys and libz-sys all compile their C libraries from
+  source, which requires cmake and the zlib headers.
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake zlib1g-dev
+
+    - name: Install (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        # GitHub's macOS runners ship cmake, but do not assume it.
+        command -v cmake >/dev/null || brew install cmake

@@ -5,7 +5,7 @@ Import sincei as:
 
 .. code-block:: python
 
-   import sincei
+   import sincei as sci
 
 The following modules are available for use directly in python.
 
@@ -21,7 +21,6 @@ The following modules are available for use directly in python.
    modules/VCRfinder
    modules/FeatureScorer
    modules/RegionQuery
-   modules/WriteBedGraph
    modules/Utilities
 
 
@@ -55,10 +54,6 @@ The following modules are available for use directly in python.
 
 * :doc:`modules/RegionQuery`
    Get overlaps between the features in an AnnData and regions in a BED or GTF file.
-
-* :doc:`modules/WriteBedGraph`
-   Write a bedgraph or bigwig file from bam files. Can be used for genome-wide coverage or for specified
-   regions.
 
 * :doc:`modules/Utilities`
    Utility functions used across the package.

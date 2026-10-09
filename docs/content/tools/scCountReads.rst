@@ -1,8 +1,7 @@
 .. _scCountReads:
 
 scCountReads
-====================
+============
 
-.. argparse::
-   :ref: sincei.scCountReads.parseArguments
+.. typer-cli:: sincei.cli.scCountReads
    :prog: scCountReads

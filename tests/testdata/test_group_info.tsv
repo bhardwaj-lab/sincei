@@ -1,0 +1,16 @@
+sample	barcode	group
+test_i1	ACGGTAAT	i1_ACGGTAAT
+test_i1	ATATAACT	i1_ATATAACT
+test_i1	CGTGGTAA	i1_CGTGGTAA
+test_i1	GCGAGCAT	i1_GCGAGCAT
+test_i1	GCGCTGAC	i1_GCGCTGAC
+test_i1	GGAGTCAT	i1_GGAGTCAT
+test_i1	GTCAAGCA	i1_GTCAAGCA
+test_i1	TAGACTTG	i1_TAGACTTG
+test_i2	AGATATTG	i2_pool
+test_i2	ATGTCGTG	i2_pool
+test_i2	ATTCTCGA	i2_pool
+test_i2	GCGAGCAT	i2_pool
+test_i2	GGACACCG	i2_pool
+test_i2	GTGCCGCG	i2_pool
+test_i2	TCTTCTGT	i2_pool
