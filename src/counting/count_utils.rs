@@ -393,7 +393,7 @@ impl CountsWriter {
             other => anyhow::bail!("unknown compression {:?}; expected 'none' or 'gzip'", other),
         };
         set_default_write_config(WriteConfig {
-            compression: compression.clone(),
+            compression,
             block_size: None,
         });
         anyhow::ensure!(
@@ -407,7 +407,7 @@ impl CountsWriter {
         x.new_attr("encoding-type", "csr_matrix")?;
         x.new_attr("encoding-version", "0.1.0")?;
         let growing = || WriteConfig {
-            compression: compression.clone(),
+            compression,
             block_size: Some(X_BLOCK.into()),
         };
         let data = x.new_empty_dataset::<f32>("data", &0.into(), growing())?;
@@ -478,7 +478,7 @@ impl CountsWriter {
 
         // Use i32 or i64 as indptr type in order to be compatible with scipy
         let config = WriteConfig {
-            compression: self.compression.clone(),
+            compression: self.compression,
             block_size: None,
         };
         if i32::try_from(self.indptr[n_rows]).is_ok() {
