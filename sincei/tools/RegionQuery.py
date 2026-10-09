@@ -98,7 +98,7 @@ def get_bins_by_gene(
 
     # if firstBin, sort the bins by start pos and return only the firstBin by strand
     if klist and firstBin:
-        spos = [x.split("_")[1] for x in klist]
+        spos = [int(x.split("_")[1]) for x in klist]
         first_bin = spos.index(min(spos)) if strand == "+" else spos.index(max(spos))
         return klist[first_bin]
     return klist
