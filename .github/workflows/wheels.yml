@@ -48,7 +48,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
-          maturin-version: "1.14.1"
+          maturin-version: "1.15.0"
           args: --release --out dist
           before-script-linux: dnf install -y cmake zlib-devel
 
