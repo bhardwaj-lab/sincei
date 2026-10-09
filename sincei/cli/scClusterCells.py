@@ -335,7 +335,9 @@ def main(
             )
             model = topics.lda_model
         # The first component is dropped.
-        adata.obsm[reduction] = topics.get_cell_topic().to_numpy()[:, 1 : n_prin_comps + 1]
+        adata.obsm[reduction] = topics.get_cell_topic().to_numpy()[
+            :, 1 : n_prin_comps + 1
+        ]
 
     sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
     sc.tl.leiden(adata, resolution=cluster_resolution)
