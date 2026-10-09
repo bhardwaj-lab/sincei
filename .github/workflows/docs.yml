@@ -1,0 +1,66 @@
+name: docs
+
+# Builds the wheel the documentation is built with, then starts the Read the
+# Docs build of this branch, which downloads it (docs/fetch_wheel.py) instead
+# of compiling sincei on the Read the Docs server.
+
+on:
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheel:
+    name: docs wheel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: ./.github/actions/setup-native-deps
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      # The docs only import sincei, so we uyse the  dev profile for cmpile
+      # speed.
+      - name: Build wheel
+        run: uvx maturin==1.14.1 build --profile dev --out dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-wheel
+          path: dist/*.whl
+          retention-days: 7
+
+  read-the-docs:
+    name: start the Read the Docs build
+    needs: wheel
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Trigger the build of this branch's docs
+        env:
+          RTD_TOKEN: ${{ secrets.RTD_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # Read the Docs serves the default branch as "latest".
+          version="$BRANCH"
+          if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
+            version=latest
+          fi
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Token $RTD_TOKEN" \
+            "https://readthedocs.org/api/v3/projects/sincei/versions/$version/builds/"

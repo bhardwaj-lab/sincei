@@ -12,14 +12,15 @@ build:
         - cmake
     jobs:
         install:
-            # The docs only import sincei, so the extension is built in the dev
-            # profile for speed.
+            # The docs workflow builds the wheel for this commit and starts the
+            # docs build, passing the wheel to Read the Docs. The build fails if
+            # the sincei wheel cannot be downloaded.
             - asdf plugin add uv
             - asdf install uv latest
             - asdf global uv latest
             - |
               export VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH
-              MATURIN_PEP517_ARGS="--profile dev" uv pip install ".[doc]"
+              python docs/fetch_wheel.py dist && uv pip install "$(ls dist/*.whl)[doc]"
 
 sphinx:
     configuration: docs/conf.py
