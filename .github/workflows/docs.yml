@@ -34,7 +34,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
 
-      # The docs only import sincei, so we uyse the  dev profile for cmpile
+      # The docs only import sincei, so we use the dev profile for compile
       # speed.
       - name: Build wheel
         run: uvx maturin==1.14.1 build --profile dev --out dist
