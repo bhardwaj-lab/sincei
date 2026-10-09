@@ -37,7 +37,6 @@ _APPS: dict[str, str] = {
     "scFilterBarcodes_app": "scFilterBarcodes",
     "scFilterStats_app": "scFilterStats",
     "scFindVCRs_app": "scFindVCRs",
-    "scJSD_app": "scJSD",
     "scPlotRegion_app": "scPlotRegion",
     "scScoreFeatures_app": "scScoreFeatures",
 }
@@ -53,7 +52,6 @@ __all__ = [
     "scFilterBarcodes_app",
     "scFilterStats_app",
     "scFindVCRs_app",
-    "scJSD_app",
     "scPlotRegion_app",
     "scScoreFeatures_app",
 ]
