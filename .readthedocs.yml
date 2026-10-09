@@ -12,9 +12,9 @@ build:
         - cmake
     jobs:
         install:
-            # The docs workflow builds the wheel for this commit and starts the
-            # docs build, passing the wheel to Read the Docs. The build fails if
-            # the sincei wheel cannot be downloaded.
+            # The docs workflow builds the wheel for this commit, and this build
+            # waits for it. The build fails if the sincei wheel cannot be
+            # downloaded.
             - asdf plugin add uv
             - asdf install uv latest
             - asdf global uv latest

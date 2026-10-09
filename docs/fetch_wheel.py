@@ -2,8 +2,8 @@
 
 Run by ``.readthedocs.yml`` as ``python docs/fetch_wheel.py <directory>``. It
 needs ``GH_ACTIONS_TOKEN`` and the commit Read the Docs checked out
-(``READTHEDOCS_GIT_COMMIT_HASH``). It exits with status 1 when there is no wheel
-to use, which stops the docs build.
+(``READTHEDOCS_GIT_COMMIT_HASH``). It waits for the workflow while it runs, and
+exits with status 1 when there is no wheel to use, which stops the docs build.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import io
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -19,6 +20,8 @@ import zipfile
 API = "https://api.github.com/repos/bhardwaj-lab/sincei"
 WORKFLOW = "docs.yml"
 ARTIFACT = "docs-wheel"
+POLL = 20
+TIMEOUT = 10 * 60
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -63,24 +66,32 @@ def main(directory: str) -> int:
         print("fetch_wheel: GH_ACTIONS_TOKEN or the commit is not set", file=sys.stderr)
         return 1
 
-    runs = _json(
-        f"{API}/actions/workflows/{WORKFLOW}/runs?head_sha={commit}&per_page=10",
-        token,
-    )["workflow_runs"]
-    for run in runs:
-        artifacts = _json(f"{API}/actions/runs/{run['id']}/artifacts", token)
-        for artifact in artifacts["artifacts"]:
-            if artifact["name"] == ARTIFACT and not artifact["expired"]:
-                archive = _download(artifact["archive_download_url"], token)
-                with zipfile.ZipFile(io.BytesIO(archive)) as wheels:
-                    wheels.extractall(directory)
-                    names = ", ".join(wheels.namelist())
-                    print(f"fetch_wheel: {names} from run {run['id']}")
-                return 0
+    deadline = time.monotonic() + TIMEOUT
+    while True:
+        runs = _json(
+            f"{API}/actions/workflows/{WORKFLOW}/runs?head_sha={commit}&per_page=10",
+            token,
+        )["workflow_runs"]
+        for run in runs:
+            artifacts = _json(f"{API}/actions/runs/{run['id']}/artifacts", token)
+            for artifact in artifacts["artifacts"]:
+                if artifact["name"] == ARTIFACT and not artifact["expired"]:
+                    archive = _download(artifact["archive_download_url"], token)
+                    with zipfile.ZipFile(io.BytesIO(archive)) as wheels:
+                        wheels.extractall(directory)
+                        names = ", ".join(wheels.namelist())
+                        print(f"fetch_wheel: {names} from run {run['id']}")
+                    return 0
+
+        finished = runs and all(run["status"] == "completed" for run in runs)
+        if finished or time.monotonic() > deadline:
+            break
+        print(f"fetch_wheel: waiting for the docs workflow of {commit}")
+        time.sleep(POLL)
 
     print(
-        f"fetch_wheel: no {ARTIFACT} artifact for {commit}; has the docs workflow "
-        "finished for this commit?",
+        f"fetch_wheel: no {ARTIFACT} artifact for {commit}; did the docs workflow "
+        "run for this commit?",
         file=sys.stderr,
     )
     return 1
