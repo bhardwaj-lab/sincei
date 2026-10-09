@@ -39,9 +39,6 @@ comment:
   layout: "condensed_header, diff, flags, components, condensed_files"
   behavior: default
   require_changes: false
-  # Both suites upload. Without this, the first comment shows only one half of
-  # the project.
-  after_n_builds: 2
 
 ignore:
   - "tests/**"
