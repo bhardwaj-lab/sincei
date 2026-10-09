@@ -10,16 +10,18 @@ build:
         # hdf5-metno-src, blosc-src, zstd-sys and lz4-sys each compile their C
         # library from source.
         - cmake
+    jobs:
+        install:
+            # The docs only import sincei, so the extension is built in the dev
+            # profile for speed.
+            - asdf plugin add uv
+            - asdf install uv latest
+            - asdf global uv latest
+            - |
+              export VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH
+              MATURIN_PEP517_ARGS="--profile dev" uv pip install ".[doc]"
 
 sphinx:
     configuration: docs/conf.py
     # disable this for more lenient docs builds
     fail_on_warning: false
-
-python:
-    install:
-        - method: uv
-          command: pip
-          path: .
-          extras:
-              - doc
