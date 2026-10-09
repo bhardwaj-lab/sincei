@@ -95,8 +95,6 @@ def get_bins_by_gene(
                 klist.append(k)
                 # get strand of the gene
                 strand = next(compress(slist, match))
-            else:
-                strand = None
 
     # if firstBin, sort the bins by start pos and return only the firstBin by strand
     if klist and firstBin:
