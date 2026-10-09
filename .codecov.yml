@@ -2,10 +2,6 @@
 
 codecov:
   require_ci_to_pass: true
-  notify:
-    # Two reports arrive per commit: `python` from test-python and `rust` from
-    # test-rust. Wait for both before posting a status.
-    after_n_builds: 2
 
 coverage:
   precision: 2
