@@ -1,9 +1,7 @@
 .. _scExportSignal:
 
 scExportSignal
-====================
+==============
 
-.. argparse::
-   :ref: sincei.scExportSignal.parseArguments
+.. typer-cli:: sincei.cli.scExportSignal
    :prog: scExportSignal
-   :nodefault:

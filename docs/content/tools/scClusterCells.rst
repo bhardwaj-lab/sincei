@@ -1,9 +1,7 @@
 .. _scClusterCells:
 
 scClusterCells
-====================
+==============
 
-.. argparse::
-   :ref: sincei.scClusterCells.parseArguments
+.. typer-cli:: sincei.cli.scClusterCells
    :prog: scClusterCells
-   :nodefault:

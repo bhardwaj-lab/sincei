@@ -1,7 +1,7 @@
-sincei.multimodalClustering module
-==================================
+sincei.tools.MultiModalClustering module
+========================================
 
-.. automodule:: sincei.multimodalClustering
+.. automodule:: sincei.tools.MultiModalClustering
    :members:
    :undoc-members:
    :show-inheritance:

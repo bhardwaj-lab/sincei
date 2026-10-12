@@ -1,17 +1,46 @@
-# Based on pydata/xarray
+# https://docs.codecov.com/docs/codecovyml-reference
+
 codecov:
-  require_ci_to_pass: no
+  require_ci_to_pass: true
 
 coverage:
+  precision: 2
+  round: down
+  range: "60...90"
   status:
     project:
       default:
-        # Require 10% coverage, i.e., always succeed
-        target: 1
-    patch: false
-    changes: false
+        target: auto
+        threshold: 1%
+      python:
+        target: auto
+        threshold: 1%
+        flags: [python]
+      rust:
+        target: auto
+        threshold: 1%
+        flags: [rust]
+    patch:
+      default:
+        target: 50%
+        threshold: 5%
+
+flags:
+  python:
+    paths:
+      - sincei/
+    carryforward: true
+  rust:
+    paths:
+      - src/
+    carryforward: true
 
 comment:
-  layout: diff, flags, files
-  behavior: once
-  require_base: no
+  layout: "condensed_header, diff, flags, components, condensed_files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/**"
+  - "docs/**"
+  - "benchmarks/**"

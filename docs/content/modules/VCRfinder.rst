@@ -1,7 +1,7 @@
-sincei.VCRfinder module
-=========================
+sincei.tools.VCRfinder module
+=============================
 
-.. automodule:: sincei.VCRfinder
+.. automodule:: sincei.tools.VCRfinder
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,0 +1,48 @@
+name: lint-rust
+
+on:
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
+          cache: 'false'
+
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+
+      - uses: ./.github/actions/setup-native-deps
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - run: |
+          cargo clippy --all-targets -- \
+            -A clippy::too_many_arguments \
+            -D warnings

@@ -1,9 +1,7 @@
 .. _scFilterBarcodes:
 
 scFilterBarcodes
-====================
+================
 
-.. argparse::
-   :ref: sincei.scFilterBarcodes.parseArguments
+.. typer-cli:: sincei.cli.scFilterBarcodes
    :prog: scFilterBarcodes
-   :nodefault:

@@ -1,9 +1,7 @@
 .. _scBulkCoverage:
 
 scBulkCoverage
-====================
+==============
 
-.. argparse::
-   :ref: sincei.scBulkCoverage.parseArguments
+.. typer-cli:: sincei.cli.scBulkCoverage
    :prog: scBulkCoverage
-   :nodefault:

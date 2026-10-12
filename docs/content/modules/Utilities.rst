@@ -1,7 +1,7 @@
-sincei.Utilities module
-=======================
+sincei.utils module
+===================
 
-.. automodule:: sincei.Utilities
+.. automodule:: sincei.utils
    :members:
    :undoc-members:
    :show-inheritance:

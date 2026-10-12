@@ -1,0 +1,26 @@
+name: 'Setup Rust'
+description: 'Install the Rust toolchain, optionally with components and a build cache.'
+
+inputs:
+  components:
+    description: 'Comma-separated rustup components, e.g. "rustfmt, clippy".'
+    required: false
+    default: ''
+  cache:
+    description: 'Enable the shared cargo/target cache.'
+    required: false
+    default: 'true'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: ${{ inputs.components }}
+
+    - name: Cache cargo registry and target
+      uses: Swatinem/rust-cache@v2
+      if: ${{ inputs.cache == 'true' }}
+      with:
+        workspaces: "."

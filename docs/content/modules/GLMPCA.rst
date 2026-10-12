@@ -1,7 +1,7 @@
-sincei.GLMPCA module
-====================
+sincei.tools.GLMPCA module
+==========================
 
-.. automodule:: sincei.GLMPCA
+.. automodule:: sincei.tools.GLMPCA
    :members:
    :undoc-members:
    :exclude-members:

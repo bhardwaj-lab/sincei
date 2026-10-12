@@ -1,9 +1,7 @@
 .. _scFilterStats:
 
 scFilterStats
-====================
+=============
 
-.. argparse::
-   :ref: sincei.scFilterStats.parseArguments
+.. typer-cli:: sincei.cli.scFilterStats
    :prog: scFilterStats
-   :nodefault:
