@@ -941,8 +941,9 @@ fn write_bigwig(
         .map(|(c, l)| (c.clone(), *l as u32))
         .collect();
 
-    let writer = BigWigWrite::create_file(path, chrom_map)
+    let mut writer = BigWigWrite::create_file(path, chrom_map)
         .with_context(|| format!("failed to create bigWig file: {}", path.display()))?;
+    writer.options.inmemory = true;
 
     // bigtools rejects an empty input, and hangs on a source that yields no
     // chromosome, so a group without signal gets one zero-valued base instead.
