@@ -213,16 +213,7 @@ pub fn bulk_coverage(
         .map(|(p, l)| (p.as_path(), l.as_str()))
         .collect();
 
-    // bigtools writes temporary files to TMPDIR, this may cause trouble in some
-    // machines. We temporarily override it to be the output directory, so that
-    // the temporary files are written there instead and restore the original
-    // TMPDIR afterwards.
-    let previous_tmpdir = std::env::var_os("TMPDIR");
-    if let Some(output_dir) = std::path::absolute(&output_prefix)?.parent() {
-        unsafe { std::env::set_var("TMPDIR", output_dir) };
-    }
-
-    let output_files = run_bulk_coverage(
+    run_bulk_coverage(
         &bam_path_refs,
         group_info.as_deref(),
         &output_prefix,
@@ -249,14 +240,8 @@ pub fn bulk_coverage(
         read_mode,
         num_threads,
         chunk_size,
-    );
-
-    match previous_tmpdir {
-        Some(tmpdir) => unsafe { std::env::set_var("TMPDIR", tmpdir) },
-        None => unsafe { std::env::remove_var("TMPDIR") },
-    }
-
-    output_files.map_err(to_py_err)
+    )
+    .map_err(to_py_err)
 }
 
 #[cfg(test)]
