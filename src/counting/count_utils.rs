@@ -9,7 +9,7 @@
 //! a written matrix back. They are test-only: nothing in the crate reads a
 //! count matrix yet.
 
-use std::ops::{AddAssign, Range};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -253,21 +253,6 @@ pub(super) fn observed_rows(
     rows.iter()
         .map(|&(sample, barcode, _)| (samples[sample].clone(), barcode.to_string()))
         .collect()
-}
-
-/// Add two chunks' `(cell, feature) -> count` maps together.
-///
-/// The smaller map is drained into the larger: merging costs one hash lookup
-/// per entry moved, so moving the shorter side does strictly less work.
-pub(super) fn merge_counts<V: Copy + Default + AddAssign>(
-    a: AHashMap<(usize, usize), V>,
-    b: AHashMap<(usize, usize), V>,
-) -> AHashMap<(usize, usize), V> {
-    let (mut keep, drain) = if a.len() >= b.len() { (a, b) } else { (b, a) };
-    for (key, val) in drain {
-        *keep.entry(key).or_default() += val;
-    }
-    keep
 }
 
 /// Build a sparse count matrix in CSR format from the chunks' entries.

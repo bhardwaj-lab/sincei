@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write as IoWrite};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use ahash::{AHashMap, AHashSet};
 use anyhow::{Context, Result};
@@ -20,18 +22,19 @@ use bigtools::beddata::BedParserStreamingIterator;
 use bigtools::{BigWigWrite, Value};
 use rayon::prelude::*;
 
-use super::count_utils::merge_counts;
 use super::params::{CountingParams, parse_region};
 use crate::annotation::parse_annotation::parse_blacklist_bed;
 use crate::annotation::region_index::{
     bins_touched, build_bigwig_index, build_bigwig_index_in_window,
 };
+use noodles::sam::Header;
+
 use crate::bam::bam_io::{
-    BamWorker, Chunk, Samples, chunk_windows, ensure_barcode_tags_present,
-    ensure_genome_matches_bams, read_bam_header, thread_pool,
+    BamReader, BamWorker, Samples, ensure_barcode_tags_present, ensure_genome_matches_bams,
+    read_bam_header, thread_pool,
 };
 use crate::bam::filters::{
-    DupMethod, DuplicateFilter, QcFilter, RawRecordFilter, derive_record_opts,
+    DupMethod, DuplicateFilter, MotifFilter, QcFilter, RawRecordFilter, derive_record_opts,
 };
 use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::fragment_length::{ensure_paired_end, resolve_extend_reads};
@@ -170,14 +173,37 @@ fn get_effective_intervals<'a>(
     }
 }
 
+struct BinChunk {
+    chrom_idx: usize,
+    first_bin: usize,
+    n_bins: usize,
+}
+
+struct ChunkCounts {
+    block: Vec<f32>,
+    remaining: usize,
+    entries: Vec<Vec<(u32, f32)>>,
+}
+
+fn read_reach(adjust: &AdjustRead, mode: ReadMode, qc_filter: Option<&QcFilter>) -> usize {
+    let max_fragment = qc_filter.and_then(|f| f.max_fragment_length).unwrap_or(0);
+    let extension = adjust.extend_reads.map_or(0, |frag_len| {
+        frag_len.max(adjust.max_paired_fragment_length.unwrap_or(4 * frag_len))
+    });
+    let reach = match mode {
+        ReadMode::Normal => extension,
+        ReadMode::MNase => max_fragment,
+        ReadMode::Offset(..) => 0,
+    };
+    reach + 1_000
+}
+
 // Group-info parsing
 
 #[derive(Debug)]
 struct ParsedGroups {
     /// Ordered unique group names.
     groups: Vec<String>,
-    /// Number of cells per group (indexed by group_idx).
-    n_cells_per_group: Vec<usize>,
     /// All cells: (bam_idx, barcode, group_idx).
     cells: Vec<(usize, String, usize)>,
 }
@@ -312,17 +338,7 @@ fn parse_group_info(path: &Path, bam_labels: &[&str]) -> Result<ParsedGroups> {
         cells.push((bam_idx, barcode.to_string(), group_idx));
     }
 
-    let n_groups = groups.len();
-    let mut n_cells_per_group = vec![0usize; n_groups];
-    for &(_, _, g) in &cells {
-        n_cells_per_group[g] += 1;
-    }
-
-    Ok(ParsedGroups {
-        groups,
-        n_cells_per_group,
-        cells,
-    })
+    Ok(ParsedGroups { groups, cells })
 }
 
 // Core function
@@ -406,15 +422,13 @@ pub fn run_bulk_coverage(
 
     // Each group's name and size, and each cell's group. Without a group-info
     // file every read counts toward one pooled group.
-    let (groups, n_cells_per_group, cell_group): (Vec<String>, Vec<usize>, Vec<usize>) =
-        match &parsed {
-            Some(parsed) => (
-                parsed.groups.clone(),
-                parsed.n_cells_per_group.clone(),
-                parsed.cells.iter().map(|(_, _, g)| *g).collect(),
-            ),
-            None => (vec![String::new()], vec![1], vec![0]),
-        };
+    let (groups, cell_group): (Vec<String>, Vec<usize>) = match &parsed {
+        Some(parsed) => (
+            parsed.groups.clone(),
+            parsed.cells.iter().map(|(_, _, g)| *g).collect(),
+        ),
+        None => (vec![String::new()], vec![0]),
+    };
     let n_groups = groups.len();
 
     // (bam_idx, barcode bytes) -> cell_global_idx: keys borrow from parsed.cells.
@@ -560,348 +574,408 @@ pub fn run_bulk_coverage(
         .filter(|&(bam_idx, _)| bam_is_read[bam_idx])
         .map(|(i, &(p, _))| (i, p))
         .collect();
-    let work = chunk_windows(&bams, &windows, chunk_size);
+    let margin = read_reach(&adjust, read_mode, qc_filter);
+    let bins_per_chunk = (chunk_size / step_size).max(1);
+    let mut chunks: Vec<BinChunk> = Vec::new();
+    let mut chrom_chunks: Vec<std::ops::Range<usize>> = Vec::with_capacity(windows.len());
+    for (chrom_idx, (chrom, _, _)) in windows.iter().enumerate() {
+        let first_chunk = chunks.len();
+        if let Some(&(_, n_chrom_bins)) = bin_index.chrom_bins.get(chrom.as_str()) {
+            for first_bin in (0..n_chrom_bins).step_by(bins_per_chunk) {
+                chunks.push(BinChunk {
+                    chrom_idx,
+                    first_bin,
+                    n_bins: bins_per_chunk.min(n_chrom_bins - first_bin),
+                });
+            }
+        }
+        chrom_chunks.push(first_chunk..chunks.len());
+    }
+    let count_cells = matches!(normalize_using, NormalizeMethod::Frequency);
+    let found: Vec<AtomicBool> = (0..cell_group.len())
+        .map(|_| AtomicBool::new(false))
+        .collect();
+    let out_of_reach = AtomicUsize::new(0);
 
     let pool = thread_pool(num_threads)?;
 
-    // Motif-filter ingredients, built once per worker rather than per chunk.
     let motif_ingredients = match (genome_path, motifs) {
         (Some(g), Some(m)) => Some((g, m)),
         _ => None,
     };
 
-    // Parallel phase: accumulate per-(cell_idx, bin_idx) counts, then combine
-    // the per-chunk maps with a parallel tree reduction. Collecting them all and
-    // merging on one thread instead cost ~15% of wall-clock time in the bin
-    // counter (see `bin_matrix.rs`), and held every partial map in memory at once.
-    let global_acc: AHashMap<(usize, usize), f32> = pool.install(|| {
-        work.par_iter()
-            .map_init(
-                BamWorker::default,
-                |worker,
-                 &Chunk {
-                     bam_idx,
-                     bam_path,
-                     ref chrom,
-                     start: chunk_start,
-                     end: chunk_end,
-                     ..
-                 }|
-                 -> Result<AHashMap<(usize, usize), f32>> {
-                    let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
+    let count_task = |reader: &mut BamReader,
+                      header: &Header,
+                      motif: &mut Option<MotifFilter>,
+                      chunk_idx: usize,
+                      bam_idx: usize|
+     -> Result<Option<Vec<f32>>> {
+        let chunk = &chunks[chunk_idx];
+        let n_chunk_bins = chunk.n_bins;
+        let (chrom, window_start, _) = &windows[chunk.chrom_idx];
+        let window_start = *window_start;
+        let chrom_len = chrom_sizes[chunk.chrom_idx].1;
+        let Some(&(_, n_chrom_bins)) = bin_index.chrom_bins.get(chrom.as_str()) else {
+            return Ok(None);
+        };
 
-                    // Each work chunk covers a single chromosome, so its bin
-                    // geometry and blacklist are resolved once here
-                    // rather than per read.
-                    let Some(&(chrom_offset, n_bins)) = bin_index.chrom_bins.get(chrom.as_str())
-                    else {
-                        return Ok(AHashMap::new());
+        let region_bounds = match &region_filter {
+            Some((region_chrom, region_start, region_end)) => {
+                if region_chrom.as_str() != chrom.as_str() {
+                    return Ok(None);
+                }
+                Some((*region_start, *region_end))
+            }
+            None => None,
+        };
+        let chunk_blacklist = blacklist
+            .as_ref()
+            .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
+
+        let lo = window_start + chunk.first_bin * step_size;
+        let hi = (window_start + (chunk.first_bin + n_chunk_bins - 1) * step_size + bin_size)
+            .min(chrom_len);
+        let query_start = lo.saturating_sub(margin);
+        let query_end = (hi + margin).min(chrom_len);
+        if query_start >= query_end {
+            return Ok(None);
+        }
+        let region_str = format!("{}:{}-{}", chrom, query_start + 1, query_end);
+        let region: noodles::core::Region = region_str
+            .parse()
+            .with_context(|| format!("failed to parse region: {}", region_str))?;
+        let query = match reader.query(header, &region) {
+            Ok(q) => q,
+            Err(_) => return Ok(None),
+        };
+
+        let mut dup_filter: Option<DuplicateFilter> = dup_method.map(DuplicateFilter::new);
+        let owned = chunk.first_bin..chunk.first_bin + n_chunk_bins;
+        let mut block = vec![0f32; n_groups * n_chunk_bins];
+        let mut seen: AHashSet<(usize, usize)> = AHashSet::new();
+
+        for result in query.records() {
+            let record = result.context("failed to read BAM record")?;
+
+            if let Some(rf) = record_filter {
+                let flags = u16::from(record.flags());
+                let mapq = record.mapping_quality().map_or(255, |q| q.get());
+                if !rf.passes(flags, mapq) {
+                    continue;
+                }
+            }
+
+            let Some(sc_rec) = ScRecord::from_bam_record(
+                &record,
+                header,
+                &bc_tag_parsed,
+                umi_tag_parsed.as_ref(),
+                None,
+                group_tag_parsed.as_ref(),
+                &record_opts,
+            )?
+            else {
+                continue;
+            };
+
+            if let Some((region_start, region_end)) = region_bounds
+                && (sc_rec.alignment_end <= region_start || sc_rec.alignment_start >= region_end)
+            {
+                continue;
+            }
+
+            if let Some(bl) = chunk_blacklist
+                && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
+            {
+                continue;
+            }
+
+            let Some(barcode) = sc_rec.barcode else {
+                continue;
+            };
+            let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
+                continue;
+            };
+            let cell_idx = match &cell_index {
+                Some(index) => {
+                    let Some(&cell_idx) = index.get(&(sample_idx, barcode)) else {
+                        continue;
                     };
-                    // Bin 0 of this chromosome starts here: 0 unless a region
-                    // restricted the tiling to a window.
-                    let window_start = bin_index.window_start(chrom.as_str());
+                    cell_idx
+                }
+                None => 0,
+            };
 
-                    // Hoisted region filter: a region on a different chromosome
-                    // skips the whole chunk; otherwise carry its bounds.
-                    let region_bounds = match &region_filter {
-                        Some((region_chrom, region_start, region_end)) => {
-                            if region_chrom.as_str() != chrom.as_str() {
-                                return Ok(AHashMap::new());
-                            }
-                            Some((*region_start, *region_end))
-                        }
-                        None => None,
-                    };
+            if let Some(qc) = qc_filter
+                && !qc.passes(&sc_rec)
+            {
+                continue;
+            }
+            if let Some(ref mut dup) = dup_filter
+                && !dup.passes(&sc_rec)
+            {
+                continue;
+            }
+            if let Some(mf) = motif.as_mut()
+                && !mf.passes(&sc_rec, chrom)?
+            {
+                continue;
+            }
 
-                    let chunk_blacklist = blacklist
-                        .as_ref()
-                        .and_then(|bl| blacklist_chrom_index(bl, chrom.as_str()));
-
-                    let region_str = format!("{}:{}-{}", chrom, chunk_start + 1, chunk_end);
-                    let region: noodles::core::Region = region_str
-                        .parse()
-                        .with_context(|| format!("failed to parse region: {}", region_str))?;
-                    let query = match reader.query(header, &region) {
-                        Ok(q) => q,
-                        Err(_) => return Ok(AHashMap::new()),
-                    };
-
-                    let mut dup_filter: Option<DuplicateFilter> =
-                        dup_method.map(DuplicateFilter::new);
-                    let mut local_acc: AHashMap<(usize, usize), f32> = AHashMap::new();
-
-                    for result in query.records() {
-                        let record = result.context("failed to read BAM record")?;
-
-                        if let Some(rf) = record_filter {
-                            let flags = u16::from(record.flags());
-                            let mapq = record.mapping_quality().map_or(255, |q| q.get());
-                            if !rf.passes(flags, mapq) {
-                                continue;
-                            }
-                        }
-
-                        let Some(sc_rec) = ScRecord::from_bam_record(
-                            &record,
-                            header,
-                            &bc_tag_parsed,
-                            umi_tag_parsed.as_ref(),
-                            None,
-                            group_tag_parsed.as_ref(),
-                            &record_opts,
-                        )?
-                        else {
-                            continue;
-                        };
-
-                        if sc_rec.alignment_start < chunk_start {
-                            continue;
-                        }
-
-                        if let Some((region_start, region_end)) = region_bounds
-                            && (sc_rec.alignment_end <= region_start
-                                || sc_rec.alignment_start >= region_end)
-                        {
-                            continue;
-                        }
-
-                        // Judged on the read's own alignment span, as the filter
-                        // tools judge it, and before --extendReads / --centerReads
-                        // move the interval that is covered.
-                        if let Some(bl) = chunk_blacklist
-                            && read_is_blacklisted(bl, sc_rec.alignment_start, sc_rec.alignment_end)
-                        {
-                            continue;
-                        }
-
-                        let Some(barcode) = sc_rec.barcode else {
-                            continue;
-                        };
-                        // Under --groupTag the read's own group picks the sample,
-                        // so a barcode shared across source samples stays two cells.
-                        let Some(sample_idx) = samples.index(bam_idx, sc_rec.group) else {
-                            continue;
-                        };
-                        let cell_idx = match &cell_index {
-                            Some(index) => {
-                                let Some(&cell_idx) = index.get(&(sample_idx, barcode)) else {
-                                    continue;
-                                };
-                                cell_idx
-                            }
-                            None => 0,
-                        };
-
-                        if let Some(qc) = qc_filter
-                            && !qc.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(ref mut dup) = dup_filter
-                            && !dup.passes(&sc_rec)
-                        {
-                            continue;
-                        }
-                        if let Some(mf) = motif.as_mut()
-                            && !mf.passes(&sc_rec, chrom)?
-                        {
-                            continue;
-                        }
-
-                        // A spliced read covers its blocks and not the intron
-                        // between them, and a bin reached twice over is still
-                        // covered once.
-                        for bin in bins_touched(
-                            get_effective_intervals(&sc_rec, &adjust, read_mode),
-                            window_start,
-                            bin_size,
-                            step_size,
-                            n_bins,
-                        ) {
-                            *local_acc
-                                .entry((cell_idx, chrom_offset + bin))
-                                .or_insert(0.0) += sc_rec.count;
-                        }
+            let (aln_start, aln_end) = (sc_rec.alignment_start, sc_rec.alignment_end);
+            let intervals =
+                get_effective_intervals(&sc_rec, &adjust, read_mode).inspect(|&(start, end)| {
+                    if start + margin < aln_start || end > aln_end + margin {
+                        out_of_reach.fetch_add(1, Ordering::Relaxed);
                     }
+                });
+            let group_base = cell_group[cell_idx] * n_chunk_bins;
+            let mut counted = false;
+            for bin in bins_touched(intervals, window_start, bin_size, step_size, n_chrom_bins) {
+                counted = true;
+                if !owned.contains(&bin) {
+                    continue;
+                }
+                let idx = group_base + bin - chunk.first_bin;
+                if count_cells {
+                    if seen.insert((cell_idx, bin)) {
+                        block[idx] += 1.0;
+                    }
+                } else {
+                    block[idx] += sc_rec.count;
+                }
+            }
+            if counted {
+                found[cell_idx].store(true, Ordering::Relaxed);
+            }
+        }
 
-                    Ok(local_acc)
-                },
-            )
-            .reduce(|| Ok(AHashMap::new()), |a, b| Ok(merge_counts(a?, b?)))
-    })?;
+        Ok(Some(block))
+    };
 
-    // Aggregate per (group, bin)
+    let add_chunk_counts =
+        |counts: &mut ChunkCounts, chunk_idx: usize, block: Option<Vec<f32>>| -> bool {
+            let chunk = &chunks[chunk_idx];
+            let n_chunk_bins = chunk.n_bins;
+            if let Some(block) = block {
+                if counts.block.is_empty() {
+                    counts.block = block;
+                } else {
+                    for (acc, value) in counts.block.iter_mut().zip(&block) {
+                        *acc += value;
+                    }
+                }
+            }
+            counts.remaining -= 1;
+            if counts.remaining > 0 {
+                return false;
+            }
+            let block = std::mem::take(&mut counts.block);
+            counts.entries = (0..n_groups)
+                .map(|group_idx| {
+                    block
+                        .get(group_idx * n_chunk_bins..(group_idx + 1) * n_chunk_bins)
+                        .unwrap_or_default()
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &value)| value != 0.0)
+                        .map(|(i, &value)| ((chunk.first_bin + i) as u32, value))
+                        .collect()
+                })
+                .collect();
+            true
+        };
 
-    let n_bins = bin_index.n_bins;
-
-    // Sum of counts per (group, bin), as a dense row per group indexed
-    // `group_idx * n_bins + bin_idx`.
-    //
-    // A pseudo-bulk track pools many cells, so most bins carry signal and a hash
-    // map buys nothing for the sparsity. It costs, though: an entry keyed by
-    // `(usize, usize)` spends 16 bytes on the key and a control byte on top of
-    // the 8-byte value, against 8 bytes flat here. Dense is both the faster and
-    // the smaller representation at this density.
-    let mut group_bin_sum: Vec<f64> = vec![0.0; n_groups * n_bins];
-
-    // Cells with >=1 read in a bin, per (group, bin). Only `Frequency` reads
-    // this, so it stays unallocated for every other normalization.
-    let mut group_bin_n_cells: Option<Vec<u32>> =
-        matches!(normalize_using, NormalizeMethod::Frequency)
-            .then(|| vec![0u32; n_groups * n_bins]);
-
-    // total reads per group (excluding ignored chroms). Needed for CPM/RPKM denominators
-    let mut group_total: Vec<f64> = vec![0.0; n_groups];
-
-    // Bin ranges of the chromosomes left out of the normalization denominator.
-    // Whether a bin is ignored varies only by chromosome, so this is a short
-    // list of half-open ranges to scan.
-    // A chromosome that is not in the index (it was skipped entirely) simply
-    // contributes no range.
-    let ignored_bin_ranges: Vec<(usize, usize)> = ignore_for_normalization
+    let ignored: AHashSet<&str> = ignore_for_normalization
         .iter()
-        .filter_map(|chrom| bin_index.chrom_bins.get(chrom.as_str()))
-        .map(|&(offset, n_bins)| (offset, offset + n_bins))
+        .map(String::as_str)
         .collect();
-
-    for (&(cell_idx, bin_idx), &count) in &global_acc {
-        let group_idx = cell_group[cell_idx];
-        let slot = group_idx * n_bins + bin_idx;
-        group_bin_sum[slot] += f64::from(count);
-        if let Some(n_cells) = group_bin_n_cells.as_mut() {
-            n_cells[slot] += 1;
-        }
-        // Exclude ignored chroms from normalization denominator.
-        let is_ignored = ignored_bin_ranges
-            .iter()
-            .any(|&(start, end)| bin_idx >= start && bin_idx < end);
-        if !is_ignored {
-            group_total[group_idx] += f64::from(count);
-        }
-    }
-
-    // Write one file per group
 
     let ext = match out_format {
         OutputFormat::BigWig => "bw",
         OutputFormat::BedGraph => "bedgraph",
     };
+    let output_path_of = |group_idx: usize| -> PathBuf {
+        PathBuf::from(if parsed.is_some() {
+            format!(
+                "{}_{}.{}",
+                output_prefix,
+                sanitize_group_name(&groups[group_idx]),
+                ext
+            )
+        } else {
+            format!("{output_prefix}.{ext}")
+        })
+    };
+    let make_normalize = |total_reads: f64, n_cells_in_group: f64| {
+        move |raw_sum: f64| -> f64 {
+            match normalize_using {
+                NormalizeMethod::None => raw_sum * scale_factor,
+                NormalizeMethod::Cpm => {
+                    if total_reads > 0.0 {
+                        raw_sum / total_reads * 1e6 * scale_factor
+                    } else {
+                        0.0
+                    }
+                }
+                NormalizeMethod::Rpkm => {
+                    if total_reads > 0.0 {
+                        raw_sum / (total_reads * bin_size as f64 / 1e9) * scale_factor
+                    } else {
+                        0.0
+                    }
+                }
+                NormalizeMethod::Mean | NormalizeMethod::Frequency => {
+                    raw_sum / n_cells_in_group * scale_factor
+                }
+            }
+        }
+    };
+    let to_value = |chunk_idx: usize, bin: u32, raw: f32, normalize: &dyn Fn(f64) -> f64| {
+        let raw_sum = f64::from(raw);
+        if raw_sum <= 0.0 {
+            return None;
+        }
+        let normalized = normalize(raw_sum);
+        if normalized == 0.0 {
+            return None;
+        }
+        let (chrom, win_start, win_end) = &windows[chunks[chunk_idx].chrom_idx];
+        let start = win_start + bin as usize * step_size;
+        Some((
+            chrom.as_str(),
+            Value {
+                start: start as u32,
+                end: (start + bin_size).min(*win_end) as u32,
+                value: normalized as f32,
+            },
+        ))
+    };
+    let count_found = || -> Vec<usize> {
+        let mut n_found = vec![0usize; n_groups];
+        for (cell_idx, is_found) in found.iter().enumerate() {
+            if is_found.load(Ordering::Relaxed) {
+                n_found[cell_group[cell_idx]] += 1;
+            }
+        }
+        n_found
+    };
+    let warn_if_empty = |group_idx: usize, is_empty: bool, output_path: &Path| {
+        if is_empty {
+            let whom = if parsed.is_some() {
+                format!("group {:?}", groups[group_idx])
+            } else {
+                "any cell".to_string()
+            };
+            eprintln!(
+                "WARNING: no reads were found for {whom}. \
+                {} contains no signal",
+                output_path.display()
+            );
+        }
+    };
 
+    let chrom_order = chrom_write_order(&windows, out_format);
+
+    let chunk_counts: Vec<Mutex<ChunkCounts>> = chunks
+        .iter()
+        .map(|_| {
+            Mutex::new(ChunkCounts {
+                block: Vec::new(),
+                remaining: bams.len(),
+                entries: Vec::new(),
+            })
+        })
+        .collect();
+    let tasks: Vec<(usize, usize, &Path)> = (0..chunks.len())
+        .flat_map(|chunk_idx| {
+            bams.iter()
+                .map(move |&(bam_idx, path)| (chunk_idx, bam_idx, path))
+        })
+        .collect();
+
+    pool.install(|| {
+        tasks.par_iter().try_for_each_init(
+            BamWorker::default,
+            |worker, &(chunk_idx, bam_idx, bam_path)| -> Result<()> {
+                let (reader, header, motif) = worker.prepare(bam_path, motif_ingredients)?;
+                let block = count_task(reader, header, motif, chunk_idx, bam_idx)?;
+                let mut counts = chunk_counts[chunk_idx]
+                    .lock()
+                    .expect("a counting task panicked");
+                add_chunk_counts(&mut counts, chunk_idx, block);
+                Ok(())
+            },
+        )
+    })?;
+
+    let chunk_counts: Vec<ChunkCounts> = chunk_counts
+        .into_iter()
+        .map(|counts| counts.into_inner().expect("a counting task panicked"))
+        .collect();
+    let n_found = count_found();
+    let group_total: Vec<f64> = (0..n_groups)
+        .map(|group_idx| {
+            chunks
+                .iter()
+                .zip(&chunk_counts)
+                .filter(|(chunk, _)| !ignored.contains(windows[chunk.chrom_idx].0.as_str()))
+                .flat_map(|(_, counts)| counts.entries.get(group_idx).into_iter().flatten())
+                .map(|&(_, value)| f64::from(value))
+                .sum()
+        })
+        .collect();
+
+    let chunk_counts = &chunk_counts;
+    let write_group = |group_idx: usize| -> Result<PathBuf> {
+        let output_path = output_path_of(group_idx);
+        let normalize = make_normalize(group_total[group_idx], n_found[group_idx] as f64);
+        let mut values = chrom_order
+            .iter()
+            .flat_map(|&chrom_idx| chrom_chunks[chrom_idx].clone())
+            .flat_map(|chunk_idx| {
+                chunk_counts[chunk_idx]
+                    .entries
+                    .get(group_idx)
+                    .into_iter()
+                    .flatten()
+                    .map(move |&(bin, raw)| (chunk_idx, bin, raw))
+            })
+            .filter_map(|(chunk_idx, bin, raw)| to_value(chunk_idx, bin, raw, &normalize))
+            .peekable();
+        warn_if_empty(group_idx, values.peek().is_none(), &output_path);
+        match out_format {
+            OutputFormat::BigWig => write_bigwig(&output_path, &chrom_sizes, values)?,
+            OutputFormat::BedGraph => write_bedgraph(&output_path, values)?,
+        }
+        Ok(output_path)
+    };
     let output_files: Vec<PathBuf> = pool.install(|| {
         (0..n_groups)
             .into_par_iter()
-            .map(|group_idx| -> Result<PathBuf> {
-                // `{prefix}_{group}.{ext}`, the name the reference
-                // implementation writes, so a pipeline that globs for these
-                // files finds them either way. The group name is still made
-                // safe to use as one path component, which the reference
-                // implementation does not do.
-                let group_name = &groups[group_idx];
-                let output_path = PathBuf::from(if parsed.is_some() {
-                    format!(
-                        "{}_{}.{}",
-                        output_prefix,
-                        sanitize_group_name(group_name),
-                        ext
-                    )
-                } else {
-                    format!("{output_prefix}.{ext}")
-                });
-
-                let total_reads = group_total[group_idx];
-                let n_cells_in_group = n_cells_per_group[group_idx] as f64;
-                // Start of this group's dense row.
-                let group_base = group_idx * n_bins;
-
-                // Build sorted (chrom, Value) list by iterating bins in
-                // chromosome order.
-                let mut values: Vec<(String, Value)> = Vec::new();
-
-                for (chrom_name, win_start, win_end) in &windows {
-                    let Some(&(offset, n_chrom_bins)) = bin_index.chrom_bins.get(chrom_name) else {
-                        continue;
-                    };
-
-                    for local_bin in 0..n_chrom_bins {
-                        let bin_idx = offset + local_bin;
-
-                        let raw_sum = group_bin_sum[group_base + bin_idx];
-                        if raw_sum <= 0.0 {
-                            continue;
-                        }
-
-                        let normalized = match normalize_using {
-                            NormalizeMethod::None => raw_sum * scale_factor,
-                            NormalizeMethod::Cpm => {
-                                if total_reads > 0.0 {
-                                    raw_sum / total_reads * 1e6 * scale_factor
-                                } else {
-                                    0.0
-                                }
-                            }
-                            NormalizeMethod::Rpkm => {
-                                if total_reads > 0.0 {
-                                    raw_sum / (total_reads * bin_size as f64 / 1e9) * scale_factor
-                                } else {
-                                    0.0
-                                }
-                            }
-                            NormalizeMethod::Mean => raw_sum / n_cells_in_group * scale_factor,
-                            NormalizeMethod::Frequency => {
-                                // Allocated exactly when this arm is reachable.
-                                let n_cells_with = group_bin_n_cells
-                                    .as_ref()
-                                    .expect("Frequency normalization tracks per-bin cell counts")
-                                    [group_base + bin_idx]
-                                    as f64;
-                                n_cells_with / n_cells_in_group * scale_factor
-                            }
-                        };
-
-                        if normalized == 0.0 {
-                            continue;
-                        }
-
-                        let start = (win_start + local_bin * step_size) as u32;
-                        let end =
-                            ((win_start + local_bin * step_size + bin_size).min(*win_end)) as u32;
-                        values.push((
-                            chrom_name.clone(),
-                            Value {
-                                start,
-                                end,
-                                value: normalized as f32,
-                            },
-                        ));
-                    }
-                }
-
-                if values.is_empty() {
-                    let whom = if parsed.is_some() {
-                        format!("group {group_name:?}")
-                    } else {
-                        "any cell".to_string()
-                    };
-                    eprintln!(
-                        "WARNING: no reads were found for {whom}. \
-                        {} contains no signal",
-                        output_path.display()
-                    );
-                }
-
-                match out_format {
-                    OutputFormat::BigWig => {
-                        write_bigwig(&output_path, &chrom_sizes, values)?;
-                    }
-                    OutputFormat::BedGraph => {
-                        write_bedgraph(&output_path, &values)?;
-                    }
-                }
-
-                Ok(output_path)
-            })
-            .collect::<Result<Vec<_>>>()
+            .map(write_group)
+            .collect::<Result<_>>()
     })?;
+
+    let n_out_of_reach = out_of_reach.load(Ordering::Relaxed);
+    if n_out_of_reach > 0 {
+        eprintln!(
+            "WARNING: {n_out_of_reach} reads reach more than {margin} bp past their alignment; \
+            their signal next to chunk edges is incomplete"
+        );
+    }
+
+    for (group_idx, output_path) in output_files.iter().enumerate() {
+        if parsed.is_some() {
+            eprintln!(
+                "{} cells grouped in file: {}",
+                n_found[group_idx],
+                output_path.display()
+            );
+        } else {
+            eprintln!("all cells pooled in file: {}", output_path.display());
+        }
+    }
 
     Ok(output_files)
 }
@@ -926,16 +1000,21 @@ fn sanitize_group_name(s: &str) -> String {
     cleaned.trim_end_matches([' ', '.']).to_string()
 }
 
-fn write_bigwig(
-    path: &Path,
-    chrom_sizes: &[(String, usize)],
-    mut values: Vec<(String, Value)>,
-) -> Result<()> {
-    // bigtools takes the chromosomes in name order ("10" before "2"), while the
-    // bins come in BAM header order. The sort is stable, so each chromosome's
-    // bins keep their position order.
-    values.sort_by(|(a, _), (b, _)| a.cmp(b));
+/// The order to write the chromosomes in a bigWig, as bigtools requires, and in
+/// the BAM header order in a bedGraph.
+fn chrom_write_order(windows: &[(String, usize, usize)], out_format: OutputFormat) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..windows.len()).collect();
+    if matches!(out_format, OutputFormat::BigWig) {
+        order.sort_by(|&a, &b| windows[a].0.cmp(&windows[b].0));
+    }
+    order
+}
 
+fn write_bigwig<'a>(
+    path: &Path,
+    chrom_sizes: &'a [(String, usize)],
+    values: impl Iterator<Item = (&'a str, Value)>,
+) -> Result<()> {
     let chrom_map: HashMap<String, u32> = chrom_sizes
         .iter()
         .map(|(c, l)| (c.clone(), *l as u32))
@@ -947,23 +1026,27 @@ fn write_bigwig(
 
     // bigtools rejects an empty input, and hangs on a source that yields no
     // chromosome, so a group without signal gets one zero-valued base instead.
-    let values = if values.is_empty() {
+    let mut values = values.peekable();
+    let placeholder = if values.peek().is_none() {
         let (chrom, _) = chrom_sizes
             .first()
             .context("no chromosome to write a bigWig for")?;
-        vec![(
-            chrom.clone(),
+        Some((
+            chrom.as_str(),
             Value {
                 start: 0,
                 end: 1,
                 value: 0.0,
             },
-        )]
+        ))
     } else {
-        values
+        None
     };
 
-    let iter = BedParserStreamingIterator::wrap_infallible_iter(values.into_iter(), false);
+    let iter = BedParserStreamingIterator::wrap_infallible_iter(
+        placeholder.into_iter().chain(values),
+        false,
+    );
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
@@ -976,7 +1059,7 @@ fn write_bigwig(
     Ok(())
 }
 
-fn write_bedgraph(path: &Path, values: &[(String, Value)]) -> Result<()> {
+fn write_bedgraph<'a>(path: &Path, values: impl Iterator<Item = (&'a str, Value)>) -> Result<()> {
     let file = File::create(path)
         .with_context(|| format!("failed to create bedGraph file: {}", path.display()))?;
     let mut w = BufWriter::new(file);
@@ -1268,7 +1351,6 @@ mod tests {
         let parsed = parse_group_info(&path, &["s1", "s2"]).unwrap();
 
         assert_eq!(parsed.groups, vec!["B", "A"]);
-        assert_eq!(parsed.n_cells_per_group, vec![2, 1]);
         assert_eq!(
             parsed.cells,
             vec![
@@ -1342,7 +1424,6 @@ mod tests {
                 (1, "GGG".to_string(), 0),
             ]
         );
-        assert_eq!(parsed.n_cells_per_group, vec![2, 1]);
     }
 
     #[test]
@@ -1400,7 +1481,6 @@ mod tests {
         let parsed = parse_group_info(&path, &["s1"]).unwrap();
 
         assert_eq!(parsed.groups, vec!["A"]);
-        assert_eq!(parsed.n_cells_per_group, vec![1]);
         assert_eq!(parsed.cells, vec![(0, "AAA".to_string(), 0)]);
     }
 
@@ -1431,7 +1511,7 @@ mod tests {
     fn bedgraph_writes_a_track_line_then_one_row_per_interval() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("out.bedgraph");
-        let values = vec![
+        let values = [
             (
                 "chr1".to_string(),
                 Value {
@@ -1450,7 +1530,7 @@ mod tests {
             ),
         ];
 
-        write_bedgraph(&path, &values).unwrap();
+        write_bedgraph(&path, values.iter().map(|(c, v)| (c.as_str(), *v))).unwrap();
 
         let text = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = text.lines().collect();
@@ -1870,7 +1950,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("empty.bw");
 
-        write_bigwig(&path, &[("chr1".to_string(), 1_000)], Vec::new()).unwrap();
+        write_bigwig(&path, &[("chr1".to_string(), 1_000)], std::iter::empty()).unwrap();
 
         assert!(
             path.metadata().unwrap().len() > 0,
@@ -1882,23 +1962,36 @@ mod tests {
     fn a_bigwig_is_written_whatever_order_the_bam_header_gives() {
         // BAM headers order chromosomes numerically, so "2" comes before "10";
         // as text, "2" sorts after "10".
+        let windows = [("2".to_string(), 0, 1_000), ("10".to_string(), 0, 1_000)];
+        let order = chrom_write_order(&windows, OutputFormat::BigWig);
+        assert_eq!(order, vec![1, 0]);
+
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("two_chroms.bw");
         let chrom_sizes = [("2".to_string(), 1_000), ("10".to_string(), 1_000)];
-        let value = |start| Value {
-            start,
-            end: start + 100,
-            value: 1.0,
-        };
-        let values = vec![
-            ("2".to_string(), value(0)),
-            ("2".to_string(), value(100)),
-            ("10".to_string(), value(0)),
-        ];
+        let values = order.iter().map(|&i| {
+            (
+                windows[i].0.as_str(),
+                Value {
+                    start: 0,
+                    end: 100,
+                    value: 1.0,
+                },
+            )
+        });
 
         write_bigwig(&path, &chrom_sizes, values).unwrap();
 
         assert!(path.metadata().unwrap().len() > 0, "no bigWig written");
+    }
+
+    #[test]
+    fn a_bedgraph_keeps_the_bam_header_order() {
+        let windows = [("2".to_string(), 0, 1_000), ("10".to_string(), 0, 1_000)];
+        assert_eq!(
+            chrom_write_order(&windows, OutputFormat::BedGraph),
+            vec![0, 1]
+        );
     }
 
     #[test]
