@@ -1,20 +1,20 @@
 from __future__ import annotations
 
+import copy
 from enum import Enum
 from typing import Any
 
 import numpy as np
-import scipy
 import torch
-from joblib import Parallel, delayed
-from tqdm import tqdm
+import torch.distributions as td
 
-saturation_eps = 10**-10
+EULER_GAMMA = 0.5772156649015329
 
 
 class GLMFamily(str, Enum):
     gaussian = "gaussian"
     poisson = "poisson"
+    negative_binomial = "negative_binomial"
     bernoulli = "bernoulli"
     beta = "beta"
     gamma = "gamma"
@@ -25,6 +25,7 @@ class GLMFamily(str, Enum):
         return {
             GLMFamily.gaussian: Gaussian,
             GLMFamily.poisson: Poisson,
+            GLMFamily.negative_binomial: NegativeBinomial,
             GLMFamily.bernoulli: Bernoulli,
             GLMFamily.beta: Beta,
             GLMFamily.gamma: Gamma,
@@ -33,105 +34,47 @@ class GLMFamily(str, Enum):
         }[self]
 
 
+def inverse_digamma(y: torch.Tensor, n_iter: int = 8) -> torch.Tensor:
+    """Vectorised inverse digamma (Minka, 2000): asymptotic init + Newton steps."""
+    x = torch.where(y >= -2.22, torch.exp(y) + 0.5, -1.0 / (y + EULER_GAMMA))
+    for _ in range(n_iter):
+        x = (x - (torch.digamma(x) - y) / torch.polygamma(1, x)).clamp_min(1e-12)
+    return x
+
+
 class ExponentialFamily:
-    r"""Encodes an exponential family distribution using PyTorch autodiff structures.
+    r"""Exponential family distribution for GLM-PCA.
 
-    ExponentialFamily corresponds to the superclass providing a backbone for
-    a subclass for any exponential family distribution.
-    Each subclass should contain the following methods, defined based on the
-    distribution of choice (same notation as in Mourragui et al, 2023):
+    A subclass needs two things:
 
-        - sufficient_statistics (:math:`T`)
-        - natural_parametrization (:math:`\eta`)
-        - log_partition (:math:`A`)
-        - invert_g (:math:`g^{-1}`)
-        - initialize_family_parameters: computes parameters used in other methods, e.g.,
-          gene-level dispersion for Negative Binomial.
+    1. The likelihood, given in one of two ways:
+       - ``torch_distribution(theta)``: return a ``torch.distributions`` object
+         parametrised by theta (preferred: exact log-likelihood incl. base measure,
+         nothing to derive), or
+       - the paper's notation (Mourragui et al., 2023): ``sufficient_statistics``
+         (T), ``natural_parametrization`` (eta) and ``log_partition`` (A).
+    2. ``invert_g``: the element-wise saturated parameter g^{-1}(x).
 
-    We added a "base_measure" for the sake of completeness, but this method is not
-    necessary for running GLM-PCA.
-    The log-likelihood and exponential term are defined directly from the
-    aforementionned methods.
+    Optional: per-feature nuisance parameters (e.g. dispersion) listed in
+    ``nuisance_params`` and estimated from streamed column sums
+    (``family_statistics`` / ``initialize_family_parameters_from_statistics``).
 
-    Parameters
-    ----------
-    family_name : str
-        Name of the family.
-
+    Convention: any 1-D tensor in ``family_params`` holds one value per feature,
+    which lets the driver subset features generically (``subset_features``).
     """
 
-    family_name: str
-    family_params: dict[str, Any]
+    family_name: str = "base"
+    default_params: dict[str, Any] = {}
+    nuisance_params: tuple[str, ...] = ()
 
     def __init__(
         self, family_params: dict[str, Any] | None = None, **kwargs: object
     ) -> None:
-        self.family_name = "base"
-        self.family_params = family_params if family_params else {}
+        self.family_params = {**self.default_params, **(family_params or {}), **kwargs}
 
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        return X
-
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        return theta
-
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor | float:
-        return 0.0
-
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.ones(size=X.shape)
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        return X
-
-    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        return torch.multiply(
-            self.sufficient_statistics(X), self.natural_parametrization(theta)
-        )
-
-    def distribution(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        f = self.base_measure(X)
-        expt = self.exponential_term(X, theta) - self.log_partition(theta)
-
-        return torch.multiply(f, torch.exp(expt))
-
-    def log_distribution(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        f = self.base_measure(X)
-        expt = self.exponential_term(X, theta) - self.log_partition(theta)
-
-        return expt - torch.log(f)
-
-    def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        """Computes negative log-likelihood between dataset X and parameters theta"""
-        expt = self.exponential_term(X, theta) - self.log_partition(theta)
-        return -torch.sum(expt)
-
-    def load_family_params_to_gpu(self, device: torch.device) -> None:
-        self.family_params = {
-            k: (
-                self.family_params[k].to(device)
-                if type(self.family_params[k]) is torch.Tensor
-                else self.family_params[k]
-            )
-            for k in self.family_params
-        }
-
-    def initialize_family_parameters(self, X: torch.Tensor) -> None:
-        """General method to initialize certain parameters (e.g. for Beta or Negative
-        Binomial)."""
-
-
-class Gaussian(ExponentialFamily):
-    r"""Gaussian with standard deviation one.
-
-    GLMPCA with Gaussian as family is equivalent to the standard PCA.
-    """
-
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "gaussian"
-        self.family_params = family_params if family_params else {}
+    # ---- likelihood -------------------------------------------------------------
+    def torch_distribution(self, theta: torch.Tensor) -> td.Distribution:
+        raise NotImplementedError
 
     def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
         return X
@@ -140,448 +83,258 @@ class Gaussian(ExponentialFamily):
         return theta
 
     def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        return torch.square(theta) / 2.0
+        raise NotImplementedError
 
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.exp(-torch.square(X) / 2.0) / np.sqrt(2.0 * torch.pi)
+    def clip_data(self, X: torch.Tensor) -> torch.Tensor:
+        """Maps data into the support of the distribution (identity by default)."""
+        return X
 
     def invert_g(self, X: torch.Tensor) -> torch.Tensor:
         return X
+
+    def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
+        """Negative log-likelihood summed over all entries."""
+        X = self.clip_data(X)
+        if type(self).torch_distribution is not ExponentialFamily.torch_distribution:
+            return -self.torch_distribution(theta).log_prob(X).sum()
+        T, eta = self.sufficient_statistics(X), self.natural_parametrization(theta)
+        expt = (T * eta).sum(0) if T.dim() > X.dim() else T * eta
+        return -(expt - self.log_partition(theta)).sum()
+
+    # ---- per-feature parameters -------------------------------------------------
+    def _param(self, name: str, like: torch.Tensor) -> torch.Tensor:
+        return torch.as_tensor(self.family_params[name]).to(like)
+
+    def to(self, device: torch.device | str, dtype: torch.dtype | None = None):
+        self.family_params = {
+            k: v.to(device, dtype if v.is_floating_point() else None)
+            if isinstance(v, torch.Tensor) else v
+            for k, v in self.family_params.items()
+        }
+        return self
+
+    def load_family_params_to_gpu(self, device: torch.device) -> None:
+        self.to(device)
+
+    def subset_features(self, idx: torch.Tensor) -> ExponentialFamily:
+        """Shallow copy with every 1-D (per-feature) parameter indexed by ``idx``
+        (a feature subset, or one feature index per non-zero entry)."""
+        new = copy.copy(self)
+        new.family_params = {
+            k: v[idx] if isinstance(v, torch.Tensor) and v.dim() == 1 else v
+            for k, v in self.family_params.items()
+        }
+        return new
+
+    # ---- streaming nuisance-parameter estimation --------------------------------
+    def needs_family_statistics(self) -> bool:
+        return any(k not in self.family_params for k in self.nuisance_params)
+
+    def family_statistics(self, X: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Per-feature column sums of a chunk (summed over chunks by the caller)."""
+        return {}
+
+    def initialize_family_parameters_from_statistics(
+        self, stats: dict[str, torch.Tensor], n: int
+    ) -> None:
+        """Sets nuisance parameters from accumulated column sums over ``n`` rows."""
+
+    def initialize_family_parameters(self, X: torch.Tensor) -> None:
+        if self.needs_family_statistics():
+            self.initialize_family_parameters_from_statistics(
+                self.family_statistics(X), X.shape[0]
+            )
+
+
+# ======================================================================================
+class Gaussian(ExponentialFamily):
+    """Unit-variance Gaussian: GLM-PCA reduces to PCA."""
+
+    family_name = "gaussian"
+
+    def torch_distribution(self, theta):
+        return td.Normal(theta, 1.0, validate_args=False)
 
 
 class Bernoulli(ExponentialFamily):
-    r"""Bernoulli distribution
+    """Bernoulli. ``max_val``: truncation m of the infinite saturated parameters
+    (Landgraf & Lee, 2020); acts as a regulariser, tune by held-out deviance."""
 
-    family_params of interest:
-        - "max_val" (int) corresponding to the max value (replaces infinity).
-          Empirically, values above 10 yield similar results.
+    family_name = "bernoulli"
+    default_params = {"max_val": 30}
 
-    """
+    def torch_distribution(self, theta):
+        return td.Bernoulli(logits=theta, validate_args=False)
 
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "bernoulli"
-        self.family_params = family_params if family_params else {"max_val": 30}
-
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        return X
-
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        return theta
-
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        return torch.log(1.0 + torch.exp(theta))
-
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.ones_like(X)
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.log(X / (X - 1)).clip(
-            -self.family_params["max_val"], self.family_params["max_val"]
-        )
-
-    def log_likelihood(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        """Computes negative log-likelihood between dataset X and parameters theta"""
-        expt = self.exponential_term(X, theta) - self.log_partition(theta)
-        return -torch.sum(expt)
+    def invert_g(self, X):
+        m = self.family_params["max_val"]
+        eps = 1.0 / (1.0 + np.exp(m))
+        return torch.logit(X.clamp(eps, 1 - eps)).clamp(-m, m)
 
 
 class Poisson(ExponentialFamily):
-    r"""Poisson distribution
+    """Poisson, theta = log(rate). ``min_val`` replaces 0 before the log."""
 
-    family_params of interest:
-        - "min_val" (int) corresponding to the min value (replaces 0).
+    family_name = "poisson"
+    default_params = {"min_val": 1e-20}
 
-    """
+    def torch_distribution(self, theta):
+        return td.Poisson(rate=theta.exp(), validate_args=False)
 
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "poisson"
-        self.family_params = family_params if family_params else {"min_val": 1e-20}
+    def invert_g(self, X):
+        return torch.log(X.clamp_min(self.family_params["min_val"]))
 
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        return X
 
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        return theta
+class NegativeBinomial(Poisson):
+    """Negative binomial, theta = log(mean), fixed per-feature inverse dispersion r
+    (Risso et al.). r is estimated by streaming method of moments if not given."""
 
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        return torch.exp(theta)
+    family_name = "negative_binomial"
+    default_params = {"min_val": 1e-20, "r_min": 1e-2, "r_max": 1e4}
+    nuisance_params = ("r",)
 
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return 1 / scipy.special.gamma(X + 1)
+    def torch_distribution(self, theta):
+        r = self._param("r", theta)
+        # torch's NB: mean = r * exp(logits)  ->  logits = theta - log r
+        return td.NegativeBinomial(r, logits=theta - r.log(), validate_args=False)
 
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.log(X).clip(self.family_params["min_val"])
+    def family_statistics(self, X):
+        X = X.double()
+        return {"s1": X.sum(0), "s2": (X * X).sum(0)}
 
-    def log_distribution(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        """The computation of gamma function for the base measure (h) would lead to inf,
-        hence a re-design of the method."""
-        log_f = torch.lgamma(X + 1)
-        expt = self.exponential_term(X, theta) - self.log_partition(theta)
-
-        return expt - log_f
+    def initialize_family_parameters_from_statistics(self, stats, n):
+        m = stats["s1"] / n
+        v = stats["s2"] / n - m**2
+        r_max = self.family_params["r_max"]
+        r = torch.where(v > m, m**2 / (v - m).clamp_min(1e-12), torch.full_like(m, r_max))
+        self.family_params["r"] = r.clamp(self.family_params["r_min"], r_max).float()
 
 
 class Beta(ExponentialFamily):
-    r"""Beta distribution, using a standard formulation.
+    """Beta with mean parametrisation theta in (0, 1) and fixed per-feature
+    concentration nu (estimated by streaming MLE if not given)."""
 
-    Original formulation presented in [Mourragui et al, 2023].
+    family_name = "beta"
+    default_params = {"min_val": 1e-5, "eps": 1e-8, "maxiter": 100, "method": "MLE"}
+    nuisance_params = ("nu",)
 
-    family_params of interest:
-        - "min_val" (int): min data value (replaces 0 and 1).
-        - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
-        - "method" (str): method use to compute the "nu" parameter per feature.
-          Two possibles: "MLE" and "MM". Defaults to "MLE".
-        - "eps" (float): minimum difference used for inverting the g function.
-          Defaults to 1e-4
-        - "maxiter" (int): maximum number of iterations for the inversion of the
-          g function. Defaults to 100.
+    def clip_data(self, X):
+        mv = self.family_params["min_val"]
+        return X.clamp(mv, 1 - mv)
 
-    """
+    def _mean(self, theta):
+        # the linear projection can leave (0, 1); prefer SigmoidBeta
+        return self.clip_data(theta)
 
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "beta"
-        if family_params is None or "nu" not in family_params:
-            print("Beta distribution not initialized yet")
-        default_family_params: dict[str, Any] = {
-            "min_val": 1e-5,
-            "n_jobs": 1,
-            "eps": 1e-4,
-            "maxiter": 100,
-            "method": "MLE",
-        }
-        self.family_params = family_params if family_params else default_family_params
-        self.family_params.update(kwargs)
-        for key, value in default_family_params.items():
-            self.family_params.setdefault(key, value)
+    def torch_distribution(self, theta):
+        m, nu = self._mean(theta), self._param("nu", theta)
+        return td.Beta(m * nu, (1 - m) * nu, validate_args=False)
 
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        X = X.clip(self.family_params["min_val"], 1 - self.family_params["min_val"])
-        return torch.stack([torch.log(X), torch.log(1 - X)])
+    def _saturated_mean(self, X):
+        """Solves logit(x) + psi((1-m) nu) - psi(m nu) = 0 (decreasing in m)."""
+        from scipy.optimize.elementwise import find_root
+        from scipy.special import digamma, logit
 
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        nat_params = torch.stack([
-            theta * self.family_params["nu"],
-            (1 - theta) * self.family_params["nu"],
-        ])
-        if nat_params.shape[1] == 1:
-            nat_params = nat_params.flatten()
-        return nat_params
-
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.mul(X, 1 - X)
-
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        numerator = torch.sum(torch.lgamma(self.natural_parametrization(theta)), dim=0)
-        denominator = torch.lgamma(self.family_params["nu"])
-        return numerator - denominator
-
-    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        return torch.sum(
-            torch.multiply(
-                self.sufficient_statistics(X), self.natural_parametrization(theta)
-            ),
-            dim=0,
+        x = self.clip_data(X).double().cpu().numpy()
+        nu = self._param("nu", X).double().cpu().numpy()
+        res = find_root(
+            lambda m, lx, nu: lx + digamma((1 - m) * nu) - digamma(m * nu),
+            (np.full_like(x, 1e-12), np.full_like(x, 1 - 1e-12)),
+            args=(logit(x), nu),
+            tolerances={"xatol": self.family_params["eps"]},
+            maxiter=self.family_params["maxiter"],
         )
+        return torch.as_tensor(res.x).to(X)
 
-    def _derivative_log_likelihood(
-        self, X: torch.Tensor, theta: torch.Tensor
-    ) -> torch.Tensor:
-        X = X.clip(self.family_params["eps"], 1 - self.family_params["eps"])
-        return (
-            torch.log(X / (1 - X))
-            + torch.digamma((1 - theta) * self.family_params["nu"])
-            - torch.digamma(theta * self.family_params["nu"])
-        )
+    def invert_g(self, X):
+        return self._saturated_mean(X)
 
-    def initialize_family_parameters(self, X: torch.Tensor) -> None:
-        p = X.shape[1]
-        values = X.numpy()
+    def family_statistics(self, X):
+        X = self.clip_data(X).double()
+        return {"s1": X.sum(0), "s2": (X * X).sum(0),
+                "slx": X.log().sum(0), "sl1x": torch.log1p(-X).sum(0)}
 
-        def compute_beta_param(x: np.ndarray) -> tuple[float, ...]:
-            y = x[x > self.family_params["eps"]]
-            y = y[y < 1 - self.family_params["eps"]]
-            return scipy.stats.beta.fit(
-                y, floc=0, fscale=1, method=self.family_params["method"]
-            )
-
-        self.family_params["nu"] = torch.Tensor(
-            Parallel(
-                n_jobs=self.family_params["n_jobs"], batch_size=100, backend="threading"
-            )(delayed(compute_beta_param)(values[:, idx]) for idx in tqdm(range(p)))
-        )
-        self.family_params["nu"] = torch.sum(self.family_params["nu"][:, :2], dim=1)
-        assert self.family_params["nu"].shape[0] == p
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        """Dichotomy to find where derivative maxes out"""
-
-        X = X.clip(self.family_params["eps"], 1 - self.family_params["eps"])
-
-        # Initialize dichotomy parameters.
-        min_val = torch.zeros(X.shape)
-        max_val = torch.ones(X.shape)
-        theta = (min_val + max_val) / 2
-
-        llik = self._derivative_log_likelihood(X, theta)
-        for idx in tqdm(range(self.family_params["maxiter"])):
-            min_val[llik > 0] = theta[llik > 0]
-            max_val[llik < 0] = theta[llik < 0]
-            theta = (min_val + max_val) / 2
-            llik = self._derivative_log_likelihood(X, theta)
-
-            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
-                print(f"CONVERGENCE AFTER {idx} ITERATIONS")
-                break
-
-        if idx == self.family_params["maxiter"] - 1:
-            print("CONVERGENCE NOT REACHED")
-
-        return theta
+    def initialize_family_parameters_from_statistics(self, stats, n):
+        m = stats["s1"] / n
+        v = (stats["s2"] / n - m**2).clamp_min(1e-12)
+        c = (m * (1 - m) / v - 1).clamp_min(1e-2)  # method of moments
+        a, b = (m * c).clamp_min(1e-3), ((1 - m) * c).clamp_min(1e-3)
+        if self.family_params["method"] == "MLE":  # Minka fixed point, all features
+            mlx, ml1x = stats["slx"] / n, stats["sl1x"] / n
+            for _ in range(200):
+                s = torch.digamma(a + b)
+                a_new, b_new = inverse_digamma(s + mlx), inverse_digamma(s + ml1x)
+                done = max((a_new - a).abs().max(), (b_new - b).abs().max()) < 1e-8
+                a, b = a_new, b_new
+                if done:
+                    break
+        self.family_params["nu"] = (a + b).float()
 
 
 class SigmoidBeta(Beta):
-    r"""Beta distribution re-parametrized using a Sigmoid.
+    """Beta with mean = sigmoid(theta): unconstrained theta. Note this changes the
+    model (linear structure is sought in logit(mean))."""
 
-    This distribution is similar to the previous Beta (which it
-    inherits from) but the natural parameter is re-parametrized using
-    a Sigmoid. This is shown expeerimentally to stabilize the
-    optimisation by removing the ]0,1[ constraint.
+    family_name = "sigmoid_beta"
 
-    family_params of interest:
-        - "min_val" (int): min data value (replaces 0 and 1).
-        - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
-        - "method" (str): method use to compute the "nu" parameter per feature.
-          Two possibles: "MLE" and "MM". Defaults to "MLE".
-        - "eps" (float): minimum difference used for inverting the g function.
-          Defaults to 1e-4
-        - "maxiter" (int): maximum number of iterations for the inversion of the
-          g function. Defaults to 100.
+    def _mean(self, theta):
+        return torch.sigmoid(theta)
 
-    """
-
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        nat_params = torch.stack([
-            torch.sigmoid(theta) * self.family_params["nu"],
-            (1 - torch.sigmoid(theta)) * self.family_params["nu"],
-        ])
-        if nat_params.shape[1] == 1:
-            nat_params = nat_params.flatten()
-        return nat_params
-
-    def _derivative_log_likelihood(
-        self, X: torch.Tensor, theta: torch.Tensor
-    ) -> torch.Tensor:
-        X = X.clip(self.family_params["eps"], 1 - self.family_params["eps"])
-        return (
-            torch.log(X / (1 - X))
-            + torch.digamma((1 - theta) * self.family_params["nu"])
-            - torch.digamma(theta * self.family_params["nu"])
-        )
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        """Dichotomy to find where derivative maxes out"""
-
-        X = X.clip(self.family_params["eps"], 1 - self.family_params["eps"])
-
-        # Initialize dichotomy parameters.
-        min_val = torch.zeros(X.shape)
-        max_val = torch.ones(X.shape)
-        logit_theta = (min_val + max_val) / 2
-
-        llik = self._derivative_log_likelihood(X, logit_theta)
-        for idx in tqdm(range(self.family_params["maxiter"])):
-            min_val[llik > 0] = logit_theta[llik > 0]
-            max_val[llik < 0] = logit_theta[llik < 0]
-            logit_theta = (min_val + max_val) / 2
-            llik = self._derivative_log_likelihood(X, logit_theta)
-
-            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
-                print(f"CONVERGENCE AFTER {idx} ITERATIONS")
-                break
-
-        if idx == self.family_params["maxiter"] - 1:
-            print("CONVERGENCE NOT REACHED")
-
-        return torch.logit(logit_theta)
+    def invert_g(self, X):
+        return torch.logit(self._saturated_mean(X))
 
 
 class Gamma(ExponentialFamily):
-    r"""Gamma distribution using a standard formulation.
+    """Gamma with shape theta + 1 and fixed per-feature rate nu (as in the paper).
+    Saturated theta = psi^{-1}(log(nu x)) - 1."""
 
-    Original formulation presented in [Mourragui et al, 2023].
+    family_name = "gamma"
+    default_params = {"min_val": 1e-5, "max_val": 1e7}
+    nuisance_params = ("nu",)
 
-    family_params of interest:
-        - "min_val" (int): min data value. Defaults to 1e-5.
-        - "max_val" (int): max data value. Defaults to 1e7.
-        - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
-        - "method" (str): method use to compute the "nu" parameter per feature.
-          Two possibles: "MLE" and "MM". Defaults to "MLE".
-        - "eps" (float): minimum difference used for inverting the g function.
-          Defaults to 1e-4
-        - "maxiter" (int): maximum number of iterations for the inversion of the
-          g function. Defaults to 100.
+    def clip_data(self, X):
+        return X.clamp(self.family_params["min_val"], self.family_params["max_val"])
 
-    """
+    def torch_distribution(self, theta):
+        return td.Gamma(theta + 1, self._param("nu", theta), validate_args=False)
 
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "gamma"
-        if family_params is None or "nu" not in family_params:
-            print("Gamma distribution not initialized yet")
-        default_family_params: dict[str, Any] = {
-            "min_val": 1e-5,
-            "max_val": 1e7,
-            "n_jobs": 1,
-            "eps": 1e-4,
-            "maxiter": 100,
-        }
-        self.family_params = family_params if family_params else default_family_params
-        self.family_params.update(kwargs)
-        for key, value in default_family_params.items():
-            self.family_params.setdefault(key, value)
+    def invert_g(self, X):
+        return inverse_digamma(torch.log(self.clip_data(X) * self._param("nu", X))) - 1.0
 
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.stack([torch.log(X), X])
+    def family_statistics(self, X):
+        X = self.clip_data(X).double()
+        return {"s1": X.sum(0), "slx": X.log().sum(0)}
 
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        nat_params = torch.stack([
-            theta,
-            -torch.ones(theta.shape) * self.family_params["nu"],
-        ])
-        if nat_params.shape[1] == 1:
-            nat_params = nat_params.flatten()
-        return nat_params
-
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        return torch.lgamma(theta + 1) - (theta + 1) * torch.log(
-            self.family_params["nu"]
-        )
-
-    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        return torch.sum(
-            torch.multiply(
-                self.sufficient_statistics(X), self.natural_parametrization(theta)
-            ),
-            dim=0,
-        )
-
-    def _digamma_implicit_function(
-        self, X: torch.Tensor, theta: torch.Tensor
-    ) -> torch.Tensor:
-        return torch.digamma(theta + 1) - torch.log(X * self.family_params["nu"])
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        """Dichotomy to compute inverse of digamma function."""
-
-        # Initialize dichotomy parameters.
-        min_val = torch.zeros(X.shape)
-        max_val = torch.ones(X.shape) * self.family_params["max_val"]
-        theta = (min_val + max_val) / 2
-
-        llik = self._digamma_implicit_function(X, theta)
-        for idx in tqdm(range(self.family_params["maxiter"])):
-            max_val[llik > 0] = theta[llik > 0]
-            min_val[llik < 0] = theta[llik < 0]
-            theta = (min_val + max_val) / 2
-            llik = self._digamma_implicit_function(X, theta)
-
-            if torch.max(torch.abs(llik)) < self.family_params["eps"]:
-                print(f"CONVERGENCE AFTER {idx} ITERATIONS")
-                break
-
-        if idx == self.family_params["maxiter"] - 1:
-            print("CONVERGENCE NOT REACHED")
-
-        return theta
-
-    def initialize_family_parameters(self, X: torch.Tensor) -> None:
-        p = X.shape[1]
-        values = X.numpy()
-
-        self.family_params["nu"] = torch.Tensor(
-            Parallel(n_jobs=self.family_params["n_jobs"])(
-                delayed(scipy.stats.gamma.fit)(values[:, idx], floc=0)
-                for idx in tqdm(range(p))
-            )
-        )
-        self.family_params["nu"] = 1.0 / self.family_params["nu"][:, -1]
-        assert self.family_params["nu"].shape[0] == p
+    def initialize_family_parameters_from_statistics(self, stats, n):
+        mean = stats["s1"] / n
+        s = (torch.log(mean) - stats["slx"] / n).clamp_min(1e-10)
+        a = (3 - s + torch.sqrt((s - 3) ** 2 + 24 * s)) / (12 * s)  # Minka init
+        for _ in range(20):  # Newton on log a - psi(a) = s
+            a = (a - (a.log() - torch.digamma(a) - s)
+                 / (1 / a - torch.polygamma(1, a))).clamp_min(1e-6)
+        self.family_params["nu"] = (a / mean).float()  # rate
 
 
 class LogNormal(ExponentialFamily):
-    r"""Log-normal distribution using a standard formulation.
+    """Log-normal with fixed per-feature sigma nu. Saturated theta = log x."""
 
-    Original formulation presented in [Mourragui et al, 2023].
+    family_name = "lognormal"
+    default_params = {"min_val": 1e-5}
+    nuisance_params = ("nu",)
 
-    family_params of interest:
-        - "min_val" (int): min data value. Defaults to 1e-5.
-        - "max_val" (int): max data value. Defaults to 1e7.
-        - "n_jobs" (int): number of jobs, specifically for computing the "nu" parameter.
-        - "method" (str): method use to compute the "nu" parameter per feature.
-          Two possibles: "MLE" and "MM". Defaults to "MLE".
-        - "eps" (float): minimum difference used for inverting the g function.
-          Defaults to 1e-4
-        - "maxiter" (int): maximum number of iterations for the inversion of the
-          g function. Defaults to 100.
+    def clip_data(self, X):
+        return X.clamp_min(self.family_params["min_val"])
 
-    """
+    def torch_distribution(self, theta):
+        return td.LogNormal(theta, self._param("nu", theta), validate_args=False)
 
-    def __init__(
-        self, family_params: dict[str, Any] | None = None, **kwargs: object
-    ) -> None:
-        self.family_name = "lognormal"
-        if family_params is None or "nu" not in family_params:
-            print("Log Normal distribution not initialized yet")
-        default_family_params: dict[str, Any] = {
-            "min_val": 1e-5,
-            "max_val": 1e7,
-            "n_jobs": 1,
-            "eps": 1e-4,
-            "maxiter": 100,
-        }
-        self.family_params = family_params if family_params else default_family_params
-        self.family_params.update(kwargs)
-        for key, value in default_family_params.items():
-            self.family_params.setdefault(key, value)
+    def invert_g(self, X):
+        return torch.log(self.clip_data(X))
 
-    def sufficient_statistics(self, X: torch.Tensor) -> torch.Tensor:
-        log_X = torch.log(X)
-        return torch.stack([log_X, torch.square(log_X)])
+    def family_statistics(self, X):
+        lx = torch.log(self.clip_data(X)).double()
+        return {"s1": lx.sum(0), "s2": (lx * lx).sum(0)}
 
-    def natural_parametrization(self, theta: torch.Tensor) -> torch.Tensor:
-        nat_params = torch.stack([
-            theta / torch.square(self.family_params["nu"]),
-            -torch.ones(theta.shape) / (2 * torch.square(self.family_params["nu"])),
-        ])
-        if nat_params.shape[1] == 1:
-            nat_params = nat_params.flatten()
-        return nat_params
-
-    def base_measure(self, X: torch.Tensor) -> torch.Tensor:
-        return 1 / (np.sqrt(2 * torch.pi) * X)
-
-    def log_partition(self, theta: torch.Tensor) -> torch.Tensor:
-        return torch.square(theta) / (
-            2 * torch.square(self.family_params["nu"])
-        ) + torch.log(self.family_params["nu"])
-
-    def exponential_term(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        return torch.sum(
-            torch.multiply(
-                self.sufficient_statistics(X), self.natural_parametrization(theta)
-            ),
-            dim=0,
-        )
-
-    def invert_g(self, X: torch.Tensor) -> torch.Tensor:
-        return torch.log(X.clip(self.family_params["min_val"]))
-
-    def initialize_family_parameters(self, X: torch.Tensor) -> None:
-        self.family_params["nu"] = torch.sqrt(torch.var(torch.log(X), dim=0))
+    def initialize_family_parameters_from_statistics(self, stats, n):
+        var = (stats["s2"] - stats["s1"] ** 2 / n) / max(n - 1, 1)
+        self.family_params["nu"] = var.clamp_min(1e-8).sqrt().float()
