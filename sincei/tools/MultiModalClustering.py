@@ -187,21 +187,15 @@ def MultiModalClustering(
             adata.obsm["X_pca"] = model_object.get_cell_topic()
 
         elif met == "glmPCA":
-            # import glmPCA (not imported on top due to special optional import of
-            # mctorch)
+            # import glmPCA lazily (pulls in torch)
             from sincei.tools.GLMPCA import GLMPCA  # noqa: PLC0415
 
-            ## glmPCA using mctorch
             glmpca = GLMPCA(
                 n_pc=n_comps[i],
                 family=glmPCAfamily,
             )
-            glmpca.fit(adata)
-            assert glmpca.saturated_loadings_ is not None
-            cell_pcs = glmpca.saturated_loadings_.detach().numpy()
-
-            ## update the anndata object
-            adata.obsm["X_pca"] = np.asarray(cell_pcs)
+            ## cell scores, cells x n_pc
+            adata.obsm["X_pca"] = glmpca.fit_transform(adata).numpy()
 
         sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=nK)
         sc.tl.leiden(adata, resolution=resolutions[i])

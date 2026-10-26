@@ -37,9 +37,8 @@ dependencies = [
     "typer",
     # for debug logging (referenced from the issue template)
     "session-info",
-    # mctorch-lib calls torch.qr, which torch 2.14 removed.
-    "torch<2.14",
-    "mctorch-lib",
+    "torch",
+    "geoopt", # GLMPCA default optimizer
     "gensim",
     "ruptures",
     "tqdm",

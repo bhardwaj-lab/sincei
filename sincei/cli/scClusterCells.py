@@ -312,9 +312,7 @@ def main(
         adata.obsm[reduction] = normalized.obsm["X_pca"]
     elif method is DimRed.glmPCA:
         glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
-        glmpca.fit(adata)
-        assert glmpca.saturated_loadings_ is not None
-        adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
+        adata.obsm[reduction] = glmpca.fit_transform(adata).numpy()
     else:
         topics = TOPICMODEL(
             adata,

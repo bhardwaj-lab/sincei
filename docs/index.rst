@@ -37,12 +37,9 @@ Create a new conda environment and install sincei using:
 
     conda create -n sincei -c bioconda -c conda-forge sincei
 
-*Note:* The dependency `mctorch-lib` required for `scClusterCells` is currently not available on conda, therefore, to use `scClusterCells`, we recommend installing it separately via pip or uv.
 
 .. code-block:: bash
 
-    # install mctorch-lib
-    (sincei): uv pip install mctorch-lib
     (sincei): scClusterCells --help
 
 
