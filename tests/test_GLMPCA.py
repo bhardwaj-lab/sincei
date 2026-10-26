@@ -80,9 +80,7 @@ def test_transform_before_fit_fails_with_advice() -> None:
 
 
 def fitted_loadings(X: torch.Tensor | ad.AnnData) -> torch.Tensor:
-    torch.manual_seed(0)
-    np.random.seed(0)
-    model = GLMPCA(N_PC, family="poisson", max_iter=2, batch_size=8)
+    model = GLMPCA(N_PC, family="poisson", max_iter=2, batch_size=8, seed=0)
     model.fit(X)
     assert model.saturated_loadings_ is not None
     return model.saturated_loadings_.detach()
@@ -99,7 +97,7 @@ def fitted_loadings(X: torch.Tensor | ad.AnnData) -> torch.Tensor:
     ],
     ids=lambda matrix_type: matrix_type.__name__,
 )
-def test_anndata_input_is_fitted_with_cells_as_features(
+def test_anndata_input_is_fitted_with_cells_in_rows(
     matrix_type: Callable[[np.ndarray], Any],
 ) -> None:
     counts = (
@@ -110,6 +108,28 @@ def test_anndata_input_is_fitted_with_cells_as_features(
     )
     adata = ad.AnnData(matrix_type(counts))
 
+    # sparse input takes the theta0 + Delta path, dense the direct one: same model
     torch.testing.assert_close(
-        fitted_loadings(adata), fitted_loadings(torch.Tensor(counts.T))
+        fitted_loadings(adata), fitted_loadings(torch.Tensor(counts)),
+        rtol=1e-4, atol=1e-4,
     )
+
+
+@pytest.mark.parametrize("family", list(GLMFamily))
+def test_sparse_and_dense_input_give_the_same_scores(family: GLMFamily) -> None:
+    X = sample(family) * (torch.rand(N_CELLS, N_FEATURES) > 0.5)
+    model = GLMPCA(N_PC, family=family, max_iter=2, batch_size=16, seed=0)
+    model.fit(X)
+
+    torch.testing.assert_close(
+        model.transform(sparse.csr_matrix(X.numpy())), model.transform(X),
+        rtol=1e-4, atol=1e-4,
+    )
+
+
+def test_refit_re_estimates_per_feature_parameters() -> None:
+    model = GLMPCA(N_PC, family="negative_binomial", max_iter=2, seed=0)
+    model.fit(sample(GLMFamily.poisson))
+    model.fit(sample(GLMFamily.poisson)[:, :-2])  # fewer features
+
+    assert model.exponential_family.family_params["r"].shape == (N_FEATURES - 2,)
