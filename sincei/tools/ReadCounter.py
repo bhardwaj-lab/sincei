@@ -49,6 +49,8 @@ def count_reads(
     extendReads: int | None = None,
     center_read: bool = False,
     tn5: bool = False,
+    mnase: bool = False,
+    offset: Sequence[int] | int | None = None,
     duplicateFilter: DuplicateFilter | str | None = None,
     motifFilter: Sequence[str] | str | None = None,
     genome2bit: str | None = None,
@@ -118,6 +120,16 @@ def count_reads(
         forward mate of a proper pair is counted, so each fragment is trimmed to
         ``start+4, end-5``. Fragments of 9 bases or less are dropped. Requires
         paired-end data.
+    mnase : bool
+        Count the 2 central bases of each fragment: turns on ``center_read``
+        and ``extendReads`` and sets ``offset`` to ``(1, 2)``. Only the forward
+        mate of a proper pair is counted. ``minFragmentLength`` and
+        ``maxFragmentLength`` default to 130 and 200. Requires paired-end data.
+    offset : int or list of int, optional
+        Count only this 1-based position in each read, or the range between
+        two positions. Negative values count from the read end. With
+        ``center_read``, a window as wide as the selected bases is centered on
+        the fragment, so ``offset=1, center_read=True`` counts its center.
     duplicateFilter : DuplicateFilter or str, optional
         Remove duplicates with this method: ``"start_bc"``, ``"start_bc_umi"``,
         ``"start_end_bc"`` or ``"start_end_bc_umi"``.
@@ -181,6 +193,8 @@ def count_reads(
         "extend_reads": extendReads,
         "center_reads": center_read,
         "tn5_shift": tn5,
+        "mnase": mnase,
+        "offset": [offset] if isinstance(offset, int) else offset,
         "dup_method": backend.dup_method(dup_filter),
         "filter_rna_strand": rna_strand.value if rna_strand else None,
         "genome_2bit": genome2bit,

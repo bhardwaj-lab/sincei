@@ -234,7 +234,10 @@ pub(crate) fn derive_record_opts(
         compute_aligned_fraction: qc.is_some_and(|f| f.needs_aligned_fraction()),
         store_sequence: has_motif,
         compute_covered_span: dedup || qc.is_some_and(|f| f.needs_covered_span()),
-        compute_blocks: adjust.extend_reads.is_none() && !adjust.center_reads && !adjust.tn5_shift,
+        compute_blocks: (adjust.extend_reads.is_none()
+            && !adjust.center_reads
+            && !adjust.tn5_shift)
+            || adjust.offset.is_some(),
     }
 }
 

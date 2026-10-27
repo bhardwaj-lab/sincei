@@ -3,9 +3,8 @@
 //! Cells are pooled into groups by a group-info TSV, their reads counted into
 //! genomic bins, and each group written out as its own bigWig or bedGraph.
 //!
-//! Unlike the count matrices, a read's signal interval can come from any
-//! [`ReadMode`]: the extended/centered interval, the centre of an MNase
-//! fragment, or a chosen offset within the read. Counts can then be normalized
+//! A read's signal interval is found as in the count matrices
+//! ([`ScRecord::effective_intervals`]). Counts can then be normalized
 //! ([`NormalizeMethod`]) against a denominator summed over the bins, optionally
 //! ignoring some chromosomes.
 
@@ -38,7 +37,7 @@ use crate::bam::filters::{
 };
 use crate::bam::filters::{blacklist_chrom_index, read_is_blacklisted};
 use crate::bam::fragment_length::{ensure_paired_end, resolve_extend_reads};
-use crate::bam::sc_record::{AdjustRead, EffectiveIntervals, ScRecord, parse_tag};
+use crate::bam::sc_record::{AdjustRead, Offset, ScRecord, parse_tag};
 
 #[derive(Clone, Copy, Debug)]
 pub enum NormalizeMethod {
@@ -55,124 +54,6 @@ pub enum OutputFormat {
     BedGraph,
 }
 
-/// How to derive the signal interval from each read.
-#[derive(Clone, Copy, Debug)]
-pub enum ReadMode {
-    /// Standard behavior: apply extend_reads / center_reads from `AdjustRead`.
-    Normal,
-    /// MNase / CUT&RUN: use only the 2–3 central bp of the paired-end fragment.
-    /// Reads that are not proper-pair forward reads return `None` and are skipped.
-    MNase,
-    /// Report only a specific offset position (or range) within the read.
-    /// Values are 1-based; negative values count from the read end.
-    Offset(i32, Option<i32>),
-}
-
-// Read-mode helpers
-
-/// Returns the 2–3 central bp of a paired-end fragment (MNase / CUT&RUN mode).
-/// Only proper-pair, non-reverse reads are considered; returns `None` otherwise.
-fn apply_mnase(rec: &ScRecord) -> Option<(usize, usize)> {
-    let tlen = rec.template_length.unsigned_abs() as usize;
-    if !rec.is_proper_pair || rec.is_reverse || tlen <= 1 {
-        return None;
-    }
-
-    let frag_start = rec.alignment_start + tlen / 2 - 1;
-    let frag_end = frag_start + if tlen.is_multiple_of(2) { 2 } else { 3 };
-    Some((frag_start, frag_end))
-}
-
-/// Returns the genomic intervals for an offset (or offset range) inside the
-/// read. Offsets are 1-based; negative values index from the read's 3' end.
-/// A single value gives one base, two give the range between them.
-///
-/// The offset counts **aligned** positions, walking the read's gapless blocks
-/// when the record carries them. Counting along the alignment span instead
-/// would step through an intron or a deletion and place the signal where the
-/// read has none. Counting along the stored sequence would step through
-/// soft-clipped bases and run off the end. Because a window can cross a gap,
-/// the result may be several intervals, always in ascending genomic order.
-///
-/// A record carries no block list in two cases. An ungapped read needs none:
-/// its alignment span is the single block. But `derive_record_opts` also
-/// switches `compute_blocks` off whenever `--extendReads` or `--centerReads` is
-/// set, since the adjusted interval replaces the blocks. Combining either with
-/// `--offset` therefore falls back to the span, and the walk *does* step
-/// through introns and deletions. Nothing rejects that combination today.
-fn apply_offset(rec: &ScRecord, start: i32, end: Option<i32>) -> Vec<(usize, usize)> {
-    // Ungapped reads carry no block list, their one block being the alignment.
-    let span = [(rec.alignment_start, rec.alignment_end)];
-    let blocks: &[(usize, usize)] = rec.blocks.as_deref().unwrap_or(&span);
-
-    let len: usize = blocks.iter().map(|(s, e)| e - s).sum();
-    if len == 0 {
-        return Vec::new();
-    }
-    let len_i = len as i32;
-
-    // 1-based, possibly negative offset to a 0-based index into the aligned
-    // positions, read 5' to 3'.
-    let to_idx = |o: i32| -> i32 { if o > 0 { o - 1 } else { len_i + o } };
-    let idx_s = to_idx(start);
-    let idx_e = match end {
-        None => idx_s + 1,
-        Some(e) => to_idx(e) + 1,
-    };
-    if idx_s < 0 || idx_e <= idx_s || idx_s >= len_i {
-        return Vec::new();
-    }
-    let (idx_s, idx_e) = (idx_s as usize, (idx_e.min(len_i)) as usize);
-
-    // Walk the blocks in read order, taking each one's share of the window.
-    // For a reverse read the 5' end is the genomic end, so the walk runs
-    // backwards and each block is indexed from its own end.
-    let reverse = rec.is_reverse;
-    let mut out: Vec<(usize, usize)> = Vec::new();
-    let mut consumed = 0usize;
-
-    for i in 0..blocks.len() {
-        let (block_start, block_end) = if reverse {
-            blocks[blocks.len() - 1 - i]
-        } else {
-            blocks[i]
-        };
-        let block_len = block_end - block_start;
-        let (from, to) = (consumed, consumed + block_len);
-        consumed = to;
-
-        let lo = idx_s.max(from);
-        let hi = idx_e.min(to);
-        if lo >= hi {
-            continue;
-        }
-        out.push(if reverse {
-            (block_end - (hi - from), block_end - (lo - from))
-        } else {
-            (block_start + (lo - from), block_start + (hi - from))
-        });
-    }
-
-    if reverse {
-        out.reverse(); // back into ascending genomic order
-    }
-    out
-}
-
-fn get_effective_intervals<'a>(
-    rec: &'a ScRecord,
-    adjust: &AdjustRead,
-    mode: ReadMode,
-) -> EffectiveIntervals<'a> {
-    match mode {
-        ReadMode::Normal => rec.effective_intervals(adjust),
-        ReadMode::MNase => EffectiveIntervals::One(apply_mnase(rec)),
-        ReadMode::Offset(start, end) => {
-            EffectiveIntervals::Selected(apply_offset(rec, start, end).into_iter())
-        }
-    }
-}
-
 struct BinChunk {
     chrom_idx: usize,
     first_bin: usize,
@@ -185,17 +66,11 @@ struct ChunkCounts {
     entries: Vec<Vec<(u32, f32)>>,
 }
 
-fn read_reach(adjust: &AdjustRead, mode: ReadMode, qc_filter: Option<&QcFilter>) -> usize {
-    let max_fragment = qc_filter.and_then(|f| f.max_fragment_length).unwrap_or(0);
+fn read_reach(adjust: &AdjustRead) -> usize {
     let extension = adjust.extend_reads.map_or(0, |frag_len| {
         frag_len.max(adjust.max_paired_fragment_length.unwrap_or(4 * frag_len))
     });
-    let reach = match mode {
-        ReadMode::Normal => extension,
-        ReadMode::MNase => max_fragment,
-        ReadMode::Offset(..) => 0,
-    };
-    reach + 1_000
+    extension + 1_000
 }
 
 // Group-info parsing
@@ -387,7 +262,8 @@ pub fn run_bulk_coverage(
     normalize_using: NormalizeMethod,
     scale_factor: f64,
     out_format: OutputFormat,
-    read_mode: ReadMode,
+    offset: Option<Offset>,
+    mnase: bool,
     num_threads: usize,
     chunk_size: usize,
 ) -> Result<Vec<PathBuf>> {
@@ -474,7 +350,7 @@ pub fn run_bulk_coverage(
     // --mnase and --tn5 read the fragment from the two mates, so a single-end
     // library has nothing to work with. Checked before any counting, so the
     // run fails instead of writing an empty track.
-    if matches!(read_mode, ReadMode::MNase) {
+    if mnase {
         ensure_paired_end(&read_bams, "--mnase")?;
     }
     if tn5_shift {
@@ -488,6 +364,7 @@ pub fn run_bulk_coverage(
         center_reads,
         tn5_shift,
         max_paired_fragment_length: qc_filter.and_then(|f| f.max_fragment_length),
+        offset,
     };
 
     let has_motif = genome_path.is_some() && motifs.is_some();
@@ -577,7 +454,7 @@ pub fn run_bulk_coverage(
         .filter(|&(bam_idx, _)| bam_is_read[bam_idx])
         .map(|(i, &(p, _))| (i, p))
         .collect();
-    let margin = read_reach(&adjust, read_mode, qc_filter);
+    let margin = read_reach(&adjust);
     let bins_per_chunk = (chunk_size / step_size).max(1);
     let mut chunks: Vec<BinChunk> = Vec::new();
     let mut chrom_chunks: Vec<std::ops::Range<usize>> = Vec::with_capacity(windows.len());
@@ -726,8 +603,9 @@ pub fn run_bulk_coverage(
             }
 
             let (aln_start, aln_end) = (sc_rec.alignment_start, sc_rec.alignment_end);
-            let intervals =
-                get_effective_intervals(&sc_rec, &adjust, read_mode).inspect(|&(start, end)| {
+            let intervals = sc_rec
+                .effective_intervals(&adjust)
+                .inspect(|&(start, end)| {
                     if start + margin < aln_start || end > aln_end + margin {
                         out_of_reach.fetch_add(1, Ordering::Relaxed);
                     }
@@ -1077,243 +955,7 @@ fn write_bedgraph<'a>(path: &Path, values: impl Iterator<Item = (&'a str, Value)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bam::sc_record::test_record;
     use tempfile::TempDir;
-
-    // Read-mode helpers: MNase
-
-    #[test]
-    fn mnase_takes_the_two_central_bases_of_an_even_fragment() {
-        let mut rec = test_record(1000, 1050);
-        rec.is_proper_pair = true;
-        rec.template_length = 200;
-        // Centre is 1000 + 200/2 - 1; an even fragment yields 2 bp.
-        assert_eq!(apply_mnase(&rec), Some((1099, 1101)));
-    }
-
-    #[test]
-    fn mnase_takes_three_bases_when_the_fragment_length_is_odd() {
-        let mut rec = test_record(1000, 1050);
-        rec.is_proper_pair = true;
-        rec.template_length = 201;
-        assert_eq!(apply_mnase(&rec), Some((1099, 1102)));
-    }
-
-    #[test]
-    fn mnase_uses_the_absolute_template_length() {
-        let mut fwd = test_record(1000, 1050);
-        fwd.is_proper_pair = true;
-        fwd.template_length = 200;
-
-        let mut negative = test_record(1000, 1050);
-        negative.is_proper_pair = true;
-        negative.template_length = -200;
-
-        assert_eq!(apply_mnase(&fwd), apply_mnase(&negative));
-    }
-
-    #[test]
-    fn mnase_skips_anything_that_is_not_a_forward_proper_pair() {
-        let mut unpaired = test_record(1000, 1050);
-        unpaired.template_length = 200;
-        assert_eq!(apply_mnase(&unpaired), None);
-
-        let mut reverse = test_record(1000, 1050);
-        reverse.is_proper_pair = true;
-        reverse.is_reverse = true;
-        reverse.template_length = 200;
-        assert_eq!(apply_mnase(&reverse), None);
-
-        // A fragment of one base or less has no centre to take.
-        let mut degenerate = test_record(1000, 1050);
-        degenerate.is_proper_pair = true;
-        degenerate.template_length = 1;
-        assert_eq!(apply_mnase(&degenerate), None);
-    }
-
-    // Read-mode helpers: offset
-
-    #[test]
-    fn a_positive_offset_is_one_based_from_the_read_start() {
-        let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 1, None), [(1000, 1001)]);
-        assert_eq!(apply_offset(&rec, 10, None), [(1009, 1010)]);
-    }
-
-    #[test]
-    fn a_negative_offset_counts_back_from_the_read_end() {
-        let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, -1, None), [(1049, 1050)]);
-        assert_eq!(apply_offset(&rec, -50, None), [(1000, 1001)]);
-    }
-
-    #[test]
-    fn two_offsets_give_the_range_between_them() {
-        let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 1, Some(5)), [(1000, 1005)]);
-        assert_eq!(apply_offset(&rec, 3, Some(-1)), [(1002, 1050)]);
-    }
-
-    #[test]
-    fn on_a_reverse_read_the_offset_is_measured_from_the_alignment_end() {
-        let mut rec = test_record(1000, 1050);
-        rec.is_reverse = true;
-        // The first base of the read is the last base in genomic order.
-        assert_eq!(apply_offset(&rec, 1, None), [(1049, 1050)]);
-        assert_eq!(apply_offset(&rec, 1, Some(5)), [(1045, 1050)]);
-    }
-
-    #[test]
-    fn offsets_outside_the_read_are_rejected() {
-        let rec = test_record(1000, 1050);
-        assert!(apply_offset(&rec, 51, None).is_empty(), "past the read end");
-        assert!(
-            apply_offset(&rec, 5, Some(2)).is_empty(),
-            "end before start"
-        );
-
-        let empty = test_record(1000, 1000);
-        assert!(apply_offset(&empty, 1, None).is_empty(), "zero-length read");
-    }
-
-    #[test]
-    fn a_range_that_runs_past_the_read_end_is_clamped_to_it() {
-        let rec = test_record(1000, 1050);
-        assert_eq!(apply_offset(&rec, 48, Some(100)), [(1047, 1050)]);
-    }
-
-    // Read-mode dispatch
-
-    /// A spliced read: two 10 bp exons either side of a 100 bp intron.
-    fn spliced_record<'a>() -> ScRecord<'a> {
-        let mut rec = test_record(1000, 1120);
-        rec.blocks = Some(vec![(1000, 1010), (1110, 1120)]);
-        rec
-    }
-
-    #[test]
-    fn an_offset_counts_aligned_bases_and_steps_over_an_intron() {
-        let rec = spliced_record();
-
-        // Bases 1-10 are the first exon; the 11th aligned base is the first of
-        // the second exon, not the 11th base of the intron.
-        assert_eq!(apply_offset(&rec, 10, None), [(1009, 1010)]);
-        assert_eq!(apply_offset(&rec, 11, None), [(1110, 1111)]);
-
-        // The RiboSeq P-site offset, which is what this option exists for.
-        assert_eq!(apply_offset(&rec, 12, None), [(1111, 1112)]);
-
-        // The last aligned base is the end of the second exon.
-        assert_eq!(apply_offset(&rec, -1, None), [(1119, 1120)]);
-    }
-
-    #[test]
-    fn an_offset_range_crossing_a_gap_comes_back_as_two_intervals() {
-        let rec = spliced_record();
-
-        // Bases 8-13 straddle the junction: three in each exon, none between.
-        assert_eq!(
-            apply_offset(&rec, 8, Some(13)),
-            [(1007, 1010), (1110, 1113)]
-        );
-        // The whole read is its two exons, and nothing of the intron.
-        assert_eq!(
-            apply_offset(&rec, 1, Some(-1)),
-            [(1000, 1010), (1110, 1120)]
-        );
-    }
-
-    #[test]
-    fn an_offset_past_the_aligned_length_yields_nothing() {
-        // 20 aligned bases over a 120 bp footprint: asking for the 21st must
-        // report nothing rather than a position inside the intron.
-        let rec = spliced_record();
-        assert!(apply_offset(&rec, 21, None).is_empty());
-        assert!(apply_offset(&rec, -21, None).is_empty());
-    }
-
-    #[test]
-    fn on_a_reverse_read_the_offset_counts_from_the_far_exon() {
-        // The 5' end of a reverse read is the genomic end, so counting starts
-        // at the last base of the second exon and runs back through it.
-        let mut rec = spliced_record();
-        rec.is_reverse = true;
-
-        assert_eq!(apply_offset(&rec, 1, None), [(1119, 1120)]);
-        assert_eq!(apply_offset(&rec, 10, None), [(1110, 1111)]);
-        assert_eq!(apply_offset(&rec, 11, None), [(1009, 1010)]);
-
-        // A range crossing the junction still comes back ascending. Aligned
-        // bases 9-12 of this read are 1111 and 1110 in the far exon, then 1009
-        // and 1008 in the near one.
-        assert_eq!(
-            apply_offset(&rec, 9, Some(12)),
-            [(1008, 1010), (1110, 1112)]
-        );
-    }
-
-    #[test]
-    fn an_offset_ignores_soft_clipped_bases() {
-        // `5S10M5S`: the stored sequence is 20 bases but only 10 align, so the
-        // 12th aligned base does not exist. Counting the clips would have put
-        // it two bases past the alignment.
-        let mut rec = test_record(1000, 1010);
-        rec.read_length = 20;
-
-        assert!(apply_offset(&rec, 12, None).is_empty());
-        assert_eq!(apply_offset(&rec, -1, None), [(1009, 1010)]);
-    }
-
-    fn intervals_of(rec: &ScRecord, adjust: &AdjustRead, mode: ReadMode) -> Vec<(usize, usize)> {
-        get_effective_intervals(rec, adjust, mode).collect()
-    }
-
-    #[test]
-    fn the_read_mode_selects_which_interval_rule_applies() {
-        let mut rec = test_record(1000, 1050);
-        rec.is_proper_pair = true;
-        rec.template_length = 200;
-        let adjust = AdjustRead::default();
-
-        assert_eq!(
-            intervals_of(&rec, &adjust, ReadMode::Normal),
-            [(1000, 1050)]
-        );
-        assert_eq!(intervals_of(&rec, &adjust, ReadMode::MNase), [(1099, 1101)]);
-        assert_eq!(
-            intervals_of(&rec, &adjust, ReadMode::Offset(1, None)),
-            [(1000, 1001)]
-        );
-    }
-
-    #[test]
-    fn a_read_the_mode_cannot_place_yields_no_interval() {
-        let rec = test_record(1000, 1050);
-        // Not a proper pair, so MNase has no fragment to centre on.
-        let intervals = intervals_of(&rec, &AdjustRead::default(), ReadMode::MNase);
-        assert!(intervals.is_empty(), "{intervals:?}");
-    }
-
-    #[test]
-    fn only_the_normal_mode_follows_a_spliced_read() {
-        // A synthetic window inside the read is one interval whatever the read's
-        // own shape, so only `Normal` splits.
-        let mut rec = test_record(1000, 1120);
-        rec.is_proper_pair = true;
-        rec.template_length = 200;
-        rec.blocks = Some(vec![(1000, 1010), (1110, 1120)]);
-        let adjust = AdjustRead::default();
-
-        assert_eq!(
-            intervals_of(&rec, &adjust, ReadMode::Normal),
-            [(1000, 1010), (1110, 1120)]
-        );
-        assert_eq!(intervals_of(&rec, &adjust, ReadMode::MNase).len(), 1);
-        assert_eq!(
-            intervals_of(&rec, &adjust, ReadMode::Offset(1, None)).len(),
-            1
-        );
-    }
 
     // Group-name sanitizing
 
@@ -1563,7 +1205,7 @@ mod tests {
         normalize: NormalizeMethod,
         scale_factor: f64,
         region: Option<&str>,
-        mode: ReadMode,
+        offset: Option<Offset>,
         bin_size: usize,
         step_size: usize,
         chunk_size: usize,
@@ -1594,7 +1236,8 @@ mod tests {
             normalize,
             scale_factor,
             format,
-            mode,
+            offset,
+            false,
             1,
             chunk_size,
         )
@@ -1609,7 +1252,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -1644,7 +1287,8 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             OutputFormat::BedGraph,
-            ReadMode::Normal,
+            None,
+            false,
             1,
             1_000_000,
         )
@@ -1718,7 +1362,8 @@ mod tests {
             normalize,
             1.0,
             OutputFormat::BedGraph,
-            ReadMode::Normal,
+            None,
+            false,
             1,
             1_000_000,
         )
@@ -1786,7 +1431,8 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             OutputFormat::BedGraph,
-            ReadMode::Normal,
+            None,
+            false,
             1,
             1_000_000,
         )
@@ -1937,7 +1583,8 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             OutputFormat::BedGraph,
-            ReadMode::MNase,
+            None,
+            true,
             1,
             1_000_000,
         )
@@ -2009,7 +1656,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2048,7 +1695,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2063,7 +1710,7 @@ mod tests {
             NormalizeMethod::None,
             10.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2095,7 +1742,7 @@ mod tests {
             NormalizeMethod::Cpm,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2120,7 +1767,7 @@ mod tests {
     }
 
     #[test]
-    fn an_offset_read_mode_still_produces_every_group() {
+    fn an_offset_still_produces_every_group() {
         let dir = TempDir::new().unwrap();
         let prefix = dir.path().join("cov");
 
@@ -2131,7 +1778,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Offset(1, None),
+            Some((1, 1)),
             100_000,
             100_000,
             1_000_000,
@@ -2154,7 +1801,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             Some("5:0-100000"),
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2188,7 +1835,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,
@@ -2212,7 +1859,7 @@ mod tests {
                 NormalizeMethod::None,
                 1.0,
                 None,
-                ReadMode::Normal,
+                None,
                 bin,
                 step,
                 chunk,
@@ -2255,7 +1902,8 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             OutputFormat::BedGraph,
-            ReadMode::Normal,
+            None,
+            false,
             1,
             1_000_000,
         )
@@ -2289,7 +1937,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             Some("5:65900000-66000000"),
-            ReadMode::Normal,
+            None,
             10_000,
             10_000,
             1_000_000,
@@ -2324,7 +1972,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             None,
-            ReadMode::Normal,
+            None,
             10_000,
             10_000,
             1_000_000,
@@ -2339,7 +1987,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             Some("5:65900000-66000000"),
-            ReadMode::Normal,
+            None,
             10_000,
             10_000,
             1_000_000,
@@ -2376,7 +2024,7 @@ mod tests {
             NormalizeMethod::None,
             1.0,
             Some("5"),
-            ReadMode::Normal,
+            None,
             100_000,
             100_000,
             1_000_000,

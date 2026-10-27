@@ -152,6 +152,8 @@ def _count_reads(
     extend_reads: int | None,
     center_reads: bool,
     tn5: bool,
+    mnase: bool,
+    offset: list[int] | None,
     duplicate_filter: DuplicateFilter | None,
     motif_filter: list[str] | None,
     genome_2bit: str | None,
@@ -201,6 +203,8 @@ def _count_reads(
         "extend_reads": extend_reads,
         "center_reads": center_reads,
         "tn5_shift": tn5,
+        "mnase": mnase,
+        "offset": offset or None,
         "dup_method": backend.dup_method(duplicate_filter),
         "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
         "genome_2bit": genome_2bit,
@@ -269,6 +273,8 @@ def bins(
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
+    mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
+    offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -324,6 +330,8 @@ def bins(
         extend_reads=extend_reads,
         center_reads=center_reads,
         tn5=tn5,
+        mnase=mnase,
+        offset=offset,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,
@@ -363,6 +371,8 @@ def features(
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
     tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
+    mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
+    offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -422,6 +432,8 @@ def features(
         extend_reads=extend_reads,
         center_reads=center_reads,
         tn5=tn5,
+        mnase=mnase,
+        offset=offset,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,

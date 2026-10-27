@@ -9,6 +9,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::bam_io::open_bam_records;
+use super::sc_record::Offset;
 
 /// `extend_reads` value meaning "estimate from the data".
 ///
@@ -94,24 +95,24 @@ pub(crate) fn ensure_paired_end(bam_paths: &[(&Path, &str)], option: &str) -> Re
     Ok(())
 }
 
-/// `--tn5` corrects the two cut sites of a fragment. It counts each properly
-/// paired fragment once through its forward mate, extended to the fragment
-/// length. Returns `extend_reads`, `sam_flag_include` and `sam_flag_exclude`
-/// with those requisites applied.
-pub(crate) fn tn5_fragment_options(
+/// `--tn5` corrects the two cut sites of a fragment, and `--mnase` counts its
+/// center. Both count each properly paired fragment once through its forward
+/// mate, extended to the fragment length. Returns `extend_reads`,
+/// `sam_flag_include` and `sam_flag_exclude` with those requisites applied.
+pub(crate) fn fragment_options(
     tn5: bool,
+    mnase: bool,
     extend_reads: Option<usize>,
     sam_flag_include: Option<u16>,
     sam_flag_exclude: Option<u16>,
 ) -> (Option<usize>, Option<u16>, Option<u16>) {
-    if !tn5 {
-        return (extend_reads, sam_flag_include, sam_flag_exclude);
-    }
+    let reason = match (tn5, mnase) {
+        (true, _) => "Tn5 shift correction works",
+        (false, true) => "MNase centering works",
+        (false, false) => return (extend_reads, sam_flag_include, sam_flag_exclude),
+    };
     if extend_reads.is_none() {
-        eprintln!(
-            "WARNING: --extendReads was enabled because Tn5 shift correction works on \
-             fragments."
-        );
+        eprintln!("WARNING: --extendReads was enabled because {reason} on fragments.");
     }
     const PROPER_PAIR: u16 = 0x2;
     const REVERSE: u16 = 0x10;
@@ -119,6 +120,33 @@ pub(crate) fn tn5_fragment_options(
         extend_reads.or(Some(ESTIMATE_FRAGMENT_LENGTH)),
         Some(sam_flag_include.unwrap_or(0) | PROPER_PAIR),
         Some(sam_flag_exclude.unwrap_or(0) | REVERSE),
+    )
+}
+
+/// `--mnase` counts the 2 central bases of each fragment: it turns on
+/// `--centerReads`, and `--offset` becomes `1 2`, `--minFragmentLength` 130
+/// and `--maxFragmentLength` 200 unless they were given. Returns
+/// `center_reads`, `offset`, `min_fragment_length` and `max_fragment_length`.
+pub(crate) fn mnase_options(
+    mnase: bool,
+    center_reads: bool,
+    offset: Option<Offset>,
+    min_fragment_length: Option<usize>,
+    max_fragment_length: Option<usize>,
+) -> (bool, Option<Offset>, Option<usize>, Option<usize>) {
+    if !mnase {
+        return (
+            center_reads,
+            offset,
+            min_fragment_length,
+            max_fragment_length,
+        );
+    }
+    (
+        true,
+        offset.or(Some((1, 2))),
+        min_fragment_length.or(Some(130)),
+        max_fragment_length.or(Some(200)),
     )
 }
 
@@ -261,23 +289,42 @@ mod tests {
     }
 
     #[test]
-    fn tn5_counts_the_forward_mate_of_proper_pairs_extended_to_the_fragment() {
-        assert_eq!(
-            tn5_fragment_options(true, None, None, None),
-            (Some(ESTIMATE_FRAGMENT_LENGTH), Some(0x2), Some(0x10))
-        );
+    fn tn5_and_mnase_count_the_forward_mate_of_proper_pairs_extended_to_the_fragment() {
+        for (tn5, mnase) in [(true, false), (false, true), (true, true)] {
+            assert_eq!(
+                fragment_options(tn5, mnase, None, None, None),
+                (Some(ESTIMATE_FRAGMENT_LENGTH), Some(0x2), Some(0x10))
+            );
+        }
         // A given fragment length and given flags are kept.
         assert_eq!(
-            tn5_fragment_options(true, Some(200), Some(0x1), Some(0x400)),
+            fragment_options(true, false, Some(200), Some(0x1), Some(0x400)),
             (Some(200), Some(0x3), Some(0x410))
         );
     }
 
     #[test]
-    fn without_tn5_the_options_are_unchanged() {
+    fn without_tn5_or_mnase_the_options_are_unchanged() {
         assert_eq!(
-            tn5_fragment_options(false, None, None, None),
+            fragment_options(false, false, None, None, None),
             (None, None, None)
+        );
+        assert_eq!(
+            mnase_options(false, false, None, None, None),
+            (false, None, None, None)
+        );
+    }
+
+    #[test]
+    fn mnase_counts_the_two_central_bases_of_mononucleosome_fragments() {
+        assert_eq!(
+            mnase_options(true, false, None, None, None),
+            (true, Some((1, 2)), Some(130), Some(200))
+        );
+        // Given values are kept.
+        assert_eq!(
+            mnase_options(true, false, Some((1, 1)), Some(100), Some(1000)),
+            (true, Some((1, 1)), Some(100), Some(1000))
         );
     }
 

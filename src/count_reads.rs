@@ -4,8 +4,10 @@ use anyhow::Result;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter, RnaStrand};
-use crate::bam::fragment_length::{ensure_paired_end, resolve_extend_reads, tn5_fragment_options};
-use crate::bam::sc_record::AdjustRead;
+use crate::bam::fragment_length::{
+    ensure_paired_end, fragment_options, mnase_options, resolve_extend_reads,
+};
+use crate::bam::sc_record::{AdjustRead, parse_offset};
 use crate::counting::params::CountingParams;
 use crate::counting::{count_bam_bins, count_bam_features};
 use crate::to_py_err;
@@ -67,6 +69,8 @@ fn sample_names(bam_paths: &[PathBuf], labels: Vec<String>) -> Result<Vec<(PathB
     extend_reads = None,
     center_reads = false,
     tn5_shift = false,
+    mnase = false,
+    offset = None,
     dup_method = None,
     genome_2bit = None,
     motif_filter = None,
@@ -101,6 +105,8 @@ pub fn count_bins(
     extend_reads: Option<usize>,
     center_reads: bool,
     tn5_shift: bool,
+    mnase: bool,
+    offset: Option<Vec<i32>>,
     dup_method: Option<String>,
     genome_2bit: Option<PathBuf>,
     motif_filter: Option<Vec<(String, String)>>,
@@ -125,6 +131,15 @@ pub fn count_bins(
         metagene: false,
     };
 
+    let offset = parse_offset(offset.as_deref()).map_err(to_py_err)?;
+    let (center_reads, offset, min_fragment_length, max_fragment_length) = mnase_options(
+        mnase,
+        center_reads,
+        offset,
+        min_fragment_length,
+        max_fragment_length,
+    );
+
     let qc = QcFilter::from_bounds(
         min_fragment_length,
         max_fragment_length,
@@ -139,8 +154,13 @@ pub fn count_bins(
         .transpose()
         .map_err(to_py_err)?;
 
-    let (extend_reads, sam_flag_include, sam_flag_exclude) =
-        tn5_fragment_options(tn5_shift, extend_reads, sam_flag_include, sam_flag_exclude);
+    let (extend_reads, sam_flag_include, sam_flag_exclude) = fragment_options(
+        tn5_shift,
+        mnase,
+        extend_reads,
+        sam_flag_include,
+        sam_flag_exclude,
+    );
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
@@ -165,12 +185,16 @@ pub fn count_bins(
     if tn5_shift {
         ensure_paired_end(&bam_path_refs, "--tn5").map_err(to_py_err)?;
     }
+    if mnase {
+        ensure_paired_end(&bam_path_refs, "--mnase").map_err(to_py_err)?;
+    }
 
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
         tn5_shift,
         max_paired_fragment_length: max_fragment_length,
+        offset,
     };
 
     count_bam_bins(
@@ -223,6 +247,8 @@ pub fn count_bins(
     extend_reads = None,
     center_reads = false,
     tn5_shift = false,
+    mnase = false,
+    offset = None,
     feature_type = None,
     exon_type = None,
     name_attr = None,
@@ -260,6 +286,8 @@ pub fn count_features(
     extend_reads: Option<usize>,
     center_reads: bool,
     tn5_shift: bool,
+    mnase: bool,
+    offset: Option<Vec<i32>>,
     feature_type: Option<Vec<String>>,
     exon_type: Option<Vec<String>>,
     name_attr: Option<String>,
@@ -288,6 +316,15 @@ pub fn count_features(
         metagene,
     };
 
+    let offset = parse_offset(offset.as_deref()).map_err(to_py_err)?;
+    let (center_reads, offset, min_fragment_length, max_fragment_length) = mnase_options(
+        mnase,
+        center_reads,
+        offset,
+        min_fragment_length,
+        max_fragment_length,
+    );
+
     let qc = QcFilter::from_bounds(
         min_fragment_length,
         max_fragment_length,
@@ -302,8 +339,13 @@ pub fn count_features(
         .transpose()
         .map_err(to_py_err)?;
 
-    let (extend_reads, sam_flag_include, sam_flag_exclude) =
-        tn5_fragment_options(tn5_shift, extend_reads, sam_flag_include, sam_flag_exclude);
+    let (extend_reads, sam_flag_include, sam_flag_exclude) = fragment_options(
+        tn5_shift,
+        mnase,
+        extend_reads,
+        sam_flag_include,
+        sam_flag_exclude,
+    );
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
@@ -328,12 +370,16 @@ pub fn count_features(
     if tn5_shift {
         ensure_paired_end(&bam_path_refs, "--tn5").map_err(to_py_err)?;
     }
+    if mnase {
+        ensure_paired_end(&bam_path_refs, "--mnase").map_err(to_py_err)?;
+    }
 
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, &bam_path_refs).map_err(to_py_err)?,
         center_reads,
         tn5_shift,
         max_paired_fragment_length: max_fragment_length,
+        offset,
     };
 
     count_bam_features(

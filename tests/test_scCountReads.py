@@ -102,6 +102,15 @@ SCENARIOS: dict[str, Scenario] = {
     "center_reads": Scenario(
         ["-bs", "100", "-e", "300", "--centerReads"], own_sampling=True
     ),
+    # One base per read, so a read across a bin boundary counts in one bin only.
+    "offset": Scenario(["-bs", "100", "--offset", "1"], own_sampling=True),
+    "offset_center_reads": Scenario(
+        ["-bs", "100", "-e", "--centerReads", "--offset", "1"], own_sampling=True
+    ),
+    # The fixture fragments are 244-612 bp, past the 200 bp --mnase default.
+    "mnase": Scenario(
+        ["-bs", "100", "--mnase", "--maxFragmentLength", "1000"], own_sampling=True
+    ),
     # The Tn5 correction moves each end by 4-5 bases, so it needs fine bins too.
     "tn5": Scenario(["-bs", "100", "--tn5"], own_sampling=True),
     "labels": Scenario(["-l", "MYSAMPLE"]),
@@ -189,6 +198,26 @@ def test_metagene_groups_exons_onto_their_gene(tmp_path: Path) -> None:
 
     cols = lambda text: int(text.splitlines()[0].split("\t")[2])  # noqa: E731
     assert cols(per_gene) <= cols(per_transcript)
+
+
+@pytest.mark.parametrize(
+    ("args", "option"),
+    [
+        (["--offset", "1", "2", "3"], "'--offset'"),
+        (["--region", ",,"], "'--region'"),
+        (["--numberOfProcessors", "abc"], "'--numberOfProcessors'"),
+    ],
+)
+def test_an_invalid_value_is_a_usage_error(
+    args: list[str], option: str, tmp_path: Path
+) -> None:
+    proc = run(
+        tool_path(TOOL), ["bins", *BASE, "-o", str(tmp_path / "out.h5ad"), *args]
+    )
+    assert proc.returncode != 0
+    assert "Invalid value for" in proc.stderr
+    assert option in proc.stderr
+    assert "Traceback" not in proc.stderr
 
 
 # Sample labelling
