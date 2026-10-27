@@ -378,7 +378,7 @@ pub fn run_bulk_coverage(
     blacklist_path: Option<&Path>,
     extend_reads: Option<usize>,
     center_reads: bool,
-    atac_shift: bool,
+    tn5_shift: bool,
     dup_method: Option<DupMethod>,
     genome_path: Option<&Path>,
     motifs: Option<&[(String, String)]>,
@@ -471,11 +471,14 @@ pub fn run_bulk_coverage(
         .map(|(bam, _)| *bam)
         .collect();
 
-    // --mnase reads the fragment from the two mates, so a single-end library
-    // has nothing to take a centre from. Checked before any counting, so the
+    // --mnase and --tn5 read the fragment from the two mates, so a single-end
+    // library has nothing to work with. Checked before any counting, so the
     // run fails instead of writing an empty track.
     if matches!(read_mode, ReadMode::MNase) {
         ensure_paired_end(&read_bams, "--mnase")?;
+    }
+    if tn5_shift {
+        ensure_paired_end(&read_bams, "--tn5")?;
     }
 
     // Resolved before the record options, which ask it whether the gapless
@@ -483,7 +486,7 @@ pub fn run_bulk_coverage(
     let adjust = AdjustRead {
         extend_reads: resolve_extend_reads(extend_reads, &read_bams)?,
         center_reads,
-        atac_shift,
+        tn5_shift,
         max_paired_fragment_length: qc_filter.and_then(|f| f.max_fragment_length),
     };
 

@@ -94,6 +94,34 @@ pub(crate) fn ensure_paired_end(bam_paths: &[(&Path, &str)], option: &str) -> Re
     Ok(())
 }
 
+/// `--tn5` corrects the two cut sites of a fragment. It counts each properly
+/// paired fragment once through its forward mate, extended to the fragment
+/// length. Returns `extend_reads`, `sam_flag_include` and `sam_flag_exclude`
+/// with those requisites applied.
+pub(crate) fn tn5_fragment_options(
+    tn5: bool,
+    extend_reads: Option<usize>,
+    sam_flag_include: Option<u16>,
+    sam_flag_exclude: Option<u16>,
+) -> (Option<usize>, Option<u16>, Option<u16>) {
+    if !tn5 {
+        return (extend_reads, sam_flag_include, sam_flag_exclude);
+    }
+    if extend_reads.is_none() {
+        eprintln!(
+            "WARNING: --extendReads was enabled because Tn5 shift correction works on \
+             fragments."
+        );
+    }
+    const PROPER_PAIR: u16 = 0x2;
+    const REVERSE: u16 = 0x10;
+    (
+        extend_reads.or(Some(ESTIMATE_FRAGMENT_LENGTH)),
+        Some(sam_flag_include.unwrap_or(0) | PROPER_PAIR),
+        Some(sam_flag_exclude.unwrap_or(0) | REVERSE),
+    )
+}
+
 /// Estimate a fragment length from the reads at the start of each BAM.
 ///
 /// Every BAM must be paired-end since fragment length cannot be inferred from
@@ -230,6 +258,27 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/testdata")
             .join(name)
+    }
+
+    #[test]
+    fn tn5_counts_the_forward_mate_of_proper_pairs_extended_to_the_fragment() {
+        assert_eq!(
+            tn5_fragment_options(true, None, None, None),
+            (Some(ESTIMATE_FRAGMENT_LENGTH), Some(0x2), Some(0x10))
+        );
+        // A given fragment length and given flags are kept.
+        assert_eq!(
+            tn5_fragment_options(true, Some(200), Some(0x1), Some(0x400)),
+            (Some(200), Some(0x3), Some(0x410))
+        );
+    }
+
+    #[test]
+    fn without_tn5_the_options_are_unchanged() {
+        assert_eq!(
+            tn5_fragment_options(false, None, None, None),
+            (None, None, None)
+        );
     }
 
     #[test]

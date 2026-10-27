@@ -631,18 +631,6 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "single-end read instead."
         ),
     ),
-    "atac": typer.Option(
-        "--atac",
-        rich_help_panel=_READ,
-        help=(
-            "Correct each read for the 9-base duplication Tn5 leaves behind: a "
-            "forward read is trimmed to ``start+4, end-5`` and a reverse read "
-            "to ``start+5, end-4``, so both ends sit on the cut site. Reads of "
-            "9 bases or less are dropped. The correction is applied before "
-            "everything else, so the filters and deduplication use the "
-            "corrected read as well.\n\n"
-        ),
-    ),
     "center_reads": typer.Option(
         "--centerReads",
         rich_help_panel=_READ,
@@ -652,7 +640,17 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "fragment; for single-end data the given fragment length is used. Useful "
             "to get a sharper signal around enriched regions."
             "*NOTE*: generally NOT recommended for spliced-read data such as RNA-seq, "
-            "as it would make reads cover skipped regions.\n\n"
+            "as it would make reads cover skipped regions."
+        ),
+    ),
+    "tn5": typer.Option(
+        "--tn5",
+        rich_help_panel=_READ,
+        help=(
+            "Correct the 9-base duplication Tn5 leaves behind in fragments. "
+            "Only the forward mate of a proper pair is counted, so each fragment "
+            "is trimmed to ``start+4, end-5``. Fragments of 9 bases or less are "
+            "dropped. *NOTE*: Requires paired-end data."
         ),
     ),
     "mnase": typer.Option(

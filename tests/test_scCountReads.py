@@ -103,7 +103,7 @@ SCENARIOS: dict[str, Scenario] = {
         ["-bs", "100", "-e", "300", "--centerReads"], own_sampling=True
     ),
     # The Tn5 correction moves each end by 4-5 bases, so it needs fine bins too.
-    "atac": Scenario(["-bs", "100", "--atac"], own_sampling=True),
+    "tn5": Scenario(["-bs", "100", "--tn5"], own_sampling=True),
     "labels": Scenario(["-l", "MYSAMPLE"]),
 }
 

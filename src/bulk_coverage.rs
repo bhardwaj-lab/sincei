@@ -5,6 +5,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter, RnaStrand};
+use crate::bam::fragment_length::tn5_fragment_options;
 use crate::counting::coverage::{NormalizeMethod, OutputFormat, ReadMode, run_bulk_coverage};
 use crate::to_py_err;
 
@@ -54,7 +55,7 @@ fn parse_normalize_method(s: &str) -> Result<NormalizeMethod> {
     blacklist_path = None,
     extend_reads = None,
     center_reads = false,
-    atac_shift = false,
+    tn5_shift = false,
     dup_method = None,
     genome_2bit = None,
     motif_filter = None,
@@ -91,7 +92,7 @@ pub fn bulk_coverage(
     blacklist_path: Option<PathBuf>,
     extend_reads: Option<usize>,
     center_reads: bool,
-    atac_shift: bool,
+    tn5_shift: bool,
     dup_method: Option<String>,
     genome_2bit: Option<PathBuf>,
     motif_filter: Option<Vec<(String, String)>>,
@@ -158,6 +159,9 @@ pub fn bulk_coverage(
         .map(str::parse::<RnaStrand>)
         .transpose()
         .map_err(to_py_err)?;
+
+    let (extend_reads, sam_flag_include, sam_flag_exclude) =
+        tn5_fragment_options(tn5_shift, extend_reads, sam_flag_include, sam_flag_exclude);
 
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
@@ -228,7 +232,7 @@ pub fn bulk_coverage(
         blacklist_path.as_deref(),
         extend_reads,
         center_reads,
-        atac_shift,
+        tn5_shift,
         dup,
         genome_2bit.as_deref(),
         motif_filter.as_deref(),

@@ -151,7 +151,7 @@ def _count_reads(
     filter_rna_strand: FilterRNAStrand | None,
     extend_reads: int | None,
     center_reads: bool,
-    atac: bool,
+    tn5: bool,
     duplicate_filter: DuplicateFilter | None,
     motif_filter: list[str] | None,
     genome_2bit: str | None,
@@ -200,7 +200,7 @@ def _count_reads(
         "blacklist_path": backend.first_blacklist(blacklist),
         "extend_reads": extend_reads,
         "center_reads": center_reads,
-        "atac_shift": atac,
+        "tn5_shift": tn5,
         "dup_method": backend.dup_method(duplicate_filter),
         "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
         "genome_2bit": genome_2bit,
@@ -268,7 +268,7 @@ def bins(
     # Read options
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
-    atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -323,7 +323,7 @@ def bins(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
-        atac=atac,
+        tn5=tn5,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,
@@ -362,7 +362,7 @@ def features(
     # Read options
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
-    atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -421,7 +421,7 @@ def features(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
-        atac=atac,
+        tn5=tn5,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,
