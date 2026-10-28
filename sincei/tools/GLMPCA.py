@@ -24,6 +24,9 @@ except ImportError:  # anndata < 0.11
 LEARNING_RATE_LIMIT = 1e-10
 # a densified chunk holds at most this many values (~200 MB in float32)
 MAX_CHUNK_ENTRIES = 5 * 10**7
+# families supporting total-count depth correction (normalize: X / s; offset: log s on theta)
+DEPTH_CORRECTION_FAMILIES = {"normalize": ("poisson", "negative_binomial", "gamma", "lognormal"),
+                             "offset": ("poisson", "negative_binomial", "lognormal")}
 
 
 # =====================================================================================
@@ -34,6 +37,7 @@ class _Batch:
     X: torch.Tensor | None = None      # dense data (optionally a column subset)
     theta: torch.Tensor | None = None  # dense saturated parameters (dense input)
     delta: torch.Tensor | None = None  # sparse Theta - 1 theta0^T (sparse input)
+    o: torch.Tensor | None = None      # per-cell log size factor (depth_correction="offset")
 
 
 class _Data:
@@ -47,7 +51,9 @@ class _Data:
     """
 
     def __init__(self, X, device, dtype, chunk_size: int, transpose: bool = False,
-                 n_sub: int | None = None, rng: np.random.Generator | None = None):
+                 n_sub: int | None = None, rng: np.random.Generator | None = None,
+                 size_factors: np.ndarray | None = None, depth_correction: str | None = None):
+        self.s, self.depth_correction = size_factors, depth_correction  # s indexed by global row
         backed = isinstance(X, ad.AnnData) and X.isbacked
         M = X.X if isinstance(X, ad.AnnData) else X
         if isinstance(M, torch.Tensor):
@@ -70,6 +76,8 @@ class _Data:
         # rows held in memory: in-memory input, or a subsample read once from disk
         if not backed:
             self.mem = M if self.n == n_all else M[self.cells]
+            if depth_correction == "normalize":
+                self.mem = self._scale(self.mem, self.cells)
         else:
             self.mem = self._read(self.cells) if self.n < n_all else None
         self.family, self.theta0, self.cache = None, None, None
@@ -77,7 +85,13 @@ class _Data:
     # -- rows ------------------------------------------------------------------------
     def _read(self, rows: np.ndarray):
         out = self.M[rows]
-        return sp.csr_matrix(out) if self.sparse else np.asarray(out)
+        out = sp.csr_matrix(out) if self.sparse else np.asarray(out)
+        return self._scale(out, rows) if self.depth_correction == "normalize" else out
+
+    def _scale(self, Xc, rows: np.ndarray):
+        """X / s row-wise (CSR stays CSR)."""
+        inv = (1.0 / self.s[rows]).astype(np.float32)
+        return sp.csr_matrix(sp.diags(inv) @ Xc) if sp.issparse(Xc) else np.asarray(Xc) * inv[:, None]
 
     def rows(self, idx: np.ndarray):
         """Raw rows (CSR or ndarray) for sorted local indices."""
@@ -105,9 +119,8 @@ class _Data:
     def set_family(self, family: ExponentialFamily, cache: bool | str = "auto",
                    max_cache_gb: float = 4.0) -> None:
         self.family = family
-        if self.sparse:
-            zeros = torch.zeros(1, self.p, device=self.device, dtype=self.dtype)
-            self.theta0 = family.invert_g(zeros).reshape(-1)
+        zeros = torch.zeros(1, self.p, device=self.device, dtype=self.dtype)
+        self.theta0 = family.invert_g(zeros).reshape(-1)
         if cache is False or self.mem is None:
             return
         if self.sparse:
@@ -135,6 +148,8 @@ class _Data:
               cols: torch.Tensor | None = None) -> _Batch:
         """Data and saturated parameters of the rows ``idx`` (sorted, local)."""
         Xc, b = self.rows(idx), _Batch()
+        if self.depth_correction == "offset":
+            b.o = torch.as_tensor(np.log(self.s[self.cells[idx]]), device=self.device, dtype=self.dtype)
         if need_X:
             b.X = self.dense(Xc, cols)
         if self.sparse:
@@ -151,10 +166,17 @@ class _Data:
         return b
 
     def scores(self, V: torch.Tensor, mu: torch.Tensor, b: _Batch) -> torch.Tensor:
-        """U = (Theta_b - 1 mu^T) V."""
+        """U = (Theta_b - o [x != 0] - 1 mu^T) V: with an offset, non-zeros are shifted by
+        -o_i (= g^{-1}(x / s) for log-link families) and zeros stay at theta0."""
         if b.delta is not None:
-            return (self.theta0 - mu) @ V + torch.sparse.mm(b.delta, V)
-        return (b.theta - mu) @ V
+            U = (self.theta0 - mu) @ V + torch.sparse.mm(b.delta, V)
+            nz = torch.sparse_coo_tensor(b.delta.indices(), torch.ones_like(b.delta.values()), b.delta.shape)
+        else:
+            U, nz = (b.theta - mu) @ V, None
+        if b.o is None:
+            return U
+        nzV = torch.sparse.mm(nz, V) if nz is not None else (b.theta != self.theta0).to(V.dtype) @ V
+        return U - b.o[:, None] * nzV
 
 
 # =====================================================================================
@@ -202,6 +224,13 @@ class GLMPCA:
         dense: if below max_cache_gb, or always with True).
     whiten : bool
         Rotate V within its span so scores are uncorrelated and ordered (Def. 2.8).
+    center_scores : bool
+        With whiten, centre the scores via mu <- mu + V mean(U) (likelihood unchanged).
+    depth_correction : {None, "normalize", "offset"}
+        Per-cell total-count correction, s_i = libsize_i / median(libsize):
+        "normalize" fits X / s (poisson, negative_binomial, gamma, lognormal); "offset"
+        keeps X in the likelihood and adds log s_i to theta (poisson, negative_binomial,
+        lognormal). Size factors can also be passed to fit / transform / score.
     sample_projection : bool
         Transpose the matrix (features become samples).
     device, dtype, seed, verbose, store_epochs.
@@ -231,6 +260,8 @@ class GLMPCA:
         cache_saturated: bool | Literal["auto"] = "auto",
         max_cache_gb: float = 4.0,
         whiten: bool = True,
+        center_scores: bool = False,
+        depth_correction: Literal["normalize", "offset"] | None = None,
         sample_projection: bool = False,
         device: str | torch.device | None = None,
         dtype: torch.dtype = torch.float32,
@@ -255,6 +286,7 @@ class GLMPCA:
         self.min_epochs, self.n_lr_decay = min_epochs, n_lr_decay
         self.cache_saturated, self.max_cache_gb = cache_saturated, max_cache_gb
         self.whiten, self.sample_projection = whiten, sample_projection
+        self.center_scores, self.depth_correction = center_scores, depth_correction
         self.dtype, self.seed, self.verbose, self.store_epochs = dtype, seed, verbose, store_epochs
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -266,6 +298,11 @@ class GLMPCA:
 
         if isinstance(family, str):
             family = GLMFamily(family).distribution()(family_params)
+        if depth_correction is not None and (
+                family.family_name not in DEPTH_CORRECTION_FAMILIES.get(depth_correction, ())
+                or sample_projection):
+            raise ValueError(f"depth_correction={depth_correction!r} is not supported for "
+                             f"{family.family_name!r} (or with sample_projection).")
         # fit() estimates nuisance parameters on a copy, so refits start clean
         self._family_template = self.exponential_family = family
 
@@ -283,14 +320,31 @@ class GLMPCA:
         cols = np.sort(self._rng.choice(p, max(k, 1), replace=False))
         return torch.from_numpy(cols).to(self.device)
 
-    def _data(self, X, n_sub: int | None = None, cache: bool | str = False) -> _Data:
+    def _size_factors(self, X, size_factors=None, train: bool = False) -> np.ndarray | None:
+        """s_i = libsize_i / median(training libsize), or the user's size factors."""
+        if self.depth_correction is None:
+            return None
+        if size_factors is None:
+            raw = _Data(X, self.device, self.dtype, self.chunk_size)
+            lib = np.concatenate([np.asarray(raw.rows(c).sum(1)).ravel()
+                                  for c in raw.chunks(np.arange(raw.n))])
+            if train:
+                self.lib_median_ = float(np.median(lib[lib > 0]))
+            size_factors = lib / self.lib_median_
+        s = np.asarray(size_factors, dtype=np.float64).ravel()
+        return np.maximum(s, s[s > 0].min())  # empty cells: smallest positive factor
+
+    def _data(self, X, n_sub: int | None = None, cache: bool | str = False,
+              size_factors=None) -> _Data:
         data = _Data(X, self.device, self.dtype, self.chunk_size, self.sample_projection,
-                     n_sub, getattr(self, "_rng", None))
+                     n_sub, getattr(self, "_rng", None),
+                     self._size_factors(X, size_factors), self.depth_correction)
         data.set_family(self.exponential_family, cache, self.max_cache_gb)
         return data
 
     # ---------------------------------------------------------------------------------
-    def fit(self, X: torch.Tensor | np.ndarray | sp.spmatrix | ad.AnnData) -> bool:
+    def fit(self, X: torch.Tensor | np.ndarray | sp.spmatrix | ad.AnnData,
+            size_factors: np.ndarray | None = None) -> bool:
         r"""Fits GLM-PCA on cells (rows) x features (columns). Accepts dense arrays,
         tensors, scipy sparse matrices and AnnData (including backed='r')."""
         t0 = time.time()
@@ -299,8 +353,9 @@ class GLMPCA:
             torch.manual_seed(self.seed)
         fam = self.exponential_family = copy.deepcopy(self._family_template)
         n_sub = (self.n_cells_fit or 200_000) if self.fit_mode == "subsample" else None
+        self.size_factors_ = self._size_factors(X, size_factors, train=True)
         data = _Data(X, self.device, self.dtype, self.chunk_size, self.sample_projection,
-                     n_sub, self._rng)
+                     n_sub, self._rng, self.size_factors_, self.depth_correction)
         if self.n_pc >= data.p:
             raise ValueError("n_pc must be smaller than the number of features.")
 
@@ -310,16 +365,21 @@ class GLMPCA:
             idx = np.sort(self._rng.choice(data.n, 500_000, replace=False))
         colsum = torch.zeros(data.p, dtype=torch.float64, device=self.device)
         stats: dict[str, torch.Tensor] = {}
+        n_eff = float(len(idx))  # offset: column mean of X / s, i.e. sum x / sum s
+        if self.depth_correction == "offset":
+            n_eff = float(self.size_factors_[data.cells[idx]].sum())
         for sub in data.chunks(idx):
             Xd = data.dense(data.rows(sub))
             colsum += Xd.double().sum(0)
+            if self.depth_correction == "offset":  # nuisance parameters from X / s
+                Xd = Xd / torch.as_tensor(self.size_factors_[data.cells[sub]]).to(Xd)[:, None]
             if fam.needs_family_statistics():
                 for k, v in fam.family_statistics(Xd).items():
                     stats[k] = stats.get(k, 0) + v
         if fam.needs_family_statistics():
             fam.initialize_family_parameters_from_statistics(stats, len(idx))
         fam.to(self.device, self.dtype)
-        self._colmean = (colsum / len(idx)).to(self.device, self.dtype)
+        self._colmean = (colsum / n_eff).to(self.device, self.dtype)
         data.set_family(fam, self.cache_saturated, self.max_cache_gb)
         self._log(f"GLM-PCA: n={data.n}, p={data.p}, d={self.n_pc}, "
                   f"family={fam.family_name}, optimizer={self.optimizer}, "
@@ -339,7 +399,7 @@ class GLMPCA:
         self.training_cost_ = min(costs)
 
         if self.whiten:
-            V, self.singular_values_ = self._whiten(V, mu, data)
+            V, self.singular_values_, mu = self._whiten(V, mu, data)
         self.saturated_loadings_, self.saturated_intercept_ = V.detach(), mu.detach()
         self.reconstruction_intercept_ = self.saturated_intercept_
         self.fit_time_ = time.time() - t0
@@ -353,11 +413,11 @@ class GLMPCA:
         return self.saturated_loadings_, self.saturated_intercept_
 
     @torch.no_grad()
-    def transform(self, X, chunk_size: int | None = None) -> torch.Tensor:
+    def transform(self, X, chunk_size: int | None = None, size_factors=None) -> torch.Tensor:
         r"""Projects X onto the components, (g^{-1}(X) - 1 mu^T) V, chunk by chunk
         (exact out-of-sample extension). Returns a (n_cells, n_pc) CPU tensor."""
         V, mu = self._check_fitted()
-        data = self._data(X)
+        data = self._data(X, size_factors=size_factors)
         if chunk_size:
             data.chunk = chunk_size
         if data.p != V.shape[0]:
@@ -366,16 +426,16 @@ class GLMPCA:
                           for i in data.chunks(np.arange(data.n))])
 
     @torch.no_grad()
-    def score(self, X) -> float:
+    def score(self, X, size_factors=None) -> float:
         r"""Mean negative log-likelihood per cell of X under the out-of-sample
         reconstruction: a held-out criterion for n_pc, truncation values, etc."""
         V, mu = self._check_fitted()
-        data = self._data(X)
+        data = self._data(X, size_factors=size_factors)
         return self._accumulate(V, mu, data, np.arange(data.n), scale=1 / data.n)
 
-    def fit_transform(self, X) -> torch.Tensor:
-        self.fit(X)
-        return self.transform(X)
+    def fit_transform(self, X, size_factors=None) -> torch.Tensor:
+        self.fit(X, size_factors)
+        return self.transform(X, size_factors=size_factors)
 
     # ---------------------------------------------------------------------------------
     # Cost
@@ -383,10 +443,11 @@ class GLMPCA:
     def _nll(self, V, mu, data: _Data, b: _Batch, cols=None) -> torch.Tensor:
         """Batch NLL; with ``cols`` evaluated on a feature subset, rescaled by p/|cols|."""
         U = data.scores(V, mu, b)
+        o = 0.0 if b.o is None else b.o[:, None]
         if cols is None:
-            return self.exponential_family.log_likelihood(b.X, mu + U @ V.T)
+            return self.exponential_family.log_likelihood(b.X, o + mu + U @ V.T)
         fam = self.exponential_family.subset_features(cols)
-        return fam.log_likelihood(b.X, mu[cols] + U @ V[cols].T) * (data.p / len(cols))
+        return fam.log_likelihood(b.X, o + mu[cols] + U @ V[cols].T) * (data.p / len(cols))
 
     def _accumulate(self, V, mu, data: _Data, idx: np.ndarray, cols=None,
                     backward: bool = False, scale: float = 1.0) -> float:
@@ -413,6 +474,8 @@ class GLMPCA:
             k = int(min(data.n, 2**13, max(4 * d, 2e8 // p)))
             b = data.batch(np.sort(self._rng.choice(data.n, k, replace=False)), need_X=False)
             Th = data.theta0 + b.delta.to_dense() if b.delta is not None else b.theta
+            if b.o is not None:
+                Th = Th - b.o[:, None] * (Th != data.theta0)
             V0 = torch.svd_lowrank(Th - mu0, q=min(d + 10, *Th.shape), niter=4)[2][:, :d]
         elif self.init == "random":
             V0 = torch.linalg.qr(torch.randn(p, d, device=self.device, dtype=self.dtype))[0]
@@ -526,11 +589,20 @@ class GLMPCA:
     @torch.no_grad()
     def _whiten(self, V, mu, data: _Data):
         r"""Definition 2.8 from the d x d Gram matrix of the scores: the right singular
-        vectors of (Theta - 1mu^T) V V^T are V R, R the eigenvectors of U^T U."""
+        vectors of (Theta - 1mu^T) V V^T are V R, R the eigenvectors of U^T U.
+        With center_scores, mu <- mu + V m (m = mean score; likelihood unchanged, since mu
+        is identified only outside span(V)) and the centred Gram matrix is used.
+        Returns (V R, singular values, mu)."""
         G = torch.zeros(self.n_pc, self.n_pc, dtype=torch.float64, device=self.device)
+        m = torch.zeros(self.n_pc, dtype=torch.float64, device=self.device)
         for sub in data.chunks(np.arange(data.n)):
             U = data.scores(V, mu, data.batch(sub, need_X=False)).double()
             G += U.T @ U
+            m += U.sum(0)
+        if self.center_scores:
+            m /= data.n
+            G -= data.n * torch.outer(m, m)
+            mu = mu + V @ m.to(self.dtype)
         evals, R = torch.linalg.eigh(G)
         evals, R = evals.flip(0), R.flip(1)  # descending order
-        return V @ R.to(self.dtype), evals.clamp_min(0).sqrt().to(self.dtype)
+        return V @ R.to(self.dtype), evals.clamp_min(0).sqrt().to(self.dtype), mu

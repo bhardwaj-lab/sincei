@@ -176,7 +176,7 @@ class Poisson(ExponentialFamily):
     """Poisson, theta = log(rate). ``min_val`` replaces 0 before the log."""
 
     family_name = "poisson"
-    default_params = {"min_val": 1e-20}
+    default_params = {"min_val": 1e-3}
 
     def torch_distribution(self, theta):
         return td.Poisson(rate=theta.exp(), validate_args=False)
