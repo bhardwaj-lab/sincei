@@ -54,7 +54,9 @@ DESCRIPTION = (
     "* glmPCA: generalized PCA, with an exponential family distribution such as "
     "Poisson, Bernoulli, etc.\n"
     "* PCA: Principal Component Analysis.\n"
-    "* LSA: Latent Semantic Analysis.\n"
+    "* LSA: Latent Semantic Analysis. One extra component is fitted, and the "
+    "component that correlates the most with the cell depth is dropped if its "
+    f"|Spearman rho| is above {DEPTH_CORRELATION_CUTOFF}, else the extra component.\n"
     "* LDA: Latent Dirichlet Allocation."
 )
 
@@ -131,18 +133,6 @@ def main(
                 "Binarize the counts per region before dimensionality reduction. Only "
                 "used with [bold yellow]LSA[/bold yellow] and "
                 "[bold yellow]LDA[/bold yellow]."
-            ),
-        ),
-    ] = False,
-    drop_depth: Annotated[
-        bool,
-        typer.Option(
-            "--dropDepth",
-            rich_help_panel=_REDUCTION,
-            help=(
-                "Fit one extra component, and drop every component whose scores "
-                "correlate with the total counts of the cells (|Spearman rho| above "
-                f"{DEPTH_CORRELATION_CUTOFF})."
             ),
         ),
     ] = False,
@@ -271,7 +261,6 @@ def main(
             n_prin_comps=n_prin_comps,
             n_neighbors=n_neighbors,
             binarize=binarize,
-            drop_depth=drop_depth,
             log_normalize=log_normalize,
             recompute_dim_red=recompute_dim_red,
             n_iterations=n_iterations,
@@ -306,9 +295,6 @@ def main(
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     else:
-        if drop_depth:
-            n_prin_comps += 1
-
         matrix = adata
         if log_normalize:
             matrix = adata.copy()
@@ -323,15 +309,18 @@ def main(
             assert glmpca.saturated_loadings_ is not None
             adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
         elif method is DimRed.LSA:
-            lsa = LSA(n_pc=n_prin_comps, binarize=binarize)
-            adata.obsm[reduction] = lsa.fit_transform(matrix)
+            lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
+            scores = lsa.fit_transform(matrix)
             assert lsa.components_ is not None
             assert lsa.singular_values_ is not None
-            adata.varm[reduction] = lsa.components_
+            depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
+            keep = depth_components(scores, depth)
+            adata.obsm[reduction] = scores[:, keep]
+            adata.varm[reduction] = lsa.components_[:, keep]
             adata.var["lsa_idf"] = lsa.idf_
             adata.uns["lsa"] = {
                 "pivot": lsa.pivot_,
-                "singular_values": lsa.singular_values_,
+                "singular_values": lsa.singular_values_[keep],
                 "binarize": binarize,
                 "log_normalize": log_normalize,
             }
@@ -351,19 +340,6 @@ def main(
                 "eta": eta,
                 "binarize": binarize,
             }
-
-        if drop_depth:
-            depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
-            keep = depth_components(adata.obsm[reduction], depth)
-            if not keep.any():
-                sys.stderr.write("--dropDepth dropped every component.\n")
-                raise typer.Exit(code=1)
-            adata.obsm[reduction] = adata.obsm[reduction][:, keep]
-            if reduction in adata.varm:
-                adata.varm[reduction] = adata.varm[reduction][:, keep]
-            if method is DimRed.LSA:
-                singular = adata.uns["lsa"]["singular_values"]
-                adata.uns["lsa"]["singular_values"] = singular[keep]
 
     sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
     sc.tl.leiden(adata, resolution=cluster_resolution)

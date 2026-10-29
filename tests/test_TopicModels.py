@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import anndata as ad
@@ -234,38 +235,69 @@ def test_logNormalize_is_refused_with_LDA(h5ad: Path) -> None:
     assert "--logNormalize is not valid with LDA" in stderr
 
 
-def test_depth_components_drop_the_correlated_ones() -> None:
+def test_depth_components_drop_the_strongest_correlation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     rng = np.random.default_rng(0)
     depth = rng.uniform(100, 1000, N_CELLS)
     noise = rng.standard_normal((N_CELLS, 3))
-    scores = np.column_stack([depth + rng.standard_normal(N_CELLS), noise])
+    scores = np.column_stack([
+        noise[:, 0],
+        depth + rng.standard_normal(N_CELLS),
+        noise[:, 1:],
+    ])
 
-    np.testing.assert_array_equal(
-        depth_components(scores, depth), [False, True, True, True]
-    )
+    with caplog.at_level(logging.INFO):
+        keep = depth_components(scores, depth)
+
+    np.testing.assert_array_equal(keep, [True, False, True, True])
+    assert "Component 2 of 4 correlates the most" in caplog.text
+    assert not [
+        record for record in caplog.records if record.levelno == logging.WARNING
+    ]
 
 
-def test_depth_components_keep_every_one_when_none_correlate() -> None:
+def test_depth_components_drop_the_extra_one_when_none_correlate(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     rng = np.random.default_rng(0)
     depth = rng.uniform(100, 1000, N_CELLS)
     scores = rng.standard_normal((N_CELLS, 4))
 
-    np.testing.assert_array_equal(
-        depth_components(scores, depth), [True, True, True, True]
-    )
+    with caplog.at_level(logging.INFO):
+        keep = depth_components(scores, depth)
+
+    np.testing.assert_array_equal(keep, [True, True, True, False])
+    assert "The extra component 4 was dropped." in caplog.text
 
 
-@pytest.mark.parametrize("method", ["PCA", "LSA", "LDA"])
-def test_dropDepth_drops_the_correlated_components_and_logs(
-    h5ad: Path, method: str
+def test_depth_components_warn_of_other_correlated_components(
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    code, stderr, out = cluster(h5ad, method, "--dropDepth")
+    rng = np.random.default_rng(0)
+    depth = rng.uniform(100, 1000, N_CELLS)
+    scores = np.column_stack([
+        depth,
+        rng.standard_normal(N_CELLS),
+        depth + 50 * rng.standard_normal(N_CELLS),
+    ])
+
+    with caplog.at_level(logging.INFO):
+        keep = depth_components(scores, depth)
+
+    np.testing.assert_array_equal(keep, [False, True, True])
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "1 more components correlate" in warnings[0].getMessage()
+    assert "component 3" in warnings[0].getMessage()
+
+
+def test_LSA_drops_one_component_for_depth_and_logs(h5ad: Path) -> None:
+    code, stderr, out = cluster(h5ad, "LSA")
     assert code == 0, stderr
 
     result = ad.read_h5ad(out)
-    n_kept = result.obsm[f"X_{method.lower()}"].shape[1]
-    assert 1 <= n_kept <= 4
-    if method != "PCA":
-        assert result.varm[f"X_{method.lower()}"].shape[1] == n_kept
-    assert "of 4 components correlate with cell depth" in stderr
-    assert f"0.75). {4 - n_kept} dropped." in stderr
+    assert result.obsm["X_lsa"].shape == (N_CELLS, 3)
+    assert result.varm["X_lsa"].shape == (N_REGIONS, 3)
+    assert len(result.uns["lsa"]["singular_values"]) == 3
+    assert "of 4 correlates the most" in stderr or "The extra component 4" in stderr
