@@ -41,14 +41,17 @@ DESCRIPTION = (
     "(optionally) a plot file and a .tsv file with UMAP coordinates and the "
     "corresponding cluster id for each barcode.\n\n"
     'Each dimensionality reduction is stored in ``obsm["X_<method>"]``, and the '
-    'region loadings of LSA and LDA in ``varm["X_<method>"]``. If the input '
-    "AnnData object already contains a reduction of the requested method, the "
-    "existing reduction is used instead of computing a new one, unless "
-    "``--recomputeDimRed`` is given.\n\n"
+    'region loadings of LSA and LDA in ``varm["X_<method>"]``, with the method name '
+    'in lowercase (for example ``obsm["X_glmpca"]``). If the input AnnData object '
+    "already contains a reduction of the requested method, the existing reduction"
+    "is used instead of computing a new one, unless ``--recomputeDimRed`` is given. "
+    "With ``--logNormalize``, the counts of every cell are scaled to a total of 10,000 "
+    "and log1p-transformed before the reduction. The counts in the output file are not "
+    "changed.\n\n"
     "``scClusterCells`` provides the following dimensionality reduction methods:\n"
     "* glmPCA: generalized PCA, with an exponential family distribution such as "
     "Poisson, Bernoulli, etc.\n"
-    "* logPCA: Principal Component Analysis preceded by a logarithm transform.\n"
+    "* PCA: Principal Component Analysis.\n"
     "* LSA: Latent Semantic Analysis.\n"
     "* LDA: Latent Dirichlet Allocation."
 )
@@ -86,7 +89,7 @@ def main(
                 "\n\n"
                 "One of: "
                 "[bold yellow]glmPCA[/bold yellow], "
-                "[bold yellow]logPCA[/bold yellow], "
+                "[bold yellow]PCA[/bold yellow], "
                 "[bold yellow]LSA[/bold yellow], "
                 "[bold yellow]LDA[/bold yellow]. "
             ),
@@ -126,6 +129,18 @@ def main(
                 "Binarize the counts per region before dimensionality reduction. Only "
                 "used with [bold yellow]LSA[/bold yellow] and "
                 "[bold yellow]LDA[/bold yellow]."
+            ),
+        ),
+    ] = False,
+    log_normalize: Annotated[
+        bool,
+        typer.Option(
+            "--logNormalize",
+            rich_help_panel=_REDUCTION,
+            help=(
+                "Depth-normalize the counts of every cell to a total of 10,000 and "
+                "then log1p transform before dimensionality reduction. Not comaptible "
+                "with [bold yellow]LDA[/bold yellow], which needs integer counts."
             ),
         ),
     ] = False,
@@ -242,6 +257,7 @@ def main(
             n_prin_comps=n_prin_comps,
             n_neighbors=n_neighbors,
             binarize=binarize,
+            log_normalize=log_normalize,
             recompute_dim_red=recompute_dim_red,
             n_iterations=n_iterations,
             alpha=alpha,
@@ -263,53 +279,61 @@ def main(
         choices = ", ".join(member.value for member in DimRed)
         sys.stderr.write(f"{method!r} is not a valid method. Use one of {choices}.\n")
         raise typer.Exit(code=1) from None
+    if method is DimRed.LDA and log_normalize:
+        sys.stderr.write(
+            "--logNormalize is not valid with LDA, which needs integer counts.\n"
+        )
+        raise typer.Exit(code=1)
 
     adata = validate_anndata(ad.read_h5ad(input), input)
-    reduction = f"X_{method.value}"
+    reduction = f"X_{method.value.lower()}"
 
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
-    elif method is DimRed.logPCA:
-        normalized = adata.copy()
-        sc.pp.normalize_total(normalized, target_sum=1e4)
-        sc.pp.log1p(normalized)
-        sc.pp.pca(normalized, n_comps=n_prin_comps)
-        adata.obsm[reduction] = normalized.obsm["X_pca"]
-    elif method is DimRed.glmPCA:
-        glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
-        glmpca.fit(adata)
-        assert glmpca.saturated_loadings_ is not None
-        adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
-    elif method is DimRed.LSA:
-        lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
-        scores = lsa.fit_transform(adata)
-        assert lsa.components_ is not None
-        assert lsa.singular_values_ is not None
-        # The first component is dropped.
-        adata.obsm[reduction] = scores[:, 1:]
-        adata.varm[reduction] = lsa.components_[:, 1:]
-        adata.var["LSA_idf"] = lsa.idf_
-        adata.uns["LSA"] = {
-            "pivot": lsa.pivot_,
-            "singular_values": lsa.singular_values_[1:],
-            "binarize": binarize,
-        }
-    elif method is DimRed.LDA:
-        lda = GibbsLDA(
-            n_topics=n_prin_comps,
-            alpha=alpha,
-            eta=eta,
-            iterations=n_iterations,
-            binarize=binarize,
-        )
-        adata.obsm[reduction] = lda.fit_transform(adata)
-        assert lda.topics_ is not None
-        adata.varm[reduction] = lda.topics_.T
-        adata.uns["LDA"] = {
-            "alpha": 1.0 / n_prin_comps if alpha is None else alpha,
-            "eta": eta,
-            "binarize": binarize,
-        }
+    else:
+        matrix = adata
+        if log_normalize:
+            matrix = adata.copy()
+            sc.pp.normalize_total(matrix, target_sum=1e4)
+            sc.pp.log1p(matrix)
+        if method is DimRed.PCA:
+            adata.obsm[reduction] = sc.pp.pca(matrix.X, n_comps=n_prin_comps)
+        elif method is DimRed.glmPCA:
+            glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
+            glmpca.fit(matrix)
+            assert glmpca.saturated_loadings_ is not None
+            adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
+        elif method is DimRed.LSA:
+            lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
+            scores = lsa.fit_transform(matrix)
+            assert lsa.components_ is not None
+            assert lsa.singular_values_ is not None
+            # The first component is dropped.
+            adata.obsm[reduction] = scores[:, 1:]
+            adata.varm[reduction] = lsa.components_[:, 1:]
+            adata.var["lsa_idf"] = lsa.idf_
+            adata.uns["lsa"] = {
+                "pivot": lsa.pivot_,
+                "singular_values": lsa.singular_values_[1:],
+                "binarize": binarize,
+                "log_normalize": log_normalize,
+            }
+        elif method is DimRed.LDA:
+            lda = GibbsLDA(
+                n_topics=n_prin_comps,
+                alpha=alpha,
+                eta=eta,
+                iterations=n_iterations,
+                binarize=binarize,
+            )
+            adata.obsm[reduction] = lda.fit_transform(matrix)
+            assert lda.topics_ is not None
+            adata.varm[reduction] = lda.topics_.T
+            adata.uns["lda"] = {
+                "alpha": 1.0 / n_prin_comps if alpha is None else alpha,
+                "eta": eta,
+                "binarize": binarize,
+            }
 
     sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
     sc.tl.leiden(adata, resolution=cluster_resolution)

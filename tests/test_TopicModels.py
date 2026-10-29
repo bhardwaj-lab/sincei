@@ -165,11 +165,9 @@ def test_lda_rejects_counts_that_are_not_integers(counts: sparse.csr_matrix) -> 
     GibbsLDA(n_topics=2, iterations=1, binarize=True).fit(counts * 0.5)
 
 
-@pytest.mark.parametrize("method", ["LSA", "LDA"])
-def test_scClusterCells_stores_the_reduction_and_the_loadings(
-    counts: sparse.csr_matrix, tmp_path: Path, method: str
-) -> None:
-    source, out = tmp_path / "counts.h5ad", tmp_path / "clustered.h5ad"
+@pytest.fixture
+def h5ad(counts: sparse.csr_matrix, tmp_path: Path) -> Path:
+    """`counts` as a sincei h5ad file."""
     adata = ad.AnnData(counts)
     adata.obs_names = [f"sample_cell{i}" for i in range(N_CELLS)]
     adata.obs["sample"] = "sample"
@@ -179,16 +177,54 @@ def test_scClusterCells_stores_the_reduction_and_the_loadings(
     adata.var["name"] = adata.var_names
     adata.var["start"] = np.arange(N_REGIONS) * 1000
     adata.var["end"] = adata.var["start"] + 1000
-    adata.write_h5ad(source)
+    path = tmp_path / "counts.h5ad"
+    adata.write_h5ad(path)
+    return path
 
+
+def cluster(h5ad: Path, method: str, *extra: str) -> tuple[int, str, Path]:
+    """Runs scClusterCells with 3 components, and gives its exit code and stderr."""
+    out = h5ad.with_name("clustered.h5ad")
     proc = run(
         tool_path("scClusterCells"),
-        ["-i", str(source), "-o", str(out), "-m", method, "-n", "3", "-nk", "10"]
-        + (["--nIterations", "20"] if method == "LDA" else []),
+        ["-i", str(h5ad), "-o", str(out), "-m", method, "-n", "3", "-nk", "10"]
+        + (["--nIterations", "20"] if method == "LDA" else [])
+        + list(extra),
     )
-    assert proc.returncode == 0, proc.stderr
+    return proc.returncode, proc.stderr, out
+
+
+@pytest.mark.parametrize("method", ["LSA", "LDA"])
+def test_scClusterCells_stores_the_reduction_and_the_loadings(
+    h5ad: Path, method: str
+) -> None:
+    code, stderr, out = cluster(h5ad, method)
+    assert code == 0, stderr
 
     result = ad.read_h5ad(out)
-    assert result.obsm[f"X_{method}"].shape == (N_CELLS, 3)
-    assert result.varm[f"X_{method}"].shape == (N_REGIONS, 3)
+    assert result.obsm[f"X_{method.lower()}"].shape == (N_CELLS, 3)
+    assert result.varm[f"X_{method.lower()}"].shape == (N_REGIONS, 3)
     assert "leiden" in result.obs
+
+
+@pytest.mark.parametrize("method", ["PCA", "LSA"])
+def test_logNormalize_changes_the_reduction_but_not_the_counts(
+    counts: sparse.csr_matrix, h5ad: Path, method: str
+) -> None:
+    embeddings = []
+    for extra in ([], ["--logNormalize"]):
+        code, stderr, out = cluster(h5ad, method, *extra)
+        assert code == 0, stderr
+        result = ad.read_h5ad(out)
+        np.testing.assert_array_equal(result.X.toarray(), counts.toarray())
+        embeddings.append(result.obsm[f"X_{method.lower()}"])
+
+    assert embeddings[0].shape == embeddings[1].shape == (N_CELLS, 3)
+    assert not np.allclose(np.abs(embeddings[0]), np.abs(embeddings[1]))
+
+
+def test_logNormalize_is_refused_with_LDA(h5ad: Path) -> None:
+    code, stderr, _ = cluster(h5ad, "LDA", "--logNormalize")
+
+    assert code == 1
+    assert "--logNormalize is not valid with LDA" in stderr
