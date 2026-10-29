@@ -10,7 +10,7 @@ import umap
 from scanpy._utils import get_igraph_from_adjacency
 
 # own modules
-from sincei.tools.TopicModels import LSA, GibbsLDA
+from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import depth_components
 
 if TYPE_CHECKING:
@@ -201,7 +201,7 @@ def MultiModalClustering(
             adata.obsm[reduction] = lsa.fit_transform(matrix)
 
         elif met == "LDA":
-            lda = GibbsLDA(n_topics=n_comps[i], binarize=binarize)
+            lda = LDA(n_topics=n_comps[i], binarize=binarize)
             adata.obsm[reduction] = lda.fit_transform(matrix)
 
         elif met == "glmPCA":

@@ -19,7 +19,7 @@ import typer
 
 from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import GLMPCA
-from sincei.tools.TopicModels import LSA, GibbsLDA
+from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
 
 from ._common_args import (
@@ -336,7 +336,7 @@ def main(
                 "log_normalize": log_normalize,
             }
         elif method is DimRed.LDA:
-            lda = GibbsLDA(
+            lda = LDA(
                 n_topics=n_prin_comps,
                 alpha=alpha,
                 eta=eta,

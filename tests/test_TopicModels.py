@@ -1,4 +1,4 @@
-"""Tests for ``LSA`` and ``GibbsLDA``, and their use in ``scClusterCells``."""
+"""Tests for ``LSA`` and ``LDA``, and their use in ``scClusterCells``."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from _cli_testing import run, tool_path
 from scipy import sparse
 from scipy.linalg import subspace_angles
 
-from sincei.tools.TopicModels import GENSIM_SLOPE, LSA, GibbsLDA, LSASolver, tfidf
+from sincei.tools.TopicModels import GENSIM_SLOPE, LDA, LSA, LSASolver, tfidf
 from sincei.utils import depth_components
 
 if TYPE_CHECKING:
@@ -129,7 +129,7 @@ def test_lsa_rejects_too_many_components(counts: sparse.csr_matrix) -> None:
 
 
 def test_lda_gives_topic_proportions(counts: sparse.csr_matrix) -> None:
-    lda = GibbsLDA(n_topics=2, iterations=50)
+    lda = LDA(n_topics=2, iterations=50)
     theta = lda.fit_transform(counts)
 
     assert theta.shape == (N_CELLS, 2)
@@ -141,15 +141,15 @@ def test_lda_gives_topic_proportions(counts: sparse.csr_matrix) -> None:
 
 
 def test_lda_separates_the_two_groups(counts: sparse.csr_matrix) -> None:
-    theta = GibbsLDA(n_topics=2, iterations=100).fit_transform(counts)
+    theta = LDA(n_topics=2, iterations=100).fit_transform(counts)
 
     first, second = theta[: N_CELLS // 2, 0], theta[N_CELLS // 2 :, 0]
     assert abs(first.mean() - second.mean()) > 0.5
 
 
 def test_lda_is_reproducible_with_a_seed(counts: sparse.csr_matrix) -> None:
-    first = GibbsLDA(n_topics=3, iterations=20, random_state=1).fit_transform(counts)
-    second = GibbsLDA(n_topics=3, iterations=20, random_state=1).fit_transform(counts)
+    first = LDA(n_topics=3, iterations=20, random_state=1).fit_transform(counts)
+    second = LDA(n_topics=3, iterations=20, random_state=1).fit_transform(counts)
 
     np.testing.assert_array_equal(first, second)
 
@@ -157,16 +157,16 @@ def test_lda_is_reproducible_with_a_seed(counts: sparse.csr_matrix) -> None:
 def test_a_cell_without_counts_gets_the_prior_mean(counts: sparse.csr_matrix) -> None:
     matrix = counts.tolil()
     matrix[0] = 0
-    theta = GibbsLDA(n_topics=4, iterations=10).fit_transform(matrix.tocsr())
+    theta = LDA(n_topics=4, iterations=10).fit_transform(matrix.tocsr())
 
     np.testing.assert_allclose(theta[0], 0.25)
 
 
 def test_lda_rejects_counts_that_are_not_integers(counts: sparse.csr_matrix) -> None:
     with pytest.raises(ValueError, match="integer counts"):
-        GibbsLDA(iterations=1).fit(counts * 0.5)
+        LDA(iterations=1).fit(counts * 0.5)
 
-    GibbsLDA(n_topics=2, iterations=1, binarize=True).fit(counts * 0.5)
+    LDA(n_topics=2, iterations=1, binarize=True).fit(counts * 0.5)
 
 
 @pytest.fixture

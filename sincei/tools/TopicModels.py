@@ -3,7 +3,7 @@
 `LSA` is the truncated SVD of the TF-IDF eqquivalent to gensim's
 `TfidfModel(smartirs="lfu")`, solved with ARPACK (`scipy.sparse.linalg.svds`) or
 with a randomized SVD in torch.
-`GibbsLDA` is latent Dirichlet allocation fitted by collapsed Gibbs sampling with
+`LDA` is latent Dirichlet allocation fitted by collapsed Gibbs sampling with
 tomotopy.
 """
 
@@ -290,7 +290,7 @@ class LSA:
         )
 
 
-class GibbsLDA:
+class LDA:
     r"""Latent Dirichlet allocation of a cell-by-region count matrix, fitted by
     collapsed Gibbs sampling with tomotopy.
 
@@ -364,7 +364,7 @@ class GibbsLDA:
         self.topics_: np.ndarray | None = None
         self.log_likelihood_: list[float] = []
 
-    def fit(self, X: CountMatrix) -> GibbsLDA:
+    def fit(self, X: CountMatrix) -> LDA:
         """Fits the model to `X`, cells in rows and regions in columns."""
         self.fit_transform(X)
         return self
