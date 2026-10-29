@@ -35,9 +35,8 @@ LOG_INTERVAL = 10
 
 
 class LSASolver(str, Enum):
-    auto = "auto"
     arpack = "arpack"
-    randomized = "randomized"
+    torch = "torch"
 
 
 def count_matrix(X: CountMatrix, binarize: bool = False) -> csr_matrix:
@@ -140,17 +139,16 @@ class LSA:
         Number of components. Defaults to 20.
     solver : LSASolver or str
         "arpack" for `scipy.sparse.linalg.svds` on the CPU, which gives the exact
-        optimum. "randomized" for the randomized SVD (Halko et al. 2009) in torch,
-        on `device`. "auto" takes "arpack" on the CPU, else "randomized". Defaults
-        to "auto".
+        optimum. "torch" for the randomized SVD (Halko et al. 2009) in torch,
+        on `device`. Defaults to "arpack".
     n_iter : int
-        Power iterations of the randomized solver. Defaults to 8.
+        Power iterations of the torch solver. Defaults to 8.
     oversample : int or None
-        Columns of the randomized solver beyond n_pc. None takes n_pc. Defaults to None.
+        Columns of the torch solver beyond n_pc. None takes n_pc. Defaults to None.
     binarize : bool
         Whether to read every value that is not zero as 1. Defaults to False.
     device : str, torch.device or None
-        Device of the randomized solver. None selects "cuda" if it is available, else
+        Device of the torch solver. None selects "cuda" if it is available, else
         "cpu". Defaults to None.
     random_state : int or None
         Seed of the start of the solvers. Defaults to DEFAULT_RANDOM_STATE (42).
@@ -162,8 +160,6 @@ class LSA:
         absolute value of every component is positive.
     singular_values_ : np.ndarray
         The singular value of every component.
-    solver_ : LSASolver
-        The solver that the fit used, "arpack" or "randomized".
     idf_ : np.ndarray
         The idf of every region, which transform uses for new cells.
     pivot_ : float
@@ -173,7 +169,7 @@ class LSA:
     def __init__(
         self,
         n_pc: int = 20,
-        solver: LSASolver | str = LSASolver.auto,
+        solver: LSASolver | str = LSASolver.arpack,
         n_iter: int = 8,
         oversample: int | None = None,
         binarize: bool = False,
@@ -204,7 +200,6 @@ class LSA:
 
         self.components_: np.ndarray | None = None
         self.singular_values_: np.ndarray | None = None
-        self.solver_: LSASolver | None = None
         self.idf_: np.ndarray | None = None
         self.pivot_: float | None = None
 
@@ -227,19 +222,16 @@ class LSA:
         if bool((counts.data < 0).any()):
             msg = "LSA takes counts, but the input has negative values."
             raise ValueError(msg)
-        device = _resolve_device(self.device)
-        solver = self.solver
-        if solver is LSASolver.auto:
-            solver = LSASolver.arpack if device.type == "cpu" else LSASolver.randomized
-        self.solver_ = solver
 
         holders = np.bincount(counts.indices[counts.data > 0], minlength=p)
         self.idf_, self.pivot_ = idf(holders.astype(np.float64), n)
         weighted = tfidf(counts, self.idf_, self.pivot_)
-        if solver is LSASolver.arpack:
+        if self.solver is LSASolver.arpack:
             components, singular, scores = self._arpack_svd(weighted)
-        else:
-            components, singular, scores = self._randomized_svd(weighted, device)
+        elif self.solver is LSASolver.torch:
+            components, singular, scores = self._randomized_svd(
+                weighted, _resolve_device(self.device)
+            )
 
         signs = largest_entry_signs(components)
         self.components_ = components * signs

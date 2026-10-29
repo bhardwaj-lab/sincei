@@ -59,36 +59,39 @@ def test_arpack_gives_the_top_singular_vectors(counts: sparse.csr_matrix) -> Non
     scores = lsa.fit_transform(counts)
     singular = np.linalg.svd(dense_tfidf(counts.toarray()), compute_uv=False)
 
-    assert lsa.solver_ is LSASolver.arpack
     assert scores.shape == (N_CELLS, N_PC)
     assert lsa.components_ is not None
     assert lsa.components_.shape == (N_REGIONS, N_PC)
     np.testing.assert_allclose(lsa.singular_values_, singular[:N_PC], rtol=1e-4)
 
 
-def test_randomized_and_arpack_find_the_same_components(
+def test_the_default_solver_is_arpack() -> None:
+    assert LSA(N_PC).solver is LSASolver.arpack
+
+
+def test_torch_and_arpack_find_the_same_components(
     counts: sparse.csr_matrix,
 ) -> None:
     arpack = LSA(N_PC, solver="arpack").fit(counts)
-    randomized = LSA(N_PC, solver="randomized", device="cpu").fit(counts)
+    torch_lsa = LSA(N_PC, solver="torch", device="cpu").fit(counts)
     assert arpack.components_ is not None
-    assert randomized.components_ is not None
+    assert torch_lsa.components_ is not None
 
     signal = slice(0, 2)
     angles = subspace_angles(
-        arpack.components_[:, signal], randomized.components_[:, signal]
+        arpack.components_[:, signal], torch_lsa.components_[:, signal]
     )
     assert np.degrees(angles).max() < 1.0
-    assert randomized.singular_values_ is not None
+    assert torch_lsa.singular_values_ is not None
     assert arpack.singular_values_ is not None
     np.testing.assert_allclose(
-        randomized.singular_values_[signal],
+        torch_lsa.singular_values_[signal],
         arpack.singular_values_[signal],
         rtol=1e-4,
     )
 
 
-@pytest.mark.parametrize("solver", ["arpack", "randomized"])
+@pytest.mark.parametrize("solver", ["arpack", "torch"])
 def test_transform_gives_the_scores_of_the_fit(
     counts: sparse.csr_matrix, solver: str
 ) -> None:
@@ -116,8 +119,8 @@ def test_lsa_takes_anndata_and_dense_input(counts: sparse.csr_matrix) -> None:
 
 
 def test_lsa_rejects_an_unknown_solver() -> None:
-    with pytest.raises(ValueError, match="'arpack'"):
-        LSA(N_PC, solver="lanczos")
+    with pytest.raises(ValueError, match="'arpack', 'torch'"):
+        LSA(N_PC, solver="randomized")
 
 
 def test_lsa_rejects_too_many_components(counts: sparse.csr_matrix) -> None:
