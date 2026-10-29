@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.stats import spearmanr
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -117,3 +119,57 @@ def chromosome_to_numeric(chroms: Iterable[str]) -> dict[str, int]:
         mapping[chrom] = counter
 
     return mapping
+
+
+DEPTH_CORRELATION_CUTOFF = 0.75
+
+
+def depth_components(scores: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Whether to keep every component, with one extra component to drop.
+
+    The component whose scores correlate the most with `depth` is dropped if its
+    |Spearman rho| is above DEPTH_CORRELATION_CUTOFF, else the last component is. A
+    warning names every other component above DEPTH_CORRELATION_CUTOFF, which is kept.
+    """
+    correlations = np.nan_to_num([
+        spearmanr(column, depth).statistic for column in scores.T
+    ])
+    strongest = int(np.argmax(np.abs(correlations)))
+    keep = np.ones(len(correlations), dtype=bool)
+    if abs(correlations[strongest]) > DEPTH_CORRELATION_CUTOFF:
+        keep[strongest] = False
+        logging.info(
+            "Component %d of %d correlates the most with cell depth (Spearman rho "
+            "%.3f, |rho| above %s), and was dropped.",
+            strongest + 1,
+            len(correlations),
+            correlations[strongest],
+            DEPTH_CORRELATION_CUTOFF,
+        )
+    else:
+        keep[-1] = False
+        logging.info(
+            "No component correlates with cell depth with |Spearman rho| above %s "
+            "(largest: component %d, rho %.3f). The extra component %d was dropped.",
+            DEPTH_CORRELATION_CUTOFF,
+            strongest + 1,
+            correlations[strongest],
+            len(correlations),
+        )
+    others = [
+        component
+        for component in np.flatnonzero(np.abs(correlations) > DEPTH_CORRELATION_CUTOFF)
+        if component != strongest
+    ]
+    if others:
+        logging.warning(
+            "%d more components correlate with cell depth with |Spearman rho| above "
+            "%s, and were kept: %s.",
+            len(others),
+            DEPTH_CORRELATION_CUTOFF,
+            ", ".join(
+                f"component {component + 1} (rho {correlations[component]:.3f})"
+                for component in others
+            ),
+        )
+    return keep

@@ -222,7 +222,7 @@ class OverlapPolicy(str, Enum):
 class DimRed(str, Enum):
     LSA = "LSA"
     LDA = "LDA"
-    logPCA = "logPCA"
+    PCA = "PCA"
     glmPCA = "glmPCA"
 
 
