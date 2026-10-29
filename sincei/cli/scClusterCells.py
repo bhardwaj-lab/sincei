@@ -12,9 +12,11 @@ import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import scanpy as sc
 import typer
+from scipy.stats import spearmanr
 
 from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import GLMPCA
@@ -69,6 +71,30 @@ _REDUCTION = "Dimensionality reduction options"
 _LDA = "LDA options"
 _GLMPCA = "glmPCA options"
 _CLUSTERING = "Clustering options"
+
+DEPTH_CORRELATION_CUTOFF = 0.75
+
+
+def depth_components(scores: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Whether to keep every component: those that do not follow the cell depth.
+
+    A component follows the cell depth when the |Spearman rho| of its scores with
+    `depth` is above DEPTH_CORRELATION_CUTOFF.
+    """
+    correlations = np.nan_to_num([
+        spearmanr(column, depth).statistic for column in scores.T
+    ])
+    correlated = np.abs(correlations) > DEPTH_CORRELATION_CUTOFF
+    keep = ~correlated
+    logging.info(
+        "%d of %d components correlate with cell depth (|Spearman rho| above %s). "
+        "%d dropped.",
+        int(correlated.sum()),
+        len(correlations),
+        DEPTH_CORRELATION_CUTOFF,
+        int((~keep).sum()),
+    )
+    return keep
 
 
 @app.callback(invoke_without_command=True)
@@ -129,6 +155,18 @@ def main(
                 "Binarize the counts per region before dimensionality reduction. Only "
                 "used with [bold yellow]LSA[/bold yellow] and "
                 "[bold yellow]LDA[/bold yellow]."
+            ),
+        ),
+    ] = False,
+    drop_depth: Annotated[
+        bool,
+        typer.Option(
+            "--dropDepth",
+            rich_help_panel=_REDUCTION,
+            help=(
+                "Fit one extra component, and drop every component whose scores "
+                "correlate with the total counts of the cells (|Spearman rho| above "
+                f"{DEPTH_CORRELATION_CUTOFF})."
             ),
         ),
     ] = False,
@@ -257,6 +295,7 @@ def main(
             n_prin_comps=n_prin_comps,
             n_neighbors=n_neighbors,
             binarize=binarize,
+            drop_depth=drop_depth,
             log_normalize=log_normalize,
             recompute_dim_red=recompute_dim_red,
             n_iterations=n_iterations,
@@ -291,11 +330,15 @@ def main(
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     else:
+        if drop_depth:
+            n_prin_comps += 1
+
         matrix = adata
         if log_normalize:
             matrix = adata.copy()
             sc.pp.normalize_total(matrix, target_sum=1e4)
             sc.pp.log1p(matrix)
+
         if method is DimRed.PCA:
             adata.obsm[reduction] = sc.pp.pca(matrix.X, n_comps=n_prin_comps)
         elif method is DimRed.glmPCA:
@@ -304,17 +347,15 @@ def main(
             assert glmpca.saturated_loadings_ is not None
             adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
         elif method is DimRed.LSA:
-            lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
-            scores = lsa.fit_transform(matrix)
+            lsa = LSA(n_pc=n_prin_comps, binarize=binarize)
+            adata.obsm[reduction] = lsa.fit_transform(matrix)
             assert lsa.components_ is not None
             assert lsa.singular_values_ is not None
-            # The first component is dropped.
-            adata.obsm[reduction] = scores[:, 1:]
-            adata.varm[reduction] = lsa.components_[:, 1:]
+            adata.varm[reduction] = lsa.components_
             adata.var["lsa_idf"] = lsa.idf_
             adata.uns["lsa"] = {
                 "pivot": lsa.pivot_,
-                "singular_values": lsa.singular_values_[1:],
+                "singular_values": lsa.singular_values_,
                 "binarize": binarize,
                 "log_normalize": log_normalize,
             }
@@ -334,6 +375,19 @@ def main(
                 "eta": eta,
                 "binarize": binarize,
             }
+
+        if drop_depth:
+            depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
+            keep = depth_components(adata.obsm[reduction], depth)
+            if not keep.any():
+                sys.stderr.write("--dropDepth dropped every component.\n")
+                raise typer.Exit(code=1)
+            adata.obsm[reduction] = adata.obsm[reduction][:, keep]
+            if reduction in adata.varm:
+                adata.varm[reduction] = adata.varm[reduction][:, keep]
+            if method is DimRed.LSA:
+                singular = adata.uns["lsa"]["singular_values"]
+                adata.uns["lsa"]["singular_values"] = singular[keep]
 
     sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
     sc.tl.leiden(adata, resolution=cluster_resolution)

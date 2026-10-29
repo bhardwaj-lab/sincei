@@ -11,6 +11,7 @@ from _cli_testing import run, tool_path
 from scipy import sparse
 from scipy.linalg import subspace_angles
 
+from sincei.cli.scClusterCells import depth_components
 from sincei.tools.TopicModels import GENSIM_SLOPE, LSA, GibbsLDA, LSASolver, tfidf
 
 if TYPE_CHECKING:
@@ -228,3 +229,40 @@ def test_logNormalize_is_refused_with_LDA(h5ad: Path) -> None:
 
     assert code == 1
     assert "--logNormalize is not valid with LDA" in stderr
+
+
+def test_depth_components_drop_the_correlated_ones() -> None:
+    rng = np.random.default_rng(0)
+    depth = rng.uniform(100, 1000, N_CELLS)
+    noise = rng.standard_normal((N_CELLS, 3))
+    scores = np.column_stack([depth + rng.standard_normal(N_CELLS), noise])
+
+    np.testing.assert_array_equal(
+        depth_components(scores, depth), [False, True, True, True]
+    )
+
+
+def test_depth_components_keep_every_one_when_none_correlate() -> None:
+    rng = np.random.default_rng(0)
+    depth = rng.uniform(100, 1000, N_CELLS)
+    scores = rng.standard_normal((N_CELLS, 4))
+
+    np.testing.assert_array_equal(
+        depth_components(scores, depth), [True, True, True, True]
+    )
+
+
+@pytest.mark.parametrize("method", ["PCA", "LSA", "LDA"])
+def test_dropDepth_drops_the_correlated_components_and_logs(
+    h5ad: Path, method: str
+) -> None:
+    code, stderr, out = cluster(h5ad, method, "--dropDepth")
+    assert code == 0, stderr
+
+    result = ad.read_h5ad(out)
+    n_kept = result.obsm[f"X_{method.lower()}"].shape[1]
+    assert 1 <= n_kept <= 4
+    if method != "PCA":
+        assert result.varm[f"X_{method.lower()}"].shape[1] == n_kept
+    assert "of 4 components correlate with cell depth" in stderr
+    assert f"0.75). {4 - n_kept} dropped." in stderr
