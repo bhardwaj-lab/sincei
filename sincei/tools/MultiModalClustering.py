@@ -9,10 +9,8 @@ import scanpy as sc
 import umap
 from scanpy._utils import get_igraph_from_adjacency
 
-from sincei.cli._common_args import available_processors
-
 # own modules
-from sincei.tools.TopicModels import TOPICMODEL
+from sincei.tools.TopicModels import LSA, GibbsLDA
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -164,27 +162,12 @@ def MultiModalClustering(
             sc.pp.pca(adata, n_comps[i])
 
         elif met == "LSA":
-            ## LSA using gensim
-            model_object = TOPICMODEL(
-                adata,
-                n_topics=n_comps[i],
-                binarize=binarize,
-                smart_code="lfu",
-            )
-            model_object.runLSA()
-            adata.obsm["X_pca"] = model_object.get_cell_topic()
+            lsa = LSA(n_pc=n_comps[i], binarize=binarize)
+            adata.obsm["X_lsa"] = lsa.fit_transform(adata)
 
         elif met == "LDA":
-            ## LDA using gensim
-            model_object = TOPICMODEL(
-                adata,
-                n_topics=n_comps[i],
-                binarize=binarize,
-                n_passes=2,
-                n_workers=available_processors(),
-            )
-            model_object.runLDA()
-            adata.obsm["X_pca"] = model_object.get_cell_topic()
+            lda = GibbsLDA(n_topics=n_comps[i], binarize=binarize)
+            adata.obsm["X_lda"] = lda.fit_transform(adata)
 
         elif met == "glmPCA":
             # import glmPCA (not imported on top due to special optional import of

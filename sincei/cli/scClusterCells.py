@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import warnings
 from pathlib import Path
 from typing import Annotated
@@ -17,10 +18,9 @@ import typer
 
 from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import GLMPCA
-from sincei.tools.TopicModels import TOPICMODEL
+from sincei.tools.TopicModels import LSA, GibbsLDA
 
 from ._common_args import (
-    AVAILABLE_PROCESSORS,
     CM_PER_INCH,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
@@ -40,7 +40,8 @@ DESCRIPTION = (
     "2D projection (UMAP) of the cells. The result is an updated h5ad object, and "
     "(optionally) a plot file and a .tsv file with UMAP coordinates and the "
     "corresponding cluster id for each barcode.\n\n"
-    'Each dimensionality reduction is stored in ``obsm["X_<method>"]``. If the input '
+    'Each dimensionality reduction is stored in ``obsm["X_<method>"]``, and the '
+    'region loadings of LSA and LDA in ``varm["X_<method>"]``. If the input '
     "AnnData object already contains a reduction of the requested method, the "
     "existing reduction is used instead of computing a new one, unless "
     "``--recomputeDimRed`` is given.\n\n"
@@ -128,20 +129,6 @@ def main(
             ),
         ),
     ] = False,
-    out_file_trained_model: Annotated[
-        str | None,
-        typer.Option(
-            "-om",
-            "--outFileTrainedModel",
-            rich_help_panel=_REDUCTION,
-            help=(
-                "The output file for the trained model. The saved model can be used "
-                "later to embed/compare new cells to the existing cluster of cells. "
-                "Only used with [bold yellow]LSA[/bold yellow] and "
-                "[bold yellow]LDA[/bold yellow]."
-            ),
-        ),
-    ] = None,
     recompute_dim_red: Annotated[
         bool,
         typer.Option(
@@ -175,61 +162,40 @@ def main(
         ),
     ] = GLMFamily.poisson,
     # LDA options
-    n_passes: Annotated[
-        int,
-        typer.Option(
-            "--nPasses",
-            rich_help_panel=_LDA,
-            help=(
-                "Number of passes through the corpus for LDA model fitting. Only used "
-                "with [bold yellow]LDA[/bold yellow]."
-            ),
-        ),
-    ] = 5,
     n_iterations: Annotated[
         int,
         typer.Option(
             "--nIterations",
             rich_help_panel=_LDA,
             help=(
-                "Maximum number of iterations through the corpus when inferring the "
-                "topic distribution. Only used with [bold yellow]LDA[/bold yellow]."
+                "Number of Gibbs sampling iterations over all the counts. Only used "
+                "with [bold yellow]LDA[/bold yellow]."
             ),
         ),
-    ] = 500,
+    ] = 1000,
     alpha: Annotated[
-        float,
+        float | None,
         typer.Option(
             "--alpha",
             rich_help_panel=_LDA,
             help=(
-                "Prior to initialize cell-topic vectors. Only used with "
+                "Prior of the topic proportions of a cell, the same for every topic. "
+                "If not given, 1/nPrinComps is used. Only used with "
                 "[bold yellow]LDA[/bold yellow]."
             ),
         ),
-    ] = 50.0,
+    ] = None,
     eta: Annotated[
         float,
         typer.Option(
             "--eta",
             rich_help_panel=_LDA,
             help=(
-                "Prior to initialize feature-topic vectors. Only used with "
+                "Prior of the region weights of a topic. Only used with "
                 "[bold yellow]LDA[/bold yellow]."
             ),
         ),
     ] = 0.1,
-    gamma_threshold: Annotated[
-        float,
-        typer.Option(
-            "--gammaThreshold",
-            rich_help_panel=_LDA,
-            help=(
-                "Minimum change in the value of the gamma parameters to continue "
-                "iterating. Only used with [bold yellow]LDA[/bold yellow]."
-            ),
-        ),
-    ] = 0.001,
     # Clustering options
     out_file_umap: Annotated[
         str | None,
@@ -265,9 +231,6 @@ def main(
     ] = PlotFileFormat.png,
     dpi: Annotated[int, PLOT_OPTS["dpi"]] = 300,
     # Other options
-    number_of_processors: Annotated[
-        int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -280,12 +243,9 @@ def main(
             n_neighbors=n_neighbors,
             binarize=binarize,
             recompute_dim_red=recompute_dim_red,
-            out_file_trained_model=out_file_trained_model,
-            n_passes=n_passes,
             n_iterations=n_iterations,
             alpha=alpha,
             eta=eta,
-            gamma_threshold=gamma_threshold,
             glmpca_family=glmpca_family,
             out_file_umap=out_file_umap,
             cluster_resolution=cluster_resolution,
@@ -293,15 +253,20 @@ def main(
             plot_height=plot_height,
             plot_file_format=plot_file_format,
             dpi=dpi,
-            number_of_processors=number_of_processors,
         )
     else:
         warnings.filterwarnings("ignore")
 
+    try:
+        method = DimRed(method)
+    except ValueError:
+        choices = ", ".join(member.value for member in DimRed)
+        sys.stderr.write(f"{method!r} is not a valid method. Use one of {choices}.\n")
+        raise typer.Exit(code=1) from None
+
     adata = validate_anndata(ad.read_h5ad(input), input)
     reduction = f"X_{method.value}"
 
-    model = None
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     elif method is DimRed.logPCA:
@@ -315,29 +280,36 @@ def main(
         glmpca.fit(adata)
         assert glmpca.saturated_loadings_ is not None
         adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
-    else:
-        topics = TOPICMODEL(
-            adata,
-            n_topics=n_prin_comps + 1,
-            binarize=binarize,
-            n_passes=n_passes,
-            n_workers=number_of_processors,
-        )
-        if method is DimRed.LSA:
-            topics.runLSA()
-            model = topics.lsi_model
-        else:
-            topics.runLDA(
-                iterations=n_iterations,
-                alpha=alpha,
-                eta=eta,
-                gamma_threshold=gamma_threshold,
-            )
-            model = topics.lda_model
+    elif method is DimRed.LSA:
+        lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
+        scores = lsa.fit_transform(adata)
+        assert lsa.components_ is not None
+        assert lsa.singular_values_ is not None
         # The first component is dropped.
-        adata.obsm[reduction] = topics.get_cell_topic().to_numpy()[
-            :, 1 : n_prin_comps + 1
-        ]
+        adata.obsm[reduction] = scores[:, 1:]
+        adata.varm[reduction] = lsa.components_[:, 1:]
+        adata.var["LSA_idf"] = lsa.idf_
+        adata.uns["LSA"] = {
+            "pivot": lsa.pivot_,
+            "singular_values": lsa.singular_values_[1:],
+            "binarize": binarize,
+        }
+    elif method is DimRed.LDA:
+        lda = GibbsLDA(
+            n_topics=n_prin_comps,
+            alpha=alpha,
+            eta=eta,
+            iterations=n_iterations,
+            binarize=binarize,
+        )
+        adata.obsm[reduction] = lda.fit_transform(adata)
+        assert lda.topics_ is not None
+        adata.varm[reduction] = lda.topics_.T
+        adata.uns["LDA"] = {
+            "alpha": 1.0 / n_prin_comps if alpha is None else alpha,
+            "eta": eta,
+            "binarize": binarize,
+        }
 
     sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=n_neighbors)
     sc.tl.leiden(adata, resolution=cluster_resolution)
@@ -346,16 +318,6 @@ def main(
     sc.tl.umap(adata, min_dist=0.1, spread=5, init_pos="paga")
 
     adata.write_h5ad(out_file)
-
-    if out_file_trained_model is not None:
-        if model is not None:
-            model.save(out_file_trained_model)
-        elif method in {DimRed.LSA, DimRed.LDA}:
-            logging.warning(
-                "No model was trained, because obsm[%r] was reused. Give "
-                "--recomputeDimRed to train and save a model.",
-                reduction,
-            )
 
     if out_file_umap is not None:
         figure, axes = plt.subplots(

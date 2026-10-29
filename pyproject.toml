@@ -40,7 +40,7 @@ dependencies = [
     # mctorch-lib calls torch.qr, which torch 2.14 removed.
     "torch<2.14",
     "mctorch-lib",
-    "gensim",
+    "tomotopy",
     "ruptures",
     "tqdm",
     ]
