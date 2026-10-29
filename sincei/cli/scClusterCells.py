@@ -143,8 +143,9 @@ def main(
             rich_help_panel=_REDUCTION,
             help=(
                 "Depth-normalize the counts of every cell to a total of 10,000 and "
-                "then log1p transform before dimensionality reduction. Not comaptible "
-                "with [bold yellow]LDA[/bold yellow], which needs integer counts."
+                "then log1p transform before dimensionality reduction. Ignored with "
+                "[bold yellow]LSA[/bold yellow] and [bold yellow]LDA[/bold yellow], "
+                "which take the counts."
             ),
         ),
     ] = False,
@@ -283,11 +284,11 @@ def main(
         choices = ", ".join(member.value for member in DimRed)
         sys.stderr.write(f"{method!r} is not a valid method. Use one of {choices}.\n")
         raise typer.Exit(code=1) from None
-    if method is DimRed.LDA and log_normalize:
-        sys.stderr.write(
-            "--logNormalize is not valid with LDA, which needs integer counts.\n"
+    if log_normalize and method in {DimRed.LSA, DimRed.LDA}:
+        logging.warning(
+            "--logNormalize is ignored with %s, which takes raw counts.", method.value
         )
-        raise typer.Exit(code=1)
+        log_normalize = False
 
     adata = validate_anndata(ad.read_h5ad(input), input)
     reduction = f"X_{method.value.lower()}"
@@ -302,7 +303,10 @@ def main(
             sc.pp.log1p(matrix)
 
         if method is DimRed.PCA:
-            adata.obsm[reduction] = sc.pp.pca(matrix.X, n_comps=n_prin_comps)
+            sc.pp.pca(matrix, n_comps=n_prin_comps)
+            adata.obsm[reduction] = matrix.obsm["X_pca"]
+            adata.varm["PCs"] = matrix.varm["PCs"]
+            adata.uns["pca"] = matrix.uns["pca"]
         elif method is DimRed.glmPCA:
             glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
             glmpca.fit(matrix)
@@ -322,7 +326,6 @@ def main(
                 "pivot": lsa.pivot_,
                 "singular_values": lsa.singular_values_[keep],
                 "binarize": binarize,
-                "log_normalize": log_normalize,
             }
         elif method is DimRed.LDA:
             lda = LDA(

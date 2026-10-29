@@ -212,10 +212,10 @@ def test_scClusterCells_stores_the_reduction_and_the_loadings(
     assert "leiden" in result.obs
 
 
-@pytest.mark.parametrize("method", ["PCA", "LSA"])
 def test_logNormalize_changes_the_reduction_but_not_the_counts(
-    counts: sparse.csr_matrix, h5ad: Path, method: str
+    counts: sparse.csr_matrix, h5ad: Path
 ) -> None:
+    method = "PCA"
     embeddings = []
     for extra in ([], ["--logNormalize"]):
         code, stderr, out = cluster(h5ad, method, *extra)
@@ -228,11 +228,16 @@ def test_logNormalize_changes_the_reduction_but_not_the_counts(
     assert not np.allclose(np.abs(embeddings[0]), np.abs(embeddings[1]))
 
 
-def test_logNormalize_is_refused_with_LDA(h5ad: Path) -> None:
-    code, stderr, _ = cluster(h5ad, "LDA", "--logNormalize")
+@pytest.mark.parametrize("method", ["LSA", "LDA"])
+def test_logNormalize_is_ignored_with_a_warning(h5ad: Path, method: str) -> None:
+    embeddings = []
+    for extra in ([], ["--logNormalize"]):
+        code, stderr, out = cluster(h5ad, method, *extra)
+        assert code == 0, stderr
+        embeddings.append(ad.read_h5ad(out).obsm[f"X_{method.lower()}"])
 
-    assert code == 1
-    assert "--logNormalize is not valid with LDA" in stderr
+    assert f"--logNormalize is ignored with {method}" in stderr
+    np.testing.assert_array_equal(embeddings[0], embeddings[1])
 
 
 def test_depth_components_drop_the_strongest_correlation(

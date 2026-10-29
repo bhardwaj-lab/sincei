@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, cast
 
 import leidenalg as la
@@ -94,9 +95,9 @@ def MultiModalClustering(
         for LSA/LDA).
     log_normalize : bool or list[bool]
         Whether to scale the counts of every cell to a total of 10,000 and then apply
-        the log1p transform, before dimensionality reduction. Not valid with LDA, which
-        needs counts. If list is provided, it must contain a value for each modality.
-        Default is False.
+        the log1p transform, before dimensionality reduction. Ignored with LSA and LDA,
+        which take the counts. If list is provided, it must contain a value for each
+        modality. Default is False.
     glmPCAfamily : str
         The choice of exponential family distribution to use for glmPCA method. Default
         is "poisson".
@@ -149,13 +150,18 @@ def MultiModalClustering(
     if len(log_normalizes) != len(modalities):
         msg = "Modalities and log_normalize lists must have the same length."
         raise ValueError(msg)
-    for met, normalize in zip(methods, log_normalizes, strict=True):
+    for i, (mod, met) in enumerate(zip(modalities, methods, strict=True)):
         if met not in METHODS:
             msg = f"{met!r} is not a valid method. Use one of {', '.join(METHODS)}."
             raise ValueError(msg)
-        if met == "LDA" and normalize:
-            msg = "log_normalize is not valid with LDA, which needs counts."
-            raise ValueError(msg)
+        if log_normalizes[i] and met in {"LSA", "LDA"}:
+            logging.warning(
+                "log_normalize is ignored for modality %s with %s, which takes the "
+                "counts.",
+                mod,
+                met,
+            )
+            log_normalizes[i] = False
 
     # Find common barcodes in provided modalities
     if column_key is None:
@@ -181,7 +187,10 @@ def MultiModalClustering(
             sc.pp.log1p(matrix)
 
         if met == "PCA":
-            adata.obsm[reduction] = sc.pp.pca(matrix.X, n_comps=n_comps[i])
+            sc.pp.pca(matrix, n_comps=n_comps[i])
+            adata.obsm[reduction] = matrix.obsm["X_pca"]
+            adata.varm["PCs"] = matrix.varm["PCs"]
+            adata.uns["pca"] = matrix.uns["pca"]
 
         elif met == "LSA":
             lsa = LSA(n_pc=n_comps[i] + 1, binarize=binarize)
