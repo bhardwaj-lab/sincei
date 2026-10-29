@@ -16,11 +16,11 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import typer
-from scipy.stats import spearmanr
 
 from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import GLMPCA
 from sincei.tools.TopicModels import LSA, GibbsLDA
+from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
 
 from ._common_args import (
     CM_PER_INCH,
@@ -71,30 +71,6 @@ _REDUCTION = "Dimensionality reduction options"
 _LDA = "LDA options"
 _GLMPCA = "glmPCA options"
 _CLUSTERING = "Clustering options"
-
-DEPTH_CORRELATION_CUTOFF = 0.75
-
-
-def depth_components(scores: np.ndarray, depth: np.ndarray) -> np.ndarray:
-    """Whether to keep every component: those that do not follow the cell depth.
-
-    A component follows the cell depth when the |Spearman rho| of its scores with
-    `depth` is above DEPTH_CORRELATION_CUTOFF.
-    """
-    correlations = np.nan_to_num([
-        spearmanr(column, depth).statistic for column in scores.T
-    ])
-    correlated = np.abs(correlations) > DEPTH_CORRELATION_CUTOFF
-    keep = ~correlated
-    logging.info(
-        "%d of %d components correlate with cell depth (|Spearman rho| above %s). "
-        "%d dropped.",
-        int(correlated.sum()),
-        len(correlations),
-        DEPTH_CORRELATION_CUTOFF,
-        int((~keep).sum()),
-    )
-    return keep
 
 
 @app.callback(invoke_without_command=True)

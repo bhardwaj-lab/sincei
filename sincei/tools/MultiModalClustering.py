@@ -11,6 +11,7 @@ from scanpy._utils import get_igraph_from_adjacency
 
 # own modules
 from sincei.tools.TopicModels import LSA, GibbsLDA
+from sincei.utils import depth_components
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -35,6 +36,8 @@ https://sciendo.com/pdf/10.2478/amcs-2019-0010
 https://web.media.mit.edu/~xdong/paper/tsp14.pdf
 """
 
+METHODS = ("PCA", "glmPCA", "LSA", "LDA")
+
 
 def MultiModalClustering(
     mdata: md.MuData,
@@ -46,6 +49,8 @@ def MultiModalClustering(
     nPrinComps: int | Sequence[int] = 20,
     clusterResolution: float | Sequence[float] = 1.0,
     binarize: bool = False,
+    log_normalize: bool | Sequence[bool] = False,
+    drop_depth: bool | Sequence[bool] = False,
     glmPCAfamily: str = "poisson",
 ) -> None:
     r"""
@@ -53,9 +58,6 @@ def MultiModalClustering(
     stores the clustering results in mdata.obs["cluster_multi"]. It also stores the
     UMAP coordinates for each of the specified modalities in
     mdata[mod].obsm["X_umap"], where mod is the modality.
-
-    `Note`: If method is "PCA" or "logPCA", the data matrix of the modality will be
-    normalized, and log1p-transformed in the case of logPCA.
 
     Parameters
     ----------
@@ -65,7 +67,7 @@ def MultiModalClustering(
         List of modalities to use for clustering, e.g. ["RNA", "ATAC", "ChIC"]
     method : list[str]
         What processing method to use for each modality. Choose between "PCA",
-        "logPCA", "glmPCA", "LSA" or "LDA". Default is "PCA" for all modalities.
+        "glmPCA", "LSA" or "LDA". Default is "PCA" for all modalities.
     modal_weights : list[float]
         Weights for each modality in the clustering process. Default is equal
         weighting. E.g. for RNA and ChIC, use [2, 1].
@@ -77,7 +79,7 @@ def MultiModalClustering(
         should be chosen considering the total number of cells and expected number of
         clusters. Smaller number will lead to more fragmented clusters.
     nPrinComps : int or list[int]
-        Number of principal components (for logPCA or glmPCA) or number of topics (for
+        Number of principal components (for PCA or glmPCA) or number of topics (for
         LSA and LDA) to use for model. Use higher number for samples with more expected
         heterogenity. If list is provided, it must contain a value for each modality.
         Default is 20.
@@ -89,6 +91,16 @@ def MultiModalClustering(
     binarize : bool
         Whether to binarize the counts per region before dimensionality reduction (only
         for LSA/LDA).
+    log_normalize : bool or list[bool]
+        Whether to scale the counts of every cell to a total of 10,000 and then apply
+        the log1p transform, before dimensionality reduction. Not valid with LDA, which
+        needs counts. If list is provided, it must contain a value for each modality.
+        Default is False.
+    drop_depth : bool or list[bool]
+        Whether to fit one extra component, and drop every component whose scores
+        correlate with the total counts of the cells (|Spearman rho| above
+        DEPTH_CORRELATION_CUTOFF). If list is provided, it must contain a value for
+        each modality. Default is False.
     glmPCAfamily : str
         The choice of exponential family distribution to use for glmPCA method. Default
         is "poisson".
@@ -133,6 +145,28 @@ def MultiModalClustering(
     if len(resolutions) != len(modalities):
         msg = "Modalities and clusterResolution lists must have the same length."
         raise ValueError(msg)
+    # a single bool applies to every modality
+    if np.ndim(log_normalize) == 0:
+        log_normalizes = [cast("bool", log_normalize)] * len(modalities)
+    else:
+        log_normalizes = list(cast("Sequence[bool]", log_normalize))
+    if len(log_normalizes) != len(modalities):
+        msg = "Modalities and log_normalize lists must have the same length."
+        raise ValueError(msg)
+    if np.ndim(drop_depth) == 0:
+        drop_depths = [cast("bool", drop_depth)] * len(modalities)
+    else:
+        drop_depths = list(cast("Sequence[bool]", drop_depth))
+    if len(drop_depths) != len(modalities):
+        msg = "Modalities and drop_depth lists must have the same length."
+        raise ValueError(msg)
+    for met, normalize in zip(methods, log_normalizes, strict=True):
+        if met not in METHODS:
+            msg = f"{met!r} is not a valid method. Use one of {', '.join(METHODS)}."
+            raise ValueError(msg)
+        if met == "LDA" and normalize:
+            msg = "log_normalize is not valid with LDA, which needs counts."
+            raise ValueError(msg)
 
     # Find common barcodes in provided modalities
     if column_key is None:
@@ -150,24 +184,25 @@ def MultiModalClustering(
     for i, (mod, met) in enumerate(zip(modalities, methods, strict=True)):
         adata = cast("ad.AnnData", mdata.mod[mod][barcodes])
 
-        if met == "PCA":
-            # if no method is provided, use PCA
-            sc.pp.normalize_total(adata, target_sum=1e4)
-            sc.pp.pca(adata, n_comps[i])
+        reduction = f"X_{met.lower()}"
+        if drop_depths[i]:
+            n_comps[i] += 1
+        matrix = adata
+        if log_normalizes[i]:
+            matrix = adata.copy()
+            sc.pp.normalize_total(matrix, target_sum=1e4)
+            sc.pp.log1p(matrix)
 
-        elif met == "logPCA":
-            ## log1p+PCA using scanpy
-            sc.pp.normalize_total(adata, target_sum=1e4)
-            sc.pp.log1p(adata)
-            sc.pp.pca(adata, n_comps[i])
+        if met == "PCA":
+            adata.obsm[reduction] = sc.pp.pca(matrix.X, n_comps=n_comps[i])
 
         elif met == "LSA":
             lsa = LSA(n_pc=n_comps[i], binarize=binarize)
-            adata.obsm["X_lsa"] = lsa.fit_transform(adata)
+            adata.obsm[reduction] = lsa.fit_transform(matrix)
 
         elif met == "LDA":
             lda = GibbsLDA(n_topics=n_comps[i], binarize=binarize)
-            adata.obsm["X_lda"] = lda.fit_transform(adata)
+            adata.obsm[reduction] = lda.fit_transform(matrix)
 
         elif met == "glmPCA":
             # import glmPCA (not imported on top due to special optional import of
@@ -179,14 +214,22 @@ def MultiModalClustering(
                 n_pc=n_comps[i],
                 family=glmPCAfamily,
             )
-            glmpca.fit(adata)
+            glmpca.fit(matrix)
             assert glmpca.saturated_loadings_ is not None
             cell_pcs = glmpca.saturated_loadings_.detach().numpy()
 
             ## update the anndata object
-            adata.obsm["X_pca"] = np.asarray(cell_pcs)
+            adata.obsm[reduction] = np.asarray(cell_pcs)
 
-        sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=nK)
+        if drop_depths[i]:
+            depth = np.asarray(adata.X.sum(axis=1), dtype=np.float64).ravel()
+            keep = depth_components(adata.obsm[reduction], depth)
+            if not keep.any():
+                msg = f"drop_depth dropped every component of modality {mod}."
+                raise ValueError(msg)
+            adata.obsm[reduction] = adata.obsm[reduction][:, keep]
+
+        sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=nK)
         sc.tl.leiden(adata, resolution=resolutions[i])
         sc.tl.paga(adata)
         sc.pl.paga(adata, plot=False, threshold=0.1)

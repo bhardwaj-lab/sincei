@@ -11,8 +11,8 @@ from _cli_testing import run, tool_path
 from scipy import sparse
 from scipy.linalg import subspace_angles
 
-from sincei.cli.scClusterCells import depth_components
 from sincei.tools.TopicModels import GENSIM_SLOPE, LSA, GibbsLDA, LSASolver, tfidf
+from sincei.utils import depth_components
 
 if TYPE_CHECKING:
     from pathlib import Path

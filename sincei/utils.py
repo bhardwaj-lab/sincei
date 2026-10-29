@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.stats import spearmanr
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -117,3 +119,28 @@ def chromosome_to_numeric(chroms: Iterable[str]) -> dict[str, int]:
         mapping[chrom] = counter
 
     return mapping
+
+
+DEPTH_CORRELATION_CUTOFF = 0.75
+
+
+def depth_components(scores: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Whether to keep every component: those that do not follow the cell depth.
+
+    A component follows the cell depth when the |Spearman rho| of its scores with
+    `depth` is above DEPTH_CORRELATION_CUTOFF.
+    """
+    correlations = np.nan_to_num([
+        spearmanr(column, depth).statistic for column in scores.T
+    ])
+    correlated = np.abs(correlations) > DEPTH_CORRELATION_CUTOFF
+    keep = ~correlated
+    logging.info(
+        "%d of %d components correlate with cell depth (|Spearman rho| above %s). "
+        "%d dropped.",
+        int(correlated.sum()),
+        len(correlations),
+        DEPTH_CORRELATION_CUTOFF,
+        int((~keep).sum()),
+    )
+    return keep
