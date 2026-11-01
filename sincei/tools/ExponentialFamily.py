@@ -101,6 +101,11 @@ class ExponentialFamily:
         expt = (T * eta).sum(0) if T.dim() > X.dim() else T * eta
         return -(expt - self.log_partition(theta)).sum()
 
+    def fit_nll(self, X: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
+        """``log_likelihood`` up to terms constant in theta (same gradient, same
+        minimiser). Used for fitting; override where the constant is costly."""
+        return self.log_likelihood(X, theta)
+
     # ---- per-feature parameters -------------------------------------------------
     def _param(self, name: str, like: torch.Tensor) -> torch.Tensor:
         return torch.as_tensor(self.family_params[name]).to(like)
@@ -181,6 +186,10 @@ class Poisson(ExponentialFamily):
     def torch_distribution(self, theta):
         return td.Poisson(rate=theta.exp(), validate_args=False)
 
+    def fit_nll(self, X, theta):
+        # drops lgamma(x + 1): ~50% of a fitting step on CPU
+        return -(X * theta - theta.exp()).sum()
+
     def invert_g(self, X):
         return torch.log(X.clamp_min(self.family_params["min_val"]))
 
@@ -197,6 +206,11 @@ class NegativeBinomial(Poisson):
         r = self._param("r", theta)
         # torch's NB: mean = r * exp(logits)  ->  logits = theta - log r
         return td.NegativeBinomial(r, logits=theta - r.log(), validate_args=False)
+
+    def fit_nll(self, X, theta):
+        # drops lgamma(x + r) - lgamma(r) - lgamma(x + 1) + r log r (r is fixed)
+        r = self._param("r", theta)
+        return -(X * theta - (X + r) * torch.logaddexp(theta, r.log())).sum()
 
     def family_statistics(self, X):
         X = X.double()
