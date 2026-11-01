@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -24,6 +26,9 @@ except ImportError:  # anndata < 0.11
 LEARNING_RATE_LIMIT = 1e-10
 # a densified chunk holds at most this many values (~200 MB in float32)
 MAX_CHUNK_ENTRIES = 5 * 10**7
+# n_jobs splits a chunk into pieces of at least this many rows: smaller pieces made a
+# 1024-cell minibatch slower with 14 threads than with 4 (thread overhead)
+MIN_PIECE_ROWS = 256
 # families supporting total-count depth correction (normalize: X / s; offset: log s on theta)
 DEPTH_CORRECTION_FAMILIES = {"normalize": ("poisson", "negative_binomial", "gamma", "lognormal"),
                              "offset": ("poisson", "negative_binomial", "lognormal")}
@@ -86,12 +91,18 @@ class _Data:
     def _read(self, rows: np.ndarray):
         out = self.M[rows]
         out = sp.csr_matrix(out) if self.sparse else np.asarray(out)
+        if self.sparse:
+            out.sum_duplicates()  # canonical: sorted, no duplicates
         return self._scale(out, rows) if self.depth_correction == "normalize" else out
 
     def _scale(self, Xc, rows: np.ndarray):
         """X / s row-wise (CSR stays CSR)."""
         inv = (1.0 / self.s[rows]).astype(np.float32)
-        return sp.csr_matrix(sp.diags(inv) @ Xc) if sp.issparse(Xc) else np.asarray(Xc) * inv[:, None]
+        if not sp.issparse(Xc):
+            return np.asarray(Xc) * inv[:, None]
+        Xc = sp.csr_matrix(Xc, copy=True)
+        Xc.data *= np.repeat(inv, np.diff(Xc.indptr))  # keeps the sparsity pattern
+        return Xc
 
     def rows(self, idx: np.ndarray):
         """Raw rows (CSR or ndarray) for sorted local indices."""
@@ -140,9 +151,14 @@ class _Data:
         return self.family.subset_features(cols).invert_g(vals) - self.theta0[cols]
 
     def _to_torch_sparse(self, Xc: sp.csr_matrix, values: torch.Tensor) -> torch.Tensor:
-        coo = Xc.tocoo()
-        idx = torch.from_numpy(np.vstack([coo.row, coo.col]).astype(np.int64))
-        return torch.sparse_coo_tensor(idx.to(self.device), values, Xc.shape, check_invariants=False).coalesce()
+        """COO from canonical CSR is already coalesced: skipping coalesce() makes
+        build + forward + backward ~1.8x faster (torch CSR is slower: its backward
+        transposes)."""
+        assert Xc.has_canonical_format, "rows must be sorted, without duplicates"
+        rows = np.repeat(np.arange(Xc.shape[0], dtype=np.int64), np.diff(Xc.indptr))
+        idx = torch.from_numpy(np.vstack([rows, Xc.indices.astype(np.int64)]))
+        return torch.sparse_coo_tensor(idx.to(self.device), values, Xc.shape,
+                                       check_invariants=False, is_coalesced=True)
 
     def batch(self, idx: np.ndarray, need_X: bool = True,
               cols: torch.Tensor | None = None) -> _Batch:
@@ -170,7 +186,8 @@ class _Data:
         -o_i (= g^{-1}(x / s) for log-link families) and zeros stay at theta0."""
         if b.delta is not None:
             U = (self.theta0 - mu) @ V + torch.sparse.mm(b.delta, V)
-            nz = torch.sparse_coo_tensor(b.delta.indices(), torch.ones_like(b.delta.values()), b.delta.shape)
+            nz = torch.sparse_coo_tensor(b.delta.indices(), torch.ones_like(b.delta.values()),
+                                         b.delta.shape, is_coalesced=True)
         else:
             U, nz = (b.theta - mu) @ V, None
         if b.o is None:
@@ -213,6 +230,12 @@ class GLMPCA:
         Cells used with fit_mode="subsample" (default min(n, 200_000)).
     chunk_size : int
         Rows per chunk for full passes; capped so a dense chunk <= MAX_CHUNK_ENTRIES.
+    n_jobs : int
+        Threads that evaluate chunks of a cost / gradient pass in parallel (-1: all
+        cores); gradients are summed in a fixed order, so results do not depend on
+        timing. Chunks are split up to n_jobs ways (pieces >= MIN_PIECE_ROWS rows),
+        so peak memory stays one chunk.
+        With n_jobs > 1, torch runs single-threaded per worker during fit and score.
     intercept_lr_ratio : float
     tol, patience, min_epochs, n_lr_decay :
         Plateau handling (geoopt), via ``torch.optim.lr_scheduler.ReduceLROnPlateau``
@@ -252,6 +275,7 @@ class GLMPCA:
         feature_subsample: float | int | None = None,
         n_cells_fit: int | None = None,
         chunk_size: int = 4096,
+        n_jobs: int = 1,
         intercept_lr_ratio: float = 1.0,
         tol: float = 1e-5,
         patience: int = 3,
@@ -282,6 +306,7 @@ class GLMPCA:
         self.n_init, self.init, self.optimizer, self.fit_mode = n_init, init, optimizer, fit_mode
         self.feature_subsample, self.n_cells_fit = feature_subsample, n_cells_fit
         self.chunk_size = chunk_size
+        self.n_jobs = (os.cpu_count() or 1) if n_jobs == -1 else max(1, int(n_jobs))
         self.intercept_lr_ratio, self.tol, self.patience = intercept_lr_ratio, tol, patience
         self.min_epochs, self.n_lr_decay = min_epochs, n_lr_decay
         self.cache_saturated, self.max_cache_gb = cache_saturated, max_cache_gb
@@ -387,14 +412,19 @@ class GLMPCA:
                   f"cached={data.cache is not None}, device={self.device}")
 
         self.loadings_learning_scores_, self.loadings_learning_rates_ = [], []
-        runs = [self._saturated_loading_iter(data) for _ in range(self.n_init)]
+        prev_threads = self._torch_threads()
+        try:
+            runs = [self._saturated_loading_iter(data) for _ in range(self.n_init)]
+        finally:
+            torch.set_num_threads(prev_threads)
 
         # select the best run on (up to 50k of) the fitting cells
         idx = np.arange(data.n)
         if data.n > 50_000:
             idx = np.sort(self._rng.choice(data.n, 50_000, replace=False))
         with torch.no_grad():
-            costs = [self._accumulate(V, mu, data, idx, scale=1 / len(idx)) for V, mu in runs]
+            costs = [self._accumulate(V, mu, data, idx, scale=1 / len(idx), full=True)
+                     for V, mu in runs]
         V, mu = runs[int(np.argmin(costs))]
         self.training_cost_ = min(costs)
 
@@ -431,7 +461,11 @@ class GLMPCA:
         reconstruction: a held-out criterion for n_pc, truncation values, etc."""
         V, mu = self._check_fitted()
         data = self._data(X, size_factors=size_factors)
-        return self._accumulate(V, mu, data, np.arange(data.n), scale=1 / data.n)
+        prev = self._torch_threads()
+        try:
+            return self._accumulate(V, mu, data, np.arange(data.n), scale=1 / data.n, full=True)
+        finally:
+            torch.set_num_threads(prev)
 
     def fit_transform(self, X, size_factors=None) -> torch.Tensor:
         self.fit(X, size_factors)
@@ -440,26 +474,52 @@ class GLMPCA:
     # ---------------------------------------------------------------------------------
     # Cost
     # ---------------------------------------------------------------------------------
-    def _nll(self, V, mu, data: _Data, b: _Batch, cols=None) -> torch.Tensor:
-        """Batch NLL; with ``cols`` evaluated on a feature subset, rescaled by p/|cols|."""
+    def _nll(self, V, mu, data: _Data, b: _Batch, cols=None, full: bool = False) -> torch.Tensor:
+        """Batch NLL; with ``cols`` evaluated on a feature subset, rescaled by p/|cols|.
+        ``full=False`` drops terms constant in theta (fitting), True keeps them (scores)."""
         U = data.scores(V, mu, b)
         o = 0.0 if b.o is None else b.o[:, None]
+        fam = self.exponential_family if cols is None else self.exponential_family.subset_features(cols)
+        nll = fam.log_likelihood if full else fam.fit_nll
         if cols is None:
-            return self.exponential_family.log_likelihood(b.X, o + mu + U @ V.T)
-        fam = self.exponential_family.subset_features(cols)
-        return fam.log_likelihood(b.X, o + mu[cols] + U @ V[cols].T) * (data.p / len(cols))
+            return nll(b.X, o + mu + U @ V.T)
+        return nll(b.X, o + mu[cols] + U @ V[cols].T) * (data.p / len(cols))
+
+    def _pieces(self, data: _Data, idx: np.ndarray) -> list[np.ndarray]:
+        """Chunks of ``idx``, split up to n_jobs ways (pieces of >= MIN_PIECE_ROWS rows)
+        so threads get work while the n_jobs live pieces stay within one chunk."""
+        cap = max(1, data.chunk // self.n_jobs)
+        size = min(cap, max(-(-len(idx) // self.n_jobs), MIN_PIECE_ROWS))
+        return [idx[s:s + size] for s in range(0, len(idx), size)]
 
     def _accumulate(self, V, mu, data: _Data, idx: np.ndarray, cols=None,
-                    backward: bool = False, scale: float = 1.0) -> float:
-        """scale * NLL over rows ``idx``, chunk by chunk; with ``backward`` the
-        gradient is accumulated chunk by chunk (memory bounded by one chunk)."""
-        total = 0.0
-        for sub in data.chunks(idx):
-            c = self._nll(V, mu, data, data.batch(sub, cols=cols), cols) * scale
-            if backward:
-                c.backward()
-            total += float(c.detach())
-        return total
+                    backward: bool = False, scale: float = 1.0, full: bool = False,
+                    batches: list[_Batch] | None = None) -> float:
+        """scale * NLL over rows ``idx`` (or over prepared ``batches`` of them), piece by
+        piece on n_jobs threads; with ``backward`` the gradients of the pieces are
+        summed in order into V.grad and mu.grad."""
+        def one(item):
+            b = item if isinstance(item, _Batch) else data.batch(item, cols=cols)
+            c = self._nll(V, mu, data, b, cols, full) * scale
+            return float(c.detach()), torch.autograd.grad(c, (V, mu)) if backward else None
+
+        items = batches if batches is not None else self._pieces(data, idx)
+        if self.n_jobs > 1 and len(items) > 1:
+            with ThreadPoolExecutor(self.n_jobs) as pool:
+                out = list(pool.map(one, items))
+        else:
+            out = [one(it) for it in items]
+        if backward:
+            for t, g in zip((V, mu), (sum(o[1][k] for o in out) for k in range(2))):
+                t.grad = g if t.grad is None else t.grad + g
+        return sum(o[0] for o in out)
+
+    def _torch_threads(self) -> int:
+        """With n_jobs workers, each runs torch single-threaded; returns the old count."""
+        prev = torch.get_num_threads()
+        if self.n_jobs > 1:
+            torch.set_num_threads(1)
+        return prev
 
     # ---------------------------------------------------------------------------------
     # Initialisation
@@ -522,10 +582,12 @@ class GLMPCA:
         pbar = tqdm(range(self.max_iter), disable=not self.verbose)
         for epoch in pbar:
             epoch_cost = 0.0
-            for idx in data.minibatches(batch_size, self._rng):
+            steps = [(idx, self._feature_sample(data.p))
+                     for idx in data.minibatches(batch_size, self._rng)]
+            for idx, cols, batches in self._prefetched(data, steps):
                 opt.zero_grad(set_to_none=True)
-                cost = self._accumulate(V, mu, data, idx, self._feature_sample(data.p),
-                                        backward=True, scale=1 / len(idx))
+                cost = self._accumulate(V, mu, data, idx, cols, backward=True,
+                                        scale=1 / len(idx), batches=batches)
                 if not np.isfinite(cost) or not torch.isfinite(V).all():
                     return None
                 try:  # the Stiefel retraction runs an SVD: a bad step raises here
@@ -547,6 +609,27 @@ class GLMPCA:
         self.loadings_learning_scores_.append(scores)
         self.loadings_learning_rates_.append(rates)
         return V.detach(), mu.detach()
+
+    _prefetch = True  # tests switch it off to check that results are unchanged
+
+    def _prefetched(self, data: _Data, steps: list[tuple[np.ndarray, Any]]):
+        """Yields (idx, cols, batches) per step, building the next step's batches in a
+        background thread meanwhile (~20% of a minibatch epoch on CPU). Exact mode
+        (one step over all cells, too large to hold twice) yields batches=None."""
+        if not self._prefetch or max(len(idx) for idx, _ in steps) > data.chunk:
+            yield from ((idx, cols, None) for idx, cols in steps)
+            return
+
+        def prepare(step):
+            return [data.batch(sub, cols=step[1]) for sub in self._pieces(data, step[0])]
+
+        with ThreadPoolExecutor(1) as pool:  # closed with the generator on early return
+            nxt = pool.submit(prepare, steps[0])
+            for k, (idx, cols) in enumerate(steps):
+                batches = nxt.result()
+                if k + 1 < len(steps):
+                    nxt = pool.submit(prepare, steps[k + 1])
+                yield idx, cols, batches
 
     def _fit_lbfgs(self, data: _Data):
         """Full-batch L-BFGS (strong-Wolfe) on the Stiefel manifold via V = qf(W),

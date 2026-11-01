@@ -311,7 +311,7 @@ def main(
         sc.pp.pca(normalized, n_comps=n_prin_comps)
         adata.obsm[reduction] = normalized.obsm["X_pca"]
     elif method is DimRed.glmPCA:
-        glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
+        glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family, n_jobs=number_of_processors)
         adata.obsm[reduction] = glmpca.fit_transform(adata).numpy()
     else:
         topics = TOPICMODEL(

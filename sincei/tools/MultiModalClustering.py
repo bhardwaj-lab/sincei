@@ -193,6 +193,7 @@ def MultiModalClustering(
             glmpca = GLMPCA(
                 n_pc=n_comps[i],
                 family=glmPCAfamily,
+                n_jobs=available_processors(),
             )
             ## cell scores, cells x n_pc
             adata.obsm["X_pca"] = glmpca.fit_transform(adata).numpy()
