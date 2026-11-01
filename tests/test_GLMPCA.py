@@ -133,3 +133,68 @@ def test_refit_re_estimates_per_feature_parameters() -> None:
     model.fit(sample(GLMFamily.poisson)[:, :-2])  # fewer features
 
     assert model.exponential_family.family_params["r"].shape == (N_FEATURES - 2,)
+
+
+def _grads(model: GLMPCA, X: Any, n_jobs: int = 1) -> tuple[float, torch.Tensor, torch.Tensor]:
+    """Cost and gradients of one full pass, at the fitted point."""
+    model.n_jobs = n_jobs
+    data = model._data(X)
+    V = model.saturated_loadings_.clone().requires_grad_(True)
+    mu = model.saturated_intercept_.clone().requires_grad_(True)
+    cost = model._accumulate(V, mu, data, np.arange(data.n), backward=True, scale=1 / data.n)
+    return cost, V.grad, mu.grad
+
+
+def test_sparse_path_gives_the_dense_gradient_with_an_offset() -> None:
+    X = sample(GLMFamily.poisson) * (torch.rand(N_CELLS, N_FEATURES) > 0.5)
+    model = GLMPCA(N_PC, family="poisson", max_iter=2, seed=0, depth_correction="offset")
+    model.fit(X)
+    Xs = sparse.csr_matrix(X.numpy())
+    assert model._data(Xs).batch(np.arange(4)).delta.is_coalesced()
+
+    for got, want in zip(_grads(model, Xs), _grads(model, X)):
+        torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
+
+
+def test_threaded_passes_match_the_serial_pass() -> None:
+    X = sparse.csr_matrix(sample(GLMFamily.poisson).numpy())
+    model = GLMPCA(N_PC, family="poisson", max_iter=2, seed=0, chunk_size=8)  # 4 pieces of 2
+    model.fit(X)
+
+    for got, want in zip(_grads(model, X, n_jobs=4), _grads(model, X, n_jobs=1)):
+        torch.testing.assert_close(got, want, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("optimizer", ["geoopt", "lbfgs"])
+def test_n_jobs_fits_and_restores_torch_threads(optimizer: str) -> None:
+    threads = torch.get_num_threads()
+    X = sample(GLMFamily.poisson)
+    fits = [GLMPCA(N_PC, family="poisson", optimizer=optimizer, fit_mode="exact",
+                   max_iter=3, chunk_size=8, n_jobs=n_jobs, seed=0).fit_transform(X)
+            for n_jobs in (1, 3)]
+
+    torch.testing.assert_close(fits[1], fits[0], rtol=1e-3, atol=1e-3)
+    assert torch.get_num_threads() == threads
+
+
+def test_prefetching_minibatches_does_not_change_the_fit() -> None:
+    X = sample(GLMFamily.poisson)
+    fits = []
+    for prefetch in (True, False):
+        model = GLMPCA(N_PC, family="poisson", max_iter=3, batch_size=8,
+                       feature_subsample=0.5, seed=0)
+        model._prefetch = prefetch
+        model.fit(X)
+        fits.append(model.saturated_loadings_)
+
+    assert torch.equal(fits[0], fits[1])
+
+
+@pytest.mark.parametrize("optimizer", ["geoopt", "lbfgs"])
+def test_threaded_fits_with_the_same_seed_are_identical(optimizer: str) -> None:
+    X = sample(GLMFamily.poisson)
+    fits = [GLMPCA(N_PC, family="poisson", optimizer=optimizer, fit_mode="exact",
+                   max_iter=3, chunk_size=8, n_jobs=4, seed=0).fit_transform(X)
+            for _ in range(2)]
+
+    assert torch.equal(fits[0], fits[1])

@@ -18,6 +18,7 @@ from sincei.tools.ExponentialFamily import (
     Beta,
     Gamma,
     Gaussian,
+    NegativeBinomial,
     Poisson,
     SigmoidBeta,
 )
@@ -98,3 +99,20 @@ def test_gamma_pdf_matches_scipy() -> None:
                 ),
                 decimal=2,
             )
+
+
+@pytest.mark.parametrize(
+    "family", [Poisson(), NegativeBinomial({"r": torch.tensor([0.5, 2.0, 50.0])})],
+    ids=lambda family: family.family_name,
+)
+def test_fit_nll_differs_from_the_full_nll_by_a_constant(family) -> None:
+    X = torch.poisson(torch.full((30, 3), 4.0))
+    gaps = []
+    for _ in range(2):
+        theta = torch.randn(30, 3, requires_grad=True)
+        full, fit = family.log_likelihood(X, theta), family.fit_nll(X, theta)
+        g_full, = torch.autograd.grad(full, theta)
+        g_fit, = torch.autograd.grad(fit, theta)
+        torch.testing.assert_close(g_fit, g_full)
+        gaps.append(float(full - fit))
+    assert gaps[0] == pytest.approx(gaps[1], rel=1e-5)
