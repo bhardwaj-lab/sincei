@@ -199,7 +199,7 @@ class NegativeBinomial(Poisson):
     (Risso et al.). r is estimated by streaming method of moments if not given."""
 
     family_name = "negative_binomial"
-    default_params = {"min_val": 1e-20, "r_min": 1e-2, "r_max": 1e4}
+    default_params = {"min_val": 1e-3, "r_min": 1e-2, "r_max": 1e4}
     nuisance_params = ("r",)
 
     def torch_distribution(self, theta):
