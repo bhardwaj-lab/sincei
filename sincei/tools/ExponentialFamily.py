@@ -166,7 +166,7 @@ class Bernoulli(ExponentialFamily):
     (Landgraf & Lee, 2020); acts as a regulariser, tune by held-out deviance."""
 
     family_name = "bernoulli"
-    default_params = {"max_val": 30}
+    default_params = {"max_val": 4}
 
     def torch_distribution(self, theta):
         return td.Bernoulli(logits=theta, validate_args=False)
@@ -178,10 +178,11 @@ class Bernoulli(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
-    """Poisson, theta = log(rate). ``min_val`` replaces 0 before the log."""
+    """Poisson, theta = log(rate). ``min_val`` replaces 0 before the log; a
+    truncation like Bernoulli's ``max_val`` (M = -log min_val), tune by held-out deviance."""
 
     family_name = "poisson"
-    default_params = {"min_val": 1e-3}
+    default_params = {"min_val": 0.02}
 
     def torch_distribution(self, theta):
         return td.Poisson(rate=theta.exp(), validate_args=False)
@@ -199,7 +200,7 @@ class NegativeBinomial(Poisson):
     (Risso et al.). r is estimated by streaming method of moments if not given."""
 
     family_name = "negative_binomial"
-    default_params = {"min_val": 1e-3, "r_min": 1e-2, "r_max": 1e4}
+    default_params = {"min_val": 0.02, "r_min": 0.1, "r_max": 500}
     nuisance_params = ("r",)
 
     def torch_distribution(self, theta):
