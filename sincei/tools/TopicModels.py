@@ -72,8 +72,8 @@ def tfidf(matrix: csr_matrix, region_idf: np.ndarray, pivot: float) -> csr_matri
 
         (1 + log2(count)) · idf / ((1 - GENSIM_SLOPE) · pivot + GENSIM_SLOPE · kept)
 
-    with `kept` the regions of the cell whose weight is above zero. A zero stays zero,
-    so the result has the entries of `matrix`.
+    with `kept` the regions of the cell with a count above zero and an idf above zero.
+    A zero stays zero, so the result has the same entries as `matrix`.
     """
     counts = np.asarray(matrix.data, dtype=np.float64)
     rows = np.repeat(np.arange(matrix.shape[0]), np.diff(matrix.indptr))
@@ -83,7 +83,9 @@ def tfidf(matrix: csr_matrix, region_idf: np.ndarray, pivot: float) -> csr_matri
         (1.0 + np.log2(np.where(held, counts, 1.0))) * region_idf[matrix.indices],
         0.0,
     )
-    kept = np.bincount(rows[weight > 0], minlength=matrix.shape[0])
+    kept = np.bincount(
+        rows[held & (region_idf[matrix.indices] > 0)], minlength=matrix.shape[0]
+    )
     norm = (1.0 - GENSIM_SLOPE) * pivot + GENSIM_SLOPE * kept
     values = weight / norm[rows]
     return csr_matrix(
