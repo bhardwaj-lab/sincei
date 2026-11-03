@@ -150,7 +150,7 @@ def main(
     # Read options
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
-    atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
     mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
     offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Other options
@@ -199,7 +199,7 @@ def main(
             blacklist_path=backend.first_blacklist(blacklist),
             extend_reads=extend_reads,
             center_reads=center_reads,
-            atac_shift=atac,
+            tn5_shift=tn5,
             dup_method=backend.dup_method(duplicate_filter),
             genome_2bit=genome_2bit,
             motif_filter=backend.parse_motif_filter(motif_filter),

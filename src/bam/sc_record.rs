@@ -27,8 +27,6 @@ pub(crate) struct ScRecordOptions {
     /// Split the alignment into its gapless blocks, so a spliced read credits
     /// its exons and not the intron between them.
     pub(crate) compute_blocks: bool,
-    /// Move both ends of the read onto the Tn5 cut sites ([`tn5_shift`]).
-    pub(crate) atac_shift: bool,
 }
 
 /// How a read's position can be adjusted.
@@ -43,13 +41,41 @@ pub struct AdjustRead {
     /// After extension, replace the interval with a `read_length` window
     /// centered on its midpoint.
     pub center_reads: bool,
-    /// Correct each read for the 9 bp Tn5 duplication before it is counted,
-    /// deduplicated or measured ([`tn5_shift`]).
-    pub atac_shift: bool,
+    /// Correct the counted fragment for the 9 bp Tn5 duplication
+    /// ([`tn5_shift`]).
+    pub tn5_shift: bool,
     /// Largest insert size that may be accepted as a fragment. `None` means
     /// `4 × extend_reads`. If`--maxFragmentLength` is given, that value
     /// replaces it.
     pub max_paired_fragment_length: Option<usize>,
+    /// Count only these aligned bases of the read, 1-based and inclusive:
+    /// `(1, 1)` is its first base, `(5, -1)` its fifth to last. With
+    /// `center_reads`, a window as wide as the selected bases is centered on
+    /// the fragment instead.
+    pub offset: Option<Offset>,
+}
+
+/// The first and last aligned base of a read to count, 1-based and inclusive.
+pub type Offset = (i32, i32);
+
+/// Parse `--offset`: one position, or the first and last of a range. Offsets
+/// are 1-based, so 0 is rejected.
+pub(crate) fn parse_offset(offset: Option<&[i32]>) -> Result<Option<Offset>> {
+    let (first, last) = match offset {
+        None => return Ok(None),
+        Some(&[first]) => (first, first),
+        Some(&[first, last]) => (first, last),
+        Some(_) => anyhow::bail!("offset must have 1 or 2 elements"),
+    };
+    anyhow::ensure!(
+        first != 0 && last != 0,
+        "offset value 0 is not allowed (offsets are 1-based)"
+    );
+    anyhow::ensure!(
+        last < 0 || last >= first,
+        "offset end must be >= offset start"
+    );
+    Ok(Some((first, last)))
 }
 
 /// A parsed, filter-passing BAM record carrying the fields needed for
@@ -156,18 +182,6 @@ impl<'a> ScRecord<'a> {
         }
 
         let is_reverse = flags.is_reverse_complemented();
-        // The read is carried forward on its Tn5-corrected span, so every filter
-        // and every count sees the cut sites rather than the read's own ends.
-        let (span_start, span_end) = if opts.atac_shift {
-            let (shifted_start, shifted_end) = tn5_shift(start, end, is_reverse);
-            // A read of 9 bases or less has no span left after the correction.
-            if shifted_end <= shifted_start {
-                return Ok(None);
-            }
-            (shifted_start, shifted_end)
-        } else {
-            (start, end)
-        };
 
         let is_proper_pair = flags.is_properly_segmented();
         let is_paired = flags.is_segmented();
@@ -325,22 +339,6 @@ impl<'a> ScRecord<'a> {
             None
         };
 
-        // The blocks are walked from the read's own start, so they keep their
-        // true positions and only the outermost ones are cut by the correction.
-        let blocks = match blocks {
-            Some(blocks) if opts.atac_shift => {
-                let clipped: Vec<(usize, usize)> = blocks
-                    .into_iter()
-                    .map(|(block_start, block_end)| {
-                        (block_start.max(span_start), block_end.min(span_end))
-                    })
-                    .filter(|&(block_start, block_end)| block_start < block_end)
-                    .collect();
-                (clipped.len() > 1).then_some(clipped)
-            }
-            blocks => blocks,
-        };
-
         // Aligned fraction: the aligned operations over the length of the read
         // as it was sequenced.
         //
@@ -380,8 +378,8 @@ impl<'a> ScRecord<'a> {
         };
 
         Ok(Some(Self {
-            alignment_start: span_start,
-            alignment_end: span_end,
+            alignment_start: start,
+            alignment_end: end,
             is_reverse,
             is_proper_pair,
             is_paired,
@@ -412,20 +410,50 @@ impl<'a> ScRecord<'a> {
     /// replace the alignment with a synthetic interval that has no blocks to
     /// speak of, so they always yield a single interval.
     ///
+    /// An offset selects aligned bases of the read and ignores the extension.
+    /// With `center_reads`, a window as wide as the selection is centered on
+    /// the fragment instead, so `(1, 1)` counts the fragment's middle base.
+    ///
     /// Callers must credit a bin or feature **once per read**, not once per
     /// interval: two blocks of one read can reach the same bin.
     pub(crate) fn effective_intervals(&self, adjust: &AdjustRead) -> EffectiveIntervals<'_> {
+        if let Some((first, last)) = adjust.offset {
+            let selected = apply_offset(self, first, last);
+            let width: usize = selected.iter().map(|(start, end)| end - start).sum();
+            if adjust.center_reads && width > 0 {
+                let window = self
+                    .fragment(adjust)
+                    .map(|(start, end)| centered(start, end, width));
+                return EffectiveIntervals::One(window);
+            }
+            return EffectiveIntervals::Selected(selected.into_iter());
+        }
         match &self.blocks {
-            Some(blocks) if adjust.extend_reads.is_none() && !adjust.center_reads => {
+            Some(blocks)
+                if adjust.extend_reads.is_none() && !adjust.center_reads && !adjust.tn5_shift =>
+            {
                 EffectiveIntervals::Blocks(blocks.iter())
             }
-            _ => EffectiveIntervals::One(Some(self.effective_interval(adjust))),
+            _ => EffectiveIntervals::One(self.effective_interval(adjust)),
         }
     }
 
-    /// Genomic interval to credit this read to, after applying the extension
-    /// and centering in `adjust`.
-    pub(crate) fn effective_interval(&self, adjust: &AdjustRead) -> (usize, usize) {
+    /// Genomic interval to credit this read to, after applying the extension,
+    /// Tn5 correction and centering in `adjust`. `None` when the Tn5 correction
+    /// leaves nothing of the fragment.
+    pub(crate) fn effective_interval(&self, adjust: &AdjustRead) -> Option<(usize, usize)> {
+        let (start, end) = self.fragment(adjust)?;
+        if adjust.center_reads && self.read_length > 0 {
+            Some(centered(start, end, self.read_length))
+        } else {
+            Some((start, end))
+        }
+    }
+
+    /// The read's alignment span, or with `extend_reads` the fragment it is
+    /// extended to, after the Tn5 correction. `None` when the correction
+    /// leaves nothing of the fragment.
+    fn fragment(&self, adjust: &AdjustRead) -> Option<(usize, usize)> {
         let (start, end) = match adjust.extend_reads {
             None => (self.alignment_start, self.alignment_end),
             Some(frag_len) => {
@@ -486,15 +514,90 @@ impl<'a> ScRecord<'a> {
         // and the feature loop would underflow its overlap subtraction.
         debug_assert!(start < end, "inverted interval {start}..{end}");
 
-        if adjust.center_reads && self.read_length > 0 {
-            let center = (start + end) / 2;
-            let half = self.read_length / 2;
-            let cs = center.saturating_sub(half);
-            (cs, cs + self.read_length)
+        // A fragment of 9 bases or less has no span left after the correction.
+        if adjust.tn5_shift {
+            let (shifted_start, shifted_end) = tn5_shift(start, end, self.is_reverse);
+            (shifted_start < shifted_end).then_some((shifted_start, shifted_end))
         } else {
-            (start, end)
+            Some((start, end))
         }
     }
+}
+
+/// A `width`-base window centered on `[start, end)`.
+fn centered(start: usize, end: usize, width: usize) -> (usize, usize) {
+    let center = (start + end) / 2;
+    let window_start = center.saturating_sub(width / 2);
+    (window_start, window_start + width)
+}
+
+/// Returns the genomic intervals of the aligned bases `first..=last` of the
+/// read. Offsets are 1-based and negative values index from the read's 3' end.
+///
+/// The offset counts **aligned** positions, walking the read's gapless blocks
+/// when the record carries them. Counting along the alignment span instead
+/// would step through an intron or a deletion and place the signal where the
+/// read has none. Counting along the stored sequence would step through
+/// soft-clipped bases and run off the end. Because a window can cross a gap,
+/// the result may be several intervals, always in ascending genomic order.
+///
+/// An ungapped read carries no block list: its alignment span is the single
+/// block. `derive_record_opts` computes the blocks whenever an offset is set,
+/// so a gapped read always has them here.
+fn apply_offset(rec: &ScRecord<'_>, first: i32, last: i32) -> Vec<(usize, usize)> {
+    // Ungapped reads carry no block list, their one block being the alignment.
+    let span = [(rec.alignment_start, rec.alignment_end)];
+    let blocks: &[(usize, usize)] = rec.blocks.as_deref().unwrap_or(&span);
+
+    let len: usize = blocks.iter().map(|(s, e)| e - s).sum();
+    if len == 0 {
+        return Vec::new();
+    }
+    let len_i = len as i32;
+
+    // 1-based, possibly negative offset to a 0-based index into the aligned
+    // positions, read 5' to 3'.
+    let to_idx = |o: i32| -> i32 { if o > 0 { o - 1 } else { len_i + o } };
+    let idx_s = to_idx(first);
+    let idx_e = to_idx(last) + 1;
+    if idx_s < 0 || idx_e <= idx_s || idx_s >= len_i {
+        return Vec::new();
+    }
+    let (idx_s, idx_e) = (idx_s as usize, (idx_e.min(len_i)) as usize);
+
+    // Walk the blocks in read order, taking each one's share of the window.
+    // For a reverse read the 5' end is the genomic end, so the walk runs
+    // backwards and each block is indexed from its own end.
+    let reverse = rec.is_reverse;
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut consumed = 0usize;
+
+    for i in 0..blocks.len() {
+        let (block_start, block_end) = if reverse {
+            blocks[blocks.len() - 1 - i]
+        } else {
+            blocks[i]
+        };
+        let block_len = block_end - block_start;
+        let (from, to) = (consumed, consumed + block_len);
+        consumed = to;
+
+        let lo = idx_s.max(from);
+        let hi = idx_e.min(to);
+        if lo >= hi {
+            continue;
+        }
+        out.push(if reverse {
+            (block_end - (hi - from), block_end - (lo - from))
+        } else {
+            (block_start + (lo - from), block_start + (hi - from))
+        });
+    }
+
+    if reverse {
+        out.reverse(); // back into ascending genomic order
+    }
+    out
 }
 
 /// The intervals of one read: either a single span or its gapless blocks.
@@ -671,7 +774,10 @@ mod tests {
     #[test]
     fn without_extension_the_alignment_span_is_used_verbatim() {
         let rec = test_record(100, 150);
-        assert_eq!(rec.effective_interval(&AdjustRead::default()), (100, 150));
+        assert_eq!(
+            rec.effective_interval(&AdjustRead::default()),
+            Some((100, 150))
+        );
     }
 
     #[test]
@@ -683,12 +789,12 @@ mod tests {
 
         // Forward: extend downstream from the start.
         let fwd = test_record(1000, 1050);
-        assert_eq!(fwd.effective_interval(&adjust), (1000, 1200));
+        assert_eq!(fwd.effective_interval(&adjust), Some((1000, 1200)));
 
         // Reverse: extend upstream from the end.
         let mut rev = test_record(1000, 1050);
         rev.is_reverse = true;
-        assert_eq!(rev.effective_interval(&adjust), (850, 1050));
+        assert_eq!(rev.effective_interval(&adjust), Some((850, 1050)));
     }
 
     #[test]
@@ -703,12 +809,12 @@ mod tests {
 
         // Forward span 300 > 200: keep [1000, 1300), not [1000, 1200).
         let fwd = test_record(1000, 1300);
-        assert_eq!(fwd.effective_interval(&adjust), (1000, 1300));
+        assert_eq!(fwd.effective_interval(&adjust), Some((1000, 1300)));
 
         // Reverse span 300 > 200: keep [1000, 1300), not [1100, 1300).
         let mut rev = test_record(1000, 1300);
         rev.is_reverse = true;
-        assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
+        assert_eq!(rev.effective_interval(&adjust), Some((1000, 1300)));
     }
 
     /// A record whose pair passes every proper-pair test: one reference,
@@ -745,11 +851,11 @@ mod tests {
 
         // Forward mate: TLEN wins over the requested fragment length.
         let fwd = proper_pair(1000, 1050, 300, 1250);
-        assert_eq!(fwd.effective_interval(&adjust), (1000, 1300));
+        assert_eq!(fwd.effective_interval(&adjust), Some((1000, 1300)));
 
         // Reverse mate: the fragment runs from the mate's start to this read's end.
         let rev = proper_pair(1250, 1300, -300, 1000);
-        assert_eq!(rev.effective_interval(&adjust), (1000, 1300));
+        assert_eq!(rev.effective_interval(&adjust), Some((1000, 1300)));
     }
 
     #[test]
@@ -758,11 +864,11 @@ mod tests {
 
         // |TLEN| > 4 × extend_reads is treated as a mapping artifact.
         let mut rec = proper_pair(1000, 1050, 801, 1750);
-        assert_eq!(rec.effective_interval(&adjust), (1000, 1200));
+        assert_eq!(rec.effective_interval(&adjust), Some((1000, 1200)));
 
         // Exactly 4 × extend_reads is still plausible.
         rec.template_length = 800;
-        assert_eq!(rec.effective_interval(&adjust), (1000, 1800));
+        assert_eq!(rec.effective_interval(&adjust), Some((1000, 1800)));
     }
 
     #[test]
@@ -770,7 +876,7 @@ mod tests {
         // Without a maximum the bound is 4 x the requested fragment length, so a
         // 700 bp insert is believed at `--extendReads 200`.
         let rec = proper_pair(1000, 1050, 700, 1650);
-        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1700));
+        assert_eq!(rec.effective_interval(&extend_to_200()), Some((1000, 1700)));
 
         // `--maxFragmentLength` replaces that bound outright, as it does in the
         // reference implementation, so the same pair is now too long to believe
@@ -780,7 +886,7 @@ mod tests {
             max_paired_fragment_length: Some(500),
             ..AdjustRead::default()
         };
-        assert_eq!(rec.effective_interval(&bounded), (1000, 1200));
+        assert_eq!(rec.effective_interval(&bounded), Some((1000, 1200)));
 
         // It replaces rather than tightens: a bound above 4x widens what counts.
         let widened = AdjustRead {
@@ -789,8 +895,11 @@ mod tests {
             ..AdjustRead::default()
         };
         let long = proper_pair(1000, 1050, 1500, 2450);
-        assert_eq!(long.effective_interval(&widened), (1000, 2500));
-        assert_eq!(long.effective_interval(&extend_to_200()), (1000, 1200));
+        assert_eq!(long.effective_interval(&widened), Some((1000, 2500)));
+        assert_eq!(
+            long.effective_interval(&extend_to_200()),
+            Some((1000, 1200))
+        );
     }
 
     // The proper-pair flag is not enough on its own: a pair failing any of the
@@ -801,7 +910,7 @@ mod tests {
         let mut rec = proper_pair(1000, 1050, 300, 1250);
         rec.mate_reference_id = Some(1);
 
-        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+        assert_eq!(rec.effective_interval(&extend_to_200()), Some((1000, 1200)));
     }
 
     #[test]
@@ -809,7 +918,7 @@ mod tests {
         let mut rec = proper_pair(1000, 1050, 300, 1250);
         rec.mate_is_reverse = false;
 
-        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+        assert_eq!(rec.effective_interval(&extend_to_200()), Some((1000, 1200)));
     }
 
     #[test]
@@ -817,7 +926,7 @@ mod tests {
         let mut rec = proper_pair(1000, 1050, 300, 1250);
         rec.mate_alignment_start = None;
 
-        assert_eq!(rec.effective_interval(&extend_to_200()), (1000, 1200));
+        assert_eq!(rec.effective_interval(&extend_to_200()), Some((1000, 1200)));
     }
 
     #[test]
@@ -827,13 +936,13 @@ mod tests {
         // A forward read whose mate lies behind it: the fragment would run
         // backwards from the read.
         let fwd = proper_pair(2000, 2050, 300, 1000);
-        assert_eq!(fwd.effective_interval(&adjust), (2000, 2200));
+        assert_eq!(fwd.effective_interval(&adjust), Some((2000, 2200)));
 
         // The reverse read of such a pair is the dangerous one. Its fragment
         // start would be the mate at 2000, past its own end at 1300, giving an
         // interval that starts after it ends.
         let rev = proper_pair(1250, 1300, -300, 2000);
-        let (start, end) = rev.effective_interval(&adjust);
+        let (start, end) = rev.effective_interval(&adjust).unwrap();
         assert!(start < end, "inverted interval {start}..{end}");
         assert_eq!((start, end), (1100, 1300));
     }
@@ -846,7 +955,7 @@ mod tests {
         };
         let mut rec = test_record(10, 60);
         rec.is_reverse = true;
-        assert_eq!(rec.effective_interval(&adjust), (0, 60));
+        assert_eq!(rec.effective_interval(&adjust), Some((0, 60)));
     }
 
     #[test]
@@ -859,7 +968,7 @@ mod tests {
         // Fragment [100, 300) centered at 200; a 50 bp read spans [175, 225).
         let mut rec = test_record(100, 300);
         rec.read_length = 50;
-        assert_eq!(rec.effective_interval(&adjust), (175, 225));
+        assert_eq!(rec.effective_interval(&adjust), Some((175, 225)));
     }
 
     #[test]
@@ -873,7 +982,7 @@ mod tests {
         // Extended to [1000, 1200), centered at 1100; a 50 bp read spans [1075, 1125).
         let mut rec = test_record(1000, 1050);
         rec.read_length = 50;
-        assert_eq!(rec.effective_interval(&adjust), (1075, 1125));
+        assert_eq!(rec.effective_interval(&adjust), Some((1075, 1125)));
     }
 
     #[test]
@@ -884,7 +993,231 @@ mod tests {
         };
         let mut rec = test_record(100, 300);
         rec.read_length = 0;
-        assert_eq!(rec.effective_interval(&adjust), (100, 300));
+        assert_eq!(rec.effective_interval(&adjust), Some((100, 300)));
+    }
+
+    // Offsets
+
+    #[test]
+    fn a_positive_offset_is_one_based_from_the_read_start() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 1, 1), [(1000, 1001)]);
+        assert_eq!(apply_offset(&rec, 10, 10), [(1009, 1010)]);
+    }
+
+    #[test]
+    fn a_negative_offset_counts_back_from_the_read_end() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, -1, -1), [(1049, 1050)]);
+        assert_eq!(apply_offset(&rec, -50, -50), [(1000, 1001)]);
+    }
+
+    #[test]
+    fn two_offsets_give_the_range_between_them() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 1, 5), [(1000, 1005)]);
+        assert_eq!(apply_offset(&rec, 3, -1), [(1002, 1050)]);
+    }
+
+    #[test]
+    fn on_a_reverse_read_the_offset_is_measured_from_the_alignment_end() {
+        let mut rec = test_record(1000, 1050);
+        rec.is_reverse = true;
+        // The first base of the read is the last base in genomic order.
+        assert_eq!(apply_offset(&rec, 1, 1), [(1049, 1050)]);
+        assert_eq!(apply_offset(&rec, 1, 5), [(1045, 1050)]);
+    }
+
+    #[test]
+    fn offsets_outside_the_read_are_rejected() {
+        let rec = test_record(1000, 1050);
+        assert!(apply_offset(&rec, 51, 51).is_empty(), "past the read end");
+        assert!(apply_offset(&rec, 5, 2).is_empty(), "end before start");
+
+        let empty = test_record(1000, 1000);
+        assert!(apply_offset(&empty, 1, 1).is_empty(), "zero-length read");
+    }
+
+    #[test]
+    fn a_range_that_runs_past_the_read_end_is_clamped_to_it() {
+        let rec = test_record(1000, 1050);
+        assert_eq!(apply_offset(&rec, 48, 100), [(1047, 1050)]);
+    }
+
+    // Read-mode dispatch
+
+    /// A spliced read: two 10 bp exons either side of a 100 bp intron.
+    fn spliced_record<'a>() -> ScRecord<'a> {
+        let mut rec = test_record(1000, 1120);
+        rec.blocks = Some(vec![(1000, 1010), (1110, 1120)]);
+        rec
+    }
+
+    #[test]
+    fn an_offset_counts_aligned_bases_and_steps_over_an_intron() {
+        let rec = spliced_record();
+
+        // Bases 1-10 are the first exon; the 11th aligned base is the first of
+        // the second exon, not the 11th base of the intron.
+        assert_eq!(apply_offset(&rec, 10, 10), [(1009, 1010)]);
+        assert_eq!(apply_offset(&rec, 11, 11), [(1110, 1111)]);
+
+        // The RiboSeq P-site offset, which is what this option exists for.
+        assert_eq!(apply_offset(&rec, 12, 12), [(1111, 1112)]);
+
+        // The last aligned base is the end of the second exon.
+        assert_eq!(apply_offset(&rec, -1, -1), [(1119, 1120)]);
+    }
+
+    #[test]
+    fn an_offset_range_crossing_a_gap_comes_back_as_two_intervals() {
+        let rec = spliced_record();
+
+        // Bases 8-13 straddle the junction: three in each exon, none between.
+        assert_eq!(apply_offset(&rec, 8, 13), [(1007, 1010), (1110, 1113)]);
+        // The whole read is its two exons, and nothing of the intron.
+        assert_eq!(apply_offset(&rec, 1, -1), [(1000, 1010), (1110, 1120)]);
+    }
+
+    #[test]
+    fn an_offset_past_the_aligned_length_yields_nothing() {
+        // 20 aligned bases over a 120 bp footprint: asking for the 21st must
+        // report nothing rather than a position inside the intron.
+        let rec = spliced_record();
+        assert!(apply_offset(&rec, 21, 21).is_empty());
+        assert!(apply_offset(&rec, -21, -21).is_empty());
+    }
+
+    #[test]
+    fn on_a_reverse_read_the_offset_counts_from_the_far_exon() {
+        // The 5' end of a reverse read is the genomic end, so counting starts
+        // at the last base of the second exon and runs back through it.
+        let mut rec = spliced_record();
+        rec.is_reverse = true;
+
+        assert_eq!(apply_offset(&rec, 1, 1), [(1119, 1120)]);
+        assert_eq!(apply_offset(&rec, 10, 10), [(1110, 1111)]);
+        assert_eq!(apply_offset(&rec, 11, 11), [(1009, 1010)]);
+
+        // A range crossing the junction still comes back ascending. Aligned
+        // bases 9-12 of this read are 1111 and 1110 in the far exon, then 1009
+        // and 1008 in the near one.
+        assert_eq!(apply_offset(&rec, 9, 12), [(1008, 1010), (1110, 1112)]);
+    }
+
+    #[test]
+    fn an_offset_ignores_soft_clipped_bases() {
+        // `5S10M5S`: the stored sequence is 20 bases but only 10 align, so the
+        // 12th aligned base does not exist. Counting the clips would have put
+        // it two bases past the alignment.
+        let mut rec = test_record(1000, 1010);
+        rec.read_length = 20;
+
+        assert!(apply_offset(&rec, 12, 12).is_empty());
+        assert_eq!(apply_offset(&rec, -1, -1), [(1009, 1010)]);
+    }
+
+    fn offset_intervals(rec: &ScRecord, adjust: AdjustRead) -> Vec<(usize, usize)> {
+        rec.effective_intervals(&adjust).collect()
+    }
+
+    #[test]
+    fn an_offset_with_center_reads_counts_the_fragment_center() {
+        let adjust = AdjustRead {
+            center_reads: true,
+            offset: Some((1, 1)),
+            ..extend_to_200()
+        };
+        // Fragment [1000, 1200) from either mate: the middle base is 1100.
+        let fwd = proper_pair(1000, 1050, 200, 1150);
+        let rev = proper_pair(1150, 1200, -200, 1000);
+        assert_eq!(offset_intervals(&fwd, adjust), [(1100, 1101)]);
+        assert_eq!(offset_intervals(&rev, adjust), [(1100, 1101)]);
+    }
+
+    #[test]
+    fn center_reads_centers_a_window_as_wide_as_the_offset_selection() {
+        let adjust = AdjustRead {
+            center_reads: true,
+            offset: Some((5, -1)),
+            ..extend_to_200()
+        };
+        // Bases 5 to the end of a 50 bp read are 46 bases, centered on 1100.
+        let rec = proper_pair(1000, 1050, 200, 1150);
+        assert_eq!(offset_intervals(&rec, adjust), [(1077, 1123)]);
+    }
+
+    #[test]
+    fn the_mnase_offset_counts_the_two_central_bases() {
+        // `--mnase` sets `--centerReads --offset 1 2` on the extended fragment.
+        let adjust = AdjustRead {
+            center_reads: true,
+            offset: Some((1, 2)),
+            ..extend_to_200()
+        };
+        let even = proper_pair(1000, 1050, 200, 1150);
+        let odd = proper_pair(1000, 1050, 201, 1151);
+        assert_eq!(offset_intervals(&even, adjust), [(1099, 1101)]);
+        assert_eq!(offset_intervals(&odd, adjust), [(1099, 1101)]);
+    }
+
+    #[test]
+    fn without_center_reads_an_offset_ignores_the_extension() {
+        let mut rev = test_record(1000, 1050);
+        rev.is_reverse = true;
+        let adjust = AdjustRead {
+            offset: Some((1, 1)),
+            ..extend_to_200()
+        };
+        assert_eq!(offset_intervals(&rev, adjust), [(1049, 1050)]);
+    }
+
+    #[test]
+    fn an_offset_on_a_spliced_read_is_centered_by_its_aligned_width() {
+        let adjust = AdjustRead {
+            center_reads: true,
+            offset: Some((1, -1)),
+            ..AdjustRead::default()
+        };
+        // 20 aligned bases centered on the [1000, 1120) span, not 120.
+        assert_eq!(offset_intervals(&spliced_record(), adjust), [(1050, 1070)]);
+    }
+
+    #[test]
+    fn an_offset_outside_the_read_counts_nothing_even_when_centered() {
+        let adjust = AdjustRead {
+            center_reads: true,
+            offset: Some((51, 51)),
+            ..AdjustRead::default()
+        };
+        assert!(offset_intervals(&test_record(1000, 1050), adjust).is_empty());
+    }
+
+    #[test]
+    fn an_offset_follows_a_spliced_read_but_extension_does_not() {
+        let rec = spliced_record();
+        let offset = AdjustRead {
+            offset: Some((8, 13)),
+            ..AdjustRead::default()
+        };
+        assert_eq!(offset_intervals(&rec, offset), [(1007, 1010), (1110, 1113)]);
+        assert_eq!(offset_intervals(&rec, extend_to_200()).len(), 1);
+    }
+
+    #[test]
+    fn an_offset_is_one_position_or_the_range_between_two() {
+        assert_eq!(parse_offset(None).unwrap(), None);
+        assert_eq!(parse_offset(Some(&[1])).unwrap(), Some((1, 1)));
+        assert_eq!(parse_offset(Some(&[5, -1])).unwrap(), Some((5, -1)));
+    }
+
+    #[test]
+    fn invalid_offsets_are_rejected() {
+        assert!(parse_offset(Some(&[0])).is_err());
+        assert!(parse_offset(Some(&[1, 0])).is_err());
+        assert!(parse_offset(Some(&[5, 2])).is_err());
+        assert!(parse_offset(Some(&[])).is_err());
+        assert!(parse_offset(Some(&[1, 2, 3])).is_err());
     }
 
     // Parsing real BAM records
@@ -995,7 +1328,6 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
-            atac_shift: false,
         }
     }
 
@@ -1073,7 +1405,6 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
-            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1095,7 +1426,6 @@ mod tests {
             store_sequence: true,
             compute_covered_span: false,
             compute_blocks: false,
-            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1123,7 +1453,6 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
-            atac_shift: false,
         };
 
         let rec = ScRecord::from_bam_record(&records[0], &header, &bc, None, None, None, &opts)
@@ -1147,7 +1476,6 @@ mod tests {
             store_sequence: false,
             compute_covered_span: false,
             compute_blocks: false,
-            atac_shift: false,
         };
         let shapes = cigar_shapes(&opts);
         let fraction = |name: &str| shapes[name].aligned_fraction.unwrap();
@@ -1169,66 +1497,52 @@ mod tests {
     }
 
     #[test]
+    fn the_tn5_correction_moves_both_ends_of_the_fragment() {
+        let adjust = AdjustRead {
+            tn5_shift: true,
+            ..extend_to_200()
+        };
+
+        // Fragment [1000, 1200), defined by a forward or a reverse R1.
+        let fwd = proper_pair(1000, 1050, 200, 1150);
+        let rev = proper_pair(1150, 1200, -200, 1000);
+        assert_eq!(fwd.effective_interval(&adjust), Some((1004, 1195)));
+        assert_eq!(rev.effective_interval(&adjust), Some((1005, 1196)));
+    }
+
+    #[test]
+    fn a_fragment_the_tn5_correction_empties_is_not_counted() {
+        let adjust = AdjustRead {
+            tn5_shift: true,
+            ..AdjustRead::default()
+        };
+        let rec = test_record(1000, 1009);
+        assert_eq!(rec.effective_interval(&adjust), None);
+        assert_eq!(rec.effective_intervals(&adjust).count(), 0);
+    }
+
+    #[test]
+    fn the_tn5_correction_is_applied_before_centering() {
+        let adjust = AdjustRead {
+            tn5_shift: true,
+            center_reads: true,
+            ..extend_to_200()
+        };
+        // [1004, 1195) is centered on 1099; a 50 bp read spans [1074, 1124).
+        let fwd = proper_pair(1000, 1050, 200, 1150);
+        assert_eq!(fwd.effective_interval(&adjust), Some((1074, 1124)));
+    }
+
+    #[test]
     fn the_tn5_correction_trims_each_end_by_its_own_offset() {
-        // deeptools --ATACshift: 4 and 5 bases, the larger one at the 3' end.
+        // deeptools --ATACshift: 4 and 5 bases, the larger one at the 3' end of
+        // the strand the fragment's read is on.
         assert_eq!(tn5_shift(1000, 1050, false), (1004, 1045));
         assert_eq!(tn5_shift(1000, 1050, true), (1005, 1046));
 
-        // A read of 9 bases or less has nothing left, which the caller drops.
+        // A fragment of 9 bases or less has nothing left, which the caller drops.
         let (start, end) = tn5_shift(1000, 1009, false);
         assert!(end <= start, "{start}..{end}");
-    }
-
-    #[test]
-    fn a_tn5_corrected_record_carries_the_shifted_span() {
-        let plain_with_blocks = ScRecordOptions {
-            compute_blocks: true,
-            ..plain_opts()
-        };
-        let shifted_with_blocks = ScRecordOptions {
-            compute_blocks: true,
-            atac_shift: true,
-            ..plain_opts()
-        };
-        let plain = cigar_shapes(&plain_with_blocks);
-        let shifted = cigar_shapes(&shifted_with_blocks);
-
-        for (name, rec) in &plain {
-            let corrected = &shifted[name];
-            let (head, tail) = if rec.is_reverse { (5, 4) } else { (4, 5) };
-            assert_eq!(
-                (corrected.alignment_start, corrected.alignment_end),
-                (rec.alignment_start + head, rec.alignment_end - tail),
-                "{name}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_tn5_correction_cuts_the_blocks_it_shortens() {
-        // An intron keeps its true position: only the outermost bases go, so
-        // the block a corrected end falls in is cut rather than moved.
-        let plain_with_blocks = ScRecordOptions {
-            compute_blocks: true,
-            ..plain_opts()
-        };
-        let shifted_with_blocks = ScRecordOptions {
-            compute_blocks: true,
-            atac_shift: true,
-            ..plain_opts()
-        };
-        let plain = cigar_shapes(&plain_with_blocks);
-        let shifted = cigar_shapes(&shifted_with_blocks);
-
-        let intron = &plain["intron"];
-        let blocks = intron.blocks.as_ref().expect("an intron has two blocks");
-        let corrected = &shifted["intron"];
-        let (head, tail) = if intron.is_reverse { (5, 4) } else { (4, 5) };
-        let expected: Vec<(usize, usize)> = vec![
-            (blocks[0].0 + head, blocks[0].1),
-            (blocks[1].0, blocks[1].1 - tail),
-        ];
-        assert_eq!(corrected.blocks.as_deref(), Some(expected.as_slice()));
     }
 
     #[test]

@@ -5,7 +5,9 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use crate::bam::filters::{DupMethod, QcFilter, RawRecordFilter, RnaStrand};
-use crate::counting::coverage::{NormalizeMethod, OutputFormat, ReadMode, run_bulk_coverage};
+use crate::bam::fragment_length::{fragment_options, mnase_options};
+use crate::bam::sc_record::parse_offset;
+use crate::counting::coverage::{NormalizeMethod, OutputFormat, run_bulk_coverage};
 use crate::to_py_err;
 
 fn parse_normalize_method(s: &str) -> Result<NormalizeMethod> {
@@ -54,7 +56,7 @@ fn parse_normalize_method(s: &str) -> Result<NormalizeMethod> {
     blacklist_path = None,
     extend_reads = None,
     center_reads = false,
-    atac_shift = false,
+    tn5_shift = false,
     dup_method = None,
     genome_2bit = None,
     motif_filter = None,
@@ -91,7 +93,7 @@ pub fn bulk_coverage(
     blacklist_path: Option<PathBuf>,
     extend_reads: Option<usize>,
     center_reads: bool,
-    atac_shift: bool,
+    tn5_shift: bool,
     dup_method: Option<String>,
     genome_2bit: Option<PathBuf>,
     motif_filter: Option<Vec<(String, String)>>,
@@ -133,17 +135,14 @@ pub fn bulk_coverage(
         .transpose()
         .map_err(to_py_err)?;
 
-    // MNase defaults: fragment length 130–200 bp unless explicitly overridden.
-    let min_fragment_length = if mnase && min_fragment_length.is_none() {
-        Some(130)
-    } else {
-        min_fragment_length
-    };
-    let max_fragment_length = if mnase && max_fragment_length.is_none() {
-        Some(200)
-    } else {
-        max_fragment_length
-    };
+    let offset = parse_offset(offset.as_deref()).map_err(to_py_err)?;
+    let (center_reads, offset, min_fragment_length, max_fragment_length) = mnase_options(
+        mnase,
+        center_reads,
+        offset,
+        min_fragment_length,
+        max_fragment_length,
+    );
 
     let qc = QcFilter::from_bounds(
         min_fragment_length,
@@ -159,53 +158,20 @@ pub fn bulk_coverage(
         .transpose()
         .map_err(to_py_err)?;
 
+    let (extend_reads, sam_flag_include, sam_flag_exclude) = fragment_options(
+        tn5_shift,
+        mnase,
+        extend_reads,
+        sam_flag_include,
+        sam_flag_exclude,
+    );
+
     let record_filter = RawRecordFilter::from_options(
         min_mapq,
         sam_flag_include,
         sam_flag_exclude,
         filter_rna_strand,
     );
-
-    // Validate and parse offset.
-    let parsed_offset: Option<(i32, Option<i32>)> = match offset.as_deref() {
-        None => None,
-        Some([s]) => {
-            if *s == 0 {
-                return Err(PyRuntimeError::new_err(
-                    "offset value 0 is not allowed (offsets are 1-based)",
-                ));
-            }
-            Some((*s, None))
-        }
-        Some([s, e]) => {
-            if *s == 0 || *e == 0 {
-                return Err(PyRuntimeError::new_err(
-                    "offset value 0 is not allowed (offsets are 1-based)",
-                ));
-            }
-            if *e > 0 && *e < *s {
-                return Err(PyRuntimeError::new_err(
-                    "offset end must be >= offset start",
-                ));
-            }
-            Some((*s, Some(*e)))
-        }
-        Some(_) => return Err(PyRuntimeError::new_err("offset must have 1 or 2 elements")),
-    };
-
-    if mnase && parsed_offset.is_some() {
-        return Err(PyRuntimeError::new_err(
-            "--mnase and --offset are mutually exclusive",
-        ));
-    }
-
-    let read_mode = if mnase {
-        ReadMode::MNase
-    } else if let Some((s, e)) = parsed_offset {
-        ReadMode::Offset(s, e)
-    } else {
-        ReadMode::Normal
-    };
 
     let path_label: Vec<(PathBuf, String)> = bam_files.into_iter().zip(bam_labels).collect();
     let bam_path_refs: Vec<(&Path, &str)> = path_label
@@ -228,7 +194,7 @@ pub fn bulk_coverage(
         blacklist_path.as_deref(),
         extend_reads,
         center_reads,
-        atac_shift,
+        tn5_shift,
         dup,
         genome_2bit.as_deref(),
         motif_filter.as_deref(),
@@ -237,7 +203,8 @@ pub fn bulk_coverage(
         normalize,
         scale_factor,
         format,
-        read_mode,
+        offset,
+        mnase,
         num_threads,
         chunk_size,
     )
