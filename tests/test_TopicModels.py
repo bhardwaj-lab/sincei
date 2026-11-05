@@ -41,16 +41,16 @@ def dense_tfidf(matrix: np.ndarray) -> np.ndarray:
     region_idf = np.where(holders > 0, np.log2(n / np.maximum(holders, 1)), 0.0)
     weight = np.where(held, 1 + np.log2(np.where(held, matrix, 1)), 0) * region_idf
     pivot = held.sum() / n
-    kept = (weight > 0).sum(axis=1, keepdims=True)
+    kept = (held & (region_idf > 0)).sum(axis=1, keepdims=True)
     return weight / ((1 - GENSIM_SLOPE) * pivot + GENSIM_SLOPE * kept)
 
 
 def test_tfidf_is_the_lfu_formula(counts: sparse.csr_matrix) -> None:
     lsa = LSA(N_PC).fit(counts)
-    assert lsa.idf_ is not None
-    assert lsa.pivot_ is not None
+    assert lsa._idf is not None
+    assert lsa._pivot is not None
 
-    weighted = tfidf(counts, lsa.idf_, lsa.pivot_).toarray()
+    weighted = tfidf(counts, lsa._idf, lsa._pivot).toarray()
 
     np.testing.assert_allclose(weighted, dense_tfidf(counts.toarray()), rtol=1e-6)
 
@@ -61,9 +61,9 @@ def test_arpack_gives_the_top_singular_vectors(counts: sparse.csr_matrix) -> Non
     singular = np.linalg.svd(dense_tfidf(counts.toarray()), compute_uv=False)
 
     assert scores.shape == (N_CELLS, N_PC)
-    assert lsa.components_ is not None
-    assert lsa.components_.shape == (N_REGIONS, N_PC)
-    np.testing.assert_allclose(lsa.singular_values_, singular[:N_PC], rtol=1e-4)
+    assert lsa._components is not None
+    assert lsa._components.shape == (N_REGIONS, N_PC)
+    np.testing.assert_allclose(lsa._singular_values, singular[:N_PC], rtol=1e-4)
 
 
 def test_the_default_solver_is_arpack() -> None:
@@ -75,19 +75,19 @@ def test_torch_and_arpack_find_the_same_components(
 ) -> None:
     arpack = LSA(N_PC, solver="arpack").fit(counts)
     torch_lsa = LSA(N_PC, solver="torch", device="cpu").fit(counts)
-    assert arpack.components_ is not None
-    assert torch_lsa.components_ is not None
+    assert arpack._components is not None
+    assert torch_lsa._components is not None
 
     signal = slice(0, 2)
     angles = subspace_angles(
-        arpack.components_[:, signal], torch_lsa.components_[:, signal]
+        arpack._components[:, signal], torch_lsa._components[:, signal]
     )
     assert np.degrees(angles).max() < 1.0
-    assert torch_lsa.singular_values_ is not None
-    assert arpack.singular_values_ is not None
+    assert torch_lsa._singular_values is not None
+    assert arpack._singular_values is not None
     np.testing.assert_allclose(
-        torch_lsa.singular_values_[signal],
-        arpack.singular_values_[signal],
+        torch_lsa._singular_values[signal],
+        arpack._singular_values[signal],
         rtol=1e-4,
     )
 
@@ -106,10 +106,10 @@ def test_the_largest_entry_of_every_component_is_positive(
     counts: sparse.csr_matrix,
 ) -> None:
     lsa = LSA(N_PC).fit(counts)
-    assert lsa.components_ is not None
+    assert lsa._components is not None
 
-    largest = np.abs(lsa.components_).argmax(axis=0)
-    assert (lsa.components_[largest, np.arange(N_PC)] > 0).all()
+    largest = np.abs(lsa._components).argmax(axis=0)
+    assert (lsa._components[largest, np.arange(N_PC)] > 0).all()
 
 
 def test_lsa_takes_anndata_and_dense_input(counts: sparse.csr_matrix) -> None:
@@ -135,10 +135,10 @@ def test_lda_gives_topic_proportions(counts: sparse.csr_matrix) -> None:
 
     assert theta.shape == (N_CELLS, 2)
     np.testing.assert_allclose(theta.sum(axis=1), 1.0, rtol=1e-5)
-    assert lda.topics_ is not None
-    assert lda.topics_.shape == (2, N_REGIONS)
-    np.testing.assert_allclose(lda.topics_.sum(axis=1), 1.0, rtol=1e-5)
-    assert len(lda.log_likelihood_) == 5
+    assert lda._topics is not None
+    assert lda._topics.shape == (2, N_REGIONS)
+    np.testing.assert_allclose(lda._topics.sum(axis=1), 1.0, rtol=1e-5)
+    assert len(lda._log_likelihood) == 5
 
 
 def test_lda_separates_the_two_groups(counts: sparse.csr_matrix) -> None:
