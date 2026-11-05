@@ -1,6 +1,6 @@
 """Topic models of a cell-by-region count matrix: LSA and LDA.
 
-`LSA` is the truncated SVD of the TF-IDF eqquivalent to gensim's
+`LSA` is the truncated SVD of the TF-IDF equivalent to gensim's
 `TfidfModel(smartirs="lfu")`, solved with ARPACK (`scipy.sparse.linalg.svds`) or
 with a randomized SVD in torch.
 `LDA` is latent Dirichlet allocation fitted by collapsed Gibbs sampling with
@@ -154,18 +154,6 @@ class LSA:
         "cpu". Defaults to None.
     random_state : int or None
         Seed of the start of the solvers. Defaults to DEFAULT_RANDOM_STATE (42).
-
-    Attributes
-    ----------
-    components_ : np.ndarray
-        `V`, regions by components, ordered by singular value. The entry of largest
-        absolute value of every component is positive.
-    singular_values_ : np.ndarray
-        The singular value of every component.
-    idf_ : np.ndarray
-        The idf of every region, which transform uses for new cells.
-    pivot_ : float
-        The pivot of the normalization.
     """
 
     def __init__(
@@ -200,10 +188,15 @@ class LSA:
         self.device = device
         self.random_state = random_state
 
-        self.components_: np.ndarray | None = None
-        self.singular_values_: np.ndarray | None = None
-        self.idf_: np.ndarray | None = None
-        self.pivot_: float | None = None
+        # Set by fit. `V`, regions by components, ordered by singular value, with
+        # the entry of largest absolute value of every component positive.
+        self._components: np.ndarray | None = None
+        # The singular value of every component.
+        self._singular_values: np.ndarray | None = None
+        # The idf of every region, which transform uses for new cells.
+        self._idf: np.ndarray | None = None
+        # The pivot of the normalization.
+        self._pivot: float | None = None
 
     def fit(self, X: CountMatrix) -> LSA:
         """Fits the components to `X`, cells in rows and regions in columns."""
@@ -226,8 +219,8 @@ class LSA:
             raise ValueError(msg)
 
         holders = np.bincount(counts.indices[counts.data > 0], minlength=p)
-        self.idf_, self.pivot_ = idf(holders.astype(np.float64), n)
-        weighted = tfidf(counts, self.idf_, self.pivot_)
+        self._idf, self._pivot = idf(holders.astype(np.float64), n)
+        weighted = tfidf(counts, self._idf, self._pivot)
         if self.solver is LSASolver.arpack:
             components, singular, scores = self._arpack_svd(weighted)
         elif self.solver is LSASolver.torch:
@@ -236,19 +229,19 @@ class LSA:
             )
 
         signs = largest_entry_signs(components)
-        self.components_ = components * signs
-        self.singular_values_ = singular
+        self._components = components * signs
+        self._singular_values = singular
         return scores * signs
 
     def transform(self, X: CountMatrix) -> np.ndarray:
         """The scores of the cells of `X`, with the idf of the fit."""
-        if self.components_ is None:
+        if self._components is None:
             msg = "LSA is not fitted. Call fit() before transform()."
             raise RuntimeError(msg)
-        assert self.idf_ is not None
-        assert self.pivot_ is not None
-        weighted = tfidf(count_matrix(X, self.binarize), self.idf_, self.pivot_)
-        return np.asarray(weighted @ self.components_, dtype=np.float32)
+        assert self._idf is not None
+        assert self._pivot is not None
+        weighted = tfidf(count_matrix(X, self.binarize), self._idf, self._pivot)
+        return np.asarray(weighted @ self._components, dtype=np.float32)
 
     def _arpack_svd(
         self, weighted: csr_matrix
@@ -323,13 +316,6 @@ class LDA:
         all available processors. Defaults to None.
     random_state : int
         Seed of the sampler. Defaults to DEFAULT_RANDOM_STATE (42).
-
-    Attributes
-    ----------
-    topics_ : np.ndarray
-        The region distribution of every topic, topics by regions.
-    log_likelihood_ : list of float
-        The log-likelihood per token, every LOG_INTERVAL iterations.
     """
 
     def __init__(
@@ -363,8 +349,10 @@ class LDA:
         self.n_jobs = n_jobs
         self.random_state = random_state
 
-        self.topics_: np.ndarray | None = None
-        self.log_likelihood_: list[float] = []
+        # Set by fit. The region distribution of every topic, topics by regions.
+        self._topics: np.ndarray | None = None
+        # The log-likelihood per token, every LOG_INTERVAL iterations.
+        self._log_likelihood: list[float] = []
 
     def fit(self, X: CountMatrix) -> LDA:
         """Fits the model to `X`, cells in rows and regions in columns."""
@@ -405,13 +393,13 @@ class LDA:
                 model.add_doc(tokens.tolist())
                 modelled.append(row)
 
-        self.log_likelihood_ = []
+        self._log_likelihood = []
         done = 0
         while done < self.iterations:
             step = min(LOG_INTERVAL, self.iterations - done)
             model.train(step, workers=self.n_jobs)
             done += step
-            self.log_likelihood_.append(float(model.ll_per_word))
+            self._log_likelihood.append(float(model.ll_per_word))
             logging.info(
                 "Iteration %d: log-likelihood per token %.6f", done, model.ll_per_word
             )
@@ -420,7 +408,7 @@ class LDA:
         theta[np.asarray(modelled, dtype=np.int64)] = np.array(
             [document.get_topic_dist() for document in model.docs], dtype=np.float32
         )
-        self.topics_ = self._full_topics(model, n_regions)
+        self._topics = self._full_topics(model, n_regions)
         return theta
 
     def _full_topics(self, model: tp.LDAModel, n_regions: int) -> np.ndarray:
