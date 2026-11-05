@@ -56,7 +56,7 @@ DESCRIPTION = (
     "* PCA: Principal Component Analysis.\n"
     "* LSA: Latent Semantic Analysis. One extra component is fitted, and the "
     "component that correlates the most with the cell depth is dropped if its "
-    f"|Spearman rho| is above {DEPTH_CORRELATION_CUTOFF}, else the extra component.\n"
+    f"Spearman rho is above {DEPTH_CORRELATION_CUTOFF}, else the extra component.\n"
     "* LDA: Latent Dirichlet Allocation."
 )
 
@@ -315,16 +315,16 @@ def main(
         elif method is DimRed.LSA:
             lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
             scores = lsa.fit_transform(matrix)
-            assert lsa.components_ is not None
-            assert lsa.singular_values_ is not None
+            assert lsa._components is not None
+            assert lsa._singular_values is not None
             depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
             keep = depth_components(scores, depth)
             adata.obsm[reduction] = scores[:, keep]
-            adata.varm[reduction] = lsa.components_[:, keep]
-            adata.var["lsa_idf"] = lsa.idf_
+            adata.varm[reduction] = lsa._components[:, keep]
+            adata.var["lsa_idf"] = lsa._idf
             adata.uns["lsa"] = {
-                "pivot": lsa.pivot_,
-                "singular_values": lsa.singular_values_[keep],
+                "pivot": lsa._pivot,
+                "singular_values": lsa._singular_values[keep],
                 "binarize": binarize,
             }
         elif method is DimRed.LDA:
@@ -336,8 +336,8 @@ def main(
                 binarize=binarize,
             )
             adata.obsm[reduction] = lda.fit_transform(matrix)
-            assert lda.topics_ is not None
-            adata.varm[reduction] = lda.topics_.T
+            assert lda._topics is not None
+            adata.varm[reduction] = lda._topics.T
             adata.uns["lda"] = {
                 "alpha": 1.0 / n_prin_comps if alpha is None else alpha,
                 "eta": eta,
