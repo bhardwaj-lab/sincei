@@ -1,8 +1,7 @@
 """Topic models of a cell-by-region count matrix: LSA and LDA.
 
 `LSA` is the truncated SVD of the TF-IDF equivalent to gensim's
-`TfidfModel(smartirs="lfu")`, solved with ARPACK (`scipy.sparse.linalg.svds`) or
-with a randomized SVD in torch.
+`TfidfModel(smartirs="lfu")`, solved with ARPACK (`scipy.sparse.linalg.svds`).
 `LDA` is latent Dirichlet allocation fitted by collapsed Gibbs sampling with
 tomotopy.
 """
@@ -10,14 +9,11 @@ tomotopy.
 from __future__ import annotations
 
 import logging
-import warnings
-from enum import Enum
 from typing import TYPE_CHECKING
 
 import anndata as ad
 import numpy as np
 import tomotopy as tp
-import torch
 from scipy.sparse import csr_matrix, issparse
 from scipy.sparse.linalg import svds
 
@@ -34,11 +30,6 @@ GENSIM_SLOPE = 0.25
 LOG_INTERVAL = 10
 
 
-class LSASolver(str, Enum):
-    arpack = "arpack"
-    torch = "torch"
-
-
 def count_matrix(X: CountMatrix, binarize: bool = False) -> csr_matrix:
     """The counts of `X`, cells in rows, as CSR. With `binarize`, a non-zero is 1."""
     counts = X.X if isinstance(X, ad.AnnData) else X
@@ -52,11 +43,11 @@ def count_matrix(X: CountMatrix, binarize: bool = False) -> csr_matrix:
 
 
 def idf(holders: np.ndarray, n_cells: int) -> tuple[np.ndarray, float]:
-    """The idf of every region, and the pivot of the normalization.
+    """The idf of the features, and the pivot of the normalization.
 
-    `holders` are the cells that hold every region. The idf is `log2(cells / holders)`,
-    zero for a region that no cell holds, and the pivot is the mean number of regions
-    that a cell holds.
+    `holders` are the cells with non-zero counts per feature. The idf is
+    `log2(n_cells / holders)`, zero for a feature that no cell holds, and the
+    pivot is the mean number of features that a cell holds.
     """
     region_idf = np.where(
         holders > 0, np.log2(n_cells / np.clip(holders, 1.0, None)), 0.0
@@ -105,29 +96,6 @@ def largest_entry_signs(basis: np.ndarray) -> np.ndarray:
     return signs
 
 
-def _resolve_device(device: str | torch.device | None) -> torch.device:
-    if device is None:
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    resolved = torch.device(device)
-    if resolved.type == "cuda" and not torch.cuda.is_available():
-        msg = f"device={device!r} was requested, but CUDA is not available."
-        raise ValueError(msg)
-    return resolved
-
-
-def _torch_csr(matrix: csr_matrix, device: torch.device) -> torch.Tensor:
-    """`matrix` as a float32 torch CSR tensor on `device`."""
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Sparse CSR tensor support")
-        return torch.sparse_csr_tensor(
-            torch.from_numpy(matrix.indptr.astype(np.int64)),
-            torch.from_numpy(matrix.indices.astype(np.int64)),
-            torch.from_numpy(np.asarray(matrix.data, dtype=np.float32)),
-            size=matrix.shape,
-            check_invariants=False,
-        ).to(device)
-
-
 class LSA:
     r"""Latent semantic analysis of a cell-by-region count matrix.
 
@@ -139,53 +107,23 @@ class LSA:
     ----------
     n_pc : int
         Number of components. Defaults to 20.
-    solver : LSASolver or str
-        "arpack" for `scipy.sparse.linalg.svds` on the CPU, which gives the exact
-        optimum. "torch" for the randomized SVD (Halko et al. 2009) in torch,
-        on `device`. Defaults to "arpack".
-    n_iter : int
-        Power iterations of the torch solver. Defaults to 8.
-    oversample : int or None
-        Columns of the torch solver beyond n_pc. None takes n_pc. Defaults to None.
     binarize : bool
         Whether to read every value that is not zero as 1. Defaults to False.
-    device : str, torch.device or None
-        Device of the torch solver. None selects "cuda" if it is available, else
-        "cpu". Defaults to None.
     random_state : int or None
-        Seed of the start of the solvers. Defaults to DEFAULT_RANDOM_STATE (42).
+        Seed of the start of the ARPACK solver. Defaults to DEFAULT_RANDOM_STATE (42).
     """
 
     def __init__(
         self,
         n_pc: int = 20,
-        solver: LSASolver | str = LSASolver.arpack,
-        n_iter: int = 8,
-        oversample: int | None = None,
         binarize: bool = False,
-        device: str | torch.device | None = None,
         random_state: int | None = DEFAULT_RANDOM_STATE,
     ) -> None:
-        try:
-            solver = LSASolver(solver)
-        except ValueError:
-            choices = ", ".join(repr(name.value) for name in LSASolver)
-            msg = f"solver={solver!r} is not valid. Use one of {choices}."
-            raise ValueError(msg) from None
-        if oversample is None:
-            oversample = n_pc
-        if n_pc < 1 or n_iter < 0 or oversample < 0:
-            msg = (
-                f"n_pc={n_pc}, n_iter={n_iter} and oversample={oversample} are not "
-                f"valid. Use n_pc of 1 or more, and n_iter and oversample of 0 or more."
-            )
+        if n_pc < 1:
+            msg = f"n_pc={n_pc} is not valid. Use n_pc of 1 or more."
             raise ValueError(msg)
         self.n_pc = n_pc
-        self.solver = solver
-        self.n_iter = n_iter
-        self.oversample = oversample
         self.binarize = binarize
-        self.device = device
         self.random_state = random_state
 
         # Set by fit. `V`, regions by components, ordered by singular value, with
@@ -221,16 +159,14 @@ class LSA:
         holders = np.bincount(counts.indices[counts.data > 0], minlength=p)
         self._idf, self._pivot = idf(holders.astype(np.float64), n)
         weighted = tfidf(counts, self._idf, self._pivot)
-        if self.solver is LSASolver.arpack:
-            components, singular, scores = self._arpack_svd(weighted)
-        elif self.solver is LSASolver.torch:
-            components, singular, scores = self._randomized_svd(
-                weighted, _resolve_device(self.device)
-            )
+        u, s, vt = svds(weighted, k=self.n_pc, rng=self.random_state)
+        order = np.argsort(s)[::-1]
+        components = vt[order].T.astype(np.float32)
+        scores = (u[:, order] * s[order]).astype(np.float32)
 
         signs = largest_entry_signs(components)
         self._components = components * signs
-        self._singular_values = singular
+        self._singular_values = s[order].astype(np.float32)
         return scores * signs
 
     def transform(self, X: CountMatrix) -> np.ndarray:
@@ -242,47 +178,6 @@ class LSA:
         assert self._pivot is not None
         weighted = tfidf(count_matrix(X, self.binarize), self._idf, self._pivot)
         return np.asarray(weighted @ self._components, dtype=np.float32)
-
-    def _arpack_svd(
-        self, weighted: csr_matrix
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        u, s, vt = svds(weighted, k=self.n_pc, rng=self.random_state)
-        order = np.argsort(s)[::-1]
-        return (
-            vt[order].T.astype(np.float32),
-            s[order].astype(np.float32),
-            (u[:, order] * s[order]).astype(np.float32),
-        )
-
-    def _randomized_svd(
-        self, weighted: csr_matrix, device: torch.device
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Randomized SVD with a QR step after every product.
-
-        The scores are `W V`, so that transform gives the cells of the fit the scores
-        that the fit gives them.
-        """
-        n, p = weighted.shape
-        W = _torch_csr(weighted, device)
-        Wt = _torch_csr(weighted.T.tocsr(), device)
-        width = min(self.n_pc + self.oversample, n, p)
-        generator = torch.Generator()
-        if self.random_state is not None:
-            generator.manual_seed(self.random_state)
-        start = torch.randn(p, width, generator=generator).to(device)
-
-        basis = torch.linalg.qr(W @ start).Q
-        for _ in range(self.n_iter):
-            features = torch.linalg.qr(Wt @ basis).Q
-            basis = torch.linalg.qr(W @ features).Q
-        _, singular, right = torch.linalg.svd((Wt @ basis).T, full_matrices=False)
-        components = right[: self.n_pc].T.contiguous()
-        scores = W @ components
-        return (
-            components.cpu().numpy(),
-            singular[: self.n_pc].cpu().numpy(),
-            scores.cpu().numpy(),
-        )
 
 
 class LDA:

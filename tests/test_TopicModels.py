@@ -10,9 +10,8 @@ import numpy as np
 import pytest
 from _cli_testing import run, tool_path
 from scipy import sparse
-from scipy.linalg import subspace_angles
 
-from sincei.tools.TopicModels import GENSIM_SLOPE, LDA, LSA, LSASolver, tfidf
+from sincei.tools.TopicModels import GENSIM_SLOPE, LDA, LSA, tfidf
 from sincei.utils import depth_components
 
 if TYPE_CHECKING:
@@ -56,7 +55,7 @@ def test_tfidf_is_the_lfu_formula(counts: sparse.csr_matrix) -> None:
 
 
 def test_arpack_gives_the_top_singular_vectors(counts: sparse.csr_matrix) -> None:
-    lsa = LSA(N_PC, solver="arpack")
+    lsa = LSA(N_PC)
     scores = lsa.fit_transform(counts)
     singular = np.linalg.svd(dense_tfidf(counts.toarray()), compute_uv=False)
 
@@ -66,37 +65,8 @@ def test_arpack_gives_the_top_singular_vectors(counts: sparse.csr_matrix) -> Non
     np.testing.assert_allclose(lsa._singular_values, singular[:N_PC], rtol=1e-4)
 
 
-def test_the_default_solver_is_arpack() -> None:
-    assert LSA(N_PC).solver is LSASolver.arpack
-
-
-def test_torch_and_arpack_find_the_same_components(
-    counts: sparse.csr_matrix,
-) -> None:
-    arpack = LSA(N_PC, solver="arpack").fit(counts)
-    torch_lsa = LSA(N_PC, solver="torch", device="cpu").fit(counts)
-    assert arpack._components is not None
-    assert torch_lsa._components is not None
-
-    signal = slice(0, 2)
-    angles = subspace_angles(
-        arpack._components[:, signal], torch_lsa._components[:, signal]
-    )
-    assert np.degrees(angles).max() < 1.0
-    assert torch_lsa._singular_values is not None
-    assert arpack._singular_values is not None
-    np.testing.assert_allclose(
-        torch_lsa._singular_values[signal],
-        arpack._singular_values[signal],
-        rtol=1e-4,
-    )
-
-
-@pytest.mark.parametrize("solver", ["arpack", "torch"])
-def test_transform_gives_the_scores_of_the_fit(
-    counts: sparse.csr_matrix, solver: str
-) -> None:
-    lsa = LSA(N_PC, solver=solver, device="cpu")
+def test_transform_gives_the_scores_of_the_fit(counts: sparse.csr_matrix) -> None:
+    lsa = LSA(N_PC)
     scores = lsa.fit_transform(counts)
 
     np.testing.assert_allclose(lsa.transform(counts), scores, rtol=1e-4, atol=1e-5)
@@ -117,11 +87,6 @@ def test_lsa_takes_anndata_and_dense_input(counts: sparse.csr_matrix) -> None:
 
     np.testing.assert_allclose(LSA(N_PC).fit_transform(ad.AnnData(counts)), reference)
     np.testing.assert_allclose(LSA(N_PC).fit_transform(counts.toarray()), reference)
-
-
-def test_lsa_rejects_an_unknown_solver() -> None:
-    with pytest.raises(ValueError, match="'arpack', 'torch'"):
-        LSA(N_PC, solver="randomized")
 
 
 def test_lsa_rejects_too_many_components(counts: sparse.csr_matrix) -> None:
