@@ -45,22 +45,30 @@ def inverse_digamma(y: torch.Tensor, n_iter: int = 8) -> torch.Tensor:
 class ExponentialFamily:
     r"""Exponential family distribution for GLM-PCA.
 
-    A subclass needs two things:
+    A subclass can be created with the following ingredients:
 
     1. The likelihood, given in one of two ways:
-       - ``torch_distribution(theta)``: return a ``torch.distributions`` object
+       - ``torch_distribution(theta)``: which returns a ``torch.distributions`` object
          parametrised by theta (preferred: exact log-likelihood incl. base measure,
          nothing to derive), or
-       - the paper's notation (Mourragui et al., 2023): ``sufficient_statistics``
-         (T), ``natural_parametrization`` (eta) and ``log_partition`` (A).
-    2. ``invert_g``: the element-wise saturated parameter g^{-1}(x).
+       - The following methods, defined based on the distribution of choice
+         (same notation as in Mourragui et al, 2023):
+            - "sufficient_statistics" (:math:`T`)
+            - "natural_parametrization" (:math:`\eta`)
+            - "log_partition" (:math:`A`)
+            - "base_measure" can be added for the sake of completeness, but is not
+                necessary for running GLM-PCA.
 
-    Optional: per-feature nuisance parameters (e.g. dispersion) listed in
+    2. invert_g, the element-wise saturated parameter (:math:`g^{-1}`)
+
+    3. Optional: per-feature nuisance parameters (e.g. dispersion) listed in
     ``nuisance_params`` and estimated from streamed column sums
     (``family_statistics`` / ``initialize_family_parameters_from_statistics``).
 
     Convention: any 1-D tensor in ``family_params`` holds one value per feature,
     which lets the driver subset features generically (``subset_features``).
+
+    The log-likelihood and exponential term are defined directly from the aforementionned methods.
     """
 
     family_name: str = "base"
@@ -153,7 +161,7 @@ class ExponentialFamily:
 
 # ======================================================================================
 class Gaussian(ExponentialFamily):
-    """Unit-variance Gaussian: GLM-PCA reduces to PCA."""
+    """Unit-variance Gaussian (SD=1). Here, GLM-PCA reduces to PCA."""
 
     family_name = "gaussian"
 
@@ -162,11 +170,14 @@ class Gaussian(ExponentialFamily):
 
 
 class Bernoulli(ExponentialFamily):
-    """Bernoulli. ``max_val``: truncation m of the infinite saturated parameters
-    (Landgraf & Lee, 2020); acts as a regulariser, tune by held-out deviance."""
+    """Bernoulli.
+    family_params:
+        - ``max_val``: truncation m of the infinite saturated parameters.
+            Empirically, values above 10 yield similar results.
+    """
 
     family_name = "bernoulli"
-    default_params = {"max_val": 4}
+    default_params = {"max_val": 5}
 
     def torch_distribution(self, theta):
         return td.Bernoulli(logits=theta, validate_args=False)
@@ -178,8 +189,11 @@ class Bernoulli(ExponentialFamily):
 
 
 class Poisson(ExponentialFamily):
-    """Poisson, theta = log(rate). ``min_val`` replaces 0 before the log; a
-    truncation like Bernoulli's ``max_val`` (M = -log min_val), tune by held-out deviance."""
+    """Poisson. theta = log(rate).
+    family_params:
+        - ``min_val``: replaces 0 before the log; a
+            truncation like Bernoulli's ``max_val`` (M = -log min_val)
+    """
 
     family_name = "poisson"
     default_params = {"min_val": 0.02}
@@ -196,8 +210,15 @@ class Poisson(ExponentialFamily):
 
 
 class NegativeBinomial(Poisson):
-    """Negative binomial, theta = log(mean), fixed per-feature inverse dispersion r
-    (Risso et al.). r is estimated by streaming method of moments if not given."""
+    """Negative binomial. theta = log(mean).
+    family_params:
+        - ``r``: fixed per-feature inverse dispersion (Risso et al.).
+            Recommended: a scalar with global inv-dispersion for all cells (Lause et al.).
+            Optional: `r` is estimated by streaming method of moments if not given.
+        - ``min_val``: replaces 0 before the log;
+        - ``r_min``: min expected `r` (if estimated/not provided)
+        - ``r_max``: max expected `r` (if estimated/not provided)
+    """
 
     family_name = "negative_binomial"
     default_params = {"min_val": 0.02, "r_min": 0.1, "r_max": 500}
@@ -226,8 +247,18 @@ class NegativeBinomial(Poisson):
 
 
 class Beta(ExponentialFamily):
-    """Beta with mean parametrisation theta in (0, 1) and fixed per-feature
-    concentration nu (estimated by streaming MLE if not given)."""
+    """Beta (standard formulation from Mourragui et al, 2023).
+    with mean parametrisation theta in (0, 1).
+    family_params:
+        - "nu": fixed per-feature concentration (estimated by streaming MLE if not given).
+        - "min_val" (int): min data value (replaces 0 and 1).
+        - "method" (str): method use to compute the "nu" parameter per feature.
+            Two possibles: "MLE" and "MM". Defaults to "MLE".
+        - "eps" (float): minimum difference used for inverting the g function.
+            Defaults to 1e-4
+        - "maxiter" (int): maximum number of iterations for the inversion of the
+            g function. Defaults to 100.
+    """
 
     family_name = "beta"
     default_params = {"min_val": 1e-5, "eps": 1e-8, "maxiter": 100, "method": "MLE"}
@@ -287,8 +318,10 @@ class Beta(ExponentialFamily):
 
 
 class SigmoidBeta(Beta):
-    """Beta with mean = sigmoid(theta): unconstrained theta. Note this changes the
-    model (linear structure is sought in logit(mean))."""
+    """Beta with mean = sigmoid(theta): unconstrained theta.
+    Note this changes the model (linear structure is sought in logit(mean)).
+    family_params: inherited from ``Beta``
+    """
 
     family_name = "sigmoid_beta"
 
@@ -300,8 +333,13 @@ class SigmoidBeta(Beta):
 
 
 class Gamma(ExponentialFamily):
-    """Gamma with shape theta + 1 and fixed per-feature rate nu (as in the paper).
-    Saturated theta = psi^{-1}(log(nu x)) - 1."""
+    """Gamma distribution using a standard fomulation (Mourragui et al, 2023).
+    shape theta + 1 and fixed per-feature rate nu. Saturated theta = psi^{-1}(log(nu x)) - 1.
+    family_params:
+        - "min_val" (int): min data value. Defaults to 1e-5.
+        - "max_val" (int): max data value. Defaults to 1e7.
+        - "nu" (float): shape parameter (estimated by default using MLE).
+    """
 
     family_name = "gamma"
     default_params = {"min_val": 1e-5, "max_val": 1e7}
@@ -331,7 +369,10 @@ class Gamma(ExponentialFamily):
 
 
 class LogNormal(ExponentialFamily):
-    """Log-normal with fixed per-feature sigma nu. Saturated theta = log x."""
+    """Log-normal with fixed per-feature sigma nu. Saturated theta = log x.
+    family_params:
+        - "min_val" (int): min data value. Defaults to 1e-5.
+    """
 
     family_name = "lognormal"
     default_params = {"min_val": 1e-5}

@@ -200,9 +200,17 @@ class _Data:
 class GLMPCA:
     r"""Performs GLM-PCA on a data matrix to reduce its dimensionality.
 
-    Loadings V (Stiefel) and intercept mu minimise
-    L((Theta - 1 mu^T) V V^T + 1 mu^T ; X) with Theta = g^{-1}(X)
-    (Landgraf & Lee, 2020; Mourragui et al., 2023). New distributions are added by
+    This class computes the generalized-linear model principal components (GLM-PCs)
+    of a dataset by exploiting the framework of saturated parameters. Specifically,
+    given an exponential distribution chosen based on prior knowledge, GLM-PCA will find
+    a collection of directions which minimize the reconstruction error, computed as the
+    negative log-likelihood of the chosen exponential distribution.
+
+    By making use of an alternative formulation, our implementation can exploit
+    automatic differentiation and can therefore rely on mini-batch Stochastic
+    Gradient Descent. As a consequence, it scales to large datasets.
+
+    New distributions can be added by
     subclassing ``sincei.tools.ExponentialFamily.ExponentialFamily``.
 
     Parameters
@@ -476,6 +484,9 @@ class GLMPCA:
     # ---------------------------------------------------------------------------------
     def _nll(self, V, mu, data: _Data, b: _Batch, cols=None, full: bool = False) -> torch.Tensor:
         """Batch NLL; with ``cols`` evaluated on a feature subset, rescaled by p/|cols|.
+        Loadings V (Stiefel) and intercept mu minimise
+        L((Theta - 1 mu^T) V V^T + 1 mu^T ; X) with Theta = g^{-1}(X)
+        (Landgraf & Lee, 2020; Mourragui et al., 2023).
         ``full=False`` drops terms constant in theta (fitting), True keeps them (scores)."""
         U = data.scores(V, mu, b)
         o = 0.0 if b.o is None else b.o[:, None]
@@ -671,9 +682,9 @@ class GLMPCA:
 
     @torch.no_grad()
     def _whiten(self, V, mu, data: _Data):
-        r"""Definition 2.8 from the d x d Gram matrix of the scores: the right singular
-        vectors of (Theta - 1mu^T) V V^T are V R, R the eigenvectors of U^T U.
-        With center_scores, mu <- mu + V m (m = mean score; likelihood unchanged, since mu
+        r"""Return the the unique rank-d SVD decomposition of the
+        saturated parameters via whitening the scores:(Theta - 1mu^T)V*V^T.
+        With "center_scores", mu <- mu + V m (m = mean score; likelihood unchanged, since mu
         is identified only outside span(V)) and the centred Gram matrix is used.
         Returns (V R, singular values, mu)."""
         G = torch.zeros(self.n_pc, self.n_pc, dtype=torch.float64, device=self.device)
