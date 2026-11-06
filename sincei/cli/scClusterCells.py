@@ -37,11 +37,10 @@ from ._parsers import validate_anndata
 
 DESCRIPTION = (
     "Cluster cells from a cell-by-feature matrix.\n\n"
-    "``scClusterCells`` clusters cells based on the input count matrix (output of "
-    "``scCountReads``) and performs dimensionality reduction, community detection and "
-    "2D projection (UMAP) of the cells. The result is an updated h5ad object, and "
-    "(optionally) a plot file and a .tsv file with UMAP coordinates and the "
-    "corresponding cluster id for each barcode.\n\n"
+    "``scClusterCells`` performs dimensionality reduction, Leiden clustering and "
+    "2D projection (UMAP) on the input count matrix (output of ``scCountReads``). "
+    "The result is an updated h5ad object, and (optionally) a plot file and a .tsv "
+    "file with UMAP coordinates and the corresponding cluster id for each barcode.\n\n"
     'Each dimensionality reduction is stored in ``obsm["X_<method>"]``, and the '
     'region loadings of LSA and LDA in ``varm["X_<method>"]``, with the method name '
     'in lowercase (for example ``obsm["X_glmpca"]``). If the input AnnData object '

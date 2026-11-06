@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 897 449">
+  <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
+  <defs>
+    <style>
+      .st0 {
+        font-size: 18px;
+      }
+
+      .st0, .st1, .st2, .st3, .st4, .st5 {
+        isolation: isolate;
+      }
+
+      .st0, .st3, .st4, .st5 {
+        fill: #161616;
+        font-weight: 700;
+      }
+
+      .st0, .st4, .st5 {
+        font-family: Arial-BoldMT, Arial;
+      }
+
+      .st6 {
+        stroke: #3b4a5a;
+        stroke-dasharray: 5 4;
+      }
+
+      .st6, .st7 {
+        stroke-width: 1.5px;
+      }
+
+      .st6, .st7, .st8, .st9 {
+        fill: none;
+      }
+
+      .st10 {
+        fill: #d9d9d9;
+      }
+
+      .st7, .st11 {
+        stroke-linejoin: round;
+      }
+
+      .st7, .st11, .st9 {
+        stroke: #6b6b6b;
+        stroke-linecap: round;
+      }
+
+      .st1 {
+        font-family: ArialMT, Arial;
+      }
+
+      .st1, .st11 {
+        fill: #6b6b6b;
+      }
+
+      .st1, .st3, .st4 {
+        font-size: 12px;
+      }
+
+      .st12 {
+        fill: #2f9a98;
+      }
+
+      .st3 {
+        font-family: MesloLGLNF-Bold, 'MesloLGL Nerd Font';
+      }
+
+      .st13 {
+        fill: #fff;
+      }
+
+      .st8 {
+        stroke: #d9d9d9;
+        stroke-dasharray: 2 2;
+      }
+
+      .st9 {
+        stroke-width: 2.5px;
+      }
+
+      .st5 {
+        font-size: 14px;
+      }
+
+      .st14 {
+        fill: #b79bc9;
+      }
+    </style>
+  </defs>
+  <rect class="st13" x="0" y="0" width="897" height="449" rx="9.5" ry="9.5"/>
+<g transform="translate(16 -14)">
+  <g class="st2">
+    <text class="st0" transform="translate(20 52)"><tspan x="0" y="0">Cell metrics</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(20 72)"><tspan x="0" y="0">--filterCellArgs &quot;metric: min, max&quot;</tspan></text>
+  </g>
+  <rect class="st10" x="26" y="262" width="21" height="10" rx="2" ry="2"/>
+  <rect class="st10" x="49" y="244" width="21" height="28" rx="2" ry="2"/>
+  <rect class="st12" x="72" y="210" width="21" height="62" rx="2" ry="2"/>
+  <rect class="st12" x="95" y="177" width="21" height="95" rx="2" ry="2"/>
+  <rect class="st12" x="118" y="160" width="21" height="112" rx="2" ry="2"/>
+  <rect class="st12" x="141" y="172" width="21" height="100" rx="2" ry="2"/>
+  <rect class="st12" x="164" y="188" width="21" height="84" rx="2" ry="2"/>
+  <rect class="st12" x="187" y="206" width="21" height="66" rx="2" ry="2"/>
+  <rect class="st12" x="210" y="222" width="21" height="50" rx="2" ry="2"/>
+  <rect class="st12" x="233" y="234" width="21" height="38" rx="2" ry="2"/>
+  <rect class="st12" x="256" y="245" width="21" height="27" rx="2" ry="2"/>
+  <rect class="st12" x="279" y="254" width="21" height="18" rx="2" ry="2"/>
+  <rect class="st10" x="302" y="260" width="21" height="12" rx="2" ry="2"/>
+  <rect class="st10" x="325" y="264" width="21" height="8" rx="2" ry="2"/>
+  <rect class="st10" x="348" y="267" width="21" height="5" rx="2" ry="2"/>
+  <path class="st10" d="M373,269h17c1.1,0,2,.7,2,1.5h0c0,.8-.9,1.5-2,1.5h-17c-1.1,0-2-.7-2-1.5h0c0-.8.9-1.5,2-1.5Z"/>
+  <path class="st7" d="M20,272h376"/>
+  <line class="st6" x1="71" y1="108" x2="71" y2="272"/>
+  <g class="st2">
+    <text class="st4" transform="translate(60.3 102)"><tspan x="0" y="0">min</tspan></text>
+  </g>
+  <line class="st6" x1="301" y1="108" x2="301" y2="272"/>
+  <g class="st2">
+    <text class="st4" transform="translate(289 102)"><tspan x="0" y="0">max</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(129.3 296)"><tspan x="0" y="0">cell metric value</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st0" transform="translate(480 52)"><tspan x="0" y="0">Region metrics</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(480 72)"><tspan x="0" y="0">--filterRegionArgs &quot;metric: min, max&quot;</tspan></text>
+  </g>
+  <rect class="st10" x="486" y="202" width="21" height="70" rx="2" ry="2"/>
+  <rect class="st10" x="509" y="176" width="21" height="96" rx="2" ry="2"/>
+  <rect class="st14" x="532" y="210" width="21" height="62" rx="2" ry="2"/>
+  <rect class="st14" x="555" y="230" width="21" height="42" rx="2" ry="2"/>
+  <rect class="st14" x="578" y="238" width="21" height="34" rx="2" ry="2"/>
+  <rect class="st14" x="601" y="236" width="21" height="36" rx="2" ry="2"/>
+  <rect class="st14" x="624" y="224" width="21" height="48" rx="2" ry="2"/>
+  <rect class="st14" x="647" y="212" width="21" height="60" rx="2" ry="2"/>
+  <rect class="st14" x="670" y="206" width="21" height="66" rx="2" ry="2"/>
+  <rect class="st14" x="693" y="218" width="21" height="54" rx="2" ry="2"/>
+  <rect class="st14" x="716" y="232" width="21" height="40" rx="2" ry="2"/>
+  <rect class="st14" x="739" y="246" width="21" height="26" rx="2" ry="2"/>
+  <rect class="st14" x="762" y="256" width="21" height="16" rx="2" ry="2"/>
+  <rect class="st10" x="785" y="262" width="21" height="10" rx="2" ry="2"/>
+  <rect class="st10" x="808" y="266" width="21" height="6" rx="2" ry="2"/>
+  <path class="st10" d="M833,268h17c1.1,0,2,.9,2,2h0c0,1.1-.9,2-2,2h-17c-1.1,0-2-.9-2-2h0c0-1.1.9-2,2-2Z"/>
+  <path class="st7" d="M480,272h376"/>
+  <line class="st6" x1="531" y1="108" x2="531" y2="272"/>
+  <g class="st2">
+    <text class="st4" transform="translate(520.3 102)"><tspan x="0" y="0">min</tspan></text>
+  </g>
+  <line class="st6" x1="784" y1="108" x2="784" y2="272"/>
+  <g class="st2">
+    <text class="st4" transform="translate(772 102)"><tspan x="0" y="0">max</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(581.6 296)"><tspan x="0" y="0">metric value</tspan></text>
+  </g>
+  <rect class="st10" x="24" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="41" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="58" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="75" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="92" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="109" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="126" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="24" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="41" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="58" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="75" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="92" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="109" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="126" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="24" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="41" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="58" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="75" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="92" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="109" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="126" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="24" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="41" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="58" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="75" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="92" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="109" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="126" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="24" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="41" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="58" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="75" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st8" x="92" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="109" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="126" y="398" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st12" x="8" y="350" width="8" height="8" rx="2" ry="2"/>
+  <rect class="st14" x="95" y="318" width="8" height="8" rx="2" ry="2"/>
+  <line class="st9" x1="158" y1="372" x2="195" y2="372"/>
+  <path class="st11" d="M204,372l-9,5.4v-10.8l9,5.4Z"/>
+  <rect class="st10" x="222" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="239" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="256" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="273" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="290" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="307" y="330" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="222" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="239" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="256" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="273" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="290" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="307" y="347" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="222" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="239" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="256" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="273" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="290" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="307" y="364" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="222" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="239" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="256" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="273" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="290" y="381" width="14" height="14" rx="3" ry="3"/>
+  <rect class="st10" x="307" y="381" width="14" height="14" rx="3" ry="3"/>
+  <g class="st2">
+    <text class="st1" transform="translate(24 435)"><tspan x="0" y="0">cells × regions</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(222 435)"><tspan x="0" y="0">filtered count matrix</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st5" transform="translate(400 344)"><tspan x="0" y="0">Filtering drops cells and regions outside the thresholds</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(400 370)"><tspan x="0" y="0">Metrics saved as .tsv (--outMetrics) · --describe lists the available metrics</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st1" transform="translate(400 396)"><tspan x="0" y="0">Blacklists:</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st3" transform="translate(472 396)"><tspan x="0" y="0">--region_blacklist</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st3" transform="translate(472 416)"><tspan x="0" y="0">--cell_blacklist</tspan></text>
+  </g>
+  <g class="st2">
+    <text class="st3" transform="translate(472 436)"><tspan x="0" y="0">--chrom_blacklist</tspan></text>
+  </g>
+</g>
+</svg>

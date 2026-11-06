@@ -313,7 +313,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_file": typer.Option(
         "-o",
         "--outFile",
-        metavar="PATH",
+        metavar="output",
         rich_help_panel=_IO,
         help=(
             "The file to write results to. This can be a .tsv file with the results, "
@@ -324,7 +324,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_prefix": typer.Option(
         "-o",
         "--outFilePrefix",
-        metavar="PATH",
+        metavar="output",
         rich_help_panel=_IO,
         help=(
             "Prefix for output file names. One file per group is written, named "
@@ -548,12 +548,12 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="FILTER",
         rich_help_panel=_FILTER,
         help=(
-            "How to filter for duplicates? Different combinations "
-            "(using start/end/umi) "
-            "are possible. Read start position and read barcode are always considered. "
+            "How to filter duplicate reads. Different combinations (using "
+            "start/end/umi) are possible. Read start position and read barcode are "
+            "always considered. "
             "Default (none) considers all reads as passing the filter. Note that for "
             "paired end data both reads in the fragment are considered (and kept) so, "
-            "to keep only read1 combine this with ``--samFlagInclude``.\n\n"
+            "to keep only read1 combine this with ``--samFlagInclude 64``.\n\n"
             "One of: "
             "[bold yellow]start_bc[/bold yellow], "
             "[bold yellow]start_bc_umi[/bold yellow], "

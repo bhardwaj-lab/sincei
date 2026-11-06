@@ -128,7 +128,7 @@ def depth_components(scores: np.ndarray, depth: np.ndarray) -> np.ndarray:
     """Whether to keep every component, with one extra component to drop.
 
     The component whose scores correlate the most with `depth` is dropped if its
-    |Spearman rho| is above DEPTH_CORRELATION_CUTOFF, else the last component is. A
+    Spearman rho is above DEPTH_CORRELATION_CUTOFF, else the last component is. A
     warning names every other component above DEPTH_CORRELATION_CUTOFF, which is kept.
     """
     correlations = np.nan_to_num([

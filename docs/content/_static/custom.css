@@ -38,3 +38,35 @@ main img {
 .cli-default {
     font-family: var(--pst-font-family-monospace);
 }
+
+/* Local tables of contents (`.. contents::`): a plain bulleted list, indented by
+   level, in place of the theme's box. */
+nav.contents,
+div.topic.contents {
+    background-color: transparent;
+    box-shadow: none !important;
+    border: none;
+    padding: 0;
+}
+
+nav.contents ul.simple,
+div.topic.contents ul.simple {
+    list-style: disc;
+    padding-left: 1.5em;
+}
+
+nav.contents ul.simple ul,
+div.topic.contents ul.simple ul {
+    list-style: circle;
+    padding-left: 1.5em;
+}
+
+nav.contents ul.simple ul ul,
+div.topic.contents ul.simple ul ul {
+    list-style: square;
+}
+
+nav.contents li > p,
+div.topic.contents li > p {
+    margin: 0;
+}
