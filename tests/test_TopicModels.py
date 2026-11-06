@@ -130,9 +130,9 @@ def test_a_cell_without_counts_gets_the_prior_mean(counts: sparse.csr_matrix) ->
 
 def test_lda_rejects_counts_that_are_not_integers(counts: sparse.csr_matrix) -> None:
     with pytest.raises(ValueError, match="integer counts"):
-        LDA(iterations=1).fit(counts * 0.5)
+        LDA(iterations=1).fit_transform(counts * 0.5)
 
-    LDA(n_topics=2, iterations=1, binarize=True).fit(counts * 0.5)
+    LDA(n_topics=2, iterations=1, binarize=True).fit_transform(counts * 0.5)
 
 
 @pytest.fixture
