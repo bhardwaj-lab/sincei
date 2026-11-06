@@ -5,7 +5,10 @@ from typing import Annotated
 
 import anndata as ad
 import mudata as md
+import pandas as pd
 import typer
+
+from sincei.utils import chromosome_to_numeric
 
 from ._common_args import (
     _IO,
@@ -29,8 +32,8 @@ DESCRIPTION = (
     "set of cells ([bold yellow]multi-modal[/bold yellow]).\n\n"
     "* [bold yellow]multi-sample[/bold yellow]: each sample is independent but was "
     "counted on the same features, so the tool looks for feature overlaps and not "
-    "for barcode overlaps. Only features present in every matrix are kept. The "
-    "result is a .h5ad (AnnData) file.\n"
+    "for barcode overlaps. Every feature of every sample is kept, with a count of 0 "
+    "in the samples that do not have it. The result is a .h5ad (AnnData) file.\n"
     "* [bold yellow]multi-modal[/bold yellow]: the counts come from different assays "
     "on the same set of cells, so the tool looks for cell-barcode overlaps and not "
     "for feature overlaps. The result is a .h5mu (MuData) file, which "
@@ -140,7 +143,23 @@ def main(
                 cell if cell.startswith(prefix) else f"{prefix}{cell}"
                 for cell in adata.obs_names
             ]
-        combined = ad.concat(adatas, merge="first")
+        # An outer join keeps the features of every sample, and a sample without
+        # a feature counts 0 there. `var` is taken from the inputs, as the join
+        # leaves it empty for features the first sample lacks, and is put back in
+        # genome order.
+        combined = ad.concat(adatas, join="outer", fill_value=0)
+        var = pd.concat([adata.var for adata in adatas])
+        var = var[~var.index.duplicated()]
+        chrom_order = chromosome_to_numeric(var["chrom"].astype(str))
+        var = var.sort_values(
+            ["chrom", "start", "end"],
+            key=lambda col: (
+                col.astype(str).map(chrom_order) if col.name == "chrom" else col
+            ),
+            kind="stable",
+        )
+        combined = combined[:, var.index].copy()
+        combined.var = var
         typer.echo(f"Combined cells: {combined.n_obs}")
         typer.echo(f"Combined features: {combined.n_vars}")
         combined.write_h5ad(out_file)

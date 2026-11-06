@@ -5,8 +5,11 @@ name: docs
 # of compiling sincei on the Read the Docs server.
 
 on:
+  push:
+    branches: [master, develop]
   pull_request:
     branches: [master, develop]
+    types: [opened, synchronize, closed]
   workflow_dispatch:
 
 permissions:
@@ -43,5 +46,5 @@ jobs:
         with:
           name: docs-wheel
           path: dist/*.whl
-          retention-days: 7
+          retention-days: 3
 

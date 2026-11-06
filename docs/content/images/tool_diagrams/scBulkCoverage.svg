@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 848 419">
+  <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
+  <defs>
+    <style>
+      .st0, .st1, .st2, .st3, .st4, .st5, .st6 {
+        isolation: isolate;
+      }
+
+      .st0, .st1, .st3, .st5, .st6 {
+        fill: #161616;
+      }
+
+      .st0, .st2 {
+        font-family: ArialMT, Arial;
+      }
+
+      .st0, .st2, .st5 {
+        font-size: 12px;
+      }
+
+      .st7, .st8, .st9, .st10 {
+        stroke: #fff;
+      }
+
+      .st7, .st11 {
+        fill: #fdb03d;
+      }
+
+      .st1 {
+        font-size: 18px;
+      }
+
+      .st1, .st3, .st4, .st5 {
+        font-family: Arial-BoldMT, Arial;
+      }
+
+      .st1, .st3, .st4, .st5, .st6 {
+        font-weight: 700;
+      }
+
+      .st8, .st12 {
+        fill: #b79bc9;
+      }
+
+      .st13 {
+        fill: #939ba4;
+        stroke: #3b4a5a;
+      }
+
+      .st13, .st14, .st15, .st16, .st17 {
+        stroke-width: 1.5px;
+      }
+
+      .st13, .st18, .st15, .st19, .st20, .st21, .st16, .st17 {
+        stroke-linecap: round;
+      }
+
+      .st13, .st18, .st15, .st20, .st16, .st17 {
+        stroke-linejoin: round;
+      }
+
+      .st2, .st18 {
+        fill: #6b6b6b;
+      }
+
+      .st14, .st18, .st21 {
+        stroke: #6b6b6b;
+      }
+
+      .st14, .st19, .st22, .st21 {
+        fill: none;
+      }
+
+      .st23, .st9 {
+        fill: #2f9a98;
+      }
+
+      .st15 {
+        fill: #fed494;
+        stroke: #fdb03d;
+      }
+
+      .st3 {
+        font-size: 11px;
+      }
+
+      .st4 {
+        font-size: 14px;
+      }
+
+      .st4, .st20 {
+        fill: #23807e;
+      }
+
+      .st24 {
+        fill: #fff;
+      }
+
+      .st19, .st20 {
+        stroke: #23807e;
+      }
+
+      .st19, .st21 {
+        stroke-width: 2.5px;
+      }
+
+      .st25, .st10 {
+        fill: #3b4a5a;
+      }
+
+      .st22 {
+        stroke: #d9d9d9;
+      }
+
+      .st26 {
+        fill: #f2f2f2;
+      }
+
+      .st6 {
+        font-family: MesloLGMNFM-Bold, 'MesloLGM Nerd Font Mono';
+        font-size: 13px;
+      }
+
+      .st16 {
+        fill: #8dc7c6;
+        stroke: #2f9a98;
+      }
+
+      .st17 {
+        fill: #d7c8e1;
+        stroke: #b79bc9;
+      }
+    </style>
+  </defs>
+  <rect class="st24" x="0" y="0" width="848" height="419" rx="9.5" ry="9.5"/>
+<g transform="translate(4 -14)">
+  <text class="st1" transform="translate(20 52)"><tspan x="0" y="0">Group cells</tspan></text>
+  <text class="st2" transform="translate(20 70)"><tspan x="0" y="0">--groupInfo: .tsv of barcode → cluster</tspan></text>
+  <circle class="st9" cx="52.3" cy="134.5" r="6"/>
+  <circle class="st9" cx="80" cy="119" r="6"/>
+  <circle class="st9" cx="86.5" cy="152.7" r="6"/>
+  <circle class="st9" cx="58.9" cy="152" r="6"/>
+  <circle class="st9" cx="63.8" cy="179.6" r="6"/>
+  <circle class="st9" cx="70.9" cy="142.1" r="6"/>
+  <circle class="st9" cx="72.6" cy="159.1" r="6"/>
+  <circle class="st9" cx="80" cy="180.8" r="6"/>
+  <circle class="st9" cx="55.8" cy="117.2" r="6"/>
+  <circle class="st9" cx="102.4" cy="136.2" r="6"/>
+  <circle class="st9" cx="105.3" cy="157.4" r="6"/>
+  <circle class="st9" cx="37.9" cy="178.1" r="6"/>
+  <circle class="st7" cx="210.4" cy="135.3" r="6"/>
+  <circle class="st7" cx="176.4" cy="140.1" r="6"/>
+  <circle class="st7" cx="196" cy="113.4" r="6"/>
+  <circle class="st7" cx="173" cy="158.1" r="6"/>
+  <circle class="st7" cx="177" cy="120.5" r="6"/>
+  <circle class="st7" cx="189.9" cy="160.1" r="6"/>
+  <circle class="st7" cx="227.1" cy="134.9" r="6"/>
+  <circle class="st7" cx="191.4" cy="143.4" r="6"/>
+  <circle class="st7" cx="211.2" cy="156.9" r="6"/>
+  <circle class="st7" cx="157" cy="123.4" r="6"/>
+  <circle class="st7" cx="157.9" cy="148.3" r="6"/>
+  <circle class="st7" cx="243.2" cy="133.6" r="6"/>
+  <circle class="st8" cx="198.6" cy="245.9" r="6"/>
+  <circle class="st8" cx="177.5" cy="223.6" r="6"/>
+  <circle class="st8" cx="191.1" cy="279.1" r="6"/>
+  <circle class="st8" cx="212.1" cy="265" r="6"/>
+  <circle class="st8" cx="178" cy="239.9" r="6"/>
+  <circle class="st8" cx="195" cy="230.8" r="6"/>
+  <circle class="st8" cx="212.3" cy="239.2" r="6"/>
+  <circle class="st8" cx="223.7" cy="254" r="6"/>
+  <circle class="st8" cx="169" cy="255.3" r="6"/>
+  <circle class="st8" cx="189.6" cy="259.4" r="6"/>
+  <circle class="st8" cx="176" cy="273.3" r="6"/>
+  <circle class="st8" cx="156.8" cy="237.8" r="6"/>
+  <circle class="st10" cx="56.2" cy="258.5" r="6"/>
+  <circle class="st10" cx="74.8" cy="262.9" r="6"/>
+  <circle class="st10" cx="84" cy="250.7" r="6"/>
+  <circle class="st10" cx="108.9" cy="268.4" r="6"/>
+  <circle class="st10" cx="64.9" cy="230.5" r="6"/>
+  <circle class="st10" cx="64.2" cy="273.8" r="6"/>
+  <circle class="st10" cx="92" cy="272.2" r="6"/>
+  <circle class="st10" cx="44.2" cy="268.8" r="6"/>
+  <circle class="st10" cx="49.1" cy="232.2" r="6"/>
+  <circle class="st10" cx="93.3" cy="234.6" r="6"/>
+  <circle class="st10" cx="45.8" cy="247.2" r="6"/>
+  <circle class="st10" cx="65.9" cy="245.8" r="6"/>
+  <text class="st5" transform="translate(20 338)"><tspan x="0" y="0">Cluster</tspan></text>
+  <circle class="st9" cx="90" cy="334" r="6"/>
+  <text class="st0" transform="translate(102 338)"><tspan x="0" y="0">1</tspan></text>
+  <circle class="st7" cx="130" cy="334" r="6"/>
+  <text class="st0" transform="translate(142 338)"><tspan x="0" y="0">2</tspan></text>
+  <circle class="st8" cx="170" cy="334" r="6"/>
+  <text class="st0" transform="translate(182 338)"><tspan x="0" y="0">3</tspan></text>
+  <circle class="st10" cx="210" cy="334" r="6"/>
+  <text class="st0" transform="translate(222 338)"><tspan x="0" y="0">4</tspan></text>
+  <text class="st6" transform="translate(20 375)"><tspan x="0" y="0">--normalizeUsing</tspan></text>
+  <path class="st26" d="M31,387h16.2c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-16.2c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+  <text class="st5" transform="translate(25.8 402.2)"><tspan x="0" y="0">CPM</tspan></text>
+  <path class="st26" d="M75.2,387h22.9c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-22.9c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+  <text class="st5" transform="translate(71.3 402.2)"><tspan x="0" y="0">Mean</tspan></text>
+  <path class="st26" d="M126,387h56.5c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-56.5c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+  <text class="st5" transform="translate(124 402.2)"><tspan x="0" y="0">Frequency</tspan></text>
+  <line class="st21" x1="279" y1="210" x2="342" y2="210"/>
+  <path class="st18" d="M352,210l-9,5.4v-10.8l9,5.4Z"/>
+  <text class="st1" transform="translate(379 52)"><tspan x="0" y="0">One coverage track per cluster</tspan></text>
+  <text class="st2" transform="translate(379 70)"><tspan x="0" y="0">reads from the BAM files, summed per group · --binSize 100</tspan></text>
+  <path class="st16" d="M379,142v-4.5l4,.3,4,1.4,4-.4,4-1.2,4,.9h4c0,.1,4,.1,4,.1l4-.7,4-.4,4,.9,4-1,4,.8,4,.7,4-2.3,4-1.7,4-4.7,4-11.2,4-9.4,4-9.6h4l4,1.5,4,11.9,4,11.4,4,7.6,4,4.2,4,1,4,1,4-.7,4,1.1,4-.3,4,.3,4-1.6,4,.3h4l4,.5,4,.4,4,.6,4-1.5,4,.7,4,.8,4-.8,4-1.1,4-3.6,4-3.7,4-1.8,4-2.9,4,1.7,4,2.1,4,3.1,4,3.2,4,1.3,4,1.6,4,1.1,4-1,4-.2,4,.9,4-.4h4c0,.1,4,.7,4,.7l4-.6h4c0-.1,4-.3,4-.3l4-.5,4,.6,4-1.3h4c0,0,4-1,4-1l4-1.9,4-4.9,4-7.6,4-9.8,4-5.7,4-1.2,4,5.5,4,9.4,4,8.8,4,6.1,4,2.7,4,.6h4c0-.1,4-.4,4-.4h4c0,.1,4,.9,4,.9l4-1.3,4,1.4,4-.9,4,1.3,4-1.5h4l4-1.2,4-1.1,4-1.6,4-2.6,4-1.5h4c0,0,4,2.4,4,2.4l4,1.6,4,1.3,4,2.8,4-.9,4,1.2,4,.4,4,.9,4-.8,4,.4,4-1,4-.5h4l4,.6,4,.5v3.3h-440Z"/>
+  <line class="st22" x1="379" y1="142" x2="819" y2="142"/>
+  <circle class="st23" cx="387" cy="104" r="5"/>
+  <text class="st3" transform="translate(397 108)"><tspan x="0" y="0">Cluster 1</tspan></text>
+  <path class="st15" d="M379,204v-2.7l4-1.3,4,.3,4-.3,4,.7,4-1.1,4,1.4,4-.2h4c0,0,4-.6,4-.6l4-.6,4,1.5,4-1,4-.3,4,.9,4-.3,4-2.4,4-2.9,4-2.9,4-2.1h4l4,1.5,4,2.5,4,1.9,4,3.2,4,1.1,4-.3,4-.6,4,1.7,4,.3,4-.2,4-.9h4c0-.1,4,.8,4,.8h4l4-.9h4c0,0,4-.2,4-.2h4c0-.1,4,1.2,4,1.2l4-1.5,4-2.4,4-4.4,4-6.4,4-12,4-10.5,4-2h4l4,8.2,4,11.1,4,10,4,6.3,4,2.3,4,.9,4,.4h4c0,0,4-1,4-1l4,1.1,4-1.4h8c0,0,4,0,4,0l4,.2,4-.5h4l4,.6,4-.8,4,1.3,4-1.1,4-2.4,4-4.3,4-4.9,4-3.6,4-.8,4,2.8,4,5.9,4,3.5,4,2.5,4,1.7,4,1.1,4-.8,4,.5,4-.7,4,.4,4-.9h4l4,1.8,4-1.5h4c0-.1,4,0,4,0l4-1.7,4-5.1,4-6.7,4-8.8,4-6.3,4,.6,4,5.2,4,7.4,4,6.9,4,4.7,4,2.9,4,1.6,4,.2,4-1,4,.7,4,1,4-.8,4,.4,4-.9,4,1.2,4-.4v3.1h-440Z"/>
+  <line class="st22" x1="379" y1="204" x2="819" y2="204"/>
+  <circle class="st11" cx="387" cy="166" r="5"/>
+  <text class="st3" transform="translate(397 170)"><tspan x="0" y="0">Cluster 2</tspan></text>
+  <path class="st17" d="M379,266v-2.7l4-.8,4-1.1,4,.9,4,.4,4-1.2,4,1.8,4-.6,4-.9,4,1.7,4-1.6,4,.8,4,.7,4-.6,4-1,4-1.3,4-3.6,4-4.6,4-7.2,4-7.2,4-.4,4,3.3,4,7.4,4,6.1,4,3.3,4,3,4,1.4,4,1.3,4-.7,4-.8,4,.8,4-.4,4-.6,4,.5h4l4,1.3h4l4-1.5,4,.7,4-1,4-.2,4-1.1,4-.9,4-5.2,4-4.9,4-5.7,4-1.3h4c0-.1,4,5.4,4,5.4l4,4.5,4,4.6,4,4.4,4,.8,4,.8,4-.3,4,.4,4-.8,4,1.1h4c0-.1,4-.7,4-.7l4,.8,4-.6,4-1.1h4l4,1.5,4,.2,4-2,4-1.4,4-2.2,4-5.2,4-10.1,4-12.9,4-5.5h4l4,4.9,4,10.8,4,10.8,4,5.9,4,4.4,4,.5,4,1.7,4-.6,4-1,4,.6,4,1.3h4c0,0,4-1.2,4-1.2l4,.6h4c0-.1,4-.7,4-.7l4-1.1,4-2.7,4-1.4,4-4.1,4-1.9,4-.9,4,1.8,4,4.6,4,2.4,4,1.7,4,2.5,4-1.2,4,.9,4-.2,4-.2,4-.4,4,1.6,4-1,4,1,4-.7h4v3.3h-440Z"/>
+  <line class="st22" x1="379" y1="266" x2="819" y2="266"/>
+  <circle class="st12" cx="387" cy="228" r="5"/>
+  <text class="st3" transform="translate(397 232)"><tspan x="0" y="0">Cluster 3</tspan></text>
+  <path class="st13" d="M379,328v-2.6l4-.5,4-.4,4-.4,4-.6,4,1.2,4-.3,4-.4,4-.5h8c0-.1,4,1.3,4,1.3l4,.3,4-1.7,4,1.4,4-1.7,4-2.8,4-3.3,4-4.3,4-4.9,4,.3,4,1.8,4,3.8,4,5.8,4,2.6,4,1.4,4,.5,4,1,4-.5,4,.9h4c0-.1,4-.6,4-.6l4,.4,4-1.8,4,1.5h4l4-1.1h4c0,.1,4,1.1,4,1.1l4-1.3h4c0-.1,4-1.1,4-1.1l4-4.2,4-6.2,4-9.9,4-11,4-4.3,4,1.4,4,9.9,4,10.5,4,8.4,4,3.5,4,2.6,4,2h4c0,0,4-1.5,4-1.5l4,.7,4-.7,4,1.7,4-1.2,4,1,4-1.2,4,.2h4l4,.8,4-1.5,4,1.7,4-.2,4-1.9h4l4-1.9,4-3.1,4-2.1,4-.7,4,1.8,4,3.7,4,.8,4,1,4,2.2,4-1,4,1.1h4c0-.1,4,.6,4,.6l4-1.6,4,.5,4-.8,4,.9,4,.6,4-.5,4-1.2,4-4.4,4-4.7,4-9.6,4-12,4-6.7h4l4,4,4,11.2,4,11.5,4,7,4,2.8,4,1,4,.9h4c0-.1,4-.8,4-.8l4,1.6,4-.3,4-.5h4l4-.8,4,.7v3.7h-440Z"/>
+  <line class="st22" x1="379" y1="328" x2="819" y2="328"/>
+  <circle class="st25" cx="387" cy="290" r="5"/>
+  <text class="st3" transform="translate(397 294)"><tspan x="0" y="0">Cluster 4</tspan></text>
+  <line class="st14" x1="379" y1="346" x2="819" y2="346"/>
+  <text class="st2" transform="translate(554 366)"><tspan x="0" y="0">genomic position</tspan></text>
+  <line class="st19" x1="379" y1="392" x2="397" y2="392"/>
+  <path class="st20" d="M405,392l-8,4.8v-9.6l8,4.8Z"/>
+  <text class="st4" transform="translate(413 397)"><tspan x="0" y="0">Per group .bigwig or .bedgraph files (--outFileFormat)</tspan></text>
+</g>
+</svg>

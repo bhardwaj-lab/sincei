@@ -30,7 +30,6 @@ import os
 from enum import Enum
 from pathlib import Path
 
-import click
 import typer
 
 from sincei import _sincei as internal
@@ -48,7 +47,7 @@ def version_string() -> str:
 
 
 def normalize_region(
-    ctx: click.Context, param: click.Parameter, string: str | None
+    ctx: typer.Context, param: typer.CallbackParam, string: str | None
 ) -> str | None:
     if string is None:
         return None
@@ -65,9 +64,16 @@ def normalize_region(
 
     if len(region) == 0:
         msg = f"{string} is not a valid region"
-        raise click.BadParameter(msg, param=param, ctx=ctx)
+        raise typer.BadParameter(msg, param=param, ctx=ctx)
 
     return region
+
+
+def check_offset(offset: list[int] | None) -> list[int] | None:
+    if offset and len(offset) > 2:
+        msg = f"takes 1 or 2 values, got {len(offset)}"
+        raise typer.BadParameter(msg)
+    return offset
 
 
 def available_processors() -> int:
@@ -100,7 +106,7 @@ def normalize_processors(value: str | int) -> int:
         number_of_processors = int(value)
     except ValueError as exc:
         msg = f"{value} is not a valid number of processors"
-        raise click.BadParameter(msg) from exc
+        raise typer.BadParameter(msg) from exc
 
     return min(number_of_processors, AVAILABLE_PROCESSORS)
 
@@ -116,7 +122,7 @@ def get_smart_labels(labels: list[str]) -> list[str]:
     return inferred
 
 
-def version_callback(ctx: click.Context, value: bool) -> None:
+def version_callback(ctx: typer.Context, value: bool) -> None:
     """Print ``<command-path> <version>`` and exit.
 
     Used as the callback of the shared ``--version`` option (``OTHER_OPTS["version"]``).
@@ -126,7 +132,7 @@ def version_callback(ctx: click.Context, value: bool) -> None:
     """
     if value:
         names: list[str] = []
-        node: click.Context | None = ctx
+        node: typer.Context | None = ctx
         while node is not None:
             if node.info_name:
                 names.append(node.info_name)
@@ -136,7 +142,7 @@ def version_callback(ctx: click.Context, value: bool) -> None:
         raise typer.Exit()
 
 
-def help_callback(ctx: click.Context, value: bool) -> None:
+def help_callback(ctx: typer.Context, value: bool) -> None:
     """Print the command help and exit.
 
     Used as the callback of the shared ``--help`` option (``OTHER_OPTS["help"]``) so
@@ -222,7 +228,7 @@ class OverlapPolicy(str, Enum):
 class DimRed(str, Enum):
     LSA = "LSA"
     LDA = "LDA"
-    logPCA = "logPCA"
+    PCA = "PCA"
     glmPCA = "glmPCA"
 
 
@@ -307,7 +313,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_file": typer.Option(
         "-o",
         "--outFile",
-        metavar="PATH",
+        metavar="output",
         rich_help_panel=_IO,
         help=(
             "The file to write results to. This can be a .tsv file with the results, "
@@ -318,7 +324,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
     "out_prefix": typer.Option(
         "-o",
         "--outFilePrefix",
-        metavar="PATH",
+        metavar="output",
         rich_help_panel=_IO,
         help=(
             "Prefix for output file names. One file per group is written, named "
@@ -542,12 +548,12 @@ FILTER_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar="FILTER",
         rich_help_panel=_FILTER,
         help=(
-            "How to filter for duplicates? Different combinations "
-            "(using start/end/umi) "
-            "are possible. Read start position and read barcode are always considered. "
+            "How to filter duplicate reads. Different combinations (using "
+            "start/end/umi) are possible. Read start position and read barcode are "
+            "always considered. "
             "Default (none) considers all reads as passing the filter. Note that for "
             "paired end data both reads in the fragment are considered (and kept) so, "
-            "to keep only read1 combine this with ``--samFlagInclude``.\n\n"
+            "to keep only read1 combine this with ``--samFlagInclude 64``.\n\n"
             "One of: "
             "[bold yellow]start_bc[/bold yellow], "
             "[bold yellow]start_bc_umi[/bold yellow], "
@@ -631,18 +637,6 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "single-end read instead."
         ),
     ),
-    "atac": typer.Option(
-        "--atac",
-        rich_help_panel=_READ,
-        help=(
-            "Correct each read for the 9-base duplication Tn5 leaves behind: a "
-            "forward read is trimmed to ``start+4, end-5`` and a reverse read "
-            "to ``start+5, end-4``, so both ends sit on the cut site. Reads of "
-            "9 bases or less are dropped. The correction is applied before "
-            "everything else, so the filters and deduplication use the "
-            "corrected read as well.\n\n"
-        ),
-    ),
     "center_reads": typer.Option(
         "--centerReads",
         rich_help_panel=_READ,
@@ -652,32 +646,48 @@ READ_OPTS: dict[str, typer.models.OptionInfo] = {
             "fragment; for single-end data the given fragment length is used. Useful "
             "to get a sharper signal around enriched regions."
             "*NOTE*: generally NOT recommended for spliced-read data such as RNA-seq, "
-            "as it would make reads cover skipped regions.\n\n"
+            "as it would make reads cover skipped regions."
+        ),
+    ),
+    "tn5": typer.Option(
+        "--tn5",
+        rich_help_panel=_READ,
+        help=(
+            "Correct the 9-base duplication Tn5 leaves behind in fragments. "
+            "Only the forward mate of a proper pair is counted, so each fragment "
+            "is trimmed to ``start+4, end-5``. Fragments of 9 bases or less are "
+            "dropped. *NOTE*: Requires paired-end data."
         ),
     ),
     "mnase": typer.Option(
         "--mnase",
         rich_help_panel=_READ,
         help=(
-            "Determine nucleosome positions from MNase-seq/CUTnRUN data. The 2-3 "
-            "central bases of each fragment are counted: 3 when the fragment "
-            "length is odd, 2 when it is even. Only the forward mate of a proper "
-            "pair contributes, so each fragment is counted once. Unless you set "
-            "them yourself, ``--minFragmentLength`` becomes 130 and "
-            "``--maxFragmentLength`` becomes 200, which avoids dinucleosomes and "
-            "other artifacts. *NOTE*: Requires paired-end data. A bin size of 1 "
-            "is recommended."
+            "Determine nucleosome positions from MNase-seq/CUTnRUN data. The 2 "
+            "central bases of each fragment are counted: this turns on "
+            "``--centerReads`` and ``--extendReads``, and sets ``--offset`` to "
+            "``1 2``. Only the forward mate of a proper pair contributes, so each "
+            "fragment is counted once. Unless you set them yourself, "
+            "``--minFragmentLength`` becomes 130 and ``--maxFragmentLength`` "
+            "becomes 200, which avoids dinucleosomes and other artifacts. "
+            "*NOTE*: Requires paired-end data. A bin size of 1 is recommended."
         ),
     ),
     "offset": typer.Option(
         "--offset",
+        metavar="INT",
+        callback=check_offset,
         rich_help_panel=_READ,
         help=(
-            "Uses this offset inside of each read as the signal. This is useful in "
-            "cases like RiboSeq or GROseq. Negative values indicate offsets from "
-            "the end of each read. A value of 1 indicates the first base of the "
-            "alignment; -1 is the last base. An offset of 0 is not permitted. If "
-            "two values are specified, they define a range of positions."
+            "Uses this offset inside of each read as the signal. This is useful for "
+            "assays like RiboSeq or GROseq, where the signal is 12, 15 or 0 bases past "
+            "the start of the read. Negative values indicate offsets from the end of "
+            "each read. A value of 1 indicates the first base of the alignment (taking "
+            "alignment orientation into account). Likewise, -1 is the last base. An "
+            "offset of 0 is not permitted. If two values are specified, they define a "
+            "range of positions. With ``--centerReads``, a window as wide as the "
+            "selected bases is centered on the fragment; for example, "
+            "``--centerReads --offset 1`` counts the fragment center."
         ),
     ),
 }

@@ -27,7 +27,7 @@ jobs:
             target: x86_64
             manylinux: auto
             deployment_target: "10.13"
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64
             manylinux: auto
             deployment_target: "11.0"
@@ -67,7 +67,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          maturin-version: "1.14.1"
+          maturin-version: "1.5.0"
           args: --out dist
 
       - uses: actions/upload-artifact@v7

@@ -1,0 +1,1524 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 984 1010">
+  <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
+  <defs>
+    <style>
+      .st0, .st1, .st2, .st3, .st4, .st5, .st6, .st7, .st8, .st9, .st10, .st11, .st12, .st13, .st14, .st15, .st16, .st17, .st18 {
+        isolation: isolate;
+      }
+
+      .st0, .st1, .st4, .st5, .st8, .st9, .st10, .st11, .st12, .st13, .st14, .st15, .st16, .st17, .st18 {
+        font-weight: 700;
+      }
+
+      .st0, .st1, .st4, .st8, .st10, .st11, .st13, .st14, .st15, .st16, .st17, .st18 {
+        font-family: Arial-BoldMT, Arial;
+      }
+
+      .st0, .st1, .st5 {
+        font-size: 13px;
+      }
+
+      .st0, .st5, .st9, .st10, .st11, .st17 {
+        fill: #161616;
+      }
+
+      .st1, .st3, .st19, .st6, .st12, .st13, .st15, .st16, .st18 {
+        fill: #6b6b6b;
+      }
+
+      .st20, .st21, .st22, .st23, .st24, .st25, .st26, .st27, .st28 {
+        fill: none;
+      }
+
+      .st20, .st21, .st19, .st29 {
+        stroke: #6b6b6b;
+      }
+
+      .st20, .st23, .st24, .st30, .st31 {
+        stroke-width: 1.5px;
+      }
+
+      .st20, .st24 {
+        stroke-dasharray: 4 3;
+      }
+
+      .st21 {
+        stroke-width: 5px;
+      }
+
+      .st21, .st22, .st19, .st32, .st25, .st33, .st28 {
+        stroke-linecap: round;
+      }
+
+      .st2 {
+        fill: #9a9a9a;
+      }
+
+      .st2, .st3, .st6 {
+        font-family: ArialMT, Arial;
+      }
+
+      .st2, .st3, .st9, .st12, .st13, .st14 {
+        font-size: 12px;
+      }
+
+      .st34 {
+        fill: #d5ebea;
+      }
+
+      .st22 {
+        stroke-dasharray: 2 5;
+        stroke-width: 2.5px;
+      }
+
+      .st22, .st19, .st32, .st25, .st33, .st28 {
+        stroke-linejoin: round;
+      }
+
+      .st22, .st25 {
+        stroke: #c00935;
+      }
+
+      .st35 {
+        fill: #d9d9d9;
+      }
+
+      .st23, .st24 {
+        stroke: #161616;
+      }
+
+      .st36 {
+        fill: #64f73f;
+      }
+
+      .st37 {
+        fill: #3c88ee;
+      }
+
+      .st4 {
+        fill: #c00935;
+      }
+
+      .st4, .st8, .st17 {
+        font-size: 14px;
+      }
+
+      .st5, .st9, .st12 {
+        font-family: MesloLGLNF-Bold, 'MesloLGL Nerd Font';
+      }
+
+      .st6, .st16 {
+        font-size: 11px;
+      }
+
+      .st38, .st33 {
+        fill: #2f9a98;
+      }
+
+      .st32 {
+        stroke: #b79bc9;
+      }
+
+      .st32, .st39 {
+        fill: #b79bc9;
+      }
+
+      .st25, .st28 {
+        stroke-width: 2.4px;
+      }
+
+      .st30 {
+        fill: #fedfb1;
+      }
+
+      .st30, .st31, .st26 {
+        stroke: #fdb03d;
+      }
+
+      .st29 {
+        fill: #e7e9eb;
+        stroke-dasharray: 2 1.5;
+        stroke-width: .8px;
+      }
+
+      .st8 {
+        fill: #23807e;
+      }
+
+      .st40 {
+        fill: #fdb03d;
+      }
+
+      .st10 {
+        font-size: 20px;
+      }
+
+      .st31 {
+        fill: #fee3bb;
+      }
+
+      .st11 {
+        font-size: 16px;
+      }
+
+      .st41, .st14 {
+        fill: #fff;
+      }
+
+      .st42 {
+        fill: #3b4a5a;
+      }
+
+      .st43 {
+        fill: #ffb340;
+      }
+
+      .st15 {
+        font-size: 10px;
+      }
+
+      .st33, .st27 {
+        stroke: #2f9a98;
+      }
+
+      .st44 {
+        fill: #f2f2f2;
+      }
+
+      .st26, .st27 {
+        stroke-width: 3px;
+      }
+
+      .st18 {
+        font-size: 8px;
+      }
+
+      .st45 {
+        fill: #eb413c;
+      }
+
+      .st28 {
+        stroke: #23807e;
+      }
+    </style>
+  </defs>
+  <rect class="st41" x="0" y="0" width="984" height="1010" rx="9.7" ry="9.7"/>
+<g transform="translate(10 3)">
+  <g class="st7">
+    <text class="st10" transform="translate(20 36)"><tspan x="0" y="0">General QC</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st11" transform="translate(20 73)"><tspan x="0" y="0">Mapping quality and blacklist</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(20 93)"><tspan x="0" y="0">--minMappingQuality 30 · --blacklist</tspan></text>
+  </g>
+  <path class="st38" d="M25.5,123.5h109c3,0,5.5,2.5,5.5,5.5h0c0,3-2.5,5.5-5.5,5.5H25.5c-3,0-5.5-2.5-5.5-5.5h0c0-3,2.5-5.5,5.5-5.5Z"/>
+  <g class="st7">
+    <text class="st3" transform="translate(152 133)"><tspan x="0" y="0">MAPQ 60</tspan></text>
+  </g>
+  <path class="st28" d="M246,130l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(264 135)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <path class="st39" d="M25.5,157.5h109c3,0,5.5,2.5,5.5,5.5h0c0,3-2.5,5.5-5.5,5.5H25.5c-3,0-5.5-2.5-5.5-5.5h0c0-3,2.5-5.5,5.5-5.5Z"/>
+  <g class="st7">
+    <text class="st3" transform="translate(152 167)"><tspan x="0" y="0">MAPQ 3</tspan></text>
+  </g>
+  <path class="st25" d="M246,159l9,9M255,159l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(264 169)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <rect class="st35" x="16" y="185" width="128" height="24" rx="5" ry="5"/>
+  <path class="st40" d="M25.5,191.5h109c3,0,5.5,2.5,5.5,5.5h0c0,3-2.5,5.5-5.5,5.5H25.5c-3,0-5.5-2.5-5.5-5.5h0c0-3,2.5-5.5,5.5-5.5Z"/>
+  <g class="st7">
+    <text class="st3" transform="translate(152 201)"><tspan x="0" y="0">blacklist</tspan></text>
+  </g>
+  <path class="st25" d="M246,193l9,9M255,193l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(264 203)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st11" transform="translate(340 73)"><tspan x="0" y="0">GC content</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(340 93)"><tspan x="0" y="0">--GCcontentFilter 0.3,0.7</tspan></text>
+  </g>
+  <rect class="st36" x="340" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(346.9 133.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st36" x="366" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(372.9 133.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="392" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(399.7 133.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="418" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(424.9 133.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="444" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(451.7 133.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="470" y="117" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(477.7 133.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(504 133)"><tspan x="0" y="0">GC 0%</tspan></text>
+  </g>
+  <path class="st25" d="M566,125l9,9M575,125l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(584 135)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <rect class="st36" x="340" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(346.9 167.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="366" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(373.7 167.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st45" x="392" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(398.6 167.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="418" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(424.9 167.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st43" x="444" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(450.9 167.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="470" y="151" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(476.9 167.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(504 167)"><tspan x="0" y="0">GC 50%</tspan></text>
+  </g>
+  <path class="st28" d="M566,164l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(584 169)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <rect class="st45" x="340" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(346.6 201.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="366" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(372.9 201.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st43" x="392" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(398.9 201.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="418" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(424.6 201.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="444" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(450.6 201.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="470" y="185" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(476.9 201.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(504 201)"><tspan x="0" y="0">GC 100%</tspan></text>
+  </g>
+  <path class="st25" d="M566,193l9,9M575,193l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(584 203)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st11" transform="translate(660 73)"><tspan x="0" y="0">Aligned fraction</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(660 93)"><tspan x="0" y="0">--minAlignedFraction 0.8</tspan></text>
+  </g>
+  <rect class="st38" x="660" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="666" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="672" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="678" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="684" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="690" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="696" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="702" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="708" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="714" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="720" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="726" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="732" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="738" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="744" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="750" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="756" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="762" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="768" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="774" y="123" width="5" height="12" rx="1.5" ry="1.5"/>
+  <g class="st7">
+    <text class="st3" transform="translate(792 133)"><tspan x="0" y="0">100% aligned</tspan></text>
+  </g>
+  <path class="st28" d="M886,130l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(904 135)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <rect class="st38" x="660" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="666" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="672" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="678" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="684" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="690" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="696" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="702" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="708" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="714" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="720" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="726" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="732" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="738" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="744" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="750" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="756" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="762" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="768" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="774" y="157" width="5" height="12" rx="1.5" ry="1.5"/>
+  <g class="st7">
+    <text class="st3" transform="translate(792 167)"><tspan x="0" y="0">80% aligned</tspan></text>
+  </g>
+  <path class="st28" d="M886,164l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(904 169)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <rect class="st29" x="660" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="666" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="672" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="678" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="684" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="690" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="696" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="702" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="708" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="714" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="720" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="726" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="732" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="738" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="744" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="750" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="756" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="762" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st29" x="768" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <rect class="st38" x="774" y="191" width="5" height="12" rx="1.5" ry="1.5"/>
+  <g class="st7">
+    <text class="st3" transform="translate(792 201)"><tspan x="0" y="0">40% aligned</tspan></text>
+  </g>
+  <path class="st25" d="M886,193l9,9M895,193l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(904 203)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <rect class="st38" x="660" y="225" width="6" height="12" rx="1.5" ry="1.5"/>
+  <g class="st7">
+    <text class="st6" transform="translate(674 235)"><tspan x="0" y="0">aligned base</tspan></text>
+  </g>
+  <rect class="st29" x="750" y="225" width="6" height="12" rx="1.5" ry="1.5"/>
+  <g class="st7">
+    <text class="st6" transform="translate(764 235)"><tspan x="0" y="0">non-aligned base</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st10" transform="translate(20 265)"><tspan x="0" y="0">Duplicate reads</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(20 285)"><tspan x="0" y="0">--duplicateFilter start_end_bc_umi</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st16" transform="translate(20 319)"><tspan x="0" y="0">Cell barcode</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st16" transform="translate(188 319)"><tspan x="0" y="0">UMI</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st16" transform="translate(278 319)"><tspan x="0" y="0">Read sequence</tspan></text>
+  </g>
+  <rect class="st27" x="16" y="327" width="162" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="20" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(26.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="46" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(52.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="72" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(78.6 347.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st37" x="98" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(105.7 347.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="124" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(130.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="150" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(156.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st20" x="184" y="327" width="84" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="188" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(194.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="214" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(220.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="240" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(246.6 347.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="278" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(284.6 347.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="304" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(310.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="330" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(337.7 347.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="356" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(363.7 347.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="382" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(388.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="408" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(414.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="434" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(440.6 347.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="460" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(466.6 347.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="486" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(492.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="512" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(519.7 347.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="538" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(544.9 347.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="564" y="331" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(570.9 347.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <path class="st28" d="M604,344l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(622 349)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <rect class="st27" x="16" y="363" width="162" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="20" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(26.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="46" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(52.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="72" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(78.6 383.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st37" x="98" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(105.7 383.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="124" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(130.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="150" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(156.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st20" x="184" y="363" width="84" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="188" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(194.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="214" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(220.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="240" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(246.6 383.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="278" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(284.6 383.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="304" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(310.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="330" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(337.7 383.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="356" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(363.7 383.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="382" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(388.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="408" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(414.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="434" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(440.6 383.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="460" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(466.6 383.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="486" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(492.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="512" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(519.7 383.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="538" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(544.9 383.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="564" y="367" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(570.9 383.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <path class="st25" d="M604,375l9,9M613,375l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(622 385)"><tspan x="0" y="0">duplicate</tspan></text>
+  </g>
+  <rect class="st27" x="16" y="399" width="162" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="20" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(26.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="46" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(52.9 419.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="72" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(78.6 419.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st37" x="98" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(105.7 419.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="124" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(130.9 419.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="150" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(156.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st20" x="184" y="399" width="84" height="32" rx="8" ry="8"/>
+  <rect class="st37" x="188" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(195.7 419.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st45" x="214" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(220.6 419.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="240" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(246.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="278" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(284.6 419.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="304" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(310.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="330" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(337.7 419.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="356" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(363.7 419.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="382" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(388.9 419.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="408" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(414.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="434" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(440.6 419.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="460" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(466.6 419.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="486" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(492.9 419.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="512" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(519.7 419.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="538" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(544.9 419.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="564" y="403" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(570.9 419.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <path class="st28" d="M604,416l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(622 421)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <rect class="st26" x="16" y="435" width="162" height="32" rx="8" ry="8"/>
+  <rect class="st37" x="20" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(27.7 455.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="46" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(53.7 455.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st45" x="72" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(78.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="98" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(104.9 455.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="124" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(130.9 455.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="150" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(156.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st20" x="184" y="435" width="84" height="32" rx="8" ry="8"/>
+  <rect class="st36" x="188" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(194.9 455.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="214" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(220.9 455.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="240" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(246.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="278" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(284.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="304" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(310.9 455.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="330" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(337.7 455.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="356" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(363.7 455.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="382" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(388.9 455.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="408" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(414.9 455.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="434" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(440.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st45" x="460" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(466.6 455.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="486" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(492.9 455.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="512" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(519.7 455.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="538" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(544.9 455.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st43" x="564" y="439" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(570.9 455.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <path class="st28" d="M604,452l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(622 457)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(20 483)"><tspan x="0" y="0">same barcode, UMI and read = duplicate</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st6" transform="translate(730 455)"><tspan x="0" y="0">read start and barcode are</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st6" transform="translate(730 469)"><tspan x="0" y="0">always compared</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st16" transform="translate(730 319)"><tspan x="0" y="0">modes</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st9" transform="translate(730 339)"><tspan x="0" y="0">start_bc</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st9" transform="translate(730 367)"><tspan x="0" y="0">start_bc_umi</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st9" transform="translate(730 395)"><tspan x="0" y="0">start_end_bc</tspan></text>
+  </g>
+  <rect class="st34" x="722" y="408" width="145.2" height="24" rx="5.2" ry="5.2"/>
+  <g class="st7">
+    <text class="st9" transform="translate(730 423)"><tspan x="0" y="0">start_end_bc_umi</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st10" transform="translate(20 543)"><tspan x="0" y="0">Motif at the 5′ end</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(20 563)"><tspan x="0" y="0">--motifFilter &apos;A,TA&apos;</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(250 543)"><tspan x="0" y="0">Only reads with the correct motif and overhang are kept.</tspan></text>
+    <text class="st3" transform="translate(250 557.4)"><tspan x="0" y="0">For example, reads with enzyme cut sites.</tspan></text>
+  </g>
+  <rect class="st30" x="152" y="607" width="108" height="64" rx="6" ry="6"/>
+  <g class="st7">
+    <text class="st0" transform="translate(172 585)"><tspan x="0" y="0">Enzyme cut site</tspan></text>
+  </g>
+  <rect class="st45" x="51" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(57.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="77" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(83.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="103" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(109.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="129" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(135.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="155" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(162.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="181" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(188.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="207" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(213.9 629.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st36" x="233" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(239.9 629.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="259" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(265.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="285" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(291.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="311" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(317.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st37" x="337" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(344.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="51" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(57.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="77" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(83.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="103" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(109.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="129" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(135.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="155" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(161.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st36" x="181" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(187.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="207" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(214.7 657.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="233" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(240.7 657.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="259" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(265.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="285" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(291.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="311" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(317.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="337" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(343.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(31.4 630)"><tspan x="0" y="0">5′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(31.4 658)"><tspan x="0" y="0">3′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(365 630)"><tspan x="0" y="0">3′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(365 658)"><tspan x="0" y="0">5′</tspan></text>
+  </g>
+  <path class="st22" d="M180,593v46h52v54"/>
+  <line class="st21" x1="385" y1="639" x2="485" y2="639"/>
+  <path class="st19" d="M499,639l-14,8.4v-16.8l14,8.4h0Z"/>
+  <g class="st7">
+    <text class="st1" transform="translate(406.2 612.1)"><tspan x="0" y="0">Enzymatic</tspan><tspan x="3.3" y="13">digestion</tspan></text>
+  </g>
+  <rect class="st45" x="529" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(535.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="555" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(561.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="581" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(587.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="607" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(613.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st37" x="633" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(640.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="529" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(535.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="555" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(561.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="581" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(587.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="607" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(613.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st36" x="633" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(639.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st36" x="659" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(665.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st37" x="685" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(692.7 657.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="735" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(742.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st36" x="761" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(767.9 629.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st36" x="787" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(793.9 629.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st45" x="813" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(819.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="839" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(845.9 629.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="865" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(871.6 629.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st37" x="891" y="613" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(898.7 629.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st37" x="787" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(794.7 657.6)"><tspan x="0" y="0">T</tspan></text>
+  </g>
+  <rect class="st43" x="813" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(819.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st45" x="839" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(845.6 657.6)"><tspan x="0" y="0">G</tspan></text>
+  </g>
+  <rect class="st43" x="865" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(871.9 657.6)"><tspan x="0" y="0">C</tspan></text>
+  </g>
+  <rect class="st36" x="891" y="641" width="24" height="24" rx="4" ry="4"/>
+  <g class="st7">
+    <text class="st17" transform="translate(897.9 657.6)"><tspan x="0" y="0">A</tspan></text>
+  </g>
+  <rect class="st24" x="732" y="610" width="56" height="30" rx="6" ry="6"/>
+  <rect class="st23" x="784" y="610" width="30" height="30" rx="6" ry="6"/>
+  <rect class="st24" x="656" y="638" width="56" height="30" rx="6" ry="6"/>
+  <g class="st7">
+    <text class="st13" transform="translate(511.4 630)"><tspan x="0" y="0">5′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(511.4 658)"><tspan x="0" y="0">3′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(919 630)"><tspan x="0" y="0">3′</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st13" transform="translate(919 658)"><tspan x="0" y="0">5′</tspan></text>
+  </g>
+  <rect class="st24" x="732" y="691" width="28" height="16" rx="5" ry="5"/>
+  <g class="st7">
+    <text class="st3" transform="translate(768 704)"><tspan x="0" y="0">5′ overhang in the genome</tspan></text>
+  </g>
+  <rect class="st23" x="732" y="715" width="28" height="16" rx="5" ry="5"/>
+  <g class="st7">
+    <text class="st3" transform="translate(768 728)"><tspan x="0" y="0">5′ end of the read</tspan></text>
+  </g>
+  <path class="st28" d="M51,709l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(69 714)"><tspan x="0" y="0">kept: read starts with the correct motif</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st10" transform="translate(20 775)"><tspan x="0" y="0">Include and exclude SAM flags</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(20 795)"><tspan x="0" y="0">--samFlagInclude · --samFlagExclude</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st17" transform="translate(20 827)"><tspan x="0" y="0">Include</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(76 827)"><tspan x="0" y="0">--samFlagInclude 2 --samFlagInclude 64</tspan></text>
+  </g>
+  <rect class="st31" x="338" y="856" width="24" height="126" rx="5" ry="5"/>
+  <rect class="st31" x="228" y="856" width="24" height="126" rx="5" ry="5"/>
+  <g class="st7">
+    <text class="st18" transform="translate(121.1 869)"><tspan x="0" y="0">2048</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st18" transform="translate(143.1 869)"><tspan x="0" y="0">1024</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(165.7 869)"><tspan x="0" y="0">512</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(187.7 869)"><tspan x="0" y="0">256</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(209.7 869)"><tspan x="0" y="0">128</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(234.4 869)"><tspan x="0" y="0">64</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(256.4 869)"><tspan x="0" y="0">32</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(278.4 869)"><tspan x="0" y="0">16</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(303.2 869)"><tspan x="0" y="0">8</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(325.2 869)"><tspan x="0" y="0">4</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(347.2 869)"><tspan x="0" y="0">2</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(369.2 869)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st33" d="M20,881h41l9,7-9,7H20v-14Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(78 892)"><tspan x="0" y="0">99</tspan></text>
+  </g>
+  <rect class="st44" x="120" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(126.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="142" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(148.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="164" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(170.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="186" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(192.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="208" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(214.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="230" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(236.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="252" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(258.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="274" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(280.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="296" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(302.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="318" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(324.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="340" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(346.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="362" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(368.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st28" d="M398,889l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(416 894)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <path class="st33" d="M29,915h41v14H29l-9-7,9-7Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(78 926)"><tspan x="0" y="0">147</tspan></text>
+  </g>
+  <rect class="st44" x="120" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(126.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="142" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(148.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="164" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(170.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="186" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(192.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="208" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(214.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="230" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(236.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="252" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(258.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="274" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(280.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="296" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(302.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="318" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(324.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="340" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(346.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="362" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(368.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st25" d="M398,918l9,9M407,918l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(416 928)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <path class="st33" d="M20,949h41l9,7-9,7H20v-14Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(78 960)"><tspan x="0" y="0">65</tspan></text>
+  </g>
+  <rect class="st44" x="120" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(126.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="142" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(148.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="164" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(170.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="186" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(192.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="208" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(214.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="230" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(236.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="252" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(258.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="274" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(280.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="296" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(302.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="318" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(324.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="340" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(346.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="362" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(368.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st25" d="M398,952l9,9M407,952l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(416 962)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(20 847)"><tspan x="0" y="0">A read is kept only if it has every included bit.</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st17" transform="translate(490 827)"><tspan x="0" y="0">Exclude</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st12" transform="translate(546 827)"><tspan x="0" y="0">--samFlagExclude 16 --samFlagExclude 2048</tspan></text>
+  </g>
+  <rect class="st31" x="742" y="856" width="24" height="126" rx="5" ry="5"/>
+  <rect class="st31" x="588" y="856" width="24" height="126" rx="5" ry="5"/>
+  <g class="st7">
+    <text class="st18" transform="translate(591.1 869)"><tspan x="0" y="0">2048</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st18" transform="translate(613.1 869)"><tspan x="0" y="0">1024</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(635.7 869)"><tspan x="0" y="0">512</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(657.7 869)"><tspan x="0" y="0">256</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(679.7 869)"><tspan x="0" y="0">128</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(704.4 869)"><tspan x="0" y="0">64</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(726.4 869)"><tspan x="0" y="0">32</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(748.4 869)"><tspan x="0" y="0">16</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(773.2 869)"><tspan x="0" y="0">8</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(795.2 869)"><tspan x="0" y="0">4</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(817.2 869)"><tspan x="0" y="0">2</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st15" transform="translate(839.2 869)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st32" d="M490,881h41l9,7-9,7h-41v-14Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(548 892)"><tspan x="0" y="0">99</tspan></text>
+  </g>
+  <rect class="st44" x="590" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(596.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="612" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(618.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="634" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(640.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="656" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(662.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="678" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(684.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="700" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(706.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="722" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(728.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="744" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(750.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="766" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(772.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="788" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(794.7 892)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="810" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(816.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="832" y="877" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(838.7 892)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st28" d="M868,889l4,4.5,8-10"/>
+  <g class="st7">
+    <text class="st8" transform="translate(886 894)"><tspan x="0" y="0">kept</tspan></text>
+  </g>
+  <path class="st32" d="M499,915h41v14h-41l-9-7,9-7Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(548 926)"><tspan x="0" y="0">115</tspan></text>
+  </g>
+  <rect class="st44" x="590" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(596.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="612" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(618.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="634" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(640.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="656" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(662.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="678" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(684.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="700" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(706.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="722" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(728.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="744" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(750.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="766" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(772.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="788" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(794.7 926)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="810" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(816.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="832" y="911" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(838.7 926)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st25" d="M868,918l9,9M877,918l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(886 928)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <path class="st32" d="M490,949h41l9,7-9,7h-41v-14Z"/>
+  <g class="st7">
+    <text class="st5" transform="translate(548 960)"><tspan x="0" y="0">2147</tspan></text>
+  </g>
+  <rect class="st42" x="590" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(596.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="612" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(618.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="634" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(640.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="656" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(662.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="678" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(684.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="700" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(706.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="722" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(728.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st44" x="744" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(750.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="766" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(772.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st44" x="788" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st2" transform="translate(794.7 960)"><tspan x="0" y="0">0</tspan></text>
+  </g>
+  <rect class="st42" x="810" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(816.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <rect class="st42" x="832" y="945" width="20" height="22" rx="3.5" ry="3.5"/>
+  <g class="st7">
+    <text class="st14" transform="translate(838.7 960)"><tspan x="0" y="0">1</tspan></text>
+  </g>
+  <path class="st25" d="M868,952l9,9M877,952l-9,9"/>
+  <g class="st7">
+    <text class="st4" transform="translate(886 962)"><tspan x="0" y="0">filtered</tspan></text>
+  </g>
+  <g class="st7">
+    <text class="st3" transform="translate(490 847)"><tspan x="0" y="0">A read is dropped if it has any excluded bit.</tspan></text>
+  </g>
+</g>
+</svg>
