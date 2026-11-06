@@ -42,6 +42,6 @@ environment:
 
     conda create -n sincei python=3.12 uv maturin
     conda activate sincei
-    git clone -b rust_release https://github.com/bhardwaj-lab/sincei.git
+    git clone -b develop https://github.com/bhardwaj-lab/sincei.git
     cd sincei
     maturin develop --release --uv
