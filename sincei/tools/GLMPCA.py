@@ -233,7 +233,7 @@ class GLMPCA:
         "subsample": fit on ``n_cells_fit`` random cells; ``transform`` projects all.
     feature_subsample : float, int or None
         Fraction or number of features at which the likelihood is evaluated per step
-        (unbiased). Scores always use all features. Fixed subset with lbfgs.
+        (unbiased). Scores always use all features. Ignored if optimizer="lbfgs".
     n_cells_fit : int or None
         Cells used with fit_mode="subsample" (default min(n, 200_000)).
     chunk_size : int
@@ -654,7 +654,7 @@ class GLMPCA:
             Q, R = torch.linalg.qr(W0)
             return Q * torch.sign(torch.diagonal(R))          # unique: diag(R) > 0
 
-        cols, rows = self._feature_sample(data.p), np.arange(data.n)  # fixed subset
+        cols, rows = None, np.arange(data.n)
         opt = torch.optim.LBFGS([W0, mu], lr=1, max_iter=self.max_iter, history_size=20,
                                 tolerance_grad=1e-7, tolerance_change=1e-12,
                                 line_search_fn="strong_wolfe")
