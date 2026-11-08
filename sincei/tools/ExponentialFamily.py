@@ -254,14 +254,10 @@ class Beta(ExponentialFamily):
         - "min_val" (int): min data value (replaces 0 and 1).
         - "method" (str): method use to compute the "nu" parameter per feature.
             Two possibles: "MLE" and "MM". Defaults to "MLE".
-        - "eps" (float): minimum difference used for inverting the g function.
-            Defaults to 1e-4
-        - "maxiter" (int): maximum number of iterations for the inversion of the
-            g function. Defaults to 100.
     """
 
     family_name = "beta"
-    default_params = {"min_val": 1e-5, "eps": 1e-8, "maxiter": 100, "method": "MLE"}
+    default_params = {"min_val": 1e-5, "method": "MLE"}
     nuisance_params = ("nu",)
 
     def clip_data(self, X):
@@ -277,20 +273,24 @@ class Beta(ExponentialFamily):
         return td.Beta(m * nu, (1 - m) * nu, validate_args=False)
 
     def _saturated_mean(self, X):
-        """Solves logit(x) + psi((1-m) nu) - psi(m nu) = 0 (decreasing in m)."""
-        from scipy.optimize.elementwise import find_root
-        from scipy.special import digamma, logit
-
-        x = self.clip_data(X).double().cpu().numpy()
-        nu = self._param("nu", X).double().cpu().numpy()
-        res = find_root(
-            lambda m, lx, nu: lx + digamma((1 - m) * nu) - digamma(m * nu),
-            (np.full_like(x, 1e-12), np.full_like(x, 1 - 1e-12)),
-            args=(logit(x), nu),
-            tolerances={"xatol": self.family_params["eps"]},
-            maxiter=self.family_params["maxiter"],
-        )
-        return torch.as_tensor(res.x).to(X)
+        """Solves logit(x) + psi((1-m) nu) - psi(m nu) = 0 (decreasing in m) via
+        bisection in z = logit(m), followed by bracketed Newton.
+        """
+        lx = torch.logit(self.clip_data(X.double()))
+        nu = self._param("nu", lx)
+        lo, hi = torch.full_like(lx, -40.0), torch.full_like(lx, 40.0)
+        for _ in range(8):
+            z = (lo + hi) / 2
+            pos = lx + torch.digamma((1 - z.sigmoid()) * nu) - torch.digamma(z.sigmoid() * nu) > 0
+            lo, hi = torch.where(pos, z, lo), torch.where(pos, hi, z)
+        z = (lo + hi) / 2
+        for _ in range(4):
+            m = z.sigmoid()
+            a, b = m * nu, (1 - m) * nu
+            g = lx + torch.digamma(b) - torch.digamma(a)
+            dg = -(torch.polygamma(1, a) + torch.polygamma(1, b)) * nu * m * (1 - m)
+            z = (z - g / dg).clamp(lo, hi)  # Newton step kept inside the bracket
+        return z.sigmoid().to(X)
 
     def invert_g(self, X):
         return self._saturated_mean(X)
