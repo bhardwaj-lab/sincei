@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 921 355">
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 900.8 355">
   <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
   <defs>
     <style>
@@ -8,46 +8,55 @@
       }
 
       .st4 {
-        fill: #e9e1ef;
+        fill: #909090;
       }
 
-      .st5 {
-        fill: #dbcde4;
-      }
-
-      .st6, .st7 {
-        fill: #161616;
-      }
-
-      .st6, .st7, .st8, .st9, .st10 {
+      .st5, .st6, .st7, .st8, .st9, .st10, .st11 {
         isolation: isolate;
       }
 
-      .st6, .st7, .st9, .st10 {
+      .st5, .st6, .st7, .st10, .st11 {
         font-family: Arial-BoldMT, Arial;
         font-weight: 700;
       }
 
-      .st6, .st10 {
+      .st5, .st6, .st11 {
         font-size: 13px;
+      }
+
+      .st5, .st7 {
+        fill: #161616;
+      }
+
+      .st6, .st12 {
+        fill: #fff;
       }
 
       .st7 {
         font-size: 18px;
       }
 
-      .st11 {
-        fill: #d9d9d9;
+      .st13 {
+        fill: #b5b5b5;
       }
 
-      .st12 {
-        stroke: #2f9a98;
+      .st14 {
+        stroke-miterlimit: 10;
+      }
+
+      .st14, .st15, .st16 {
         stroke-dasharray: 3 2;
-        stroke-width: 1.2px;
       }
 
-      .st12, .st13 {
+      .st14, .st16 {
+        fill: #d9d9d9;
+        stroke: #000;
+      }
+
+      .st15 {
         fill: #c1e1e0;
+        stroke: #2f9a98;
+        stroke-width: 1.2px;
       }
 
       .st8 {
@@ -55,15 +64,11 @@
         font-size: 12px;
       }
 
-      .st8, .st14, .st9 {
+      .st8, .st17, .st18, .st10 {
         fill: #6b6b6b;
       }
 
-      .st15 {
-        fill: #c4c9ce;
-      }
-
-      .st1, .st14, .st3 {
+      .st1, .st17, .st3 {
         stroke: #6b6b6b;
       }
 
@@ -71,20 +76,20 @@
         stroke-width: 1.5px;
       }
 
-      .st14 {
+      .st17 {
         stroke-linejoin: round;
       }
 
-      .st14, .st3 {
+      .st17, .st3 {
         stroke-linecap: round;
       }
 
-      .st16 {
+      .st19 {
         fill: #2f9a98;
       }
 
-      .st17 {
-        fill: #97cccc;
+      .st20 {
+        fill: #9d9d9d;
       }
 
       .st2 {
@@ -92,31 +97,23 @@
         stroke-dasharray: 3 4;
       }
 
-      .st18 {
-        fill: #f4f0f7;
-      }
-
-      .st19 {
+      .st21 {
         fill: #fdb03d;
       }
 
-      .st20 {
-        fill: #c9b4d6;
-      }
-
-      .st21 {
-        fill: #fff;
-      }
-
       .st22 {
-        fill: #3b4a5a;
+        fill: #f0f0f0;
       }
 
       .st23 {
-        fill: #6c7783;
+        fill: #3b4a5a;
       }
 
-      .st9 {
+      .st24 {
+        fill: #e9e9e9;
+      }
+
+      .st10 {
         font-size: 11px;
       }
 
@@ -124,82 +121,151 @@
         stroke-width: 2.5px;
       }
 
-      .st24 {
-        fill: #fff3e2;
-      }
-
-      .st25 {
-        fill: #fec46e;
-      }
-
-      .st10 {
+      .st11 {
         fill: #23807e;
       }
 
-      .st26 {
+      .st25 {
         fill: #b79bc9;
+      }
+
+      .st26 {
+        fill: #d3d3d3;
       }
     </style>
   </defs>
-  <rect class="st21" x="0" y="0" width="921" height="355" rx="9.4" ry="9.4"/>
-<g transform="translate(4 -14)">
-  <text class="st7" transform="translate(20 52)"><tspan x="0" y="0">Aggregate regions into genes</tspan></text>
-  <text class="st8" transform="translate(20 72)"><tspan x="0" y="0">--features genes.gtf (BED or GTF) · --overlapPolicy for regions that only partly overlap a gene</tspan></text>
-  <line class="st2" x1="220" y1="112" x2="220" y2="258"/>
-  <line class="st2" x1="440" y1="112" x2="440" y2="258"/>
-  <rect class="st26" x="220" y="98" width="220" height="22" rx="5" ry="5"/>
-  <text class="st6" transform="translate(314.8 114)"><tspan x="0" y="0">gene</tspan></text>
-  <path class="st0" d="M440,98l10,11-10,11"/>
-  <line class="st1" x1="150" y1="128" x2="550" y2="128"/>
-  <text class="st6" transform="translate(20 163)"><tspan x="0" y="0">full overlap</tspan></text>
-  <rect class="st16" x="270" y="150" width="80" height="18" rx="4" ry="4"/>
-  <text class="st6" transform="translate(20 199)"><tspan x="0" y="0">partial overlap</tspan></text>
-  <rect class="st16" x="400" y="186" width="40" height="18" rx="4" ry="4"/>
-  <rect class="st12" x="440" y="186" width="60" height="18" rx="4" ry="4"/>
-  <text class="st6" transform="translate(20 235)"><tspan x="0" y="0">no overlap</tspan></text>
-  <rect class="st11" x="480" y="222" width="70" height="18" rx="4" ry="4"/>
-  <rect class="st16" x="20" y="268" width="12" height="12" rx="3" ry="3"/>
-  <text class="st8" transform="translate(38 279)"><tspan x="0" y="0">counted</tspan></text>
-  <rect class="st11" x="110" y="268" width="12" height="12" rx="3" ry="3"/>
-  <text class="st8" transform="translate(128 279)"><tspan x="0" y="0">ignored</tspan></text>
-  <rect class="st12" x="200" y="268" width="12" height="12" rx="3" ry="3"/>
-  <text class="st8" transform="translate(218 279)"><tspan x="0" y="0">depends on --overlapPolicy</tspan></text>
-  <line class="st3" x1="580" y1="190" x2="621" y2="190"/>
-  <path class="st14" d="M630,190l-9,5.4v-10.8l9,5.4Z"/>
-  <text class="st7" transform="translate(660 52)"><tspan x="0" y="0">Gene scores per cell</tspan></text>
-  <text class="st8" transform="translate(660 72)"><tspan x="0" y="0">--centerScores · --normalizeGeneLengths</tspan></text>
-  <text class="st9" transform="translate(690.6 116)"><tspan x="0" y="0">g1</tspan></text>
-  <text class="st9" transform="translate(730.6 116)"><tspan x="0" y="0">g2</tspan></text>
-  <text class="st9" transform="translate(770.6 116)"><tspan x="0" y="0">g3</tspan></text>
-  <text class="st9" transform="translate(810.6 116)"><tspan x="0" y="0">g4</tspan></text>
-  <text class="st9" transform="translate(850.6 116)"><tspan x="0" y="0">g5</tspan></text>
-  <rect class="st16" x="660" y="129" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st13" x="680" y="124" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st16" x="720" y="124" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st16" x="760" y="124" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st13" x="800" y="124" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st17" x="840" y="124" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st19" x="660" y="167" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st19" x="680" y="162" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st25" x="720" y="162" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st19" x="760" y="162" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st24" x="800" y="162" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st19" x="840" y="162" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st26" x="660" y="205" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st18" x="680" y="200" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st20" x="720" y="200" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st5" x="760" y="200" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st26" x="800" y="200" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st4" x="840" y="200" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st22" x="660" y="243" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st15" x="680" y="238" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st23" x="720" y="238" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st22" x="760" y="238" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st22" x="800" y="238" width="36" height="34" rx="5" ry="5"/>
-  <rect class="st23" x="840" y="238" width="36" height="34" rx="5" ry="5"/>
-  <text class="st8" transform="translate(680 296)"><tspan x="0" y="0">cells × genes</tspan></text>
-  <text class="st10" transform="translate(694 327)"><tspan x="0" y="0">Updated .h5ad with gene scores</tspan></text>
-  <text class="st8" transform="translate(20 322)"><tspan x="0" y="0">--bedScoreFilter keeps regions by their BED score (e.g. a scFindVCRs penalty)</tspan></text>
-  <text class="st8" transform="translate(20 342)"><tspan x="0" y="0">--maxRegion: kb up/downstream of genes (default 100)</tspan></text>
-</g>
+  <rect class="st12" width="900.4" height="355" rx="9.3" ry="9.3"/>
+  <g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st7" transform="translate(24 38)"><tspan x="0" y="0">Aggregate regions into genes</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(24 58)"><tspan x="0" y="0">--features genes.gtf (BED or GTF) · --overlapPolicy for regions that only partly overlap a gene</tspan></text>
+      </g>
+    </g>
+    <line class="st2" x1="224" y1="98" x2="224" y2="244"/>
+    <line class="st2" x1="444" y1="98" x2="444" y2="244"/>
+    <rect class="st23" x="224" y="84" width="220" height="22" rx="5" ry="5"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st6" transform="translate(318.8 100)"><tspan x="0" y="0">gene</tspan></text>
+      </g>
+    </g>
+    <path class="st0" d="M444,84l10,11-10,11"/>
+    <line class="st1" x1="154" y1="114" x2="554" y2="114"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st5" transform="translate(24 149)"><tspan x="0" y="0">full overlap</tspan></text>
+      </g>
+    </g>
+    <rect class="st19" x="274" y="136" width="80" height="18" rx="4" ry="4"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st5" transform="translate(24 185)"><tspan x="0" y="0">partial overlap</tspan></text>
+      </g>
+    </g>
+    <rect class="st15" x="410.5" y="172" width="80" height="18" rx="4.6" ry="4.6"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st5" transform="translate(24 221)"><tspan x="0" y="0">no overlap</tspan></text>
+      </g>
+    </g>
+    <rect class="st14" x="484" y="208" width="70" height="18" rx="4" ry="4"/>
+    <rect class="st19" x="24" y="254" width="12" height="12" rx="3" ry="3"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(42 265)"><tspan x="0" y="0">counted</tspan></text>
+      </g>
+    </g>
+    <rect class="st16" x="290" y="254" width="12" height="12" rx="3" ry="3"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(308 265)"><tspan x="0" y="0">ignored</tspan></text>
+      </g>
+    </g>
+    <rect class="st15" x="104" y="254" width="12" height="12" rx="3" ry="3"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(122 265)"><tspan x="0" y="0">depends on --overlapPolicy</tspan></text>
+      </g>
+    </g>
+    <line class="st3" x1="574" y1="165" x2="615" y2="165"/>
+    <path class="st17" d="M624,165l-9,5.4v-10.8l9,5.4h0Z"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st7" transform="translate(644 38)"><tspan x="0" y="0">Gene scores per cell</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(644 58)"><tspan x="0" y="0">--centerScores · --normalizeGeneLengths</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st10" transform="translate(674.6 102)"><tspan x="0" y="0">g1</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st10" transform="translate(714.6 102)"><tspan x="0" y="0">g2</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st10" transform="translate(754.6 102)"><tspan x="0" y="0">g3</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st10" transform="translate(794.6 102)"><tspan x="0" y="0">g4</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st10" transform="translate(834.6 102)"><tspan x="0" y="0">g5</tspan></text>
+      </g>
+    </g>
+    <rect class="st19" x="644" y="115" width="12" height="24" rx="4" ry="4"/>
+    <rect class="st26" x="664" y="110" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st18" x="704" y="110" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st18" x="744" y="110" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st26" x="784" y="110" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st13" x="824" y="110" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st21" x="644" y="153" width="12" height="24" rx="4" ry="4"/>
+    <rect class="st18" x="664" y="148" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st20" x="704" y="148" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st18" x="744" y="148" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st22" x="784" y="148" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st18" x="824" y="148" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st25" x="644" y="191" width="12" height="24" rx="4" ry="4"/>
+    <rect class="st24" x="664" y="186" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st4" x="704" y="186" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st13" x="744" y="186" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st18" x="784" y="186" width="36" height="34" rx="5" ry="5"/>
+    <rect class="st26" x="824" y="186" width="36" height="34" rx="5" ry="5"/>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(664 244)"><tspan x="0" y="0">cells × genes</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st11" transform="translate(678 275)"><tspan x="0" y="0">Updated .h5ad with gene scores</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(24 308)"><tspan x="0" y="0">--bedScoreFilter keeps regions by their BED score (e.g. a scFindVCRs penalty)</tspan></text>
+      </g>
+    </g>
+    <g class="st9">
+      <g class="st9">
+        <text class="st8" transform="translate(24 328)"><tspan x="0" y="0">--maxRegion: kb up/downstream of genes (default 100)</tspan></text>
+      </g>
+    </g>
+  </g>
 </svg>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 928 415">
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 928 377">
   <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
   <defs>
     <style>
@@ -151,17 +151,21 @@
       .st30 {
         fill: #b79bc9;
       }
+          .stbin {
+        fill: #939ba4;
+      }
     </style>
   </defs>
-  <rect class="st26" x="0" y="0" width="928" height="415" rx="10" ry="10"/>
+  <rect class="st26" x="0" y="0" width="928" height="377" rx="10" ry="10"/>
+<g transform="translate(0 0)">
 <g transform="translate(4 -8)">
   <text class="st4" transform="translate(20 42)"><tspan x="0" y="0">BAM reads, colored by cell barcode</tspan></text>
-  <rect class="st28" x="26" y="56" width="88" height="156" rx="4" ry="4"/>
-  <rect class="st28" x="121" y="56" width="58" height="156" rx="4" ry="4"/>
-  <rect class="st28" x="186" y="56" width="118" height="156" rx="4" ry="4"/>
-  <rect class="st28" x="311" y="56" width="53" height="156" rx="4" ry="4"/>
-  <rect class="st28" x="371" y="56" width="73" height="156" rx="4" ry="4"/>
-  <rect class="st28" x="446" y="56" width="43" height="156" rx="4" ry="4"/>
+  <rect class="st28" x="26" y="56" width="88" height="118" rx="4" ry="4"/>
+  <rect class="st28" x="121" y="56" width="58" height="118" rx="4" ry="4"/>
+  <rect class="st28" x="186" y="56" width="118" height="118" rx="4" ry="4"/>
+  <rect class="st28" x="311" y="56" width="53" height="118" rx="4" ry="4"/>
+  <rect class="st28" x="371" y="56" width="73" height="118" rx="4" ry="4"/>
+  <rect class="st28" x="446" y="56" width="43" height="118" rx="4" ry="4"/>
   <line class="st18" x1="20" y1="79" x2="490" y2="79"/>
   <rect class="st23" x="37.4" y="72" width="26" height="14" rx="4" ry="4"/>
   <rect class="st23" x="54.6" y="72" width="26" height="14" rx="4" ry="4"/>
@@ -185,29 +189,22 @@
   <rect class="st30" x="326.3" y="148" width="26" height="14" rx="4" ry="4"/>
   <rect class="st30" x="454.1" y="148" width="26" height="14" rx="4" ry="4"/>
   <rect class="st30" x="454.9" y="148" width="26" height="14" rx="4" ry="4"/>
-  <line class="st18" x1="20" y1="193" x2="490" y2="193"/>
-  <rect class="st27" x="42.4" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="71.3" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="319.6" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="326.6" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="333.1" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="392" y="186" width="26" height="14" rx="4" ry="4"/>
-  <rect class="st27" x="30" y="232" width="80" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(64.8 264)"><tspan x="0" y="0">r1</tspan></text>
-  <rect class="st27" x="125" y="232" width="50" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(144.8 264)"><tspan x="0" y="0">r2</tspan></text>
-  <rect class="st27" x="190" y="232" width="110" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(239.8 264)"><tspan x="0" y="0">r3</tspan></text>
-  <rect class="st27" x="315" y="232" width="45" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(332.3 264)"><tspan x="0" y="0">r4</tspan></text>
-  <rect class="st27" x="375" y="232" width="65" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(402.3 264)"><tspan x="0" y="0">r5</tspan></text>
-  <rect class="st27" x="450" y="232" width="35" height="12" rx="3" ry="3"/>
-  <text class="st10" transform="translate(462.3 264)"><tspan x="0" y="0">r6</tspan></text>
-  <line class="st17" x1="20" y1="220" x2="490" y2="220"/>
-  <text class="st4" transform="translate(20 288)"><tspan x="0" y="0">genomic regions</tspan></text>
-  <line class="st19" x1="512" y1="144" x2="557" y2="144"/>
-  <path class="st11" d="M566,144l-9,5.4v-10.8l9,5.4Z"/>
+  <rect class="st27" x="30" y="194" width="80" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(64.8 226)"><tspan x="0" y="0">r1</tspan></text>
+  <rect class="st27" x="125" y="194" width="50" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(144.8 226)"><tspan x="0" y="0">r2</tspan></text>
+  <rect class="st27" x="190" y="194" width="110" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(239.8 226)"><tspan x="0" y="0">r3</tspan></text>
+  <rect class="st27" x="315" y="194" width="45" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(332.3 226)"><tspan x="0" y="0">r4</tspan></text>
+  <rect class="st27" x="375" y="194" width="65" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(402.3 226)"><tspan x="0" y="0">r5</tspan></text>
+  <rect class="st27" x="450" y="194" width="35" height="12" rx="3" ry="3"/>
+  <text class="st10" transform="translate(462.3 226)"><tspan x="0" y="0">r6</tspan></text>
+  <line class="st17" x1="20" y1="182" x2="490" y2="182"/>
+  <text class="st4" transform="translate(20 250)"><tspan x="0" y="0">genomic regions</tspan></text>
+  <line class="st19" x1="512" y1="125" x2="557" y2="125"/>
+  <path class="st11" d="M566,125l-9,5.4v-10.8l9,5.4Z"/>
   <text class="st4" transform="translate(580 42)"><tspan x="0" y="0">count matrix: cells × regions</tspan></text>
   <text class="st10" transform="translate(614.8 68)"><tspan x="0" y="0">r1</tspan></text>
   <text class="st10" transform="translate(660.8 68)"><tspan x="0" y="0">r2</tspan></text>
@@ -216,81 +213,69 @@
   <text class="st10" transform="translate(798.8 68)"><tspan x="0" y="0">r5</tspan></text>
   <text class="st10" transform="translate(844.8 68)"><tspan x="0" y="0">r6</tspan></text>
   <rect class="st23" x="580" y="81" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st12" x="600" y="76" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(616.8 98)"><tspan x="0" y="0">3</tspan></text>
+  <rect class="st12" x="600" y="76" width="42" height="34" rx="5" ry="5" style="fill:#4A4A4A"/>
+  <text style="fill:#fff" class="st9" transform="translate(616.8 98)"><tspan x="0" y="0">3</tspan></text>
   <rect class="st28" x="646" y="76" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(662.8 98)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st13" x="692" y="76" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(708.8 98)"><tspan x="0" y="0">1</tspan></text>
-  <rect class="st21" x="738" y="76" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(754.8 98)"><tspan x="0" y="0">2</tspan></text>
+  <rect class="st13" x="692" y="76" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(708.8 98)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st21" x="738" y="76" width="42" height="34" rx="5" ry="5" style="fill:#6B6B6B"/>
+  <text style="fill:#fff" class="st9" transform="translate(754.8 98)"><tspan x="0" y="0">2</tspan></text>
   <rect class="st28" x="784" y="76" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(800.8 98)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st13" x="830" y="76" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(846.8 98)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st13" x="830" y="76" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(846.8 98)"><tspan x="0" y="0">1</tspan></text>
   <rect class="st25" x="580" y="119" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st29" x="600" y="114" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(616.8 136)"><tspan x="0" y="0">1</tspan></text>
-  <rect class="st2" x="646" y="114" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(662.8 136)"><tspan x="0" y="0">2</tspan></text>
+  <rect class="st29" x="600" y="114" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(616.8 136)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st2" x="646" y="114" width="42" height="34" rx="5" ry="5" style="fill:#6B6B6B"/>
+  <text style="fill:#fff" class="st9" transform="translate(662.8 136)"><tspan x="0" y="0">2</tspan></text>
   <rect class="st28" x="692" y="114" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(708.8 136)"><tspan x="0" y="0">0</tspan></text>
   <rect class="st28" x="738" y="114" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(754.8 136)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st1" x="784" y="114" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(800.8 136)"><tspan x="0" y="0">3</tspan></text>
-  <rect class="st29" x="830" y="114" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(846.8 136)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st1" x="784" y="114" width="42" height="34" rx="5" ry="5" style="fill:#4A4A4A"/>
+  <text style="fill:#fff" class="st9" transform="translate(800.8 136)"><tspan x="0" y="0">3</tspan></text>
+  <rect class="st29" x="830" y="114" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(846.8 136)"><tspan x="0" y="0">1</tspan></text>
   <rect class="st30" x="580" y="157" width="12" height="24" rx="4" ry="4"/>
   <rect class="st28" x="600" y="152" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(616.8 174)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st24" x="646" y="152" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(662.8 174)"><tspan x="0" y="0">1</tspan></text>
-  <rect class="st3" x="692" y="152" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(708.8 174)"><tspan x="0" y="0">2</tspan></text>
-  <rect class="st24" x="738" y="152" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(754.8 174)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st24" x="646" y="152" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(662.8 174)"><tspan x="0" y="0">1</tspan></text>
+  <rect class="st3" x="692" y="152" width="42" height="34" rx="5" ry="5" style="fill:#6B6B6B"/>
+  <text style="fill:#fff" class="st9" transform="translate(708.8 174)"><tspan x="0" y="0">2</tspan></text>
+  <rect class="st24" x="738" y="152" width="42" height="34" rx="5" ry="5" style="fill:#8C8C8C"/>
+  <text style="fill:#fff" class="st9" transform="translate(754.8 174)"><tspan x="0" y="0">1</tspan></text>
   <rect class="st28" x="784" y="152" width="42" height="34" rx="5" ry="5"/>
   <text class="st8" transform="translate(800.8 174)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st3" x="830" y="152" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(846.8 174)"><tspan x="0" y="0">2</tspan></text>
-  <rect class="st27" x="580" y="195" width="12" height="24" rx="4" ry="4"/>
-  <rect class="st22" x="600" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(616.8 212)"><tspan x="0" y="0">2</tspan></text>
-  <rect class="st28" x="646" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st8" transform="translate(662.8 212)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st28" x="692" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st8" transform="translate(708.8 212)"><tspan x="0" y="0">0</tspan></text>
-  <rect class="st14" x="738" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(754.8 212)"><tspan x="0" y="0">3</tspan></text>
-  <rect class="st0" x="784" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st9" transform="translate(800.8 212)"><tspan x="0" y="0">1</tspan></text>
-  <rect class="st28" x="830" y="190" width="42" height="34" rx="5" ry="5"/>
-  <text class="st8" transform="translate(846.8 212)"><tspan x="0" y="0">0</tspan></text>
-  <text class="st5" transform="translate(580 267)"><tspan x="0" y="0">Stored in .h5ad AnnData format.</tspan></text>
-  <text class="st6" transform="translate(20 320)"><tspan x="0" y="0">bins</tspan></text>
-  <text class="st7" transform="translate(20 340)"><tspan x="0" y="0">fixed-size windows over the genome · --binSize 10000</tspan></text>
-  <rect class="st20" x="20" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="56" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="92" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="128" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="164" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="200" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="236" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="272" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="308" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="344" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="380" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st20" x="416" y="358" width="34" height="24" rx="4" ry="4"/>
-  <text class="st10" transform="translate(20 398)"><tspan x="0" y="0">10 kb</tspan></text>
-  <line class="st16" x1="20" y1="388" x2="450" y2="388"/>
-  <text class="st6" transform="translate(480 320)"><tspan x="0" y="0">features</tspan></text>
-  <text class="st7" transform="translate(480 340)"><tspan x="0" y="0">regions from a BED or GTF/GFF3 file · --BED regions.bed</tspan></text>
-  <line class="st15" x1="480" y1="370" x2="900" y2="370"/>
-  <rect class="st30" x="486" y="358" width="60" height="24" rx="4" ry="4"/>
-  <rect class="st30" x="576" y="358" width="34" height="24" rx="4" ry="4"/>
-  <rect class="st30" x="640" y="358" width="110" height="24" rx="4" ry="4"/>
-  <rect class="st30" x="780" y="358" width="44" height="24" rx="4" ry="4"/>
-  <rect class="st30" x="850" y="358" width="50" height="24" rx="4" ry="4"/>
+  <rect class="st3" x="830" y="152" width="42" height="34" rx="5" ry="5" style="fill:#6B6B6B"/>
+  <text style="fill:#fff" class="st9" transform="translate(846.8 174)"><tspan x="0" y="0">2</tspan></text>
+  <text class="st5" transform="translate(580 229)"><tspan x="0" y="0">Stored in .h5ad AnnData format.</tspan></text>
+  <text class="st6" transform="translate(20 282)"><tspan x="0" y="0">bins</tspan></text>
+  <text class="st7" transform="translate(20 302)"><tspan x="0" y="0">fixed-size windows over the genome · --binSize 10000</tspan></text>
+  <rect class="stbin" x="20" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="56" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="92" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="128" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="164" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="200" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="236" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="272" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="308" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="344" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="380" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="stbin" x="416" y="320" width="34" height="24" rx="4" ry="4"/>
+  <text class="st10" transform="translate(20 360)"><tspan x="0" y="0">10 kb</tspan></text>
+  <line class="st16" x1="20" y1="350" x2="450" y2="350"/>
+  <text class="st6" transform="translate(480 282)"><tspan x="0" y="0">features</tspan></text>
+  <text class="st7" transform="translate(480 302)"><tspan x="0" y="0">regions from a BED or GTF/GFF3 file · --BED regions.bed</tspan></text>
+  <line class="st15" x1="480" y1="332" x2="900" y2="332"/>
+  <rect class="st27" x="486" y="320" width="60" height="24" rx="4" ry="4"/>
+  <rect class="st27" x="576" y="320" width="34" height="24" rx="4" ry="4"/>
+  <rect class="st27" x="640" y="320" width="110" height="24" rx="4" ry="4"/>
+  <rect class="st27" x="780" y="320" width="44" height="24" rx="4" ry="4"/>
+  <rect class="st27" x="850" y="320" width="50" height="24" rx="4" ry="4"/>
+</g>
 </g>
 </svg>

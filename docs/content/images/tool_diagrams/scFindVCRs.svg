@@ -679,25 +679,17 @@
     <path class="st2" d="M390,306h15.2c0-.1,2.1-.2,2.1-.2l2.2-.5,2.2-1.2,2.1-2,2.2-2.7,2.2-2.7,2.1-1.6,2.2.3,2.2,2,2.1,2.5,2.2,1.6,2.2-.4,2.1-2.4,2.2-4.2,2.2-4.9,2.1-4.1,2.2-1.5,2.2,1.6,2.1,4,2.2,5,2.2,4.6,2.1,3.3,2.2,1.9,2.2,1,2.1.4h2.2c0,.1,2.2,0,2.2,0l2.1-.5,2.2-1.1,2.2-2,2.1-3.1,2.2-4,2.2-3.8,2.1-2.4h2.2c0,0,2.2,2.2,2.2,2.2l2.1,3.7,2.2,4,2.2,3.2,2.1,2.1,2.2,1.2,2.2.5,2.1.2h2.2c0,.1,2.2.1,2.2.1h17.3"/>
     <line class="st3" x1="390" y1="314" x2="520" y2="314"/>
     <text class="st12" transform="translate(390 332)"><tspan x="0" y="0">score along the genome</tspan></text>
-    <rect class="st45" x="561" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="576" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="591" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="606" y="130" width="13" height="22" rx="3" ry="3"/>
+    <rect class="st45" x="561" y="130" width="28" height="22" rx="3" ry="3"/>
+    <rect class="st26" x="591" y="130" width="28" height="22" rx="3" ry="3"/>
     <rect class="st45" x="621" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="636" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="651" y="130" width="13" height="22" rx="3" ry="3"/>
-    <text class="st13" transform="translate(670 146)"><tspan x="0" y="0">0.05</tspan></text>
+    <rect class="st26" x="636" y="130" width="28" height="22" rx="3" ry="3"/>
+    <text class="st13" transform="translate(670 146)"><tspan x="0" y="0">0.1</tspan></text>
     <rect class="st45" x="561" y="164" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="591" y="164" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="621" y="164" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="636" y="164" width="28" height="22" rx="3" ry="3"/>
-    <text class="st13" transform="translate(670 180)"><tspan x="0" y="0">0.1</tspan></text>
-    <rect class="st45" x="561" y="198" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="591" y="198" width="43" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="636" y="198" width="28" height="22" rx="3" ry="3"/>
-    <text class="st13" transform="translate(670 214)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st12" transform="translate(560 246)"><tspan x="0" y="0">higher penalty →</tspan></text>
-    <text class="st12" transform="translate(560 262)"><tspan x="0" y="0">fewer, larger segments</tspan></text>
+    <rect class="st26" x="591" y="164" width="43" height="22" rx="3" ry="3"/>
+    <rect class="st45" x="636" y="164" width="28" height="22" rx="3" ry="3"/>
+    <text class="st13" transform="translate(670 180)"><tspan x="0" y="0">0.5</tspan></text>
+    <text class="st12" transform="translate(560 212)"><tspan x="0" y="0">higher penalty →</tspan></text>
+    <text class="st12" transform="translate(560 228)"><tspan x="0" y="0">fewer, larger segments</tspan></text>
     <rect class="st34" x="736" y="112" width="170" height="20" rx="3" ry="3"/>
     <text class="st17" transform="translate(740 126)"><tspan x="0" y="0">chr</tspan></text>
     <text class="st17" transform="translate(778 126)"><tspan x="0" y="0">start</tspan></text>
@@ -711,29 +703,19 @@
     <text class="st16" transform="translate(778 168)"><tspan x="0" y="0">2000</tspan></text>
     <text class="st16" transform="translate(824 168)"><tspan x="0" y="0">4000</tspan></text>
     <text class="st16" transform="translate(868 168)"><tspan x="0" y="0">0.1</tspan></text>
-    <text class="st16" transform="translate(740 189)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 189)"><tspan x="0" y="0">4000</tspan></text>
-    <text class="st16" transform="translate(824 189)"><tspan x="0" y="0">5000</tspan></text>
-    <text class="st16" transform="translate(868 189)"><tspan x="0" y="0">0.1</tspan></text>
+    <text class="st16" transform="translate(740 189)"><tspan x="0" y="0">…</tspan></text>
+    <line class="st4" x1="736" y1="196" x2="906" y2="196"/>
     <text class="st16" transform="translate(740 210)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 210)"><tspan x="0" y="0">5000</tspan></text>
-    <text class="st16" transform="translate(824 210)"><tspan x="0" y="0">7000</tspan></text>
-    <text class="st16" transform="translate(868 210)"><tspan x="0" y="0">0.1</tspan></text>
-    <line class="st4" x1="736" y1="217" x2="906" y2="217"/>
+    <text class="st16" transform="translate(778 210)"><tspan x="0" y="0">0</tspan></text>
+    <text class="st16" transform="translate(824 210)"><tspan x="0" y="0">2000</tspan></text>
+    <text class="st16" transform="translate(868 210)"><tspan x="0" y="0">0.5</tspan></text>
     <text class="st16" transform="translate(740 231)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 231)"><tspan x="0" y="0">0</tspan></text>
-    <text class="st16" transform="translate(824 231)"><tspan x="0" y="0">2000</tspan></text>
+    <text class="st16" transform="translate(778 231)"><tspan x="0" y="0">2000</tspan></text>
+    <text class="st16" transform="translate(824 231)"><tspan x="0" y="0">5000</tspan></text>
     <text class="st16" transform="translate(868 231)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st16" transform="translate(740 252)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 252)"><tspan x="0" y="0">2000</tspan></text>
-    <text class="st16" transform="translate(824 252)"><tspan x="0" y="0">5000</tspan></text>
-    <text class="st16" transform="translate(868 252)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st16" transform="translate(740 273)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 273)"><tspan x="0" y="0">5000</tspan></text>
-    <text class="st16" transform="translate(824 273)"><tspan x="0" y="0">7000</tspan></text>
-    <text class="st16" transform="translate(868 273)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st12" transform="translate(740 326)"><tspan x="0" y="0">score column = penalty, so each</tspan></text>
-    <text class="st12" transform="translate(740 342)"><tspan x="0" y="0">segmentation can be filtered</tspan></text>
+    <text class="st16" transform="translate(740 252)"><tspan x="0" y="0">…</tspan></text>
+    <text class="st12" transform="translate(740 305)"><tspan x="0" y="0">score column = penalty, so each</tspan></text>
+    <text class="st12" transform="translate(740 321)"><tspan x="0" y="0">segmentation can be filtered</tspan></text>
     <text class="st14" transform="translate(20 362)"><tspan x="0" y="0">count matrix → bin cooccurrence → segments → BED of variable chromatin regions</tspan></text>
   </g>
 </g>
