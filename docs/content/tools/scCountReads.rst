@@ -17,4 +17,4 @@ Count matrix generation in detail
 ------------------------------------------
 
 For fine details on how sincei generates count matrices, please consult
-:doc:`this page <../methods/matrix_counting>`.
+:doc:`this page <../methods/matrix_creation>`.

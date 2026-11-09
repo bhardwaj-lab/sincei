@@ -1,7 +1,7 @@
-Matrix counting
-===============
+Creating a count matrix
+=======================
 
-:ref:`scCountReads` makes a count matrix :math:`X \in \mathbb{R}^{N \times G}` from one
+:ref:`scCountReads` makes a count matrix :math:`X \in \mathbb{R}^{N \times P}` from one
 or more BAM files, with one row per cell and one column per feature. The features are
 either bins from a uniform tiling of the genome, or regions from an annotation file.
 The entry :math:`x_{ci}` is the number of reads of cell :math:`c` that overlap feature
@@ -220,7 +220,7 @@ Space and time complexity
 With :math:`R` total reads in the BAM files:
 
 - **Time**: :math:`O(R)` for bin counting, because the bins of a read come from its
-  position. For feature counting, :math:`O(R \log G)`, because each read searches an
+  position. For feature counting, :math:`O(R \log P)`, because each read searches an
   interval index of the features on its chromosome.
 - **Memory**: :math:`O(\mathrm{nnz})` for the data matrix, plus the counts of the
   chunks in progress. The output is written one BAM file at a time.

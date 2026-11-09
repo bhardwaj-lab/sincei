@@ -7,6 +7,6 @@ For fine details on the methods used in sincei, please refer to the following pa
     :maxdepth: 2
 
     methods/notation
-    methods/matrix_counting
+    methods/matrix_creation
     methods/dimensionality_reduction
     VCRFinder <methods/vcrfinder>
