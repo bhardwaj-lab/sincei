@@ -43,7 +43,7 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install build and test tools
-        run: uv pip install maturin pytest pytest-cov
+        run: uv pip install maturin==1.15.0 pytest pytest-cov
 
       - name: Build and install the extension
         run: maturin develop --profile dev --uv --extras test

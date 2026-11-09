@@ -67,7 +67,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          maturin-version: "1.5.0"
+          maturin-version: "1.15.0"
           args: --out dist
 
       - uses: actions/upload-artifact@v7
