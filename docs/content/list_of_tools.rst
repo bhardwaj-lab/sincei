@@ -53,58 +53,58 @@ The table below summarizes input and output of each tool:
      - application
    * - :ref:`scFilterBarcodes`
      - preprocessing
-     - BAM/SAM files
-     - text file with filtered cell barcodes
+     - :ref:`BAM files <fmt-bam>`
+     - :ref:`text file <fmt-tsv>` with filtered cell barcodes
      - Identify and filter cell barcodes (for droplet-based single-cell seq).
    * - :ref:`scFilterStats`
      - QC
-     - BAM/SAM files
-     - text file with QC per cell
+     - :ref:`BAM files <fmt-bam>`
+     - :ref:`text file <fmt-tsv>` with QC per cell
      - Produce per-cell statistics after filtering reads by user-defined criteria.
    * - :ref:`scCountReads`
      - preprocessing
-     - BAM/SAM files
-     - h5ad object with cellxregion counts
+     - :ref:`BAM files <fmt-bam>`
+     - :ref:`h5ad object <fmt-anndata>` with cellxregion counts
      - Counts reads for each barcode on genomic bins or user-defined features.
    * - :ref:`scCountQC`
      - QC
-     - h5ad object
-     - QC metrics / filtered h5ad file
+     - :ref:`h5ad object <fmt-anndata>`
+     - QC metrics (:ref:`tsv <fmt-tsv>`) / filtered :ref:`h5ad file <fmt-anndata>`
      - Perform quality control and filter the output of scCountReads.
    * - :ref:`scFindVCRs`
      - analysis
-     - h5ad object
-     - BED file
+     - :ref:`h5ad object <fmt-anndata>`
+     - :ref:`BED file <fmt-bed>`
      - Call variable chromatin regions (VCRs) from binned chromatin data.
    * - :ref:`scScoreFeatures`
      - analysis
-     - h5ad object + BED/GTF
-     - h5ad object with gene activity scores
+     - :ref:`h5ad object <fmt-anndata>` + :ref:`BED <fmt-bed>`/:ref:`GTF <fmt-gtf>`
+     - :ref:`h5ad object <fmt-anndata>` with gene activity scores
      - Calculate gene activity scores from chromatin features/bins or aggregate bins
        into VCRs.
    * - :ref:`scCombineCounts`
      - preprocessing
-     - h5ad objects
-     - merged h5ad object
+     - :ref:`h5ad objects <fmt-anndata>`
+     - merged :ref:`h5ad <fmt-anndata>` or :ref:`h5mu <fmt-mudata>` object
      - Concatenate/merge the counts from different samples/batches or modalities.
    * - :ref:`scClusterCells`
      - analysis
-     - h5ad object
-     - .tsv file with clusters, png with UMAP
+     - :ref:`h5ad object <fmt-anndata>`
+     - :ref:`.tsv file <fmt-tsv>` with clusters, :ref:`png <fmt-plots>` with UMAP
      - Perform dimensionality reduction and clustering on the output of scCountReads.
    * - :ref:`scBulkCoverage`
      - analysis
-     - tsv file + BAM file
-     - bigwig files
+     - :ref:`tsv file <fmt-tsv>` + :ref:`BAM file <fmt-bam>`
+     - :ref:`bigwig files <fmt-bigwig>`
      - Get pseudo-bulk coverage per group using a user-supplied cell->group mapping
        (output of scClusterCells).
    * - :ref:`scPlotRegion`
      - analysis
-     - h5ad object
-     - png
+     - :ref:`h5ad object <fmt-anndata>`
+     - :ref:`png <fmt-plots>`
      - Plot genomic regions of interest from sincei output.
    * - :ref:`scExportSignal`
      - analysis
-     - h5ad object
-     - bedgraph matrix, mtx, loom
+     - :ref:`h5ad object <fmt-anndata>`
+     - :ref:`bedgraph matrix <fmt-bm>`, :ref:`mtx <fmt-mtx>`, loom
      - Export sincei-supportred .h5ad (anndata) object to other formats.

@@ -1,75 +1,15 @@
 File formats
 ============
 
-This page describes the file formats that sincei reads and writes. The table gives
-an overview, and the sections below describe each format.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 18 30 30
-
-   * - Format
-     - Extension
-     - Read by
-     - Written by
-   * - `BAM`_ (and its index)
-     - ``.bam`` (``.bai``)
-     - :ref:`scFilterBarcodes`, :ref:`scFilterStats`, :ref:`scCountReads`,
-       :ref:`scBulkCoverage`
-     - (aligner, ``samtools``)
-   * - `BED`_
-     - ``.bed``
-     - :ref:`scCountReads`, :ref:`scScoreFeatures`, blacklists of the BAM-facing tools
-     - :ref:`scFindVCRs`
-   * - `GTF and GFF3`_
-     - ``.gtf``, ``.gff3``
-     - :ref:`scCountReads`, :ref:`scScoreFeatures`
-     -
-   * - `2bit`_
-     - ``.2bit``
-     - tools with ``--motifFilter``
-     -
-   * - `Cell barcode whitelists`_
-     - ``.txt``
-     - :ref:`scFilterBarcodes`, :ref:`scFilterStats`, :ref:`scCountReads`,
-       :ref:`scCountQC`
-     -
-   * - `AnnData`_
-     - ``.h5ad``
-     - tools that take a single-cell matrix as input
-     - :ref:`scCountReads`, :ref:`scCountQC`, :ref:`scCombineCounts`,
-       :ref:`scScoreFeatures`, :ref:`scClusterCells`
-   * - `MuData`_
-     - ``.h5mu``
-     -
-     - :ref:`scCombineCounts`
-   * - `Tables (TSV)`_
-     - ``.tsv``
-     - :ref:`scBulkCoverage` (group information)
-     - :ref:`scFilterBarcodes`, :ref:`scFilterStats`, :ref:`scCountQC`,
-       :ref:`scClusterCells`
-   * - `bigWig and bedGraph`_
-     - ``.bw``, ``.bedgraph``
-     -
-     - :ref:`scBulkCoverage`
-   * - `BedGraphMatrix`_
-     - ``.bm``
-     -
-     - :ref:`scExportSignal`
-   * - `MatrixMarket`_
-     - ``.mtx``
-     -
-     - :ref:`scExportSignal`
-   * - `Plots`_
-     - ``.png``, ``.jpg``, ``.svg``, ``.pdf``
-     -
-     - :ref:`scFilterBarcodes`, :ref:`scClusterCells`, :ref:`scPlotRegion`
+This page describes the file formats that sincei reads and writes.
 
 Input files
 -----------
 
-BAM
-~~~
+.. _fmt-bam:
+
+BAM (.bam, and index .bai)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 BAM is the compressed, binary form of SAM (Sequence Alignment Map), the standard format
 to store aligned sequencing reads. It is the input of the sincei tools that process
@@ -129,8 +69,10 @@ it with ``samtools index sample.bam``. sincei only reads BAI indexes, not CSI in
    depend on the aligner used to produce the BAM. Check how your aligner defines them
    before you use them to filter reads with sincei.
 
-BED
-~~~
+.. _fmt-bed:
+
+BED (.bed)
+~~~~~~~~~~
 
 BED (Browser Extensible Data) is a text format for genomic regions, with one region
 per line and tab-separated columns:
@@ -146,7 +88,7 @@ per line and tab-separated columns:
 - Column 4 (optional): the name of the region. sincei uses it in the region IDs.
   If there is no name, sincei uses ``chrom:start-end``.
 - More columns are allowed, consult
- `this <https://genome.ucsc.edu/FAQ/FAQformat.html#format1>`_ for more details.
+  `this <https://genome.ucsc.edu/FAQ/FAQformat.html#format1>`_ for more details.
 
 BED lines that start with ``#`` are skipped. The file can be compressed with gzip or
 bgzip. sincei reads BED files of features to count (:ref:`scCountReads`,
@@ -156,8 +98,10 @@ bgzip. sincei reads BED files of features to count (:ref:`scCountReads`,
 ``name``, ``score``, ``strand``). The score column is the value of the penalty
 parameter used for the segmentation.
 
-GTF and GFF3
-~~~~~~~~~~~~
+.. _fmt-gtf:
+
+GTF and GFF3 (.gtf, .gff3)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 GTF (Gene Transfer Format) and GFF3 (Generic Feature Format version 3) are text formats
 for gene and genome annotation, with nine tab-separated columns. Unlike BED, the
@@ -185,15 +129,19 @@ and
 `GFF3 <https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md>`_
 specifications for more details.
 
-2bit
-~~~~
+.. _fmt-2bit:
+
+2bit (.2bit)
+~~~~~~~~~~~~
 
 2bit is a compressed binary format for a genome sequence. ``--motifFilter`` needs it
 (``--genome2bit``) to read the genome overhang of reads. Download it from UCSC, or
 make it from a FASTA file with ``faToTwoBit genome.fa genome.2bit``.
 
-Cell barcode lists
-~~~~~~~~~~~~~~~~~~
+.. _fmt-barcodes:
+
+Cell barcode lists (.txt)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A cell barcode list is a plain text file with one barcode per line:
 
@@ -210,8 +158,10 @@ one. :ref:`scFilterBarcodes` reads one with ``--whitelist``. The cell blacklist 
 Output files
 ------------
 
-AnnData
-~~~~~~~
+.. _fmt-anndata:
+
+AnnData (.h5ad)
+~~~~~~~~~~~~~~~
 
 `AnnData <https://anndata.scverse.org/en/stable/>`_ is the data structure that sincei
 uses to store count matrices, saved as ``.h5ad`` files (based on HDF5). Read it in
@@ -231,7 +181,7 @@ An AnnData object has the following parts:
      - Content in sincei
    * - ``X``
      - The count matrix: one row per cell and one column per feature. It may be a dense
-     or a sparse matrix. Sincei always stores data in sparse format.
+       or a sparse matrix. Sincei always stores data in sparse format.
    * - ``obs``, ``obs_names``
      - A table with one row per cell. The cell IDs are ``<sample>::<barcode>``.
        sincei needs the columns ``sample`` and ``barcode``. :ref:`scCountQC` adds
@@ -247,15 +197,17 @@ An AnnData object has the following parts:
        UMAP coordinates (``X_umap``).
    * - ``varm``
      - Matrices with one row per region, for example the loadings of
-     :ref:`scClusterCells` (``glmpca``, ``pca``, ``lsa``, ``lda``).
+       :ref:`scClusterCells` (``glmpca``, ``pca``, ``lsa``, ``lda``).
    * - ``uns``
      - Other information, for example the parameters of a method.
 
 ``--compression`` (default ``none``, or ``gzip``) of :ref:`scCountReads` can compress
 the file with gzip.
 
-MuData
-~~~~~~
+.. _fmt-mudata:
+
+MuData (.h5mu)
+~~~~~~~~~~~~~~
 
 MuData is the Python data structure for multi-modal data, saved as ``.h5mu`` files.
 It holds one AnnData object for each modality (for example chromatin and RNA) of the
@@ -263,8 +215,10 @@ same cells. :ref:`scCombineCounts` writes it with ``--method multi-modal``. Read
 with ``mudata.read_h5mu`` or the `muon <https://muon.scverse.org/stable/#>`_ package.
 See the `MuData documentation <https://mudata.readthedocs.io/>`_.
 
-Tables (TSV)
-~~~~~~~~~~~~
+.. _fmt-tsv:
+
+Tables (.tsv)
+~~~~~~~~~~~~~
 
 Several tools write tab-separated tables with a header line:
 
@@ -291,8 +245,10 @@ Several tools write tab-separated tables with a header line:
 4-column output of :ref:`scClusterCells`, or a 3-column table with ``sample``,
 ``barcode`` and ``group``.
 
-bigWig and bedGraph
-~~~~~~~~~~~~~~~~~~~
+.. _fmt-bigwig:
+
+bigWig and bedGraph (.bw, .bedgraph)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :ref:`scBulkCoverage` writes the pseudo-bulk coverage of each cell group as
 ``<prefix>_<group>.bw`` (default) or ``<prefix>_<group>.bedgraph``
@@ -305,8 +261,10 @@ bigWig and bedGraph
   `specification <https://genome.ucsc.edu/goldenpath/help/bigWig.html>`_ for more
   details.
 
-BedGraphMatrix
-~~~~~~~~~~~~~~
+.. _fmt-bm:
+
+BedGraphMatrix (.bm)
+~~~~~~~~~~~~~~~~~~~~
 
 BedGraphMatrix (``.bm``) is a plain text format with one row per region and one column
 per cell, without a header. The first three columns are the chromosome, the start and
@@ -314,8 +272,10 @@ the end, and the other columns are the counts of each cell. The rows are sorted 
 position. :ref:`scExportSignal` writes it (``--outFileFormat bm``) for
 pyGenomeTracks, which plots it as a heatmap of cells.
 
-MatrixMarket
-~~~~~~~~~~~~
+.. _fmt-mtx:
+
+MatrixMarket (.mtx)
+~~~~~~~~~~~~~~~~~~~
 
 MatrixMarket (``.mtx``) is a palin text format to store sparse matrices: it lists only
 the non-zero entries, with their row and column. :ref:`scExportSignal` writes three
@@ -328,8 +288,10 @@ files:
 
 R (``Matrix::readMM``) and many single-cell tools can read it.
 
-Plots
-~~~~~
+.. _fmt-plots:
+
+Plots (.png, .jpg, .svg, .pdf)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The tools that make plots write them as ``png`` (default), ``jpg``, ``svg`` or
 ``pdf`` (``--plotFileFormat``), with ``--plotWidth`` and ``--plotHeight`` in cm and
