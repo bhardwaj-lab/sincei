@@ -20,8 +20,8 @@ projects the saturated parameters of the data onto a linear subspace.
 Exponential family distributions
 --------------------------------
 
-Let :math:`X \in \mathbb{R}^{N \times G}` be the data matrix, with :math:`N` cells
-in rows and :math:`G` features (bins, genes or other genomic regions) in columns. GLMPCA
+Let :math:`X \in \mathbb{R}^{N \times P}` be the data matrix, with :math:`N` cells
+in rows and :math:`P` features (bins, genes or other genomic regions) in columns. GLMPCA
 models every entry :math:`x_{ci}` with an exponential family distribution:
 
 .. math::
@@ -36,7 +36,7 @@ log-likelihood of the data:
 
 .. math::
 
-   \mathcal{L}(\hat\Theta; X) = - \sum_{c=1}^{N} \sum_{i=1}^{G}
+   \mathcal{L}(\hat\Theta; X) = - \sum_{c=1}^{N} \sum_{i=1}^{P}
    \log p(x_{ci} \mid \hat\theta_{ci})
 
 For the Gaussian distribution with unit variance, :math:`\mathcal{L}` is the squared
@@ -61,9 +61,9 @@ The low-rank model
 ------------------
 
 GLMPCA looks for a rank-:math:`K` approximation of the saturated parameters. It
-centers them with a feature intercept :math:`\mu \in \mathbb{R}^G`, and projects
+centers them with a feature intercept :math:`\mu \in \mathbb{R}^P`, and projects
 them onto the span of an orthonormal matrix of loadings
-:math:`V \in \mathbb{R}^{G \times K}`:
+:math:`V \in \mathbb{R}^{P \times K}`:
 
 .. math::
 
@@ -84,14 +84,14 @@ GLMPCA finds the :math:`V` and :math:`\mu` that minimize the cost:
    (\tilde\Theta - \mathbf{1}\mu^\top)\,V V^\top;\; X\big)
    \quad \text{subject to} \quad V^\top V = I_K
 
-The loadings :math:`V` are on the Stiefel manifold, the set of :math:`G \times K`
+The loadings :math:`V` are on the Stiefel manifold, the set of :math:`P \times K`
 matrices with orthonormal columns.
 
 This formulation has these advantages over the factorization
 :math:`\hat\Theta = \mathbf{1}\mu^\top + U V^\top` with free :math:`U`:
 
 - **Few parameters**: the model learns only :math:`V` and :math:`\mu`
-  (:math:`G\,K + G` values). The number of parameters does not increase with the
+  (:math:`P\,K + P` values). The number of parameters does not increase with the
   number of cells.
 - **Exact out-of-sample projection**: the scores of a new cell are
   :math:`u = V^\top(g^{-1}(x) - \mu)`. This is a linear projection, and it does not
@@ -187,7 +187,7 @@ where :math:`\Delta` is sparse and has the non-zeros of :math:`X`. The scores ar
    U = \mathbf{1}\,(\theta^0 - \mu)^\top V + \Delta V
 
 This calculation is exact for all families. It costs :math:`O(\mathrm{nnz}\,K)`
-and not :math:`O(N\,G\,K)`. GLMPCA never makes the full matrix dense: it reads
+and not :math:`O(N\,P\,K)`. GLMPCA never makes the full matrix dense: it reads
 cells in chunks.
 
 Sequencing depth correction
@@ -224,8 +224,8 @@ when :math:`T(x) = x`. The loadings start with a randomized SVD of
 **Riemannian Adam (default).** The loadings :math:`V` are a parameter on the Stiefel
 manifold, and the optimizer is Riemannian Adam (geoopt). Every step uses a
 mini-batch of cells (1,024 by default), and a retraction keeps :math:`V` orthonormal.
-The learning rate of :math:`V` is :math:`0.5 / \sqrt{G}` (default) because the entries
-of an orthonormal :math:`V` are of order :math:`1/\sqrt{G}`. When the mean cost per
+The learning rate of :math:`V` is :math:`0.5 / \sqrt{P}` (default) because the entries
+of an orthonormal :math:`V` are of order :math:`1/\sqrt{P}`. When the mean cost per
 entry does not decrease for some epochs, the learning rate decreases by ``gamma`` (0.5
 by default). The fit stops at the fourth plateau or after 100 epochs. If the cost
 becomes infinite or NaN, the fit starts again with a smaller learning rate.
@@ -244,44 +244,44 @@ Whitening of the components
 ---------------------------
 
 The cost depends only on the subspace :math:`V V^\top`. Thus, a rotation
-:math:`V P` with an orthogonal :math:`P \in \mathbb{R}^{K \times K}` gives the same
+:math:`V Q` with an orthogonal :math:`Q \in \mathbb{R}^{K \times K}` gives the same
 cost. After the fit, sincei
 selects the rotation that makes the scores uncorrelated, as in PCA. It computes the
 eigendecomposition of the Gram matrix of the scores:
 
 .. math::
 
-   U^\top U = P\,\Lambda\,P^\top
+   U^\top U = Q\,\Lambda\,Q^\top
 
-and replaces :math:`V` with :math:`V P`, with the eigenvalues in decreasing order.
+and replaces :math:`V` with :math:`V Q`, with the eigenvalues in decreasing order.
 The first component then has the largest variance, and the singular values are
 :math:`\sqrt{\Lambda}`.
 
 Space and time complexity
 -------------------------
 
-With :math:`N` cells, :math:`G` features, :math:`\mathrm{nnz}` non-zero entries,
+With :math:`N` cells, :math:`P` features, :math:`\mathrm{nnz}` non-zero entries,
 :math:`K` components, mini-batches of :math:`b` cells and :math:`E` epochs:
 
-- **Scores**: :math:`O(\mathrm{nnz}\,K)` for sparse data. :math:`O(N\,G\,K)` for
+- **Scores**: :math:`O(\mathrm{nnz}\,K)` for sparse data. :math:`O(N\,P\,K)` for
   dense data.
 - **Cost and gradients**: the likelihood includes every entry, zeros included. Thus,
   every epoch must compute :math:`\hat\Theta = \mathbf{1}\mu^\top + U V^\top` for all
-  :math:`N\,G` entries: :math:`O(N\,G\,K)` time. With ``feature_subsample``, each step
-  uses only a random fraction :math:`f` of the features: :math:`O(N\,f\,G\,K)`.
+  :math:`N\,P` entries: :math:`O(N\,P\,K)` time. With ``feature_subsample``, each step
+  uses only a random fraction :math:`f` of the features: :math:`O(N\,f\,P\,K)`.
 - **Retraction**: each step keeps :math:`V` on the Stiefel manifold with an SVD or
-  QR step of :math:`O(G\,K^2)`. There are :math:`N / b` steps per epoch.
-- **Total fit time**: :math:`O\big(E\,(N\,G\,K + (N/b)\,G\,K^2)\big)` with
+  QR step of :math:`O(P\,K^2)`. There are :math:`N / b` steps per epoch.
+- **Total fit time**: :math:`O\big(E\,(N\,P\,K + (N/b)\,P\,K^2)\big)` with
   Riemannian Adam. The initialization adds a randomized SVD on up to 8,192 cells, and
   the whitening adds :math:`O(\mathrm{nnz}\,K + N\,K^2 + K^3)`.
-- **Memory**: :math:`O(G\,K)` for :math:`V`, :math:`\mu` and the optimizer state,
+- **Memory**: :math:`O(P\,K)` for :math:`V`, :math:`\mu` and the optimizer state,
   plus one dense chunk of cells (at most :math:`5 \times 10^7` values, approximately
   200 MB in float32). The saturated parameters are cached: :math:`O(\mathrm{nnz})`
-  for sparse data, or :math:`O(N\,G)` for dense data if they fit in 4 GB. The full
+  for sparse data, or :math:`O(N\,P)` for dense data if they fit in 4 GB. The full
   matrix never becomes dense.
 - **Projection of new cells**: :math:`O(\mathrm{nnz}\,K)`, with no new fit.
 
-The fit time increases with :math:`N\,G` and not with :math:`\mathrm{nnz}`. Thus,
+The fit time increases with :math:`N\,P` and not with :math:`\mathrm{nnz}`. Thus,
 GLMPCA is slower than LSA on sparse data, but it gives the exact likelihood of each
 entry. The chunks of a pass can run in parallel on ``n_jobs`` threads, or on a GPU.
 

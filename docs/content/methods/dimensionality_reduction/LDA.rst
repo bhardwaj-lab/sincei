@@ -14,7 +14,7 @@ the `tomotopy <https://bab2min.github.io/tomotopy/>`_ library.
 The generative model
 --------------------
 
-Let :math:`N` be the number of cells, :math:`G` the number of features, and :math:`K`
+Let :math:`N` be the number of cells, :math:`P` the number of features, and :math:`K`
 the number of topics to fit. LDA assumes that the data comes from this
 process:
 
@@ -89,7 +89,7 @@ samples the topic of every token again from its conditional distribution:
 
    p(z_t = k \mid z^{-t}, \mathbf{w}) \;\propto\;
    \big(n_{ck}^{-t} + \alpha_k\big)\,
-   \frac{n_{k w_t}^{-t} + \eta}{n_k^{-t} + G\eta}
+   \frac{n_{k w_t}^{-t} + \eta}{n_k^{-t} + P\eta}
 
 with :math:`c` the cell of token :math:`t`.
 
@@ -114,7 +114,7 @@ The feature distribution of topic :math:`k` is:
 
 .. math::
 
-   \hat\phi_{ki} = \frac{n_{ki} + \eta}{n_k + G\eta}
+   \hat\phi_{ki} = \frac{n_{ki} + \eta}{n_k + P\eta}
 
 over all features, also the features without tokens.
 
@@ -139,13 +139,13 @@ result depends on the number of threads used in the computation.
 Space and time complexity
 -------------------------
 
-With :math:`N` cells, :math:`G` features, :math:`T` tokens, :math:`K` topics and
+With :math:`N` cells, :math:`P` features, :math:`T` tokens, :math:`K` topics and
 :math:`S` iterations:
 
 - **Time**: :math:`O(S\,T\,K)`. Each iteration samples every token from :math:`K`
   topics. Runtime is linear with the number of tokens. Binarized counts reduce
   :math:`T` to :math:`\mathrm{nnz}`.
-- **Memory**: :math:`O(T + (N + G)\,K)`, for one topic assignment per token and the
+- **Memory**: :math:`O(T + (N + P)\,K)`, for one topic assignment per token and the
   tables :math:`n_{ck}` and :math:`n_{ki}`. sincei passes tokens to tomotopy as lists
   of strings, which needs an additional :math:`O(T)` memory while the model is built.
 

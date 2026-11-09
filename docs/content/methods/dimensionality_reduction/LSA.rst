@@ -11,9 +11,9 @@ The TF-IDF used is the ``lfu`` formulation. In
 ``u`` is the pivoted unique normalization.
 Here, a cell is a document and a feature is a term.
 
-Let :math:`X \in \mathbb{R}^{N \times G}` be the input matrix, :math:`x_{ci}` be the
+Let :math:`X \in \mathbb{R}^{N \times P}` be the input matrix, :math:`x_{ci}` be the
 count of feature :math:`i` in cell :math:`c`, :math:`N` the total number of cells,
-:math:`G` the total number of features, and :math:`\mathrm{n}_i` the number of cells with
+:math:`P` the total number of features, and :math:`\mathrm{n}_i` the number of cells with
 :math:`x_{ci} > 0` for feature :math:`i`.
 
 The term frequency (``l``) is:
@@ -42,7 +42,7 @@ with the slope :math:`\beta = 0.25`, the pivot
 :math:`\mathcal{F}_c = \{\, i : x_{ci} > 0,\; \mathrm{idf}_i > 0 \,\}` the features of
 cell :math:`c` with a count above zero and an idf above zero.
 
-The TF-IDF weight matrix :math:`W \in \mathbb{R}^{N \times G}` is then:
+The TF-IDF weight matrix :math:`W \in \mathbb{R}^{N \times P}` is then:
 
 .. math::
 
@@ -55,7 +55,7 @@ The TF-IDF weight matrix :math:`W \in \mathbb{R}^{N \times G}` is then:
 The zeros of the input matrix stay at zero, so :math:`W` stays sparse.
 
 LSA then computes the truncated SVD :math:`W \approx U \Sigma V^\top` of the weight
-matrix, with the top :math:`K` components in :math:`V \in \mathbb{R}^{G \times K}`
+matrix, with the top :math:`K` components in :math:`V \in \mathbb{R}^{P \times K}`
 (features by components).
 
 The scores of the cells are :math:`U \Sigma = W V \in \mathbb{R}^{N \times K}`, and
@@ -74,7 +74,7 @@ SVD solver
 ----------
 
 Truncated SVD computes the top :math:`K` singular vectors of :math:`W`, with :math:`K`
-much smaller than :math:`N` and :math:`G`.
+much smaller than :math:`N` and :math:`P`.
 
 Sincei's LSA calls ``scipy.sparse.linalg.svds``, which uses the ARPACK library
 :footcite:p:`lehoucq1998arpack`. It uses :math:`W` only through sparse matrix products,
@@ -98,7 +98,7 @@ to each other.
 Space and time complexity
 -------------------------
 
-With :math:`N` cells, :math:`G` features, :math:`\mathrm{nnz}` the number of non-zero
+With :math:`N` cells, :math:`P` features, :math:`\mathrm{nnz}` the number of non-zero
 entries in the matrix and :math:`K` components:
 
 - **TF-IDF**
@@ -108,10 +108,10 @@ entries in the matrix and :math:`K` components:
 
 - **ARPACK**
 
-  - Time: :math:`O\big(t\,(\mathrm{nnz} + \min(N, G)\,K) + t_r\,\min(N, G)\,K^2\big)`,
+  - Time: :math:`O\big(t\,(\mathrm{nnz} + \min(N, P)\,K) + t_r\,\min(N, P)\,K^2\big)`,
     with :math:`t` Lanczos steps and :math:`t_r` restarts. The number of steps
     depends on the gaps between the singular values.
-  - Space: :math:`O(\mathrm{nnz} + (N + G)\,K)`.
+  - Space: :math:`O(\mathrm{nnz} + (N + P)\,K)`.
 
 - **Scores and depth check**
 
