@@ -33,6 +33,9 @@ MIN_PIECE_ROWS = 256
 DEPTH_CORRECTION_FAMILIES = {"normalize": ("poisson", "negative_binomial", "gamma", "lognormal"),
                              "offset": ("poisson", "negative_binomial", "lognormal")}
 
+# families with per-entry weights: bernoulli with w = trials is the binomial model
+WEIGHTED_FAMILIES = ("bernoulli",)
+
 
 # =====================================================================================
 # Data access and saturated parameters
@@ -43,6 +46,8 @@ class _Batch:
     theta: torch.Tensor | None = None  # dense saturated parameters (dense input)
     delta: torch.Tensor | None = None  # sparse Theta - 1 theta0^T (sparse input)
     o: torch.Tensor | None = None      # per-cell log size factor (depth_correction="offset")
+    w: torch.Tensor | None = None      # dense weights (optionally a column subset)
+    obs: torch.Tensor | None = None    # sparse 0/1 pattern of the weights: observed entries
 
 
 class _Data:
@@ -86,6 +91,7 @@ class _Data:
         else:
             self.mem = self._read(self.cells) if self.n < n_all else None
         self.family, self.theta0, self.cache = None, None, None
+        self.W = None  # per-entry weights of self.cells (CSR), set by GLMPCA._weights
 
     # -- rows ------------------------------------------------------------------------
     def _read(self, rows: np.ndarray):
@@ -168,6 +174,11 @@ class _Data:
             b.o = torch.as_tensor(np.log(self.s[self.cells[idx]]), device=self.device, dtype=self.dtype)
         if need_X:
             b.X = self.dense(Xc, cols)
+        if self.W is not None:
+            Wc = self.W[idx]
+            b.obs = self._to_torch_sparse(Wc, torch.ones(Wc.nnz, device=self.device, dtype=self.dtype))
+            if need_X:
+                b.w = self.dense(Wc, cols)
         if self.sparse:
             if self.cache is not None:
                 D = self.cache[idx]
@@ -182,14 +193,19 @@ class _Data:
         return b
 
     def scores(self, V: torch.Tensor, mu: torch.Tensor, b: _Batch) -> torch.Tensor:
-        """U = (Theta_b - o [x != 0] - 1 mu^T) V: with an offset, non-zeros are shifted by
-        -o_i (= g^{-1}(x / s) for log-link families) and zeros stay at theta0."""
+        """U = (Theta_b - o [x != 0] - 1 mu^T) V
+        With 'offset': non-zeros are shifted by -o_i (= g^{-1}(x / s) for log-link families) and zeros stay at theta0.
+        With 'weights': unobserved entries sit at mu, only observed rows of V enter.
+        """
         if b.delta is not None:
-            U = (self.theta0 - mu) @ V + torch.sparse.mm(b.delta, V)
+            U = ((self.theta0 - mu) @ V if b.obs is None
+                 else torch.sparse.mm(b.obs, (self.theta0 - mu)[:, None] * V))
+            U = U + torch.sparse.mm(b.delta, V)
             nz = torch.sparse_coo_tensor(b.delta.indices(), torch.ones_like(b.delta.values()),
                                          b.delta.shape, is_coalesced=True)
         else:
-            U, nz = (b.theta - mu) @ V, None
+            T = b.theta - mu
+            U, nz = (T if b.obs is None else T * b.obs.to_dense()) @ V, None
         if b.o is None:
             return U
         nzV = torch.sparse.mm(nz, V) if nz is not None else (b.theta != self.theta0).to(V.dtype) @ V
@@ -264,6 +280,13 @@ class GLMPCA:
         lognormal). Size factors can also be passed to fit / transform / score.
     sample_projection : bool
         Transpose the matrix (features become samples).
+    weights_layer : str or None
+        Layer of the (in-memory) AnnData which stores sparse per-entry weights, same shape as
+        X. Currently only supported for `family="bernoulli"`, where weights represent total
+        numbe of trials (e.g. read coverage) and adata.X = successes / trials (eg.methylation fraction).
+        If provided, the non-zero weights in this layer mark the observed entries. Therefore,
+        X must be zero wherever the weight is zero. Weights are divided by their mean on the training data
+        and the fit minimises sum of weighted nlls.
     device, dtype, seed, verbose, store_epochs.
     """
 
@@ -300,6 +323,7 @@ class GLMPCA:
         seed: int | None = None,
         verbose: bool = True,
         store_epochs: bool = False,
+        weights_layer: str | None = None,
     ) -> None:
         if optimizer not in ("geoopt", "lbfgs"):
             raise ValueError("optimizer must be 'geoopt' or 'lbfgs'")
@@ -338,6 +362,10 @@ class GLMPCA:
                              f"{family.family_name!r} (or with sample_projection).")
         # fit() estimates nuisance parameters on a copy, so refits start clean
         self._family_template = self.exponential_family = family
+        self.weights_layer = weights_layer
+        if weights_layer is not None and (family.family_name not in WEIGHTED_FAMILIES
+                                          or depth_correction is not None):
+            raise ValueError(f"weights_layer supports {WEIGHTED_FAMILIES} without depth_correction.")
 
     def _log(self, msg: str) -> None:
         if self.verbose:
@@ -367,11 +395,30 @@ class GLMPCA:
         s = np.asarray(size_factors, dtype=np.float64).ravel()
         return np.maximum(s, s[s > 0].min())  # empty cells: smallest positive factor
 
+    def _weights(self, X, data: _Data, train: bool = False) -> sp.csr_matrix | None:
+        """The weights layer for ``data.cells``, divided by the mean training weight."""
+        if self.weights_layer is None:
+            return None
+        if not isinstance(X, ad.AnnData) or X.isbacked:
+            raise ValueError("weights_layer requires an in-memory AnnData.")
+        W = sp.csr_matrix(X.layers[self.weights_layer], dtype=np.float64, copy=True)
+        W = W.T.tocsr() if self.sample_projection else W
+        W.eliminate_zeros()
+        if not np.isfinite(W.data).all() or (W.data < 0).any():
+            raise ValueError("weights must be finite and non-negative.")
+        if sp.csr_matrix(data.M != 0).multiply(W != 0).nnz != sp.csr_matrix(data.M != 0).nnz:
+            raise ValueError("X has non-zero entries where the weights are zero.")
+        if train:
+            self.weight_scale_ = float(W.data.mean())
+        W.data /= self.weight_scale_
+        return W[data.cells].astype(np.float32)
+
     def _data(self, X, n_sub: int | None = None, cache: bool | str = False,
               size_factors=None) -> _Data:
         data = _Data(X, self.device, self.dtype, self.chunk_size, self.sample_projection,
                      n_sub, getattr(self, "_rng", None),
                      self._size_factors(X, size_factors), self.depth_correction)
+        data.W = self._weights(X, data)
         data.set_family(self.exponential_family, cache, self.max_cache_gb)
         return data
 
@@ -389,6 +436,7 @@ class GLMPCA:
         self.size_factors_ = self._size_factors(X, size_factors, train=True)
         data = _Data(X, self.device, self.dtype, self.chunk_size, self.sample_projection,
                      n_sub, self._rng, self.size_factors_, self.depth_correction)
+        data.W = self._weights(X, data, train=True)
         if self.n_pc >= data.p:
             raise ValueError("n_pc must be smaller than the number of features.")
 
@@ -401,9 +449,15 @@ class GLMPCA:
         n_eff = float(len(idx))  # offset: column mean of X / s, i.e. sum x / sum s
         if self.depth_correction == "offset":
             n_eff = float(self.size_factors_[data.cells[idx]].sum())
+        wsum = torch.zeros(data.p, dtype=torch.float64, device=self.device)
         for sub in data.chunks(idx):
             Xd = data.dense(data.rows(sub))
-            colsum += Xd.double().sum(0)
+            if data.W is None:
+                colsum += Xd.double().sum(0)
+            else:  # weighted column means over the observed entries
+                Wd = data.dense(data.W[sub]).double()
+                colsum += (Wd * Xd).sum(0)
+                wsum += Wd.sum(0)
             if self.depth_correction == "offset":  # nuisance parameters from X / s
                 Xd = Xd / torch.as_tensor(self.size_factors_[data.cells[sub]]).to(Xd)[:, None]
             if fam.needs_family_statistics():
@@ -412,6 +466,8 @@ class GLMPCA:
         if fam.needs_family_statistics():
             fam.initialize_family_parameters_from_statistics(stats, len(idx))
         fam.to(self.device, self.dtype)
+        if data.W is not None:
+            n_eff = wsum.clamp_min(1e-12)
         self._colmean = (colsum / n_eff).to(self.device, self.dtype)
         data.set_family(fam, self.cache_saturated, self.max_cache_gb)
         self._log(f"GLM-PCA: n={data.n}, p={data.p}, d={self.n_pc}, "
@@ -492,6 +548,8 @@ class GLMPCA:
         o = 0.0 if b.o is None else b.o[:, None]
         fam = self.exponential_family if cols is None else self.exponential_family.subset_features(cols)
         nll = fam.log_likelihood if full else fam.fit_nll
+        if b.w is not None:  # binomial up to a constant: Bernoulli log_prob takes fractional x
+            nll = lambda X, theta: -(b.w * fam.torch_distribution(theta).log_prob(X)).sum()
         if cols is None:
             return nll(b.X, o + mu + U @ V.T)
         return nll(b.X, o + mu[cols] + U @ V[cols].T) * (data.p / len(cols))
@@ -545,6 +603,8 @@ class GLMPCA:
             k = int(min(data.n, 2**13, max(4 * d, 2e8 // p)))
             b = data.batch(np.sort(self._rng.choice(data.n, k, replace=False)), need_X=False)
             Th = data.theta0 + b.delta.to_dense() if b.delta is not None else b.theta
+            if b.obs is not None:  # unobserved entries at mu0
+                Th = torch.where(b.obs.to_dense() > 0, Th, mu0)
             if b.o is not None:
                 Th = Th - b.o[:, None] * (Th != data.theta0)
             V0 = torch.svd_lowrank(Th - mu0, q=min(d + 10, *Th.shape), niter=4)[2][:, :d]

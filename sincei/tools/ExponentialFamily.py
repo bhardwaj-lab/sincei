@@ -171,6 +171,10 @@ class Gaussian(ExponentialFamily):
 
 class Bernoulli(ExponentialFamily):
     """Bernoulli.
+    Expected input: matrix of 0/1s, where each entry is considered "observed",
+    alternatively, a matrix of proportions which is considered success probability.
+    Note that in the later case, a "weights" matrix must be provided, which resolves to
+    binomial likelihood.
     family_params:
         - ``max_val``: truncation m of the infinite saturated parameters.
             Empirically, values above 10 yield similar results.
