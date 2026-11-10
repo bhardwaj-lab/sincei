@@ -161,7 +161,12 @@ class ExponentialFamily:
 
 # ======================================================================================
 class Gaussian(ExponentialFamily):
-    """Unit-variance Gaussian (SD=1). Here, GLM-PCA reduces to PCA."""
+    """Unit-variance Gaussian (SD=1). Here, GLM-PCA reduces to PCA.
+
+    Expected input: matrix with real, continuous entries, scaled (eg. z-scores)
+
+    family_params: None
+    """
 
     family_name = "gaussian"
 
@@ -170,11 +175,13 @@ class Gaussian(ExponentialFamily):
 
 
 class Bernoulli(ExponentialFamily):
-    """Bernoulli.
+    """Bernoulli distribution.
+
     Expected input: matrix of 0/1s, where each entry is considered "observed",
     alternatively, a matrix of proportions which is considered success probability.
     Note that in the later case, a "weights" matrix must be provided, which resolves to
     binomial likelihood.
+
     family_params:
         - ``max_val``: truncation m of the infinite saturated parameters.
             Empirically, values above 10 yield similar results.
@@ -194,6 +201,10 @@ class Bernoulli(ExponentialFamily):
 
 class Poisson(ExponentialFamily):
     """Poisson. theta = log(rate).
+
+    Expected input: matrix with non-negative integers.
+    (Note: continuous input results in pseudo-likelihood)
+
     family_params:
         - ``min_val``: replaces 0 before the log; a
             truncation like Bernoulli's ``max_val`` (M = -log min_val)
@@ -215,6 +226,10 @@ class Poisson(ExponentialFamily):
 
 class NegativeBinomial(Poisson):
     """Negative binomial. theta = log(mean).
+
+    Expected input: matrix with non-negative integers.
+    (Note: continuous input results in pseudo-likelihood)
+
     family_params:
         - ``r``: fixed per-feature inverse dispersion (Risso et al.).
             Recommended: a scalar with global inv-dispersion for all cells (Lause et al.).
@@ -251,8 +266,12 @@ class NegativeBinomial(Poisson):
 
 
 class Beta(ExponentialFamily):
-    """Beta (standard formulation from Mourragui et al, 2023).
+    """Beta distribution (standard formulation, same as Mourragui et al, 2023)
     with mean parametrisation theta in (0, 1).
+
+    Expected input: matrix with proportions (between 0 and 1). Values at and outside
+    these bounds are clipped.
+
     family_params:
         - "nu": fixed per-feature concentration (estimated by streaming MLE if not given).
         - "min_val" (int): min data value (replaces 0 and 1).
@@ -324,6 +343,10 @@ class Beta(ExponentialFamily):
 class SigmoidBeta(Beta):
     """Beta with mean = sigmoid(theta): unconstrained theta.
     Note this changes the model (linear structure is sought in logit(mean)).
+
+    Expected input: matrix with proportions (between 0 and 1). Values at and outside
+    these bounds are clipped.
+
     family_params: inherited from ``Beta``
     """
 
@@ -337,8 +360,12 @@ class SigmoidBeta(Beta):
 
 
 class Gamma(ExponentialFamily):
-    """Gamma distribution using a standard fomulation (Mourragui et al, 2023).
+    """Gamma distribution (standard formulation, same as Mourragui et al, 2023).
     shape theta + 1 and fixed per-feature rate nu. Saturated theta = psi^{-1}(log(nu x)) - 1.
+
+    Expected input: matrix with non-negative, continuous variables. Values <= 0 are replaced
+    by "min_val"
+
     family_params:
         - "min_val" (int): min data value. Defaults to 1e-5.
         - "max_val" (int): max data value. Defaults to 1e7.
@@ -374,6 +401,10 @@ class Gamma(ExponentialFamily):
 
 class LogNormal(ExponentialFamily):
     """Log-normal with fixed per-feature sigma nu. Saturated theta = log x.
+
+    Expected input: matrix with non-negative, continuous variables. Values <= 0 are replaced
+    by "min_val"
+
     family_params:
         - "min_val" (int): min data value. Defaults to 1e-5.
     """

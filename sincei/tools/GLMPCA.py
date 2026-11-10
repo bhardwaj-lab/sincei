@@ -51,13 +51,16 @@ class _Batch:
 
 
 class _Data:
-    r"""Chunked row access and saturated parameters for a set of cells.
+    r"""
+    Provides chunked row access and saturated parameters for a set of cells,
+    such that the whole matrix is never loaded as a dense array.
 
-    Accepts numpy / torch / scipy.sparse / AnnData (also backed='r'); the full
-    matrix is never densified. For sparse X, g^{-1} is element-wise, hence
-    Theta = 1 theta0^T + Delta with theta0 = g^{-1}(0) per feature and Delta sparse on
-    the non-zeros of X: scores cost O(nnz d) and the cache O(nnz). Exact for any
-    family.
+    Accepts numpy / torch / scipy.sparse / AnnData (also backed='r').
+    For sparse X, `invert_g` is element-wise, and all zeros return the same. Therefore we
+    store Theta = 1 theta0^T + Delta, where theta0 = g^{-1}(0) per feature, and Delta is
+    a sparse correction on the non-zero entries of X. This keeps oth computation and memory
+    proportional to the number of non-zeros (scores cost O(nnz d), cache stores O(nnz)).
+    It is exact for every distribution, not an approximation.
     """
 
     def __init__(self, X, device, dtype, chunk_size: int, transpose: bool = False,
@@ -231,7 +234,23 @@ class GLMPCA:
 
     Parameters
     ----------
-    n_pc, family, family_params, max_iter, batch_size, n_init : as before.
+    n_pc : int
+        Number of principal components to compute.
+    family: str or ExponentialFamily
+        Name of the exponential distribution to use. Possible families: "gaussian",
+        "poisson", "bernoulli", "beta", "gamma", "lognormal", "sigmoid_beta".
+        Defaults to "gaussian".
+    family_params : dict
+        Dictionary with additional exponential distribution parameters. The list of
+        parameters depends on the specific `ExponentialFamily` class chosen.
+        Defaults to None.
+    max_iter : int
+        Maximum number of epochs in the GLM-PCA optimisation. Defaults to 100.
+    batch_size : int
+      Size of the batch in the SGD optimisation step. Defaults to 1024.
+    n_init: int
+        Number of GLM-PCA initializations. Useful if you want to explore different
+        random seeds and starting points. Defaults to 1.
     learning_rate : float
         Riemannian Adam step for the loadings (geoopt), scaled internally by
         1/sqrt(n_features) since Stiefel entries are O(1/sqrt(p)).
