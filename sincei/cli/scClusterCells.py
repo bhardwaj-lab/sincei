@@ -355,7 +355,18 @@ def main(
         figure, axes = plt.subplots(
             figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
         )
-        sc.pl.umap(adata, color="leiden", legend_loc="on data", ax=axes, show=False)
+        sc.pl.umap(
+            adata, color="leiden", legend_loc="on data", size=20, ax=axes, show=False
+        )
+
+        umap_title = (
+            f"Leiden clusters; resolution : {cluster_resolution}\n"
+            f"{n_prin_comps} components | {n_neighbors} neighbors"
+        )
+        axes.set_title(umap_title, fontsize=18, fontweight="bold")
+        axes.set_xlabel("UMAP1", fontsize=16)
+        axes.set_ylabel("UMAP2", fontsize=16)
+
         figure.savefig(out_file_umap, dpi=dpi, format=plot_file_format.value)
         plt.close(figure)
 
