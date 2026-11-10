@@ -11,7 +11,8 @@ dynamic = ["version"]
 license = {file = "LICENCE.txt"}
 authors = [
     {name = "Vivek Bhardwaj"},
-    {name = "Fernando Sancho Gómez"},
+    {name = "Fernando Sancho Gómez",
+    name = "Soufiane Mourragui"},
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
@@ -40,6 +41,7 @@ dependencies = [
     "torch",
     "geoopt", # GLMPCA default optimizer
     "gensim",
+    "tomotopy",
     "ruptures",
     "tqdm",
     ]

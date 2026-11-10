@@ -87,7 +87,7 @@ SCENARIOS: dict[str, BulkScenario] = {
     "duplicate_filter": BulkScenario(["--duplicateFilter", "start_bc_umi"]),
     "extend_reads": BulkScenario(["--extendReads", "300"]),
     "center_reads": BulkScenario(["--extendReads", "300", "--centerReads"]),
-    "atac": BulkScenario(["--atac"]),
+    "tn5": BulkScenario(["--tn5"]),
     "min_mapping_quality": BulkScenario(["--minMappingQuality", "50"]),
     "sam_flag_exclude": BulkScenario(["--samFlagExclude", "16"]),
     "min_fragment_length": BulkScenario(["--minFragmentLength", "300"]),

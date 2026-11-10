@@ -9,8 +9,8 @@ from sincei import _sincei as internal
 
 from . import _parsers as backend
 from ._common_args import (
-    AVAILABLE_PROCESSORS,
     BAM_OPTS,
+    DEFAULT_PROCESSORS,
     FILTER_OPTS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
@@ -18,6 +18,7 @@ from ._common_args import (
     FilterRNAStrand,
     configure_logging,
     log_parameters,
+    override,
     preprocess_args,
 )
 
@@ -94,7 +95,16 @@ app = typer.Typer(
 def main(
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
     barcodes: Annotated[str, INPUT_OUTPUT_OPTS["barcodes"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".tsv",
+            help=(
+                "A .tsv file with one row per cell and one column per filter statistic."
+            ),
+        ),
+    ],
     cell_tag: Annotated[str, BAM_OPTS["cell_tag"]] = "BC",
     umi_tag: Annotated[str, BAM_OPTS["umi_tag"]] = "RX",
     bin_size: Annotated[int, BAM_OPTS["bin_size"]] = 100_000,
@@ -129,7 +139,7 @@ def main(
     chr_to_skip: Annotated[list[str] | None, BAM_OPTS["chr_to_skip"]] = None,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:

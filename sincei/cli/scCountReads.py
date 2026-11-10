@@ -9,8 +9,8 @@ from sincei import _sincei as internal
 from . import _parsers as backend
 from ._common_args import (
     _IO,
-    AVAILABLE_PROCESSORS,
     BAM_OPTS,
+    DEFAULT_PROCESSORS,
     FILTER_OPTS,
     GTF_GFF_OPTS,
     INPUT_OUTPUT_OPTS,
@@ -90,6 +90,11 @@ GENOME_CHUNK_SIZE = typer.Option(
         "Manually specify the size (in bases) of the genome chunks processed at a time."
     ),
 )
+OUT_FILE = override(
+    INPUT_OUTPUT_OPTS["out_file"],
+    metavar=".h5ad",
+    help=("The .h5ad file to write the count matrix to."),
+)
 COMPRESSION = typer.Option(
     "--compression",
     metavar="METHOD",
@@ -151,7 +156,9 @@ def _count_reads(
     filter_rna_strand: FilterRNAStrand | None,
     extend_reads: int | None,
     center_reads: bool,
-    atac: bool,
+    tn5: bool,
+    mnase: bool,
+    offset: list[int] | None,
     duplicate_filter: DuplicateFilter | None,
     motif_filter: list[str] | None,
     genome_2bit: str | None,
@@ -200,7 +207,9 @@ def _count_reads(
         "blacklist_path": backend.first_blacklist(blacklist),
         "extend_reads": extend_reads,
         "center_reads": center_reads,
-        "atac_shift": atac,
+        "tn5_shift": tn5,
+        "mnase": mnase,
+        "offset": offset or None,
         "dup_method": backend.dup_method(duplicate_filter),
         "filter_rna_strand": filter_rna_strand.value if filter_rna_strand else None,
         "genome_2bit": genome_2bit,
@@ -243,7 +252,7 @@ def _count_reads(
 def bins(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[str, OUT_FILE],
     barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
@@ -268,7 +277,9 @@ def bins(
     # Read options
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
-    atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
+    mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
+    offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -296,7 +307,7 @@ def bins(
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -323,7 +334,9 @@ def bins(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
-        atac=atac,
+        tn5=tn5,
+        mnase=mnase,
+        offset=offset,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,
@@ -342,7 +355,7 @@ def bins(
 def features(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[str, OUT_FILE],
     bed: Annotated[str, BED],
     barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
@@ -362,7 +375,9 @@ def features(
     # Read options
     extend_reads: Annotated[int | None, READ_OPTS["extend_reads"]] = None,
     center_reads: Annotated[bool, READ_OPTS["center_reads"]] = False,
-    atac: Annotated[bool, READ_OPTS["atac"]] = False,
+    tn5: Annotated[bool, READ_OPTS["tn5"]] = False,
+    mnase: Annotated[bool, READ_OPTS["mnase"]] = False,
+    offset: Annotated[list[int] | None, READ_OPTS["offset"]] = None,
     # Filtering options
     min_mapping_quality: Annotated[
         int | None, FILTER_OPTS["min_mapping_quality"]
@@ -395,7 +410,7 @@ def features(
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -421,7 +436,9 @@ def features(
         filter_rna_strand=filter_rna_strand,
         extend_reads=extend_reads,
         center_reads=center_reads,
-        atac=atac,
+        tn5=tn5,
+        mnase=mnase,
+        offset=offset,
         duplicate_filter=duplicate_filter,
         motif_filter=motif_filter,
         genome_2bit=genome_2bit,

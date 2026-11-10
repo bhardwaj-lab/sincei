@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 874.3 364">
+  <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
+  <defs>
+    <style>
+      .st0, .st1, .st2, .st3, .st4 {
+        stroke: #fff;
+      }
+
+      .st0, .st1, .st5 {
+        fill: #fdb03d;
+      }
+
+      .st0, .st4 {
+        stroke-miterlimit: 4;
+        stroke-width: 1px;
+      }
+
+      .st6, .st7, .st8, .st9, .st10, .st11, .st12, .st13, .st14 {
+        isolation: isolate;
+      }
+
+      .st6, .st7, .st9, .st11, .st13 {
+        fill: #161616;
+      }
+
+      .st6, .st8 {
+        font-family: ArialMT, Arial;
+      }
+
+      .st6, .st8, .st13 {
+        font-size: 12px;
+      }
+
+      .st7 {
+        font-size: 18px;
+      }
+
+      .st7, .st9, .st11, .st12, .st13, .st14 {
+        font-weight: 700;
+      }
+
+      .st7, .st11, .st12, .st13, .st14 {
+        font-family: Arial-BoldMT, Arial;
+      }
+
+      .st2, .st4, .st15 {
+        fill: #b79bc9;
+      }
+
+      .st16, .st17, .st18, .st19 {
+        stroke: #6b6b6b;
+      }
+
+      .st16, .st17, .st20, .st21, .st22 {
+        stroke-width: 1.5px;
+      }
+
+      .st16, .st17, .st23, .st24, .st19 {
+        fill: none;
+      }
+
+      .st16, .st18, .st20, .st25, .st21, .st22 {
+        stroke-linejoin: round;
+      }
+
+      .st16, .st20, .st23, .st25, .st19, .st21, .st22 {
+        stroke-linecap: round;
+      }
+
+      .st8, .st18, .st14 {
+        fill: #6b6b6b;
+      }
+
+      .st9 {
+        font-family: MesloLGLNF-Bold, 'MesloLGL Nerd Font';
+        font-size: 13px;
+      }
+
+      .st26, .st3 {
+        fill: #2f9a98;
+      }
+
+      .st20 {
+        fill: #fed494;
+        stroke: #fdb03d;
+      }
+
+      .st11, .st14 {
+        font-size: 11px;
+      }
+
+      .st12 {
+        font-size: 14px;
+      }
+
+      .st12, .st25 {
+        fill: #23807e;
+      }
+
+      .st27 {
+        fill: #fff;
+      }
+
+      .st23, .st25 {
+        stroke: #23807e;
+      }
+
+      .st23, .st19 {
+        stroke-width: 2.5px;
+      }
+
+      .st24 {
+        stroke: #d9d9d9;
+      }
+
+      .st28 {
+        fill: #f2f2f2;
+      }
+
+      .st21 {
+        fill: #8dc7c6;
+        stroke: #2f9a98;
+      }
+
+      .st22 {
+        fill: #d7c8e1;
+        stroke: #b79bc9;
+      }
+    </style>
+  </defs>
+  <rect class="st27" width="874.6" height="364" rx="9.4" ry="9.4"/>
+  <g>
+    <g class="st10">
+      <text class="st7" transform="translate(26 38)"><tspan x="0" y="0">Group cells</tspan></text>
+    </g>
+    <g class="st10">
+      <text class="st8" transform="translate(26 56)"><tspan x="0" y="0">--groupInfo: .tsv of barcode → cluster</tspan></text>
+    </g>
+    <g class="st10">
+      <text class="st9" transform="translate(26 306)"><tspan x="0" y="0">--normalizeUsing</tspan></text>
+    </g>
+    <path class="st28" d="M37,318h16.2c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-16.2c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+    <g class="st10">
+      <text class="st13" transform="translate(31.8 333.2)"><tspan x="0" y="0">CPM</tspan></text>
+    </g>
+    <path class="st28" d="M81.2,318h22.9c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-22.9c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+    <g class="st10">
+      <text class="st13" transform="translate(77.3 333.2)"><tspan x="0" y="0">Mean</tspan></text>
+    </g>
+    <path class="st28" d="M132,318h56.5c6.1,0,11,4.9,11,11h0c0,6.1-4.9,11-11,11h-56.5c-6.1,0-11-4.9-11-11h0c0-6.1,4.9-11,11-11Z"/>
+    <g class="st10">
+      <text class="st13" transform="translate(130 333.2)"><tspan x="0" y="0">Frequency</tspan></text>
+    </g>
+    <g class="st10">
+      <text class="st7" transform="translate(405 38)"><tspan x="0" y="0">One coverage track per cluster</tspan></text>
+    </g>
+    <g class="st10">
+      <text class="st8" transform="translate(405 56)"><tspan x="0" y="0">reads from the BAM files, summed per group · --binSize 100</tspan></text>
+    </g>
+    <path class="st21" d="M405,128v-4.5l4,.3,4,1.4,4-.4,4-1.2,4,.9h4c0,.1,4,.1,4,.1l4-.7,4-.4,4,.9,4-1,4,.8,4,.7,4-2.3,4-1.7,4-4.7,4-11.2,4-9.4,4-9.6h4l4,1.5,4,11.9,4,11.4,4,7.6,4,4.2,4,1,4,1,4-.7,4,1.1,4-.3,4,.3,4-1.6,4,.3h4l4,.5,4,.4,4,.6,4-1.5,4,.7,4,.8,4-.8,4-1.1,4-3.6,4-3.7,4-1.8,4-2.9,4,1.7,4,2.1,4,3.1,4,3.2,4,1.3,4,1.6,4,1.1,4-1,4-.2,4,.9,4-.4h4c0,.1,4,.7,4,.7l4-.6h4c0-.1,4-.3,4-.3l4-.5,4,.6,4-1.3h4l4-1,4-1.9,4-4.9,4-7.6,4-9.8,4-5.7,4-1.2,4,5.5,4,9.4,4,8.8,4,6.1,4,2.7,4,.6h4c0-.1,4-.4,4-.4h4c0,.1,4,.9,4,.9l4-1.3,4,1.4,4-.9,4,1.3,4-1.5h4l4-1.2,4-1.1,4-1.6,4-2.6,4-1.5h4l4,2.4,4,1.6,4,1.3,4,2.8,4-.9,4,1.2,4,.4,4,.9,4-.8,4,.4,4-1,4-.5h4l4,.6,4,.5v3.3h-440Z"/>
+    <line class="st24" x1="405" y1="128" x2="845" y2="128"/>
+    <circle class="st26" cx="413" cy="90" r="5"/>
+    <g class="st10">
+      <text class="st11" transform="translate(423 94)"><tspan x="0" y="0">Cluster 1</tspan></text>
+    </g>
+    <path class="st20" d="M405,190v-2.7l4-1.3,4,.3,4-.3,4,.7,4-1.1,4,1.4,4-.2h4l4-.6,4-.6,4,1.5,4-1,4-.3,4,.9,4-.3,4-2.4,4-2.9,4-2.9,4-2.1h4l4,1.5,4,2.5,4,1.9,4,3.2,4,1.1,4-.3,4-.6,4,1.7,4,.3,4-.2,4-.9h4c0-.1,4,.8,4,.8h4l4-.9h4l4-.2h4c0-.1,4,1.2,4,1.2l4-1.5,4-2.4,4-4.4,4-6.4,4-12,4-10.5,4-2h4l4,8.2,4,11.1,4,10,4,6.3,4,2.3,4,.9,4,.4h4l4-1,4,1.1,4-1.4h12l4,.2,4-.5h4l4,.6,4-.8,4,1.3,4-1.1,4-2.4,4-4.3,4-4.9,4-3.6,4-.8,4,2.8,4,5.9,4,3.5,4,2.5,4,1.7,4,1.1,4-.8,4,.5,4-.7,4,.4,4-.9h4l4,1.8,4-1.5h4c0-.1,4,0,4,0l4-1.7,4-5.1,4-6.7,4-8.8,4-6.3,4,.6,4,5.2,4,7.4,4,6.9,4,4.7,4,2.9,4,1.6,4,.2,4-1,4,.7,4,1,4-.8,4,.4,4-.9,4,1.2,4-.4v3.1h-440Z"/>
+    <line class="st24" x1="405" y1="190" x2="845" y2="190"/>
+    <circle class="st5" cx="413" cy="152" r="5"/>
+    <g class="st10">
+      <text class="st11" transform="translate(423 156)"><tspan x="0" y="0">Cluster 2</tspan></text>
+    </g>
+    <path class="st22" d="M405,252v-2.7l4-.8,4-1.1,4,.9,4,.4,4-1.2,4,1.8,4-.6,4-.9,4,1.7,4-1.6,4,.8,4,.7,4-.6,4-1,4-1.3,4-3.6,4-4.6,4-7.2,4-7.2,4-.4,4,3.3,4,7.4,4,6.1,4,3.3,4,3,4,1.4,4,1.3,4-.7,4-.8,4,.8,4-.4,4-.6,4,.5h4l4,1.3h4l4-1.5,4,.7,4-1,4-.2,4-1.1,4-.9,4-5.2,4-4.9,4-5.7,4-1.3h4c0-.1,4,5.4,4,5.4l4,4.5,4,4.6,4,4.4,4,.8,4,.8,4-.3,4,.4,4-.8,4,1.1h4c0-.1,4-.7,4-.7l4,.8,4-.6,4-1.1h4l4,1.5,4,.2,4-2,4-1.4,4-2.2,4-5.2,4-10.1,4-12.9,4-5.5h4l4,4.9,4,10.8,4,10.8,4,5.9,4,4.4,4,.5,4,1.7,4-.6,4-1,4,.6,4,1.3h4l4-1.2,4,.6h4c0-.1,4-.7,4-.7l4-1.1,4-2.7,4-1.4,4-4.1,4-1.9,4-.9,4,1.8,4,4.6,4,2.4,4,1.7,4,2.5,4-1.2,4,.9,4-.2,4-.2,4-.4,4,1.6,4-1,4,1,4-.7h4v3.3h-440Z"/>
+    <line class="st24" x1="405" y1="252" x2="845" y2="252"/>
+    <circle class="st15" cx="413" cy="214" r="5"/>
+    <g class="st10">
+      <text class="st11" transform="translate(423 218)"><tspan x="0" y="0">Cluster 3</tspan></text>
+    </g>
+    <line class="st17" x1="405" y1="270" x2="845" y2="270"/>
+    <g class="st10">
+      <text class="st8" transform="translate(580 290)"><tspan x="0" y="0">genomic position</tspan></text>
+    </g>
+    <line class="st23" x1="405" y1="316" x2="423" y2="316"/>
+    <path class="st25" d="M431,316l-8,4.8v-9.6l8,4.8h0Z"/>
+    <g class="st10">
+      <text class="st12" transform="translate(439 321)"><tspan x="0" y="0">Per group .bigwig or .bedgraph files (--outFileFormat)</tspan></text>
+    </g>
+    <g>
+      <circle class="st3" cx="113.3" cy="123.4" r="5"/>
+      <circle class="st3" cx="97.6" cy="142.1" r="5"/>
+      <circle class="st3" cx="118.2" cy="141.4" r="5"/>
+      <circle class="st3" cx="94.4" cy="121.8" r="5"/>
+      <circle class="st3" cx="82.9" cy="129.1" r="5"/>
+      <circle class="st3" cx="113.7" cy="153.4" r="5"/>
+      <circle class="st3" cx="127.4" cy="150.5" r="5"/>
+      <circle class="st3" cx="124.5" cy="113.4" r="5"/>
+      <circle class="st3" cx="128.3" cy="129.7" r="5"/>
+      <circle class="st3" cx="70.7" cy="131.9" r="5"/>
+      <circle class="st3" cx="93.6" cy="156.9" r="5"/>
+      <circle class="st3" cx="99" cy="106" r="5"/>
+      <circle class="st1" cx="204.2" cy="167.3" r="5"/>
+      <circle class="st1" cx="185.1" cy="166.1" r="5"/>
+      <circle class="st1" cx="191.2" cy="146.6" r="5"/>
+      <circle class="st1" cx="204.9" cy="153.8" r="5"/>
+      <circle class="st1" cx="179.5" cy="153.4" r="5"/>
+      <circle class="st1" cx="204.5" cy="182.2" r="5"/>
+      <circle class="st1" cx="174" cy="175.4" r="5"/>
+      <circle class="st1" cx="175.9" cy="195.9" r="5"/>
+      <circle class="st0" cx="219.7" cy="153" r="5"/>
+      <circle class="st1" cx="216.5" cy="178.3" r="5"/>
+      <circle class="st1" cx="192.8" cy="177.2" r="5"/>
+      <circle class="st1" cx="164.3" cy="160.2" r="5"/>
+      <circle class="st2" cx="91.5" cy="213.8" r="5"/>
+      <circle class="st4" cx="116.1" cy="208.5" r="5"/>
+      <circle class="st2" cx="92.5" cy="200.2" r="5"/>
+      <circle class="st2" cx="104.2" cy="196.5" r="5"/>
+      <circle class="st2" cx="107.3" cy="222.9" r="5"/>
+      <circle class="st2" cx="78.3" cy="217.5" r="5"/>
+      <circle class="st2" cx="100.4" cy="183.2" r="5"/>
+      <circle class="st2" cx="122.4" cy="220" r="5"/>
+      <circle class="st2" cx="104.4" cy="209.2" r="5"/>
+      <circle class="st2" cx="81" cy="195.2" r="5"/>
+      <circle class="st2" cx="87.8" cy="227.5" r="5"/>
+      <circle class="st2" cx="100" cy="240.8" r="5"/>
+      <path class="st16" d="M44,82v168h208"/>
+      <g class="st10">
+        <text class="st14" transform="translate(127.3 268)"><tspan x="0" y="0">UMAP 1</tspan></text>
+      </g>
+      <g class="st10">
+        <text class="st14" transform="translate(32 186.7) rotate(-90)"><tspan x="0" y="0">UMAP 2</tspan></text>
+      </g>
+      <g class="st10">
+        <text class="st13" transform="translate(273 120)"><tspan x="0" y="0">Cluster</tspan></text>
+      </g>
+      <circle class="st3" cx="278" cy="140" r="6"/>
+      <g class="st10">
+        <text class="st6" transform="translate(290 144)"><tspan x="0" y="0">1</tspan></text>
+      </g>
+      <circle class="st1" cx="278" cy="160" r="6"/>
+      <g class="st10">
+        <text class="st6" transform="translate(290 164)"><tspan x="0" y="0">2</tspan></text>
+      </g>
+      <circle class="st2" cx="278" cy="180" r="6"/>
+      <g class="st10">
+        <text class="st6" transform="translate(290 184)"><tspan x="0" y="0">3</tspan></text>
+      </g>
+    </g>
+    <line class="st19" x1="341" y1="186" x2="368" y2="186"/>
+    <path class="st18" d="M377,186l-9,5.4v-10.8l9,5.4h0Z"/>
+  </g>
+</svg>

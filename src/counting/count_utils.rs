@@ -32,7 +32,7 @@ use anyhow::bail;
 use anyhow::{Context, Result};
 use nalgebra_sparse::CsrMatrix;
 use ndarray::{Array1, CowArray};
-use polars::prelude::*;
+use polars::prelude::{Categories, Column, DataFrame, DataType};
 use rayon::ThreadPool;
 
 use crate::annotation::region_index::Feature;

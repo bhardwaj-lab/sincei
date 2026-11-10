@@ -9,12 +9,13 @@ import typer
 from sincei.tools.FeatureScorer import FeatureScorer
 
 from ._common_args import (
-    AVAILABLE_PROCESSORS,
+    DEFAULT_PROCESSORS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
     OverlapPolicy,
     configure_logging,
     log_parameters,
+    override,
     preprocess_args,
 )
 from ._parsers import validate_anndata
@@ -40,7 +41,14 @@ _SCORING = "Common options"
 @app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".h5ad",
+            help=("The .h5ad file to write the scores to."),
+        ),
+    ],
     features: Annotated[
         str,
         typer.Option(
@@ -111,7 +119,7 @@ def main(
     ] = False,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -142,7 +150,7 @@ def main(
         gene_body=True,
         gene_size_factor=normalize_gene_lengths,
         exclude_in_range=None,
-        n_threads=number_of_processors,
+        n_jobs=number_of_processors,
         verbose=verbose,
     )
     adata_out.uns = adata.uns

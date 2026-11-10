@@ -12,6 +12,7 @@ from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
 from sincei import _sincei as internal
+from sincei.cli._common_args import DEFAULT_PROCESSORS
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -375,7 +376,7 @@ def FeatureScorer(
     exclude_in_range: str | None = None,
     center_scores: bool = False,
     verbose: bool = False,
-    n_threads: int = 1,
+    n_jobs: int = DEFAULT_PROCESSORS,
 ) -> ad.AnnData:
     """
     This function calculates a cell x gene matrix with gene activity scores.
@@ -444,8 +445,9 @@ def FeatureScorer(
         increased memory usage. Use with caution for large datasets.
     verbose : bool, optional
         Print progress messages and warnings. Default is False.
-    n_threads : int, optional
-        Number of threads to use for parallel processing, by default 1.
+    n_jobs : int, optional
+        Number of threads to use for parallel processing. Default is DEFAULT_PROCESSORS
+        (half of the available processors, at most 16).
 
     Returns
     -------
@@ -545,8 +547,8 @@ def FeatureScorer(
 
     sys.stdout.write("Computing features...\n")
 
-    if n_threads > 1:
-        with ThreadPoolExecutor(max_workers=n_threads) as executor:
+    if n_jobs > 1:
+        with ThreadPoolExecutor(max_workers=n_jobs) as executor:
             results = list(
                 tqdm(
                     executor.map(process_gene, gene_rows),

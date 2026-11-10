@@ -9,7 +9,7 @@ import anndata as ad
 
 from sincei import _sincei as internal
 from sincei.cli import _parsers as backend
-from sincei.cli._common_args import DuplicateFilter, FilterRNAStrand
+from sincei.cli._common_args import DEFAULT_PROCESSORS, DuplicateFilter, FilterRNAStrand
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -48,7 +48,9 @@ def count_reads(
     filterRNAstrand: FilterRNAStrand | str | None = None,
     extendReads: int | None = None,
     center_read: bool = False,
-    atac: bool = False,
+    tn5: bool = False,
+    mnase: bool = False,
+    offset: Sequence[int] | int | None = None,
     duplicateFilter: DuplicateFilter | str | None = None,
     motifFilter: Sequence[str] | str | None = None,
     genome2bit: str | None = None,
@@ -59,7 +61,7 @@ def count_reads(
     featureIdTag: str | None = None,
     metagene: bool = False,
     genomeChunkSize: int | None = None,
-    numberOfProcessors: int = 1,
+    numberOfProcessors: int = DEFAULT_PROCESSORS,
     tmpDir: str | None = None,
     verbose: bool = False,
 ) -> ad.AnnData:
@@ -113,12 +115,21 @@ def count_reads(
         Extend reads to this fragment length.
     center_read : bool
         Count only the centre of each fragment.
-    atac : bool
-        Correct each read for the 9-base duplication Tn5 leaves behind: a
-        forward read is trimmed to ``start+4, end-5`` and a reverse read to
-        ``start+5, end-4``, so both ends sit on the cut site. Reads of. 9 bases
-        or less are dropped. The correction is applied before everything else,
-        so the filters and deduplication use the corrected read as well.
+    tn5 : bool
+        Correct the 9-base duplication Tn5 leaves behind in fragments. Only the
+        forward mate of a proper pair is counted, so each fragment is trimmed to
+        ``start+4, end-5``. Fragments of 9 bases or less are dropped. Requires
+        paired-end data.
+    mnase : bool
+        Count the 2 central bases of each fragment: turns on ``center_read``
+        and ``extendReads`` and sets ``offset`` to ``(1, 2)``. Only the forward
+        mate of a proper pair is counted. ``minFragmentLength`` and
+        ``maxFragmentLength`` default to 130 and 200. Requires paired-end data.
+    offset : int or list of int, optional
+        Count only this 1-based position in each read, or the range between
+        two positions. Negative values count from the read end. With
+        ``center_read``, a window as wide as the selected bases is centered on
+        the fragment, so ``offset=1, center_read=True`` counts its center.
     duplicateFilter : DuplicateFilter or str, optional
         Remove duplicates with this method: ``"start_bc"``, ``"start_bc_umi"``,
         ``"start_end_bc"`` or ``"start_end_bc_umi"``.
@@ -139,7 +150,8 @@ def count_reads(
     genomeChunkSize : int, optional
         Genome chunk size given to each thread.
     numberOfProcessors : int
-        Number of threads. 0 uses all cores.
+        Number of threads. 0 uses all cores. Defaults to DEFAULT_PROCESSORS (half of
+        the available processors, at most 16).
     tmpDir : str, optional
         Directory for the temporary ``.h5ad`` file. Defaults to the system
         temporary directory.
@@ -181,7 +193,9 @@ def count_reads(
         "blacklist_path": blackListFileName,
         "extend_reads": extendReads,
         "center_reads": center_read,
-        "atac_shift": atac,
+        "tn5_shift": tn5,
+        "mnase": mnase,
+        "offset": [offset] if isinstance(offset, int) else offset,
         "dup_method": backend.dup_method(dup_filter),
         "filter_rna_strand": rna_strand.value if rna_strand else None,
         "genome_2bit": genome2bit,
