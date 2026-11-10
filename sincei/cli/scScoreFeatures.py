@@ -9,7 +9,7 @@ import typer
 from sincei.tools.FeatureScorer import FeatureScorer
 
 from ._common_args import (
-    AVAILABLE_PROCESSORS,
+    DEFAULT_PROCESSORS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
     OverlapPolicy,
@@ -111,7 +111,7 @@ def main(
     ] = False,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -142,7 +142,7 @@ def main(
         gene_body=True,
         gene_size_factor=normalize_gene_lengths,
         exclude_in_range=None,
-        n_threads=number_of_processors,
+        n_jobs=number_of_processors,
         verbose=verbose,
     )
     adata_out.uns = adata.uns

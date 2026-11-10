@@ -9,8 +9,8 @@ from sincei import _sincei as internal
 from . import _parsers as backend
 from ._common_args import (
     _IO,
-    AVAILABLE_PROCESSORS,
     BAM_OPTS,
+    DEFAULT_PROCESSORS,
     FILTER_OPTS,
     GTF_GFF_OPTS,
     INPUT_OUTPUT_OPTS,
@@ -302,7 +302,7 @@ def bins(
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -405,7 +405,7 @@ def features(
     # Other options
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:

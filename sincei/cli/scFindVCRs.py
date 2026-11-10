@@ -8,7 +8,7 @@ import typer
 from sincei.tools.VCRfinder import VCRfinder
 
 from ._common_args import (
-    AVAILABLE_PROCESSORS,
+    DEFAULT_PROCESSORS,
     INPUT_OUTPUT_OPTS,
     OTHER_OPTS,
     configure_logging,
@@ -122,7 +122,7 @@ def main(
     ] = None,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
-    ] = AVAILABLE_PROCESSORS,
+    ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
@@ -141,7 +141,7 @@ def main(
         penalties=penalties,
         region=region,
         verbose=verbose,
-        n_threads=number_of_processors,
+        n_jobs=number_of_processors,
     )
 
     regions.to_csv(out_file, sep="\t", header=False, index=False)

@@ -9,7 +9,7 @@ import anndata as ad
 
 from sincei import _sincei as internal
 from sincei.cli import _parsers as backend
-from sincei.cli._common_args import DuplicateFilter, FilterRNAStrand
+from sincei.cli._common_args import DEFAULT_PROCESSORS, DuplicateFilter, FilterRNAStrand
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -61,7 +61,7 @@ def count_reads(
     featureIdTag: str | None = None,
     metagene: bool = False,
     genomeChunkSize: int | None = None,
-    numberOfProcessors: int = 1,
+    numberOfProcessors: int = DEFAULT_PROCESSORS,
     tmpDir: str | None = None,
     verbose: bool = False,
 ) -> ad.AnnData:
@@ -150,7 +150,8 @@ def count_reads(
     genomeChunkSize : int, optional
         Genome chunk size given to each thread.
     numberOfProcessors : int
-        Number of threads. 0 uses all cores.
+        Number of threads. 0 uses all cores. Defaults to DEFAULT_PROCESSORS (half of
+        the available processors, at most 16).
     tmpDir : str, optional
         Directory for the temporary ``.h5ad`` file. Defaults to the system
         temporary directory.

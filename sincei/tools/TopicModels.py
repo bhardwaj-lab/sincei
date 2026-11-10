@@ -17,7 +17,7 @@ import tomotopy as tp
 from scipy.sparse import csr_matrix, issparse
 from scipy.sparse.linalg import svds
 
-from sincei.cli._common_args import available_processors
+from sincei.cli._common_args import DEFAULT_PROCESSORS
 
 if TYPE_CHECKING:
     from scipy.sparse import spmatrix
@@ -203,9 +203,9 @@ class LDA:
         Number of Gibbs sampling iterations over all the tokens. Defaults to 1000.
     binarize : bool
         Whether to count every non-zero entry as 1. Defaults to False.
-    n_jobs : int or None
-        Number of threads for tomotopy. The result of a seed depends on it. None uses
-        all available processors. Defaults to None.
+    n_jobs : int
+        Number of threads for tomotopy. The result of a seed depends on it. Defaults to
+        DEFAULT_PROCESSORS (half of the available processors, at most 16).
     random_state : int
         Seed of the sampler. Defaults to DEFAULT_RANDOM_STATE (42).
     """
@@ -217,11 +217,9 @@ class LDA:
         eta: float = 0.1,
         iterations: int = 1000,
         binarize: bool = False,
-        n_jobs: int | None = None,
+        n_jobs: int = DEFAULT_PROCESSORS,
         random_state: int = DEFAULT_RANDOM_STATE,
     ) -> None:
-        if n_jobs is None:
-            n_jobs = available_processors()
         for name, value in (
             ("n_topics", n_topics),
             ("iterations", iterations),

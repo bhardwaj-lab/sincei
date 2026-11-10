@@ -77,16 +77,19 @@ def check_offset(offset: list[int] | None) -> list[int] | None:
 
 
 def available_processors() -> int:
-    """Usable processor count (``os.sched_getaffinity`` where it exists)."""
-    # Use os.sched_getaffinity if available (Linux), fall back to os.cpu_count()
-    # (MacOS/Windows)
+    """Number of usable processors in the system."""
+    # Use os.process_cpu_count if available (Python 3.13+), then
+    # os.sched_getaffinity (Linux), then os.cpu_count()
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    if process_cpu_count is not None:
+        return process_cpu_count() or 1
     try:
         return len(os.sched_getaffinity(0))  # ty: ignore[unresolved-attribute]
     except (AttributeError, OSError):
         return os.cpu_count() or 1
 
 
-AVAILABLE_PROCESSORS = available_processors()
+DEFAULT_PROCESSORS = max(1, min(16, available_processors() // 2))
 
 
 def normalize_processors(value: str | int) -> int:
@@ -98,17 +101,23 @@ def normalize_processors(value: str | int) -> int:
     the parser over the default, hence the ``int`` half of the input type.
     """
     if value == "max/2":
-        return int(AVAILABLE_PROCESSORS * 0.5)
+        return max(1, int(available_processors() * 0.5))
     if value == "max":
-        return AVAILABLE_PROCESSORS
+        return max(1, available_processors())
 
     try:
         number_of_processors = int(value)
     except ValueError as exc:
         msg = f"{value} is not a valid number of processors"
         raise typer.BadParameter(msg) from exc
+    if number_of_processors < 1:
+        msg = (
+            f"{value} is not a valid number of processors. Use 1 or more, "
+            '"max/2" or "max".'
+        )
+        raise typer.BadParameter(msg)
 
-    return min(number_of_processors, AVAILABLE_PROCESSORS)
+    return min(number_of_processors, available_processors())
 
 
 def get_smart_labels(labels: list[str]) -> list[str]:
@@ -699,7 +708,7 @@ OTHER_OPTS: dict[str, typer.models.OptionInfo] = {
         "--numberOfProcessors",
         parser=normalize_processors,
         metavar="INT",
-        show_default="max",
+        show_default='The minimum of 16 and "max/2"',
         rich_help_panel=_OTHER,
         help=(
             'Number of processors to use. You can also type "max/2" to use half the '
