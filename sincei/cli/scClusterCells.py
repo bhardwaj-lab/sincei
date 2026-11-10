@@ -69,8 +69,8 @@ app = typer.Typer(
 )
 
 _REDUCTION = "Dimensionality reduction options"
-_LDA = "LDA options"
-_GLMPCA = "glmPCA options"
+_LDA = "LDA-specific options"
+_GLMPCA = "glmPCA-specific options"
 _CLUSTERING = "Clustering options"
 
 
