@@ -9,6 +9,8 @@ import torch
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
+from sincei.cli._common_args import DEFAULT_PROCESSORS
+
 saturation_eps = 10**-10
 
 
@@ -250,7 +252,7 @@ class Beta(ExponentialFamily):
             print("Beta distribution not initialized yet")
         default_family_params: dict[str, Any] = {
             "min_val": 1e-5,
-            "n_jobs": 1,
+            "n_jobs": DEFAULT_PROCESSORS,
             "eps": 1e-4,
             "maxiter": 100,
             "method": "MLE",
@@ -438,7 +440,7 @@ class Gamma(ExponentialFamily):
         default_family_params: dict[str, Any] = {
             "min_val": 1e-5,
             "max_val": 1e7,
-            "n_jobs": 1,
+            "n_jobs": DEFAULT_PROCESSORS,
             "eps": 1e-4,
             "maxiter": 100,
         }
@@ -542,7 +544,7 @@ class LogNormal(ExponentialFamily):
         default_family_params: dict[str, Any] = {
             "min_val": 1e-5,
             "max_val": 1e7,
-            "n_jobs": 1,
+            "n_jobs": DEFAULT_PROCESSORS,
             "eps": 1e-4,
             "maxiter": 100,
         }

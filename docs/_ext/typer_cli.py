@@ -3,7 +3,8 @@
 ``.. typer-cli:: sincei.cli.scFilterBarcodes`` writes the command's description,
 a usage line, and one section per help panel. Each option is a definition list
 entry: its names, its help, and its default or its possible choices. A group
-such as ``scCountReads`` gets one section per subcommand.
+such as ``scCountReads`` gets one section per subcommand. The directive's
+content, for example an image, goes right after the description.
 
 sphinx-argparse cannot read typer, and sphinx-click does not accept the command
 classes typer builds on its own copy of click, hence this directive.
@@ -118,8 +119,11 @@ def _usage(prog: str, command: Any) -> str:
     return " ".join(["usage:", prog, *required, "[OPTIONS]"])
 
 
-def _command_lines(prog: str, command: Any, underline: str) -> list[str]:
-    lines = [*_plain(command.help).splitlines(), "", ".. code-block:: text", ""]
+def _command_lines(
+    prog: str, command: Any, underline: str, intro: list[str] | None = None
+) -> list[str]:
+    lines = [*_plain(command.help).splitlines(), "", *(intro or [])]
+    lines += ["", ".. code-block:: text", ""]
     lines += ["   " + _usage(prog, command), ""]
 
     panels: dict[str, list[Any]] = {}
@@ -153,22 +157,24 @@ class TyperCli(SphinxDirective):
     """``.. typer-cli:: module.path`` with ``:prog:`` naming the program."""
 
     required_arguments = 1
+    has_content = True
     option_spec = {"prog": directives.unchanged_required}
 
     def run(self) -> list[nodes.Node]:
         module = importlib.import_module(self.arguments[0])
         command = typer.main.get_command(module.app)
         prog = self.options["prog"]
+        intro = list(self.content)
 
         subcommands = getattr(command, "commands", None) or {}
         if subcommands:
-            lines = [*_plain(command.help).splitlines(), ""]
+            lines = [*_plain(command.help).splitlines(), "", *intro, ""]
             for name, subcommand in subcommands.items():
                 title = f"{prog} {name}"
                 lines += [title, "-" * len(title), ""]
                 lines += _command_lines(title, subcommand, "~")
         else:
-            lines = _command_lines(prog, command, "-")
+            lines = _command_lines(prog, command, "-", intro)
 
         container = nodes.section()
         container.document = self.state.document

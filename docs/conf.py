@@ -36,9 +36,16 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_toolbox.collapse",
     "sphinx_copybutton",
+    "sphinxcontrib.bibtex",
     "myst_nb",
     "typer_cli",
 ]
+
+# Citations: cite with :footcite:p:`key` or :footcite:t:`key`, add the entries to
+# content/references.bib, and end the page with `.. footbibliography::`.
+bibtex_bibfiles = ["content/references.bib"]
+bibtex_reference_style = "author_year"
+bibtex_default_style = "plain"
 
 # Ignore prompts when coppying code blocks.
 copybutton_prompt_text = r">>> |\.\.\. |\$ |\(sincei\): "
@@ -73,6 +80,7 @@ html_theme_options = {
     "repository_url": "https://github.com/bhardwaj-lab/sincei",
     "use_repository_button": True,
     "show_toc_level": 3,
+    "show_navbar_depth": 1,
     "pygments_light_style": "tango",
     "pygments_dark_style": "monokai",
     "logo": {

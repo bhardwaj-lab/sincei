@@ -1,178 +1,316 @@
-# topic models
+"""Topic models of a cell-by-feature count matrix: LSA and LDA.
+
+`LSA` is the truncated SVD of the TF-IDF equivalent to gensim's
+`TfidfModel(smartirs="lfu")`, solved with ARPACK (`scipy.sparse.linalg.svds`).
+`LDA` is latent Dirichlet allocation fitted by collapsed Gibbs sampling with
+tomotopy.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
+import anndata as ad
 import numpy as np
-import pandas as pd
-from gensim import corpora, matutils, models
-from sklearn.preprocessing import binarize as sklearn_binarize
+import tomotopy as tp
+from scipy.sparse import csr_matrix, issparse
+from scipy.sparse.linalg import svds
+from tqdm import tqdm
+
+from sincei.cli._common_args import DEFAULT_PROCESSORS
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from scipy.sparse import spmatrix
 
-    import anndata as ad
-    from scipy import sparse
+    CountMatrix = ad.AnnData | np.ndarray | spmatrix
 
-    # The matrix layouts `anndata.AnnData.X` holds for a count matrix.
-    CountMatrix = (
-        np.ndarray
-        | sparse.csr_matrix
-        | sparse.csc_matrix
-        | sparse.csr_array
-        | sparse.csc_array
+DEFAULT_RANDOM_STATE = 42
+# Slope of gensim's pivoted unique normalization, `smartirs="lfu"`.
+GENSIM_SLOPE = 0.25
+
+
+def count_matrix(X: CountMatrix, binarize: bool = False) -> csr_matrix:
+    """The counts of `X`, cells in rows, as CSR. With `binarize`, a non-zero is 1."""
+    counts = X.X if isinstance(X, ad.AnnData) else X
+    matrix = csr_matrix(counts if issparse(counts) else np.asarray(counts))
+    if binarize:
+        return csr_matrix(
+            ((matrix.data != 0).astype(np.float32), matrix.indices, matrix.indptr),
+            shape=matrix.shape,
+        )
+    return matrix
+
+
+def idf(holders: np.ndarray, n_cells: int) -> tuple[np.ndarray, float]:
+    """The idf of the features, and the pivot of the normalization.
+
+    `holders` are the cells with non-zero counts per feature. The idf is
+    `log2(n_cells / holders)`, zero for a feature that no cell holds, and the
+    pivot is the mean number of features that a cell holds.
+    """
+    feature_idf = np.where(
+        holders > 0, np.log2(n_cells / np.clip(holders, 1.0, None)), 0.0
+    )
+    return feature_idf, float(holders.sum()) / n_cells
+
+
+def tfidf(matrix: csr_matrix, feature_idf: np.ndarray, pivot: float) -> csr_matrix:
+    r"""The TF-IDF of the CSR `matrix`, computed on its stored entries.
+
+    It is gensim's `TfidfModel(normalize=True, smartirs="lfu")`, for a count above
+    zero:
+
+        (1 + log2(count)) · idf / ((1 - GENSIM_SLOPE) · pivot + GENSIM_SLOPE · kept)
+
+    with `kept` the features of the cell with a count above zero and an idf above zero.
+    A zero stays zero, so the result has the same entries as `matrix`.
+    """
+    counts = np.asarray(matrix.data, dtype=np.float64)
+    rows = np.repeat(np.arange(matrix.shape[0]), np.diff(matrix.indptr))
+    held = counts > 0
+    weight = np.where(
+        held,
+        (1.0 + np.log2(np.where(held, counts, 1.0))) * feature_idf[matrix.indices],
+        0.0,
+    )
+    kept = np.bincount(
+        rows[held & (feature_idf[matrix.indices] > 0)], minlength=matrix.shape[0]
+    )
+    norm = (1.0 - GENSIM_SLOPE) * pivot + GENSIM_SLOPE * kept
+    values = weight / norm[rows]
+    return csr_matrix(
+        (values.astype(np.float32), matrix.indices, matrix.indptr), shape=matrix.shape
     )
 
-### ------ Functions ------
+
+def largest_entry_signs(basis: np.ndarray) -> np.ndarray:
+    """The sign that makes the entry of largest magnitude of every column positive.
+
+    A zero column keeps its sign. Multiplying the columns by it fixes the arbitrary sign
+    of a singular vector.
+    """
+    largest = np.abs(basis).argmax(axis=0)
+    signs = np.sign(basis[largest, np.arange(basis.shape[1])])
+    signs[signs == 0] = 1
+    return signs
 
 
-class TOPICMODEL:
-    r"""
-    Computes LSA or LDA for a given matrix and returns the cell-topic matrix.
+class LSA:
+    r"""Latent semantic analysis of a cell-by-feature count matrix.
+
+    The counts are turned into the TF-IDF of gensim's `TfidfModel(smartirs="lfu")`
+    (`tfidf`), and the components are the top `n_pc` right singular vectors of the
+    TF-IDF matrix `W`. The scores of a cell are `w V`.
 
     Parameters
     ----------
-    adata : AnnData
-        AnnData object containing the data matrix in adata.X, with cells in
-        adata.obs_names and regions in adata.var_names.
-    n_topics : int
-        Number of Topics / Principal Components for modeling.
-    binarize : bool, optional
-        If True, the input matrix will be binarized (default is False). Recommended
-        for LDA.
-    smart_code : str
-        SMART (System for the Mechanical Analysis and Retrieval of Text) code for
-        weighting of input matrix for TFIDF. Only valid for the LSA model. The default
-        ("lfu") corresponds to "log" TF * IDF, and "pivoted unique" normalization of
-        document length. For more information, see:
-        https://en.wikipedia.org/wiki/SMART_Information_Retrieval_System
-    n_passes : int, optional
-        Number of passes for the LDA model. Default is 1.
-    n_workers : int, optional
-        Number of workers for the LDA model. Default is 1.
+    n_pc : int
+        Number of components. Defaults to 20.
+    binarize : bool
+        Whether to read every value that is not zero as 1. Defaults to False.
+    random_state : int or None
+        Seed of the start of the ARPACK solver. Defaults to DEFAULT_RANDOM_STATE (42).
     """
 
     def __init__(
         self,
-        adata: ad.AnnData,
-        n_topics: int,
+        n_pc: int = 20,
         binarize: bool = False,
-        smart_code: str = "lfu",
-        n_passes: int = 1,
-        n_workers: int = 1,
+        random_state: int | None = DEFAULT_RANDOM_STATE,
     ) -> None:
-        self.cells = adata.obs_names.to_list()
-        self.regions_dict = corpora.dictionary.Dictionary([adata.var_names.to_list()])
-        mtx = cast("CountMatrix", adata.X).copy().transpose()
-        if binarize:
-            mtx = sklearn_binarize(mtx, copy=True)
-        self.corpus = matutils.Sparse2Corpus(mtx)
-        self.shape = adata.shape
-        self.n_topics = n_topics
-        self.smart_code = smart_code
-        self.n_passes = n_passes
-        self.n_workers = n_workers
-        self.corpus_tfidf = None
-        self.lsi_model: models.LsiModel | None = None
-        self.lda_model: models.LdaMulticore | None = None
-        self.cell_topic_dist: Iterable[list[tuple[int, float]]] | None = None
-        self.topic_region_dist: np.ndarray | None = None
+        if n_pc < 1:
+            msg = f"n_pc={n_pc} is not valid. Use n_pc of 1 or more."
+            raise ValueError(msg)
+        self.n_pc = n_pc
+        self.binarize = binarize
+        self.random_state = random_state
 
-    def runLSA(self) -> None:
-        r"""
-        Computes LSA for a given matrix and updates the ``TOPICMODEL`` object.
-        """
+        # Set by fit. `V`, features by components, ordered by singular value, with
+        # the entry of largest absolute value of every component positive.
+        self._components: np.ndarray | None = None
+        # The singular value of every component.
+        self._singular_values: np.ndarray | None = None
+        # The idf of every feature, which transform uses for new cells.
+        self._idf: np.ndarray | None = None
+        # The pivot of the normalization.
+        self._pivot: float | None = None
 
-        # LSA
-        tfidf = models.TfidfModel(
-            self.corpus,
-            id2word=self.regions_dict,
-            normalize=True,
-            smartirs=self.smart_code,
-        )
-        self.corpus_tfidf = tfidf[self.corpus]
-        self.lsi_model = models.LsiModel(
-            self.corpus_tfidf, id2word=self.regions_dict, num_topics=self.n_topics
-        )
-        # lsi[X] computes U^-1*X, which equals V*S (its shape is num_docs * num_topics).
-        self.cell_topic_dist = self.lsi_model[self.corpus_tfidf]
+    def fit(self, X: CountMatrix) -> LSA:
+        """Fits the components to `X`, cells in rows and features in columns."""
+        counts = count_matrix(X, self.binarize)
+        n, p = counts.shape
+        if self.n_pc >= min(n, p):
+            msg = (
+                f"n_pc={self.n_pc} components need more cells and features than that, "
+                f"but the input has {n} cells and {p} features. Use n_pc="
+                f"{min(n, p) - 1} or fewer."
+            )
+            raise ValueError(msg)
+        if bool((counts.data < 0).any()):
+            msg = "LSA takes counts, but the input has negative values."
+            raise ValueError(msg)
 
-        # Compute Coherence Score
-        coherence_model_lsa = models.CoherenceModel(
-            model=self.lsi_model,
-            corpus=self.corpus,
-            dictionary=self.regions_dict,
-            coherence="u_mass",
-        )
-        coherence_lsa = coherence_model_lsa.get_coherence()
-        print("\nCoherence Score: ", coherence_lsa)
+        holders = np.bincount(counts.indices[counts.data > 0], minlength=p)
+        self._idf, self._pivot = idf(holders.astype(np.float64), n)
+        weighted = tfidf(counts, self._idf, self._pivot)
+        _, s, vt = svds(weighted, k=self.n_pc, rng=self.random_state)
+        order = np.argsort(s)[::-1]
+        components = vt[order].T.astype(np.float32)
 
-    def runLDA(
-        self,
-        iterations: int = 500,
-        alpha: float = 50.0,
-        eta: float = 0.1,
-        gamma_threshold: float = 0.001,
-    ) -> None:
-        r"""
-        Computes LDA model for a given matrix and updates the ``TOPICMODEL`` object.
+        self._components = components * largest_entry_signs(components)
+        self._singular_values = s[order].astype(np.float32)
+        return self
 
-        Parameters
-        ----------
-        iterations : int, optional
-            Maximum number of iterations through the corpus when inferring the topic
-            distribution of a corpus. Default is 500.
-        alpha : float, optional
-            A-priori belief on the cell-topic distribution. Default is 50.0.
-        eta : float, optional
-            A-priori belief on the topic-region distribution. Default is 0.1.
-        gamma_threshold : float, optional
-            Minimum change in the value of the gamma parameters to continue iterating.
-            Default is 0.001.
-        """
-
-        self.lda_model = models.LdaMulticore(
-            corpus=self.corpus,
-            num_topics=self.n_topics,
-            passes=self.n_passes,
-            iterations=iterations,
-            alpha=alpha,
-            eta=eta,
-            gamma_threshold=gamma_threshold,
-            chunksize=5000,
-            workers=self.n_workers,
-            minimum_probability=0.0,
-        )
-        # get topic distributions for each document as dense topic vectors
-        self.cell_topic_dist = self.lda_model.get_document_topics(
-            self.corpus, minimum_probability=0.0
-        )
-        # get topic-word distributions
-        self.topic_region_dist = self.lda_model.get_topics()
-
-    def get_cell_topic(self) -> pd.DataFrame:
-        r"""
-        Get cell-topic matrix from the ``TOPICMODEL`` object.
-
-        Returns
-        -------
-        cell_topic : pandas.DataFrame
-            Cell-topic matrix (cells x topics).
-        """
-        topic_dist = self.cell_topic_dist
-        if topic_dist is None:
-            msg = "No topic model fitted yet. Call runLSA() or runLDA() first."
+    def transform(self, X: CountMatrix) -> np.ndarray:
+        """The scores of the cells of `X`, with the idf of the fit."""
+        if self._components is None:
+            msg = "LSA is not fitted. Call fit() before transform()."
             raise RuntimeError(msg)
+        assert self._idf is not None
+        assert self._pivot is not None
+        weighted = tfidf(count_matrix(X, self.binarize), self._idf, self._pivot)
+        return np.asarray(weighted @ self._components, dtype=np.float32)
 
-        weights = np.zeros((len(self.cells), self.n_topics), dtype=float)
-        for i, topic_weights in enumerate(topic_dist):
-            for topic_id, weight in topic_weights:
-                if topic_id < self.n_topics:
-                    weights[i, topic_id] = weight
+    def fit_transform(self, X: CountMatrix) -> np.ndarray:
+        """Fits the components to `X` and returns the scores of its cells."""
+        return self.fit(X).transform(X)
 
-        cell_topic = pd.DataFrame(
-            weights, columns=pd.Index([f"topic_{x}" for x in range(self.n_topics)])
+
+class LDA:
+    r"""Latent Dirichlet allocation of a cell-by-feature count matrix, fitted by
+    collapsed Gibbs sampling with tomotopy.
+
+    Each cell is a document and each count of a feature is one token of that feature.
+    Every token holds a topic assignment, and each iteration samples every assignment
+    again from the counts of the others (Griffiths and Steyvers, 2004).
+
+    The results are from the last sample: the topic proportions of a cell are
+    :math:`(n_{dk} + \alpha) / (n_d + K \alpha)` and the feature distribution of a topic
+    is :math:`(n_{kw} + \eta) / (n_k + V \eta)`, over every feature of the input. A cell
+    without counts gets the prior mean, 1/K for every topic.
+
+    Parameters
+    ----------
+    n_topics : int
+        Number of topics K. Defaults to 20.
+    alpha : float or None
+        Prior of the topic proportions of a cell, the same for every topic. None takes
+        1/K. Defaults to None.
+    eta : float
+        Prior of the feature weights of a topic. Defaults to 0.1.
+    iterations : int
+        Number of Gibbs sampling iterations over all the tokens. Defaults to 1000.
+    binarize : bool
+        Whether to count every non-zero entry as 1. Defaults to False.
+    n_jobs : int
+        Number of threads for tomotopy. The result of a seed depends on it. Defaults to
+        DEFAULT_PROCESSORS (half of the available processors, at most 16).
+    random_state : int
+        Seed of the sampler. Defaults to DEFAULT_RANDOM_STATE (42).
+    """
+
+    def __init__(
+        self,
+        n_topics: int = 20,
+        alpha: float | None = None,
+        eta: float = 0.1,
+        iterations: int = 1000,
+        binarize: bool = False,
+        n_jobs: int = DEFAULT_PROCESSORS,
+        random_state: int = DEFAULT_RANDOM_STATE,
+    ) -> None:
+        for name, value in (
+            ("n_topics", n_topics),
+            ("iterations", iterations),
+            ("n_jobs", n_jobs),
+        ):
+            if value < 1:
+                msg = f"{name} must be at least 1, not {value}."
+                raise ValueError(msg)
+        if (alpha is not None and alpha <= 0) or eta <= 0:
+            msg = f"alpha={alpha} and eta={eta} are not valid. Use positive values."
+            raise ValueError(msg)
+        self.n_topics = n_topics
+        self.alpha = alpha
+        self.eta = eta
+        self.iterations = iterations
+        self.binarize = binarize
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+
+        # Set by fit. The feature distribution of every topic, topics by features.
+        self._topics: np.ndarray | None = None
+        # The log-likelihood per token after every iteration.
+        self._log_likelihood: list[float] = []
+
+    def fit_transform(self, X: CountMatrix) -> np.ndarray:
+        """Fits the model to `X`, cells in rows and features in columns, and returns
+        the topic proportions of the cells."""
+        counts = count_matrix(X, self.binarize)
+        if counts.nnz and not np.array_equal(counts.data, np.round(counts.data)):
+            msg = "LDA needs integer counts."
+            raise ValueError(msg)
+        if bool((counts.data < 0).any()):
+            msg = "LDA takes counts, but the input has negative values."
+            raise ValueError(msg)
+
+        # tomotopy model. TermWeight.ONE gives each count a weight of 1. min_cf=0,
+        # min_df=0 and rm_top=0 keep every feature with counts.
+        alpha = 1.0 / self.n_topics if self.alpha is None else float(self.alpha)
+        model = tp.LDAModel(
+            tw=tp.TermWeight.ONE,
+            min_cf=0,
+            min_df=0,
+            rm_top=0,
+            k=self.n_topics,
+            alpha=alpha,
+            eta=self.eta,
+            seed=self.random_state,
         )
-        cell_topic.index = pd.Index(self.cells)
 
-        return cell_topic
+        # Tokenize: every count contributes one token of its feature to the cell.
+        # Tokens are stored as strings. Every cell/document is turned into a list
+        # of tokens/strings and added to the corpus.
+        n_cells, n_features = counts.shape
+        names = np.array([str(feature) for feature in range(n_features)])
+        values = counts.data.astype(np.int64)
+        modelled = []
+        for row in range(n_cells):
+            low, high = counts.indptr[row], counts.indptr[row + 1]
+            tokens = np.repeat(names[counts.indices[low:high]], values[low:high])
+            if len(tokens):
+                model.add_doc(tokens.tolist())
+                modelled.append(row)
+
+        # Fit LDA one iteration at a time. After each iteration, keep the
+        # log-likelihood per token and show it in the progress bar to monitor the
+        # convergence.
+        self._log_likelihood = []
+        progress = tqdm(range(self.iterations), desc="LDA fit", unit="it")
+        for _ in progress:
+            model.train(1, workers=self.n_jobs)
+            self._log_likelihood.append(float(model.ll_per_word))
+            progress.set_postfix(ll_per_token=f"{model.ll_per_word:.6f}")
+
+        # Topic proportions of the cells from the iteration. A cell without tokens
+        # gets the prior mean, 1/K for each topic.
+        theta = np.full((n_cells, self.n_topics), 1.0 / self.n_topics, np.float32)
+        theta[np.asarray(modelled, dtype=np.int64)] = np.array(
+            [document.get_topic_dist() for document in model.docs], dtype=np.float32
+        )
+
+        # Feature distribution of every topic, over all V features of the input.
+        # tomotopy only holds the features with tokens (`used_vocabs`), so without
+        # normalization it gives n_kw + eta for them.
+        # Subtract eta to get n_kw, put it in the column of its feature, and keep
+        # n_kw = 0 for the features without tokens. The clip removes small negative
+        # values from the float32 precision of tomotopy. Then add eta to all V
+        # features and normalize each topic.
+        features = np.array([int(word) for word in model.used_vocabs], dtype=np.int64)
+        topic_counts = np.zeros((self.n_topics, n_features))
+        for topic in range(self.n_topics):
+            raw = np.asarray(model.get_topic_word_dist(topic, normalize=False))
+            topic_counts[topic, features] = raw - self.eta
+        weights = np.clip(topic_counts, 0.0, None) + self.eta
+        self._topics = (weights / weights.sum(axis=1, keepdims=True)).astype(np.float32)
+        return theta

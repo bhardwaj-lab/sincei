@@ -5,8 +5,11 @@ name: docs
 # of compiling sincei on the Read the Docs server.
 
 on:
+  push:
+    branches: [master, develop]
   pull_request:
     branches: [master, develop]
+    types: [opened, synchronize, closed]
   workflow_dispatch:
 
 permissions:
@@ -37,11 +40,11 @@ jobs:
       # The docs only import sincei, so we use the dev profile for compile
       # speed.
       - name: Build wheel
-        run: uvx maturin==1.14.1 build --profile dev --out dist
+        run: uvx maturin==1.15.0 build --profile dev --out dist
 
       - uses: actions/upload-artifact@v7
         with:
           name: docs-wheel
           path: dist/*.whl
-          retention-days: 7
+          retention-days: 3
 

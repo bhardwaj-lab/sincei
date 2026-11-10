@@ -14,6 +14,8 @@ from ruptures.exceptions import BadSegmentationParameters
 from scipy import sparse
 from tqdm import tqdm
 
+from sincei.cli._common_args import DEFAULT_PROCESSORS
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -241,7 +243,7 @@ def VCRfinder(
     penalties: Sequence[float] = (1,),
     region: str | None = None,
     verbose: bool = False,
-    n_threads: int = 1,
+    n_jobs: int = DEFAULT_PROCESSORS,
 ) -> pd.DataFrame:
     """
     Detects variable chromatin regions (VCRs) from a anndata object containing
@@ -282,8 +284,9 @@ def VCRfinder(
         Default is None.
     verbose : bool, optional
         Print progress messages and warnings. Default is False.
-    n_threads : int, optional
-        Number of threads to use for parallel processing, by default 1.
+    n_jobs : int, optional
+        Number of threads to use for parallel processing. Default is DEFAULT_PROCESSORS
+        (half of the available processors, at most 16).
 
     Returns
     -------
@@ -393,8 +396,8 @@ def VCRfinder(
         scores = np.zeros((p, len(sigmas)))
         score_sigma = partial(_score_sigma, corr, k)
 
-        if n_threads > 1:
-            with ThreadPoolExecutor(max_workers=n_threads) as executor:
+        if n_jobs > 1:
+            with ThreadPoolExecutor(max_workers=n_jobs) as executor:
                 for i, score_row in tqdm(
                     enumerate(executor.map(score_sigma, sigmas)),
                     total=len(sigmas),
@@ -417,8 +420,8 @@ def VCRfinder(
             _penalty_regions, algo, chrom=chrom, start=start, binsize=binsize
         )
 
-        if n_threads > 1:
-            with ThreadPoolExecutor(max_workers=n_threads) as executor:
+        if n_jobs > 1:
+            with ThreadPoolExecutor(max_workers=n_jobs) as executor:
                 for bkp_df in tqdm(
                     executor.map(penalty_regions, penalties),
                     total=len(penalties),
