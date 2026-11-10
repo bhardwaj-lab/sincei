@@ -102,7 +102,8 @@ def _ends_in_list(lines: list[str]) -> bool:
 
 
 def _choices(param: Any) -> str | None:
-    choices = getattr(param.type, "choices", None)
+    source = getattr(param, "type_descriptor", None) or getattr(param, "type", None)
+    choices = [_value(choice) for choice in getattr(source, "choices", None) or ()]
     # A help text that already names every choice says it better.
     named = _plain(param.help)
     if not choices or all(f"``{choice}``" in named for choice in choices):
