@@ -11,8 +11,8 @@ dynamic = ["version"]
 license = {file = "LICENCE.txt"}
 authors = [
     {name = "Vivek Bhardwaj"},
-    {name = "Fernando Sancho Gómez",
-    name = "Soufiane Mourragui"},
+    {name = "Fernando Sancho Gómez"},
+    {name = "Soufiane Mourragui"},
 ]
 maintainers = [
     {name = "Vivek Bhardwaj", email = "v.bhardwaj@uu.nl"},
@@ -34,16 +34,14 @@ dependencies = [
     "polars",
     "igraph",
     "leidenalg",
-    "click",
-    "typer",
-    # for debug logging (referenced from the issue template)
-    "session-info",
     "torch",
-    "geoopt", # GLMPCA default optimizer
-    "gensim",
+    "geoopt",
     "tomotopy",
     "ruptures",
     "tqdm",
+    "click",
+    "typer",
+    "session-info",
     ]
 
 [project.urls]
