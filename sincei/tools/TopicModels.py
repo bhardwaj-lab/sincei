@@ -8,7 +8,6 @@ tomotopy.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import anndata as ad
@@ -16,6 +15,7 @@ import numpy as np
 import tomotopy as tp
 from scipy.sparse import csr_matrix, issparse
 from scipy.sparse.linalg import svds
+from tqdm import tqdm
 
 from sincei.cli._common_args import DEFAULT_PROCESSORS
 
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 DEFAULT_RANDOM_STATE = 42
 # Slope of gensim's pivoted unique normalization, `smartirs="lfu"`.
 GENSIM_SLOPE = 0.25
-LOG_INTERVAL = 10
 
 
 def count_matrix(X: CountMatrix, binarize: bool = False) -> csr_matrix:
@@ -241,7 +240,7 @@ class LDA:
 
         # Set by fit. The feature distribution of every topic, topics by features.
         self._topics: np.ndarray | None = None
-        # The log-likelihood per token, every LOG_INTERVAL iterations.
+        # The log-likelihood per token after every iteration.
         self._log_likelihood: list[float] = []
 
     def fit_transform(self, X: CountMatrix) -> np.ndarray:
@@ -283,18 +282,15 @@ class LDA:
                 model.add_doc(tokens.tolist())
                 modelled.append(row)
 
-        # Fit LDA in steps of LOG_INTERVAL iterations. After each step, keep
-        # and print the log-likelihood per token to monitor the convergence.
+        # Fit LDA one iteration at a time. After each iteration, keep the
+        # log-likelihood per token and show it in the progress bar to monitor the
+        # convergence.
         self._log_likelihood = []
-        done = 0
-        while done < self.iterations:
-            step = min(LOG_INTERVAL, self.iterations - done)
-            model.train(step, workers=self.n_jobs)
-            done += step
+        progress = tqdm(range(self.iterations), desc="LDA fit", unit="it")
+        for _ in progress:
+            model.train(1, workers=self.n_jobs)
             self._log_likelihood.append(float(model.ll_per_word))
-            logging.info(
-                "Iteration %d: log-likelihood per token %.6f", done, model.ll_per_word
-            )
+            progress.set_postfix(ll_per_token=f"{model.ll_per_word:.6f}")
 
         # Topic proportions of the cells from the iteration. A cell without tokens
         # gets the prior mean, 1/K for each topic.

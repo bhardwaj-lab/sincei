@@ -103,7 +103,7 @@ def test_lda_gives_topic_proportions(counts: sparse.csr_matrix) -> None:
     assert lda._topics is not None
     assert lda._topics.shape == (2, N_REGIONS)
     np.testing.assert_allclose(lda._topics.sum(axis=1), 1.0, rtol=1e-5)
-    assert len(lda._log_likelihood) == 5
+    assert len(lda._log_likelihood) == 50
 
 
 def test_lda_separates_the_two_groups(counts: sparse.csr_matrix) -> None:
