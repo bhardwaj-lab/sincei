@@ -90,6 +90,11 @@ GENOME_CHUNK_SIZE = typer.Option(
         "Manually specify the size (in bases) of the genome chunks processed at a time."
     ),
 )
+OUT_FILE = override(
+    INPUT_OUTPUT_OPTS["out_file"],
+    metavar=".h5ad",
+    help=("The .h5ad file to write the count matrix to."),
+)
 COMPRESSION = typer.Option(
     "--compression",
     metavar="METHOD",
@@ -247,7 +252,7 @@ def _count_reads(
 def bins(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[str, OUT_FILE],
     barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
     compression: Annotated[Compression, COMPRESSION] = Compression.none,
@@ -350,7 +355,7 @@ def bins(
 def features(
     # Input / Output options
     bam_files: Annotated[list[str], INPUT_OUTPUT_OPTS["bam_files"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[str, OUT_FILE],
     bed: Annotated[str, BED],
     barcodes: Annotated[str | None, INPUT_OUTPUT_OPTS["barcodes"]] = None,
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,

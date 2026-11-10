@@ -50,7 +50,17 @@ _COLOR = "Color / Scale options"
 @app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".png/.jpg/.svg/.pdf",
+            help=(
+                "The image file to write the plot to. The suffix sets the image "
+                "format, unless --plotFileFormat is given."
+            ),
+        ),
+    ],
     region: Annotated[str, INPUT_OUTPUT_OPTS["region"]],
     mode: Annotated[
         SummaryMode,

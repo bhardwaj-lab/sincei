@@ -45,7 +45,17 @@ _BARCODE = "Barcode options "
 def main(
     # Input / Output options
     bam_file: Annotated[str, INPUT_OUTPUT_OPTS["bam_file"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".tsv",
+            help=(
+                "A .tsv file with one row per barcode, sorted by counts, with columns: "
+                "barcode, count, selected, count_log10 and count_rank."
+            ),
+        ),
+    ],
     whitelist: Annotated[str | None, INPUT_OUTPUT_OPTS["whitelist"]] = None,
     min_hamming_dist: Annotated[
         int,

@@ -15,6 +15,7 @@ from ._common_args import (
     OverlapPolicy,
     configure_logging,
     log_parameters,
+    override,
     preprocess_args,
 )
 from ._parsers import validate_anndata
@@ -40,7 +41,14 @@ _SCORING = "Common options"
 @app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".h5ad",
+            help=("The .h5ad file to write the scores to."),
+        ),
+    ],
     features: Annotated[
         str,
         typer.Option(

@@ -31,6 +31,7 @@ from ._common_args import (
     PlotFileFormat,
     configure_logging,
     log_parameters,
+    override,
     preprocess_args,
 )
 from ._parsers import validate_anndata
@@ -78,7 +79,17 @@ _CLUSTERING = "Clustering options"
 def main(
     # Input / Output options
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
-    out_file: Annotated[str, INPUT_OUTPUT_OPTS["out_file"]],
+    out_file: Annotated[
+        str,
+        override(
+            INPUT_OUTPUT_OPTS["out_file"],
+            metavar=".h5ad",
+            help=(
+                "The .h5ad file to write the AnnData to, with the reduction and, if "
+                "``--op`` is also given, the Leiden clusters and UMAP coordinates."
+            ),
+        ),
+    ],
     # Dimensionality reduction options
     method: Annotated[
         DimRed,
