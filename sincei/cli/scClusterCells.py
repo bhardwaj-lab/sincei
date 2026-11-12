@@ -156,19 +156,19 @@ def main(
             ),
         ),
     ] = False,
-    log_normalize: Annotated[
-        bool,
+    depth_correction: Annotated[
+        str | None,
         typer.Option(
-            "--logNormalize",
+            "--depthCorrection",
             rich_help_panel=_REDUCTION,
             help=(
-                "Depth-normalize the counts of every cell to a total of 10,000 and "
-                "then log1p transform before dimensionality reduction. Ignored with "
-                "[bold yellow]LSA[/bold yellow] and [bold yellow]LDA[/bold yellow], "
-                "which take the counts."
+                "Strategy to correct for differences in total counts across cells "
+                "during dimentionality reduction."
+                "Default: auto - selects the most appropriate strategy based on the selected "
+                "--method. Options are: [bold yellow]none, drop, lognormalize, normalize, offset[/bold yellow], "
             ),
         ),
-    ] = False,
+    ] = "auto",
     recompute_dim_red: Annotated[
         bool,
         typer.Option(
@@ -282,7 +282,7 @@ def main(
             n_prin_comps=n_prin_comps,
             n_neighbors=n_neighbors,
             binarize=binarize,
-            log_normalize=log_normalize,
+            depth_correction=depth_correction,
             recompute_dim_red=recompute_dim_red,
             n_iterations=n_iterations,
             alpha=alpha,
@@ -304,27 +304,53 @@ def main(
         choices = ", ".join(member.value for member in DimRed)
         sys.stderr.write(f"{method!r} is not a valid method. Use one of {choices}.\n")
         raise typer.Exit(code=1) from None
-    if log_normalize and method in {DimRed.LSA, DimRed.LDA}:
-        logging.warning(
-            "--logNormalize is ignored with %s, which takes raw counts.", method.value
-        )
-        log_normalize = False
 
+    # handle backed 'r' for glmPCA
     ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
-    backed = method is DimRed.glmPCA and not log_normalize and x_nbytes(input) > 0.3 * ram
+    backed = method is DimRed.glmPCA and x_nbytes(input) > 0.3 * ram
     adata = validate_anndata(ad.read_h5ad(input, backed="r" if backed else None), input)
+
+    # handle depth correction
+    if depth_correction.lower() == "none":
+        depth_correction = None
+    if depth_correction.lower() == "auto":
+        if method in {DimRed.LSA, DimRed.LDA}:
+            depth_correction = "drop"
+        if method is DimRed.PCA:
+            depth_correction = "lognormalize"
+        if method is DimRed.glmPCA:
+            if family in DEPTH_CORRECTION_FAMILIES["offset"]:
+                depth_correction = "offset"
+            elif family in DEPTH_CORRECTION_FAMILIES["normalize"]:
+                depth_correction = "normalize"
+            else:
+                depth_correction = None
+    else:
+        if depth_correction not in {"drop", None} and method in {DimRed.LSA, DimRed.LDA}:
+            logging.warning(
+            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+            )
+            depth_correction = None
+        if depth_correction not in {"lognormalize", None} and method in {DimRed.PCA}:
+            logging.warning(
+            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+            )
+            depth_correction = None
+        if depth_correction not in {"offset", "normalize", None} and method in {DimRed.glmPCA}:
+            logging.warning(
+            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+            )
+            depth_correction = None
 
     reduction = f"X_{method.value.lower()}"
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     else:
         matrix = adata
-        if log_normalize:
-            matrix = adata.copy()
-            sc.pp.normalize_total(matrix, target_sum=1e4)
-            sc.pp.log1p(matrix)
-
         if method is DimRed.PCA:
+            if depth_correction == "lognormalize":
+                sc.pp.normalize_total(matrix, target_sum=1e4)
+                sc.pp.log1p(matrix)
             sc.pp.pca(matrix, n_comps=n_prin_comps)
             adata.obsm[reduction] = matrix.obsm["X_pca"]
             adata.varm["PCs"] = matrix.varm["PCs"]
@@ -332,7 +358,11 @@ def main(
         elif method is DimRed.glmPCA:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logging.info("Running glmPCA on device: %s", device)
-            glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family, device=device)
+            glmpca = GLMPCA(n_pc=n_prin_comps,
+                            family=glmpca_family,
+                            device=device,
+                            depth_correction=depth_correction
+                            )
             adata.obsm[reduction] = glmpca.fit_transform(matrix).numpy()
             assert glmpca.saturated_loadings_ is not None
             adata.varm[reduction] = glmpca.saturated_loadings_.cpu().numpy()
@@ -341,8 +371,11 @@ def main(
             scores = lsa.fit_transform(matrix)
             assert lsa._components is not None
             assert lsa._singular_values is not None
-            depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
-            keep = depth_components(scores, depth)
+            if depth_correction == "drop":
+                depth = np.asarray(adata.X.sum(axis=1), dtype=np.float32).ravel()
+                keep = depth_components(scores, depth)
+            else:
+                keep = slice(None)
             adata.obsm[reduction] = scores[:, keep]
             adata.varm[reduction] = lsa._components[:, keep]
             adata.var["lsa_idf"] = lsa._idf
@@ -381,7 +414,7 @@ def main(
             figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
         )
         sc.pl.umap(
-            adata, color="leiden", legend_loc="on data", size=20, ax=axes, show=False
+            adata, color="leiden", legend_loc="on data", ax=axes, show=False
         )
 
         umap_title = (
