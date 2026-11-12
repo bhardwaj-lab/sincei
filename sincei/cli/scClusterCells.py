@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import torch
 import typer
 
 from sincei.tools.ExponentialFamily import GLMFamily
@@ -318,10 +319,12 @@ def main(
             adata.varm["PCs"] = matrix.varm["PCs"]
             adata.uns["pca"] = matrix.uns["pca"]
         elif method is DimRed.glmPCA:
-            glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family)
-            glmpca.fit(matrix)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logging.info("Running glmPCA on device: %s", device)
+            glmpca = GLMPCA(n_pc=n_prin_comps, family=glmpca_family, device=device)
+            adata.obsm[reduction] = glmpca.fit_transform(matrix).numpy()
             assert glmpca.saturated_loadings_ is not None
-            adata.obsm[reduction] = glmpca.saturated_loadings_.detach().numpy()
+            adata.varm[reduction] = glmpca.saturated_loadings_.cpu().numpy()
         elif method is DimRed.LSA:
             lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
             scores = lsa.fit_transform(matrix)

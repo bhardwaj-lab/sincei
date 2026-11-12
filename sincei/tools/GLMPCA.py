@@ -197,7 +197,7 @@ class _Data:
 
     def scores(self, V: torch.Tensor, mu: torch.Tensor, b: _Batch) -> torch.Tensor:
         """U = (Theta_b - o [x != 0] - 1 mu^T) V
-        With 'offset': non-zeros are shifted by -o_i (= g^{-1}(x / s) for log-link families) and zeros stay at theta0.
+        With 'offset': non-zeros are shifted by -o_i (= g^{-1}(x / s) for log-link families, and zeros stay at theta0.
         With 'weights': unobserved entries sit at mu, only observed rows of V enter.
         """
         if b.delta is not None:
@@ -274,8 +274,8 @@ class GLMPCA:
     chunk_size : int
         Rows per chunk for full passes; capped so a dense chunk <= MAX_CHUNK_ENTRIES.
     n_jobs : int
-        Threads that evaluate chunks of a cost / gradient pass in parallel (-1: all
-        cores); gradients are summed in a fixed order, so results do not depend on
+        Threads (on CPU) that evaluate chunks of a cost / gradient pass in parallel
+        (-1: all cores); gradients are summed in a fixed order, so results do not depend on
         timing. Chunks are split up to n_jobs ways (pieces >= MIN_PIECE_ROWS rows),
         so peak memory stays one chunk.
         With n_jobs > 1, torch runs single-threaded per worker during fit and score.
