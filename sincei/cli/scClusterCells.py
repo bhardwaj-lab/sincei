@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import os
 import logging
 import sys
 import warnings
 from pathlib import Path
 from typing import Annotated
 
+import h5py
 import anndata as ad
 import matplotlib as mpl
-
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -22,6 +23,14 @@ from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import GLMPCA
 from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
+
+def x_nbytes(path: str) -> int:
+    "Check in-memory size of X from metadata."
+    with h5py.File(path, "r") as f:
+        X = f["X"]
+        if isinstance(X, h5py.Dataset):
+            return X.size * X.dtype.itemsize
+        return sum(X[k].size * X[k].dtype.itemsize for k in ("data", "indices", "indptr"))
 
 from ._common_args import (
     CM_PER_INCH,
@@ -301,9 +310,11 @@ def main(
         )
         log_normalize = False
 
-    adata = validate_anndata(ad.read_h5ad(input), input)
-    reduction = f"X_{method.value.lower()}"
+    ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    backed = method is DimRed.glmPCA and not log_normalize and x_nbytes(input) > 0.3 * ram
+    adata = validate_anndata(ad.read_h5ad(input, backed="r" if backed else None), input)
 
+    reduction = f"X_{method.value.lower()}"
     if reduction in adata.obsm and not recompute_dim_red:
         logging.info("Using the existing reduction in obsm[%r].", reduction)
     else:
