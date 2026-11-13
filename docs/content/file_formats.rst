@@ -95,8 +95,8 @@ bgzip. sincei reads BED files of features to count (:ref:`scCountReads`,
 :ref:`scScoreFeatures`) and blacklists (``--blacklist``).
 
 :ref:`scFindVCRs` writes a 6-column BED file (``chrom``, ``start``, ``end``,
-``name``, ``score``, ``strand``). The score column is the value of the penalty
-parameter used for the segmentation.
+``name``, ``score``, ``strand``). Its score column is the cost of the segment (0 for
+a one-bin segment).
 
 .. _fmt-gtf:
 

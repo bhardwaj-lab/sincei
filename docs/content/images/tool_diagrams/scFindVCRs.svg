@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 939 373">
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 939 312">
   <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
   <defs>
     <style>
@@ -225,6 +225,18 @@
       .st17 {
         font-family: MesloLGMNFM-Bold, 'MesloLGM Nerd Font Mono';
       }
+
+      .st46 {
+        fill: #a6d4d3;
+      }
+
+      .st47 {
+        fill: #ffffff;
+      }
+
+      .st48 {
+        fill: #fff1dd;
+      }
     </style>
   </defs>
   <rect class="st31" x="0" y="0" width="939" height="373" rx="9.7" ry="9.7"/>
@@ -233,26 +245,26 @@
   <text class="st12" transform="translate(20 72)"><tspan x="0" y="0">binned .h5ad from</tspan></text>
   <text class="st12" transform="translate(20 88)"><tspan x="0" y="0">scCountReads bins</tspan></text>
   <text class="st15" transform="translate(200 52)"><tspan x="0" y="0">Bin cooccurrence</tspan></text>
-  <text class="st12" transform="translate(200 72)"><tspan x="0" y="0">bin-to-bin cooccurrence</tspan></text>
-  <text class="st12" transform="translate(200 88)"><tspan x="0" y="0">across cells · --binSize</tspan></text>
-  <text class="st15" transform="translate(380 52)"><tspan x="0" y="0">Score map</tspan></text>
-  <text class="st12" transform="translate(380 72)"><tspan x="0" y="0">Gaussian kernels along</tspan></text>
-  <text class="st12" transform="translate(380 88)"><tspan x="0" y="0">the diagonal · --nKernels 20</tspan></text>
-  <text class="st15" transform="translate(560 52)"><tspan x="0" y="0">Segment with PELT</tspan></text>
-  <text class="st12" transform="translate(560 72)"><tspan x="0" y="0">change points per</tspan></text>
-  <text class="st12" transform="translate(560 88)"><tspan x="0" y="0">penalty · --penalties</tspan></text>
+  <text class="st12" transform="translate(200 72)"><tspan x="0" y="0">binarized, in signal blocks</tspan></text>
+  <text class="st12" transform="translate(200 88)"><tspan x="0" y="0">--minCellPct · --slack</tspan></text>
+  <text class="st15" transform="translate(380 52)"><tspan x="0" y="0">Normalize</tspan></text>
+  <text class="st12" transform="translate(380 72)"><tspan x="0" y="0">divide by the geometric mean</tspan></text>
+  <text class="st12" transform="translate(380 88)"><tspan x="0" y="0">of total counts in each bin</tspan></text>
+  <text class="st15" transform="translate(560 52)"><tspan x="0" y="0">Exact segmentation</tspan></text>
+  <text class="st12" transform="translate(560 72)"><tspan x="0" y="0">dynamic programming with</tspan></text>
+  <text class="st12" transform="translate(560 88)"><tspan x="0" y="0">a penalty · --penalty</tspan></text>
   <text class="st15" transform="translate(740 52)"><tspan x="0" y="0">BED output</tspan></text>
   <text class="st12" transform="translate(740 72)"><tspan x="0" y="0">one row per segment</tspan></text>
   <text class="st12" transform="translate(740 88)"><tspan x="0" y="0">--outFile</tspan></text>
   <g>
-    <line class="st6" x1="174" y1="180" x2="190" y2="180"/>
-    <path class="st7" d="M198,180l-8,4.8v-9.6l8,4.8Z"/>
-    <line class="st6" x1="354" y1="180" x2="370" y2="180"/>
-    <path class="st7" d="M378,180l-8,4.8v-9.6l8,4.8Z"/>
-    <line class="st6" x1="534" y1="180" x2="550" y2="180"/>
-    <path class="st7" d="M558,180l-8,4.8v-9.6l8,4.8Z"/>
-    <line class="st6" x1="714" y1="180" x2="730" y2="180"/>
-    <path class="st7" d="M738,180l-8,4.8v-9.6l8,4.8Z"/>
+    <line class="st6" x1="174" y1="180" x2="182" y2="180"/>
+    <path class="st7" d="M190,180l-8,4.8v-9.6l8,4.8Z"/>
+    <line class="st6" x1="357" y1="180" x2="365" y2="180"/>
+    <path class="st7" d="M373,180l-8,4.8v-9.6l8,4.8Z"/>
+    <line class="st6" x1="530" y1="180" x2="538" y2="180"/>
+    <path class="st7" d="M546,180l-8,4.8v-9.6l8,4.8Z"/>
+    <line class="st6" x1="707" y1="180" x2="715" y2="180"/>
+    <path class="st7" d="M723,180l-8,4.8v-9.6l8,4.8Z"/>
     <rect class="st37" x="26" y="130" width="11" height="11" rx="2" ry="2"/>
     <rect class="st38" x="39" y="130" width="11" height="11" rx="2" ry="2"/>
     <rect class="st27" x="52" y="130" width="11" height="11" rx="2" ry="2"/>
@@ -337,91 +349,91 @@
     <rect class="st22" x="210" y="120" width="10" height="10"/>
     <rect class="st33" x="220" y="120" width="10" height="10"/>
     <rect class="st19" x="230" y="120" width="10" height="10"/>
-    <rect class="st1" x="240" y="120" width="10" height="10"/>
-    <rect class="st44" x="250" y="120" width="10" height="10"/>
-    <rect class="st36" x="260" y="120" width="10" height="10"/>
+    <rect class="st46" x="240" y="120" width="10" height="10"/>
+    <rect class="st46" x="250" y="120" width="10" height="10"/>
+    <rect class="st47" x="260" y="120" width="10" height="10"/>
     <rect class="st29" x="270" y="120" width="10" height="10"/>
     <rect class="st35" x="280" y="120" width="10" height="10"/>
     <rect class="st0" x="290" y="120" width="10" height="10"/>
-    <rect class="st8" x="300" y="120" width="10" height="10"/>
+    <rect class="st47" x="300" y="120" width="10" height="10"/>
     <rect class="st11" x="310" y="120" width="10" height="10"/>
     <rect class="st30" x="320" y="120" width="10" height="10"/>
     <rect class="st10" x="330" y="120" width="10" height="10"/>
     <rect class="st33" x="210" y="130" width="10" height="10"/>
     <rect class="st22" x="220" y="130" width="10" height="10"/>
     <rect class="st33" x="230" y="130" width="10" height="10"/>
-    <rect class="st19" x="240" y="130" width="10" height="10"/>
-    <rect class="st9" x="250" y="130" width="10" height="10"/>
-    <rect class="st44" x="260" y="130" width="10" height="10"/>
+    <rect class="st46" x="240" y="130" width="10" height="10"/>
+    <rect class="st46" x="250" y="130" width="10" height="10"/>
+    <rect class="st47" x="260" y="130" width="10" height="10"/>
     <rect class="st36" x="270" y="130" width="10" height="10"/>
     <rect class="st29" x="280" y="130" width="10" height="10"/>
     <rect class="st35" x="290" y="130" width="10" height="10"/>
-    <rect class="st0" x="300" y="130" width="10" height="10"/>
+    <rect class="st47" x="300" y="130" width="10" height="10"/>
     <rect class="st8" x="310" y="130" width="10" height="10"/>
     <rect class="st11" x="320" y="130" width="10" height="10"/>
     <rect class="st30" x="330" y="130" width="10" height="10"/>
     <rect class="st19" x="210" y="140" width="10" height="10"/>
     <rect class="st33" x="220" y="140" width="10" height="10"/>
     <rect class="st22" x="230" y="140" width="10" height="10"/>
-    <rect class="st33" x="240" y="140" width="10" height="10"/>
-    <rect class="st40" x="250" y="140" width="10" height="10"/>
-    <rect class="st9" x="260" y="140" width="10" height="10"/>
+    <rect class="st46" x="240" y="140" width="10" height="10"/>
+    <rect class="st46" x="250" y="140" width="10" height="10"/>
+    <rect class="st47" x="260" y="140" width="10" height="10"/>
     <rect class="st44" x="270" y="140" width="10" height="10"/>
     <rect class="st36" x="280" y="140" width="10" height="10"/>
     <rect class="st29" x="290" y="140" width="10" height="10"/>
-    <rect class="st35" x="300" y="140" width="10" height="10"/>
+    <rect class="st47" x="300" y="140" width="10" height="10"/>
     <rect class="st0" x="310" y="140" width="10" height="10"/>
     <rect class="st8" x="320" y="140" width="10" height="10"/>
     <rect class="st11" x="330" y="140" width="10" height="10"/>
-    <rect class="st1" x="210" y="150" width="10" height="10"/>
-    <rect class="st19" x="220" y="150" width="10" height="10"/>
-    <rect class="st33" x="230" y="150" width="10" height="10"/>
+    <rect class="st46" x="210" y="150" width="10" height="10"/>
+    <rect class="st46" x="220" y="150" width="10" height="10"/>
+    <rect class="st46" x="230" y="150" width="10" height="10"/>
     <rect class="st22" x="240" y="150" width="10" height="10"/>
-    <rect class="st43" x="250" y="150" width="10" height="10"/>
-    <rect class="st40" x="260" y="150" width="10" height="10"/>
+    <rect class="st33" x="250" y="150" width="10" height="10"/>
+    <rect class="st47" x="260" y="150" width="10" height="10"/>
     <rect class="st9" x="270" y="150" width="10" height="10"/>
     <rect class="st44" x="280" y="150" width="10" height="10"/>
     <rect class="st36" x="290" y="150" width="10" height="10"/>
-    <rect class="st29" x="300" y="150" width="10" height="10"/>
+    <rect class="st47" x="300" y="150" width="10" height="10"/>
     <rect class="st35" x="310" y="150" width="10" height="10"/>
     <rect class="st0" x="320" y="150" width="10" height="10"/>
     <rect class="st8" x="330" y="150" width="10" height="10"/>
-    <rect class="st44" x="210" y="160" width="10" height="10"/>
-    <rect class="st9" x="220" y="160" width="10" height="10"/>
-    <rect class="st40" x="230" y="160" width="10" height="10"/>
-    <rect class="st43" x="240" y="160" width="10" height="10"/>
+    <rect class="st46" x="210" y="160" width="10" height="10"/>
+    <rect class="st46" x="220" y="160" width="10" height="10"/>
+    <rect class="st46" x="230" y="160" width="10" height="10"/>
+    <rect class="st33" x="240" y="160" width="10" height="10"/>
     <rect class="st22" x="250" y="160" width="10" height="10"/>
-    <rect class="st33" x="260" y="160" width="10" height="10"/>
-    <rect class="st19" x="270" y="160" width="10" height="10"/>
+    <rect class="st47" x="260" y="160" width="10" height="10"/>
+    <rect class="st40" x="270" y="160" width="10" height="10"/>
     <rect class="st9" x="280" y="160" width="10" height="10"/>
     <rect class="st44" x="290" y="160" width="10" height="10"/>
-    <rect class="st36" x="300" y="160" width="10" height="10"/>
+    <rect class="st47" x="300" y="160" width="10" height="10"/>
     <rect class="st29" x="310" y="160" width="10" height="10"/>
     <rect class="st35" x="320" y="160" width="10" height="10"/>
     <rect class="st0" x="330" y="160" width="10" height="10"/>
-    <rect class="st36" x="210" y="170" width="10" height="10"/>
-    <rect class="st44" x="220" y="170" width="10" height="10"/>
-    <rect class="st9" x="230" y="170" width="10" height="10"/>
-    <rect class="st40" x="240" y="170" width="10" height="10"/>
-    <rect class="st33" x="250" y="170" width="10" height="10"/>
-    <rect class="st22" x="260" y="170" width="10" height="10"/>
-    <rect class="st33" x="270" y="170" width="10" height="10"/>
-    <rect class="st40" x="280" y="170" width="10" height="10"/>
-    <rect class="st9" x="290" y="170" width="10" height="10"/>
-    <rect class="st44" x="300" y="170" width="10" height="10"/>
-    <rect class="st36" x="310" y="170" width="10" height="10"/>
-    <rect class="st29" x="320" y="170" width="10" height="10"/>
-    <rect class="st35" x="330" y="170" width="10" height="10"/>
+    <rect class="st47" x="210" y="170" width="10" height="10"/>
+    <rect class="st47" x="220" y="170" width="10" height="10"/>
+    <rect class="st47" x="230" y="170" width="10" height="10"/>
+    <rect class="st47" x="240" y="170" width="10" height="10"/>
+    <rect class="st47" x="250" y="170" width="10" height="10"/>
+    <rect class="st47" x="260" y="170" width="10" height="10"/>
+    <rect class="st47" x="270" y="170" width="10" height="10"/>
+    <rect class="st47" x="280" y="170" width="10" height="10"/>
+    <rect class="st47" x="290" y="170" width="10" height="10"/>
+    <rect class="st47" x="300" y="170" width="10" height="10"/>
+    <rect class="st47" x="310" y="170" width="10" height="10"/>
+    <rect class="st47" x="320" y="170" width="10" height="10"/>
+    <rect class="st47" x="330" y="170" width="10" height="10"/>
     <rect class="st29" x="210" y="180" width="10" height="10"/>
     <rect class="st36" x="220" y="180" width="10" height="10"/>
     <rect class="st44" x="230" y="180" width="10" height="10"/>
     <rect class="st9" x="240" y="180" width="10" height="10"/>
-    <rect class="st19" x="250" y="180" width="10" height="10"/>
-    <rect class="st33" x="260" y="180" width="10" height="10"/>
+    <rect class="st40" x="250" y="180" width="10" height="10"/>
+    <rect class="st47" x="260" y="180" width="10" height="10"/>
     <rect class="st22" x="270" y="180" width="10" height="10"/>
-    <rect class="st43" x="280" y="180" width="10" height="10"/>
-    <rect class="st40" x="290" y="180" width="10" height="10"/>
-    <rect class="st9" x="300" y="180" width="10" height="10"/>
+    <rect class="st33" x="280" y="180" width="10" height="10"/>
+    <rect class="st19" x="290" y="180" width="10" height="10"/>
+    <rect class="st47" x="300" y="180" width="10" height="10"/>
     <rect class="st44" x="310" y="180" width="10" height="10"/>
     <rect class="st36" x="320" y="180" width="10" height="10"/>
     <rect class="st29" x="330" y="180" width="10" height="10"/>
@@ -430,11 +442,11 @@
     <rect class="st36" x="230" y="190" width="10" height="10"/>
     <rect class="st44" x="240" y="190" width="10" height="10"/>
     <rect class="st9" x="250" y="190" width="10" height="10"/>
-    <rect class="st40" x="260" y="190" width="10" height="10"/>
-    <rect class="st43" x="270" y="190" width="10" height="10"/>
+    <rect class="st47" x="260" y="190" width="10" height="10"/>
+    <rect class="st33" x="270" y="190" width="10" height="10"/>
     <rect class="st22" x="280" y="190" width="10" height="10"/>
     <rect class="st33" x="290" y="190" width="10" height="10"/>
-    <rect class="st40" x="300" y="190" width="10" height="10"/>
+    <rect class="st47" x="300" y="190" width="10" height="10"/>
     <rect class="st9" x="310" y="190" width="10" height="10"/>
     <rect class="st44" x="320" y="190" width="10" height="10"/>
     <rect class="st36" x="330" y="190" width="10" height="10"/>
@@ -443,37 +455,37 @@
     <rect class="st29" x="230" y="200" width="10" height="10"/>
     <rect class="st36" x="240" y="200" width="10" height="10"/>
     <rect class="st44" x="250" y="200" width="10" height="10"/>
-    <rect class="st9" x="260" y="200" width="10" height="10"/>
-    <rect class="st40" x="270" y="200" width="10" height="10"/>
+    <rect class="st47" x="260" y="200" width="10" height="10"/>
+    <rect class="st19" x="270" y="200" width="10" height="10"/>
     <rect class="st33" x="280" y="200" width="10" height="10"/>
     <rect class="st22" x="290" y="200" width="10" height="10"/>
-    <rect class="st43" x="300" y="200" width="10" height="10"/>
+    <rect class="st47" x="300" y="200" width="10" height="10"/>
     <rect class="st40" x="310" y="200" width="10" height="10"/>
     <rect class="st9" x="320" y="200" width="10" height="10"/>
     <rect class="st44" x="330" y="200" width="10" height="10"/>
-    <rect class="st8" x="210" y="210" width="10" height="10"/>
-    <rect class="st0" x="220" y="210" width="10" height="10"/>
-    <rect class="st35" x="230" y="210" width="10" height="10"/>
-    <rect class="st29" x="240" y="210" width="10" height="10"/>
-    <rect class="st36" x="250" y="210" width="10" height="10"/>
-    <rect class="st44" x="260" y="210" width="10" height="10"/>
-    <rect class="st9" x="270" y="210" width="10" height="10"/>
-    <rect class="st40" x="280" y="210" width="10" height="10"/>
-    <rect class="st43" x="290" y="210" width="10" height="10"/>
-    <rect class="st22" x="300" y="210" width="10" height="10"/>
-    <rect class="st33" x="310" y="210" width="10" height="10"/>
-    <rect class="st19" x="320" y="210" width="10" height="10"/>
-    <rect class="st1" x="330" y="210" width="10" height="10"/>
+    <rect class="st47" x="210" y="210" width="10" height="10"/>
+    <rect class="st47" x="220" y="210" width="10" height="10"/>
+    <rect class="st47" x="230" y="210" width="10" height="10"/>
+    <rect class="st47" x="240" y="210" width="10" height="10"/>
+    <rect class="st47" x="250" y="210" width="10" height="10"/>
+    <rect class="st47" x="260" y="210" width="10" height="10"/>
+    <rect class="st47" x="270" y="210" width="10" height="10"/>
+    <rect class="st47" x="280" y="210" width="10" height="10"/>
+    <rect class="st47" x="290" y="210" width="10" height="10"/>
+    <rect class="st47" x="300" y="210" width="10" height="10"/>
+    <rect class="st47" x="310" y="210" width="10" height="10"/>
+    <rect class="st47" x="320" y="210" width="10" height="10"/>
+    <rect class="st47" x="330" y="210" width="10" height="10"/>
     <rect class="st11" x="210" y="220" width="10" height="10"/>
     <rect class="st8" x="220" y="220" width="10" height="10"/>
     <rect class="st0" x="230" y="220" width="10" height="10"/>
     <rect class="st35" x="240" y="220" width="10" height="10"/>
     <rect class="st29" x="250" y="220" width="10" height="10"/>
-    <rect class="st36" x="260" y="220" width="10" height="10"/>
+    <rect class="st47" x="260" y="220" width="10" height="10"/>
     <rect class="st44" x="270" y="220" width="10" height="10"/>
     <rect class="st9" x="280" y="220" width="10" height="10"/>
     <rect class="st40" x="290" y="220" width="10" height="10"/>
-    <rect class="st33" x="300" y="220" width="10" height="10"/>
+    <rect class="st47" x="300" y="220" width="10" height="10"/>
     <rect class="st22" x="310" y="220" width="10" height="10"/>
     <rect class="st33" x="320" y="220" width="10" height="10"/>
     <rect class="st19" x="330" y="220" width="10" height="10"/>
@@ -482,11 +494,11 @@
     <rect class="st8" x="230" y="230" width="10" height="10"/>
     <rect class="st0" x="240" y="230" width="10" height="10"/>
     <rect class="st35" x="250" y="230" width="10" height="10"/>
-    <rect class="st29" x="260" y="230" width="10" height="10"/>
+    <rect class="st47" x="260" y="230" width="10" height="10"/>
     <rect class="st36" x="270" y="230" width="10" height="10"/>
     <rect class="st44" x="280" y="230" width="10" height="10"/>
     <rect class="st9" x="290" y="230" width="10" height="10"/>
-    <rect class="st19" x="300" y="230" width="10" height="10"/>
+    <rect class="st47" x="300" y="230" width="10" height="10"/>
     <rect class="st33" x="310" y="230" width="10" height="10"/>
     <rect class="st22" x="320" y="230" width="10" height="10"/>
     <rect class="st33" x="330" y="230" width="10" height="10"/>
@@ -495,11 +507,11 @@
     <rect class="st11" x="230" y="240" width="10" height="10"/>
     <rect class="st8" x="240" y="240" width="10" height="10"/>
     <rect class="st0" x="250" y="240" width="10" height="10"/>
-    <rect class="st35" x="260" y="240" width="10" height="10"/>
+    <rect class="st47" x="260" y="240" width="10" height="10"/>
     <rect class="st29" x="270" y="240" width="10" height="10"/>
     <rect class="st36" x="280" y="240" width="10" height="10"/>
     <rect class="st44" x="290" y="240" width="10" height="10"/>
-    <rect class="st1" x="300" y="240" width="10" height="10"/>
+    <rect class="st47" x="300" y="240" width="10" height="10"/>
     <rect class="st19" x="310" y="240" width="10" height="10"/>
     <rect class="st33" x="320" y="240" width="10" height="10"/>
     <rect class="st22" x="330" y="240" width="10" height="10"/>
@@ -507,189 +519,183 @@
     <rect class="st42" x="390" y="120" width="10" height="10"/>
     <rect class="st28" x="400" y="120" width="10" height="10"/>
     <rect class="st32" x="410" y="120" width="10" height="10"/>
-    <rect class="st18" x="420" y="120" width="10" height="10"/>
-    <rect class="st20" x="430" y="120" width="10" height="10"/>
-    <rect class="st24" x="440" y="120" width="10" height="10"/>
-    <rect class="st41" x="450" y="120" width="10" height="10"/>
-    <rect class="st41" x="460" y="120" width="10" height="10"/>
-    <rect class="st21" x="470" y="120" width="10" height="10"/>
-    <rect class="st38" x="480" y="120" width="10" height="10"/>
-    <rect class="st38" x="490" y="120" width="10" height="10"/>
-    <rect class="st38" x="500" y="120" width="10" height="10"/>
-    <rect class="st38" x="510" y="120" width="10" height="10"/>
+    <rect class="st48" x="420" y="120" width="10" height="10"/>
+    <rect class="st48" x="430" y="120" width="10" height="10"/>
+    <rect class="st47" x="440" y="120" width="10" height="10"/>
+    <rect class="st47" x="450" y="120" width="10" height="10"/>
+    <rect class="st47" x="460" y="120" width="10" height="10"/>
+    <rect class="st47" x="470" y="120" width="10" height="10"/>
+    <rect class="st47" x="480" y="120" width="10" height="10"/>
+    <rect class="st47" x="490" y="120" width="10" height="10"/>
+    <rect class="st47" x="500" y="120" width="10" height="10"/>
+    <rect class="st47" x="510" y="120" width="10" height="10"/>
     <rect class="st28" x="390" y="130" width="10" height="10"/>
     <rect class="st42" x="400" y="130" width="10" height="10"/>
     <rect class="st28" x="410" y="130" width="10" height="10"/>
-    <rect class="st32" x="420" y="130" width="10" height="10"/>
-    <rect class="st39" x="430" y="130" width="10" height="10"/>
-    <rect class="st20" x="440" y="130" width="10" height="10"/>
-    <rect class="st24" x="450" y="130" width="10" height="10"/>
-    <rect class="st41" x="460" y="130" width="10" height="10"/>
-    <rect class="st41" x="470" y="130" width="10" height="10"/>
-    <rect class="st21" x="480" y="130" width="10" height="10"/>
-    <rect class="st38" x="490" y="130" width="10" height="10"/>
-    <rect class="st38" x="500" y="130" width="10" height="10"/>
-    <rect class="st38" x="510" y="130" width="10" height="10"/>
+    <rect class="st48" x="420" y="130" width="10" height="10"/>
+    <rect class="st48" x="430" y="130" width="10" height="10"/>
+    <rect class="st47" x="440" y="130" width="10" height="10"/>
+    <rect class="st47" x="450" y="130" width="10" height="10"/>
+    <rect class="st47" x="460" y="130" width="10" height="10"/>
+    <rect class="st47" x="470" y="130" width="10" height="10"/>
+    <rect class="st47" x="480" y="130" width="10" height="10"/>
+    <rect class="st47" x="490" y="130" width="10" height="10"/>
+    <rect class="st47" x="500" y="130" width="10" height="10"/>
+    <rect class="st47" x="510" y="130" width="10" height="10"/>
     <rect class="st32" x="390" y="140" width="10" height="10"/>
     <rect class="st28" x="400" y="140" width="10" height="10"/>
     <rect class="st42" x="410" y="140" width="10" height="10"/>
-    <rect class="st28" x="420" y="140" width="10" height="10"/>
-    <rect class="st39" x="430" y="140" width="10" height="10"/>
-    <rect class="st39" x="440" y="140" width="10" height="10"/>
-    <rect class="st20" x="450" y="140" width="10" height="10"/>
-    <rect class="st24" x="460" y="140" width="10" height="10"/>
-    <rect class="st41" x="470" y="140" width="10" height="10"/>
-    <rect class="st41" x="480" y="140" width="10" height="10"/>
-    <rect class="st21" x="490" y="140" width="10" height="10"/>
-    <rect class="st38" x="500" y="140" width="10" height="10"/>
-    <rect class="st38" x="510" y="140" width="10" height="10"/>
-    <rect class="st18" x="390" y="150" width="10" height="10"/>
-    <rect class="st32" x="400" y="150" width="10" height="10"/>
-    <rect class="st28" x="410" y="150" width="10" height="10"/>
+    <rect class="st48" x="420" y="140" width="10" height="10"/>
+    <rect class="st48" x="430" y="140" width="10" height="10"/>
+    <rect class="st47" x="440" y="140" width="10" height="10"/>
+    <rect class="st47" x="450" y="140" width="10" height="10"/>
+    <rect class="st47" x="460" y="140" width="10" height="10"/>
+    <rect class="st47" x="470" y="140" width="10" height="10"/>
+    <rect class="st47" x="480" y="140" width="10" height="10"/>
+    <rect class="st47" x="490" y="140" width="10" height="10"/>
+    <rect class="st47" x="500" y="140" width="10" height="10"/>
+    <rect class="st47" x="510" y="140" width="10" height="10"/>
+    <rect class="st48" x="390" y="150" width="10" height="10"/>
+    <rect class="st48" x="400" y="150" width="10" height="10"/>
+    <rect class="st48" x="410" y="150" width="10" height="10"/>
     <rect class="st42" x="420" y="150" width="10" height="10"/>
-    <rect class="st25" x="430" y="150" width="10" height="10"/>
-    <rect class="st39" x="440" y="150" width="10" height="10"/>
-    <rect class="st39" x="450" y="150" width="10" height="10"/>
-    <rect class="st20" x="460" y="150" width="10" height="10"/>
-    <rect class="st24" x="470" y="150" width="10" height="10"/>
-    <rect class="st41" x="480" y="150" width="10" height="10"/>
-    <rect class="st41" x="490" y="150" width="10" height="10"/>
-    <rect class="st21" x="500" y="150" width="10" height="10"/>
-    <rect class="st38" x="510" y="150" width="10" height="10"/>
-    <rect class="st20" x="390" y="160" width="10" height="10"/>
-    <rect class="st39" x="400" y="160" width="10" height="10"/>
-    <rect class="st39" x="410" y="160" width="10" height="10"/>
-    <rect class="st25" x="420" y="160" width="10" height="10"/>
+    <rect class="st28" x="430" y="150" width="10" height="10"/>
+    <rect class="st47" x="440" y="150" width="10" height="10"/>
+    <rect class="st47" x="450" y="150" width="10" height="10"/>
+    <rect class="st47" x="460" y="150" width="10" height="10"/>
+    <rect class="st47" x="470" y="150" width="10" height="10"/>
+    <rect class="st47" x="480" y="150" width="10" height="10"/>
+    <rect class="st47" x="490" y="150" width="10" height="10"/>
+    <rect class="st47" x="500" y="150" width="10" height="10"/>
+    <rect class="st47" x="510" y="150" width="10" height="10"/>
+    <rect class="st48" x="390" y="160" width="10" height="10"/>
+    <rect class="st48" x="400" y="160" width="10" height="10"/>
+    <rect class="st48" x="410" y="160" width="10" height="10"/>
+    <rect class="st28" x="420" y="160" width="10" height="10"/>
     <rect class="st42" x="430" y="160" width="10" height="10"/>
-    <rect class="st28" x="440" y="160" width="10" height="10"/>
-    <rect class="st32" x="450" y="160" width="10" height="10"/>
-    <rect class="st39" x="460" y="160" width="10" height="10"/>
-    <rect class="st20" x="470" y="160" width="10" height="10"/>
-    <rect class="st24" x="480" y="160" width="10" height="10"/>
-    <rect class="st41" x="490" y="160" width="10" height="10"/>
-    <rect class="st41" x="500" y="160" width="10" height="10"/>
-    <rect class="st21" x="510" y="160" width="10" height="10"/>
-    <rect class="st24" x="390" y="170" width="10" height="10"/>
-    <rect class="st20" x="400" y="170" width="10" height="10"/>
-    <rect class="st39" x="410" y="170" width="10" height="10"/>
-    <rect class="st39" x="420" y="170" width="10" height="10"/>
-    <rect class="st28" x="430" y="170" width="10" height="10"/>
-    <rect class="st42" x="440" y="170" width="10" height="10"/>
-    <rect class="st28" x="450" y="170" width="10" height="10"/>
-    <rect class="st39" x="460" y="170" width="10" height="10"/>
-    <rect class="st39" x="470" y="170" width="10" height="10"/>
-    <rect class="st20" x="480" y="170" width="10" height="10"/>
-    <rect class="st24" x="490" y="170" width="10" height="10"/>
-    <rect class="st41" x="500" y="170" width="10" height="10"/>
-    <rect class="st41" x="510" y="170" width="10" height="10"/>
-    <rect class="st41" x="390" y="180" width="10" height="10"/>
-    <rect class="st24" x="400" y="180" width="10" height="10"/>
-    <rect class="st20" x="410" y="180" width="10" height="10"/>
-    <rect class="st39" x="420" y="180" width="10" height="10"/>
-    <rect class="st32" x="430" y="180" width="10" height="10"/>
-    <rect class="st28" x="440" y="180" width="10" height="10"/>
+    <rect class="st47" x="440" y="160" width="10" height="10"/>
+    <rect class="st47" x="450" y="160" width="10" height="10"/>
+    <rect class="st47" x="460" y="160" width="10" height="10"/>
+    <rect class="st47" x="470" y="160" width="10" height="10"/>
+    <rect class="st47" x="480" y="160" width="10" height="10"/>
+    <rect class="st47" x="490" y="160" width="10" height="10"/>
+    <rect class="st47" x="500" y="160" width="10" height="10"/>
+    <rect class="st47" x="510" y="160" width="10" height="10"/>
+    <rect class="st47" x="390" y="170" width="10" height="10"/>
+    <rect class="st47" x="400" y="170" width="10" height="10"/>
+    <rect class="st47" x="410" y="170" width="10" height="10"/>
+    <rect class="st47" x="420" y="170" width="10" height="10"/>
+    <rect class="st47" x="430" y="170" width="10" height="10"/>
+    <rect class="st47" x="440" y="170" width="10" height="10"/>
+    <rect class="st47" x="450" y="170" width="10" height="10"/>
+    <rect class="st47" x="460" y="170" width="10" height="10"/>
+    <rect class="st47" x="470" y="170" width="10" height="10"/>
+    <rect class="st47" x="480" y="170" width="10" height="10"/>
+    <rect class="st47" x="490" y="170" width="10" height="10"/>
+    <rect class="st47" x="500" y="170" width="10" height="10"/>
+    <rect class="st47" x="510" y="170" width="10" height="10"/>
+    <rect class="st47" x="390" y="180" width="10" height="10"/>
+    <rect class="st47" x="400" y="180" width="10" height="10"/>
+    <rect class="st47" x="410" y="180" width="10" height="10"/>
+    <rect class="st47" x="420" y="180" width="10" height="10"/>
+    <rect class="st47" x="430" y="180" width="10" height="10"/>
+    <rect class="st47" x="440" y="180" width="10" height="10"/>
     <rect class="st42" x="450" y="180" width="10" height="10"/>
-    <rect class="st25" x="460" y="180" width="10" height="10"/>
-    <rect class="st39" x="470" y="180" width="10" height="10"/>
-    <rect class="st39" x="480" y="180" width="10" height="10"/>
-    <rect class="st20" x="490" y="180" width="10" height="10"/>
-    <rect class="st24" x="500" y="180" width="10" height="10"/>
-    <rect class="st41" x="510" y="180" width="10" height="10"/>
-    <rect class="st41" x="390" y="190" width="10" height="10"/>
-    <rect class="st41" x="400" y="190" width="10" height="10"/>
-    <rect class="st24" x="410" y="190" width="10" height="10"/>
-    <rect class="st20" x="420" y="190" width="10" height="10"/>
-    <rect class="st39" x="430" y="190" width="10" height="10"/>
-    <rect class="st39" x="440" y="190" width="10" height="10"/>
-    <rect class="st25" x="450" y="190" width="10" height="10"/>
+    <rect class="st28" x="460" y="180" width="10" height="10"/>
+    <rect class="st32" x="470" y="180" width="10" height="10"/>
+    <rect class="st47" x="480" y="180" width="10" height="10"/>
+    <rect class="st47" x="490" y="180" width="10" height="10"/>
+    <rect class="st47" x="500" y="180" width="10" height="10"/>
+    <rect class="st47" x="510" y="180" width="10" height="10"/>
+    <rect class="st47" x="390" y="190" width="10" height="10"/>
+    <rect class="st47" x="400" y="190" width="10" height="10"/>
+    <rect class="st47" x="410" y="190" width="10" height="10"/>
+    <rect class="st47" x="420" y="190" width="10" height="10"/>
+    <rect class="st47" x="430" y="190" width="10" height="10"/>
+    <rect class="st47" x="440" y="190" width="10" height="10"/>
+    <rect class="st28" x="450" y="190" width="10" height="10"/>
     <rect class="st42" x="460" y="190" width="10" height="10"/>
     <rect class="st28" x="470" y="190" width="10" height="10"/>
-    <rect class="st39" x="480" y="190" width="10" height="10"/>
-    <rect class="st39" x="490" y="190" width="10" height="10"/>
-    <rect class="st20" x="500" y="190" width="10" height="10"/>
-    <rect class="st24" x="510" y="190" width="10" height="10"/>
-    <rect class="st21" x="390" y="200" width="10" height="10"/>
-    <rect class="st41" x="400" y="200" width="10" height="10"/>
-    <rect class="st41" x="410" y="200" width="10" height="10"/>
-    <rect class="st24" x="420" y="200" width="10" height="10"/>
-    <rect class="st20" x="430" y="200" width="10" height="10"/>
-    <rect class="st39" x="440" y="200" width="10" height="10"/>
-    <rect class="st39" x="450" y="200" width="10" height="10"/>
+    <rect class="st47" x="480" y="190" width="10" height="10"/>
+    <rect class="st47" x="490" y="190" width="10" height="10"/>
+    <rect class="st47" x="500" y="190" width="10" height="10"/>
+    <rect class="st47" x="510" y="190" width="10" height="10"/>
+    <rect class="st47" x="390" y="200" width="10" height="10"/>
+    <rect class="st47" x="400" y="200" width="10" height="10"/>
+    <rect class="st47" x="410" y="200" width="10" height="10"/>
+    <rect class="st47" x="420" y="200" width="10" height="10"/>
+    <rect class="st47" x="430" y="200" width="10" height="10"/>
+    <rect class="st47" x="440" y="200" width="10" height="10"/>
+    <rect class="st32" x="450" y="200" width="10" height="10"/>
     <rect class="st28" x="460" y="200" width="10" height="10"/>
     <rect class="st42" x="470" y="200" width="10" height="10"/>
-    <rect class="st25" x="480" y="200" width="10" height="10"/>
-    <rect class="st39" x="490" y="200" width="10" height="10"/>
-    <rect class="st39" x="500" y="200" width="10" height="10"/>
-    <rect class="st20" x="510" y="200" width="10" height="10"/>
-    <rect class="st38" x="390" y="210" width="10" height="10"/>
-    <rect class="st21" x="400" y="210" width="10" height="10"/>
-    <rect class="st41" x="410" y="210" width="10" height="10"/>
-    <rect class="st41" x="420" y="210" width="10" height="10"/>
-    <rect class="st24" x="430" y="210" width="10" height="10"/>
-    <rect class="st20" x="440" y="210" width="10" height="10"/>
-    <rect class="st39" x="450" y="210" width="10" height="10"/>
-    <rect class="st39" x="460" y="210" width="10" height="10"/>
-    <rect class="st25" x="470" y="210" width="10" height="10"/>
-    <rect class="st42" x="480" y="210" width="10" height="10"/>
-    <rect class="st28" x="490" y="210" width="10" height="10"/>
-    <rect class="st32" x="500" y="210" width="10" height="10"/>
-    <rect class="st18" x="510" y="210" width="10" height="10"/>
-    <rect class="st38" x="390" y="220" width="10" height="10"/>
-    <rect class="st38" x="400" y="220" width="10" height="10"/>
-    <rect class="st21" x="410" y="220" width="10" height="10"/>
-    <rect class="st41" x="420" y="220" width="10" height="10"/>
-    <rect class="st41" x="430" y="220" width="10" height="10"/>
-    <rect class="st24" x="440" y="220" width="10" height="10"/>
-    <rect class="st20" x="450" y="220" width="10" height="10"/>
-    <rect class="st39" x="460" y="220" width="10" height="10"/>
-    <rect class="st39" x="470" y="220" width="10" height="10"/>
-    <rect class="st28" x="480" y="220" width="10" height="10"/>
+    <rect class="st47" x="480" y="200" width="10" height="10"/>
+    <rect class="st47" x="490" y="200" width="10" height="10"/>
+    <rect class="st47" x="500" y="200" width="10" height="10"/>
+    <rect class="st47" x="510" y="200" width="10" height="10"/>
+    <rect class="st47" x="390" y="210" width="10" height="10"/>
+    <rect class="st47" x="400" y="210" width="10" height="10"/>
+    <rect class="st47" x="410" y="210" width="10" height="10"/>
+    <rect class="st47" x="420" y="210" width="10" height="10"/>
+    <rect class="st47" x="430" y="210" width="10" height="10"/>
+    <rect class="st47" x="440" y="210" width="10" height="10"/>
+    <rect class="st47" x="450" y="210" width="10" height="10"/>
+    <rect class="st47" x="460" y="210" width="10" height="10"/>
+    <rect class="st47" x="470" y="210" width="10" height="10"/>
+    <rect class="st47" x="480" y="210" width="10" height="10"/>
+    <rect class="st47" x="490" y="210" width="10" height="10"/>
+    <rect class="st47" x="500" y="210" width="10" height="10"/>
+    <rect class="st47" x="510" y="210" width="10" height="10"/>
+    <rect class="st47" x="390" y="220" width="10" height="10"/>
+    <rect class="st47" x="400" y="220" width="10" height="10"/>
+    <rect class="st47" x="410" y="220" width="10" height="10"/>
+    <rect class="st47" x="420" y="220" width="10" height="10"/>
+    <rect class="st47" x="430" y="220" width="10" height="10"/>
+    <rect class="st47" x="440" y="220" width="10" height="10"/>
+    <rect class="st47" x="450" y="220" width="10" height="10"/>
+    <rect class="st47" x="460" y="220" width="10" height="10"/>
+    <rect class="st47" x="470" y="220" width="10" height="10"/>
+    <rect class="st47" x="480" y="220" width="10" height="10"/>
     <rect class="st42" x="490" y="220" width="10" height="10"/>
     <rect class="st28" x="500" y="220" width="10" height="10"/>
     <rect class="st32" x="510" y="220" width="10" height="10"/>
-    <rect class="st38" x="390" y="230" width="10" height="10"/>
-    <rect class="st38" x="400" y="230" width="10" height="10"/>
-    <rect class="st38" x="410" y="230" width="10" height="10"/>
-    <rect class="st21" x="420" y="230" width="10" height="10"/>
-    <rect class="st41" x="430" y="230" width="10" height="10"/>
-    <rect class="st41" x="440" y="230" width="10" height="10"/>
-    <rect class="st24" x="450" y="230" width="10" height="10"/>
-    <rect class="st20" x="460" y="230" width="10" height="10"/>
-    <rect class="st39" x="470" y="230" width="10" height="10"/>
-    <rect class="st32" x="480" y="230" width="10" height="10"/>
+    <rect class="st47" x="390" y="230" width="10" height="10"/>
+    <rect class="st47" x="400" y="230" width="10" height="10"/>
+    <rect class="st47" x="410" y="230" width="10" height="10"/>
+    <rect class="st47" x="420" y="230" width="10" height="10"/>
+    <rect class="st47" x="430" y="230" width="10" height="10"/>
+    <rect class="st47" x="440" y="230" width="10" height="10"/>
+    <rect class="st47" x="450" y="230" width="10" height="10"/>
+    <rect class="st47" x="460" y="230" width="10" height="10"/>
+    <rect class="st47" x="470" y="230" width="10" height="10"/>
+    <rect class="st47" x="480" y="230" width="10" height="10"/>
     <rect class="st28" x="490" y="230" width="10" height="10"/>
     <rect class="st42" x="500" y="230" width="10" height="10"/>
     <rect class="st28" x="510" y="230" width="10" height="10"/>
-    <rect class="st38" x="390" y="240" width="10" height="10"/>
-    <rect class="st38" x="400" y="240" width="10" height="10"/>
-    <rect class="st38" x="410" y="240" width="10" height="10"/>
-    <rect class="st38" x="420" y="240" width="10" height="10"/>
-    <rect class="st21" x="430" y="240" width="10" height="10"/>
-    <rect class="st41" x="440" y="240" width="10" height="10"/>
-    <rect class="st41" x="450" y="240" width="10" height="10"/>
-    <rect class="st24" x="460" y="240" width="10" height="10"/>
-    <rect class="st20" x="470" y="240" width="10" height="10"/>
-    <rect class="st18" x="480" y="240" width="10" height="10"/>
+    <rect class="st47" x="390" y="240" width="10" height="10"/>
+    <rect class="st47" x="400" y="240" width="10" height="10"/>
+    <rect class="st47" x="410" y="240" width="10" height="10"/>
+    <rect class="st47" x="420" y="240" width="10" height="10"/>
+    <rect class="st47" x="430" y="240" width="10" height="10"/>
+    <rect class="st47" x="440" y="240" width="10" height="10"/>
+    <rect class="st47" x="450" y="240" width="10" height="10"/>
+    <rect class="st47" x="460" y="240" width="10" height="10"/>
+    <rect class="st47" x="470" y="240" width="10" height="10"/>
+    <rect class="st47" x="480" y="240" width="10" height="10"/>
     <rect class="st32" x="490" y="240" width="10" height="10"/>
     <rect class="st28" x="500" y="240" width="10" height="10"/>
     <rect class="st42" x="510" y="240" width="10" height="10"/>
-    <rect class="st5" x="400" y="130" width="50" height="50" rx="2" ry="2"/>
-    <rect class="st5" x="425" y="155" width="60" height="60" rx="2" ry="2"/>
-    <rect class="st5" x="460" y="190" width="50" height="50" rx="2" ry="2"/>
-    <path class="st2" d="M390,306h15.2c0-.1,2.1-.2,2.1-.2l2.2-.5,2.2-1.2,2.1-2,2.2-2.7,2.2-2.7,2.1-1.6,2.2.3,2.2,2,2.1,2.5,2.2,1.6,2.2-.4,2.1-2.4,2.2-4.2,2.2-4.9,2.1-4.1,2.2-1.5,2.2,1.6,2.1,4,2.2,5,2.2,4.6,2.1,3.3,2.2,1.9,2.2,1,2.1.4h2.2c0,.1,2.2,0,2.2,0l2.1-.5,2.2-1.1,2.2-2,2.1-3.1,2.2-4,2.2-3.8,2.1-2.4h2.2c0,0,2.2,2.2,2.2,2.2l2.1,3.7,2.2,4,2.2,3.2,2.1,2.1,2.2,1.2,2.2.5,2.1.2h2.2c0,.1,2.2.1,2.2.1h17.3"/>
-    <line class="st3" x1="390" y1="314" x2="520" y2="314"/>
-    <text class="st12" transform="translate(390 332)"><tspan x="0" y="0">score along the genome</tspan></text>
-    <rect class="st45" x="561" y="130" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="591" y="130" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="621" y="130" width="13" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="636" y="130" width="28" height="22" rx="3" ry="3"/>
-    <text class="st13" transform="translate(670 146)"><tspan x="0" y="0">0.1</tspan></text>
-    <rect class="st45" x="561" y="164" width="28" height="22" rx="3" ry="3"/>
-    <rect class="st26" x="591" y="164" width="43" height="22" rx="3" ry="3"/>
-    <rect class="st45" x="636" y="164" width="28" height="22" rx="3" ry="3"/>
-    <text class="st13" transform="translate(670 180)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st12" transform="translate(560 212)"><tspan x="0" y="0">higher penalty →</tspan></text>
-    <text class="st12" transform="translate(560 228)"><tspan x="0" y="0">fewer, larger segments</tspan></text>
+    <rect class="st5" x="390" y="120" width="30" height="30" rx="2" ry="2"/>
+    <rect class="st5" x="420" y="150" width="20" height="20" rx="2" ry="2"/>
+    <rect class="st5" x="450" y="180" width="30" height="30" rx="2" ry="2"/>
+    <rect class="st5" x="490" y="220" width="30" height="30" rx="2" ry="2"/>
+    <text class="st12" transform="translate(390 270)"><tspan x="0" y="0">segments on the diagonal</tspan></text>
+    <rect class="st45" x="561" y="169" width="28" height="22" rx="3" ry="3"/>
+    <rect class="st26" x="591" y="169" width="18" height="22" rx="3" ry="3"/>
+    <rect class="st45" x="621" y="169" width="28" height="22" rx="3" ry="3"/>
+    <rect class="st26" x="661" y="169" width="28" height="22" rx="3" ry="3"/>
+    <text class="st12" transform="translate(560 222)"><tspan x="0" y="0">higher penalty →</tspan></text>
+    <text class="st12" transform="translate(560 238)"><tspan x="0" y="0">fewer, larger segments</tspan></text>
     <rect class="st34" x="736" y="112" width="170" height="20" rx="3" ry="3"/>
     <text class="st17" transform="translate(740 126)"><tspan x="0" y="0">chr</tspan></text>
     <text class="st17" transform="translate(778 126)"><tspan x="0" y="0">start</tspan></text>
@@ -697,26 +703,22 @@
     <text class="st17" transform="translate(868 126)"><tspan x="0" y="0">score</tspan></text>
     <text class="st16" transform="translate(740 147)"><tspan x="0" y="0">chr1</tspan></text>
     <text class="st16" transform="translate(778 147)"><tspan x="0" y="0">0</tspan></text>
-    <text class="st16" transform="translate(824 147)"><tspan x="0" y="0">2000</tspan></text>
-    <text class="st16" transform="translate(868 147)"><tspan x="0" y="0">0.1</tspan></text>
+    <text class="st16" transform="translate(824 147)"><tspan x="0" y="0">3000</tspan></text>
+    <text class="st16" transform="translate(868 147)"><tspan x="0" y="0">1.4</tspan></text>
     <text class="st16" transform="translate(740 168)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 168)"><tspan x="0" y="0">2000</tspan></text>
-    <text class="st16" transform="translate(824 168)"><tspan x="0" y="0">4000</tspan></text>
-    <text class="st16" transform="translate(868 168)"><tspan x="0" y="0">0.1</tspan></text>
-    <text class="st16" transform="translate(740 189)"><tspan x="0" y="0">…</tspan></text>
-    <line class="st4" x1="736" y1="196" x2="906" y2="196"/>
+    <text class="st16" transform="translate(778 168)"><tspan x="0" y="0">3000</tspan></text>
+    <text class="st16" transform="translate(824 168)"><tspan x="0" y="0">5000</tspan></text>
+    <text class="st16" transform="translate(868 168)"><tspan x="0" y="0">0.8</tspan></text>
+    <text class="st16" transform="translate(740 189)"><tspan x="0" y="0">chr1</tspan></text>
+    <text class="st16" transform="translate(778 189)"><tspan x="0" y="0">6000</tspan></text>
+    <text class="st16" transform="translate(824 189)"><tspan x="0" y="0">9000</tspan></text>
+    <text class="st16" transform="translate(868 189)"><tspan x="0" y="0">1.3</tspan></text>
     <text class="st16" transform="translate(740 210)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 210)"><tspan x="0" y="0">0</tspan></text>
-    <text class="st16" transform="translate(824 210)"><tspan x="0" y="0">2000</tspan></text>
-    <text class="st16" transform="translate(868 210)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st16" transform="translate(740 231)"><tspan x="0" y="0">chr1</tspan></text>
-    <text class="st16" transform="translate(778 231)"><tspan x="0" y="0">2000</tspan></text>
-    <text class="st16" transform="translate(824 231)"><tspan x="0" y="0">5000</tspan></text>
-    <text class="st16" transform="translate(868 231)"><tspan x="0" y="0">0.5</tspan></text>
-    <text class="st16" transform="translate(740 252)"><tspan x="0" y="0">…</tspan></text>
-    <text class="st12" transform="translate(740 305)"><tspan x="0" y="0">score column = penalty, so each</tspan></text>
-    <text class="st12" transform="translate(740 321)"><tspan x="0" y="0">segmentation can be filtered</tspan></text>
-    <text class="st14" transform="translate(20 362)"><tspan x="0" y="0">count matrix → bin cooccurrence → segments → BED of variable chromatin regions</tspan></text>
+    <text class="st16" transform="translate(778 210)"><tspan x="0" y="0">10000</tspan></text>
+    <text class="st16" transform="translate(824 210)"><tspan x="0" y="0">13000</tspan></text>
+    <text class="st16" transform="translate(868 210)"><tspan x="0" y="0">1.5</tspan></text>
+    <text class="st16" transform="translate(740 231)"><tspan x="0" y="0">…</tspan></text>
+    <text class="st14" transform="translate(20 300)"><tspan x="0" y="0">count matrix → signal blocks → normalized cooccurrence → segments → BED of VCRs</tspan></text>
   </g>
 </g>
 </svg>
