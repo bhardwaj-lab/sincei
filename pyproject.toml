@@ -41,7 +41,6 @@ dependencies = [
     "torch<2.14",
     "mctorch-lib",
     "tomotopy",
-    "ruptures",
     "tqdm",
     ]
 
