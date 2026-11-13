@@ -21,16 +21,18 @@ DESCRIPTION = (
     "Call variable chromatin regions (VCRs) from binned chromatin data.\n\n"
     "``scFindVCRs`` calls variable chromatin regions (VCRs) from binned chromatin "
     "data. It takes a .h5ad file containing single-cell genomic signal in bins, and "
-    "outputs BED files with genome segmentations for different sensitivities.\n\n"
-    "First, a bin-to-bin correlation matrix is computed for each chromosome.\n\n"
-    "Then, the correlation matrix is turned into a score map by convolving a number "
-    "of square Gaussian kernels along its main diagonal. Each kernel has a sigma "
-    "calculated using a maximum region size to consider. Each kernel produces a 1-D "
-    "score for each bin, which are stacked into a matrix where each row corresponds "
-    "to a kernel scale and each column to a bin.\n\n"
-    "Finally, the PELT change-point detection algorithm is applied to the score map "
-    "to identify regions with distinct correlation patterns. This step depends on a "
-    "penalty parameter that controls the number of detected regions."
+    "outputs a BED file with the genome segmentation.\n\n"
+    "For each chromosome, the counts are binarized: a cell has signal in a bin if its "
+    "count is not 0. A bin is kept if at least --minCellPct percent of the cells have "
+    "signal in it; the bins at most --slack bins from a kept bin are also kept. The "
+    "kept bins are split into signal blocks: runs of bins with signal, with at most "
+    "--slack bins without signal between two bins with signal.\n\n"
+    "In each block, the co-occurrence of two bins is the number of cells with signal "
+    "in both, normalized by the number of cells in each bin (the cosine similarity of "
+    "the cells with signal). Each block is then segmented exactly, by dynamic "
+    "programming, into runs of bins that co-occur. A penalty for each segment, in "
+    "units of bins, controls the number of regions: a higher penalty gives fewer, "
+    "longer regions."
 )
 
 
@@ -43,10 +45,6 @@ app = typer.Typer(
 )
 
 _VCR = "VCR options"
-
-DEFAULT_PENALTIES = [0.05, 0.1, 0.5]
-
-DEFAULT_MAX_REGION_IN_BINS = 100
 
 
 @app.callback(invoke_without_command=True)
@@ -69,76 +67,67 @@ def main(
             metavar=".bed",
             help=(
                 "Name of the output file (BED format) with the genome segmentation "
-                "result. The penalty threshold that defines each segment is saved in "
-                'the "score" column of the BED file, which can be filtered to obtain '
-                "non-overlapping segments."
+                'result. The "score" column has the cost of each segment (0 for a '
+                "region of one bin)."
             ),
         ),
     ],
     region: Annotated[str | None, INPUT_OUTPUT_OPTS["region"]] = None,
-    max_region_size: Annotated[
-        int | None,
+    min_cell_pct: Annotated[
+        float,
         typer.Option(
-            "-mr",
-            "--maxRegionSize",
-            metavar="INT",
-            rich_help_panel=_VCR,
-            show_default="100 x --binSize",
-            help=(
-                "The maximum region size to be considered, in base pairs. Larger "
-                "regions may increase compute time."
-            ),
-        ),
-    ] = None,
-    n_kernels: Annotated[
-        int,
-        typer.Option(
-            "-nk",
-            "--nKernels",
-            metavar="INT",
-            rich_help_panel=_VCR,
-            help=(
-                "The number of kernels to use for the score map. More kernels "
-                "generally lead to a better segmentation, but increase the "
-                "computational cost."
-            ),
-        ),
-    ] = 20,
-    penalties: Annotated[
-        list[float] | None,
-        typer.Option(
-            "-pen",
-            "--penalties",
+            "-mc",
+            "--minCellPct",
             metavar="FLOAT",
             rich_help_panel=_VCR,
-            show_default="0.05, 0.1, 0.5",
             help=(
-                "Penalty value(s) for change-point detection. Higher values result in "
-                "fewer segments. Multiple values can be provided (separated by space); "
-                "each produces a separate set of regions, distinguishable in the "
-                'output BED file by filtering on the "score" column.'
+                "Minimum percentage of cells with signal for a bin to be kept. Bins "
+                "below it are removed before the signal blocks are made, unless they "
+                "are at most --slack bins from a kept bin."
             ),
         ),
-    ] = None,
+    ] = 1.0,
+    slack: Annotated[
+        int,
+        typer.Option(
+            "-sl",
+            "--slack",
+            metavar="INT",
+            rich_help_panel=_VCR,
+            help=(
+                "Number of bins to the left and to the right of each bin that passes "
+                "--minCellPct that are also kept, and the maximum number of bins "
+                "without signal between two bins with signal in the same block."
+            ),
+        ),
+    ] = 0,
+    penalty: Annotated[
+        float,
+        typer.Option(
+            "-pen",
+            "--penalty",
+            metavar="FLOAT",
+            rich_help_panel=_VCR,
+            help=(
+                "Penalty for each segment, in units of bins. Higher values result in "
+                "fewer, longer segments."
+            ),
+        ),
+    ] = 1.0,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
     ] = DEFAULT_PROCESSORS,
     verbose: Annotated[bool, OTHER_OPTS["verbose"]] = False,
     help: Annotated[bool, OTHER_OPTS["help"]] = False,
 ) -> int:
-    if max_region_size is None:
-        max_region_size = bin_size * DEFAULT_MAX_REGION_IN_BINS
-    if penalties is None:
-        penalties = DEFAULT_PENALTIES
-
     adata = validate_anndata(ad.read_h5ad(input), input)
 
     regions = VCRfinder(
         adata=adata,
         binsize=bin_size,
-        max_region=max_region_size,
-        n_kernels=n_kernels,
-        penalties=penalties,
+        penalty=penalty,
+        X_pct=min_cell_pct,
+        k=slack,
         region=region,
         verbose=verbose,
         n_jobs=number_of_processors,
