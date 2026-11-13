@@ -22,9 +22,9 @@ In addition to the :doc:`common notation <notation>`, this page uses:
    * - Symbol
      - Meaning
    * - :math:`B \in \{0, 1\}^{N \times P}`
-     - Binarized counts: :math:`B_{ci} = 1` if :math:`x_{ci} > 0`, 0 otherwise
-   * - :math:`f_i = \sum_{c=1}^{N} B_{ci}`
-     - Number of cells with signal in bin :math:`i`
+     - Binarized counts: :math:`B_{ij} = 1` if :math:`x_{ij} > 0`, 0 otherwise
+   * - :math:`f_j = \sum_{i=1}^{N} B_{ij}`
+     - Number of cells with signal in bin :math:`j`
    * - :math:`x_\mathrm{pct}`
      - Minimum percentage of cells with signal for a bin to pass the prefilter
        (``--minCellPct``)
@@ -38,8 +38,8 @@ In addition to the :doc:`common notation <notation>`, this page uses:
      - A signal block, the columns of :math:`\widetilde{B}` in it, and its number of
        bins
    * - :math:`O = B_\mathcal{C}^\top B_\mathcal{C}`
-     - Co-occurrence: :math:`O_{ij}` is the number of cells with signal in bins
-       :math:`i` and :math:`j`, with :math:`O_{ii} = f_i`
+     - Co-occurrence: :math:`O_{jl}` is the number of cells with signal in bins
+       :math:`j` and :math:`l`, with :math:`O_{jj} = f_j`
    * - :math:`D = \operatorname{diag}(O)`
      - Degree matrix of the block (1 for a bin without signal)
    * - :math:`W = D^{-1/2} O D^{-1/2}`
@@ -63,32 +63,32 @@ Set the nonzero entries of :math:`X` to 1.
 
 .. math::
 
-  {B}_{ci} = \begin{cases}
-  1, & \text{if } X_{cf} > 0, \\
+  {B}_{ij} = \begin{cases}
+  1, & \text{if } x_{ij} > 0, \\
   0, & \text{otherwise.}
   \end{cases}
 
 **2. Prefilter**
 
-We denote :math:`f_i` as the fraction of cells with counts in bin :math:`i`:
+We denote :math:`f_j` as the fraction of cells with counts in bin :math:`j`:
 
 .. math::
 
-  f_i = \sum_c^N B_{ci}
+  f_j = \sum_i^N B_{ij}
 
 A bin passes the prefilter if it has nonzero counts in more than the threshold fraction:
 
 .. math::
 
-   \mathcal{B} = \left\{ i \mid f_i \geq N \cdot \frac{x_\mathrm{pct}}{100} \right\}
+   \mathcal{B} = \left\{ j \mid f_j \geq N \cdot \frac{x_\mathrm{pct}}{100} \right\}
 
 The bins in :math:`\mathcal{B}`, and the bins at most :math:`k` bins from one of them,
 are kept. The entries of all other bins are set to 0:
 
 .. math::
 
-   \widetilde{B}_{ci} = \begin{cases}
-   B_{ci}, & \text{if } \exists\, b \in \mathcal{B}: |i - b| \leq k, \\
+   \widetilde{B}_{ij} = \begin{cases}
+   B_{ij}, & \text{if } \exists\, b \in \mathcal{B}: |j - b| \leq k, \\
    0, & \text{otherwise.}
    \end{cases}
 
@@ -106,13 +106,13 @@ For each block:
 
    W = D^{-1/2}\, O\, D^{-1/2},
    \qquad
-   W_{ij} = \frac{O_{ij}}{\sqrt{f_i f_j}}
+   W_{jl} = \frac{O_{jl}}{\sqrt{f_j f_l}}
 
-:math:`W_{ij}` is the cosine similarity of the columns :math:`B_{\cdot i}` and
-:math:`B_{\cdot j}`: the number of cells with signal in both bins, divided by the
+:math:`W_{jl}` is the cosine similarity of the columns :math:`B_{\cdot j}` and
+:math:`B_{\cdot l}`: the number of cells with signal in both bins, divided by the
 geometric mean of the number of cells in each bin. It is in :math:`[0, 1]`, and
-:math:`W_{ii} = 1` for every bin with signal. With :math:`k > 0`, a block can contain bins
-without signal (:math:`O_{ii} = 0`); for these bins :math:`D_{ii}` is set to 1 to prevent
+:math:`W_{jj} = 1` for every bin with signal. With :math:`k > 0`, a block can contain bins
+without signal (:math:`O_{jj} = 0`); for these bins :math:`D_{jj}` is set to 1 to prevent
 a division by 0, so their row, column and diagonal of :math:`W` are 0.
 
 **5. Segment cost**
@@ -121,7 +121,7 @@ The cost of a segment :math:`[a, b)` of :math:`m` bins is
 
 .. math::
 
-   C(a, b) = \sum_{i=a}^{b-1} W_{ii} \;-\; \frac{1}{m} \sum_{i=a}^{b-1} \sum_{j=a}^{b-1} W_{ij}
+   C(a, b) = \sum_{j=a}^{b-1} W_{jj} \;-\; \frac{1}{m} \sum_{j=a}^{b-1} \sum_{l=a}^{b-1} W_{jl}
 
 This is the kernel cost of change-point detection with a cosine kernel. The first term,
 summed over a block, is the same for every segmentation. Thus a low total cost means a
@@ -166,8 +166,8 @@ of one bin). See :ref:`the file formats
 Space and time complexity
 -------------------------
 
-For a block of :math:`w` bins, :math:`r_c` is the number of its bins with signal in cell
-:math:`c`.
+For a block of :math:`w` bins, :math:`r_i` is the number of its bins with signal in cell
+:math:`i`.
 
 .. list-table::
    :header-rows: 1
@@ -180,7 +180,7 @@ For a block of :math:`w` bins, :math:`r_c` is the number of its bins with signal
      - :math:`O(\mathrm{nnz} + P)`
      - :math:`O(\mathrm{nnz} + P)`
    * - :math:`O` of one block
-     - :math:`O\big(\sum_c r_c^2 + w^2\big)`
+     - :math:`O\big(\sum_i r_i^2 + w^2\big)`
      - :math:`O(w^2)`
    * - :math:`W`, prefix sums and dynamic programming of one block
      - :math:`O(w^2)`

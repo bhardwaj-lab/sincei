@@ -22,22 +22,22 @@ Exponential family distributions
 
 Let :math:`X \in \mathbb{R}^{N \times P}` be the data matrix, with :math:`N` cells
 in rows and :math:`P` features (bins, genes or other genomic regions) in columns. GLMPCA
-models every entry :math:`x_{ci}` with an exponential family distribution:
+models every entry :math:`x_{ij}` with an exponential family distribution:
 
 .. math::
 
-   p(x_{ci} \mid \theta_{ci}) = h(x_{ci})
-   \exp\big( T(x_{ci})\,\eta(\theta_{ci}) - A(\theta_{ci}) \big)
+   p(x_{ij} \mid \theta_{ij}) = h(x_{ij})
+   \exp\big( T(x_{ij})\,\eta(\theta_{ij}) - A(\theta_{ij}) \big)
 
-with the parameter :math:`\theta_{ci}`, the sufficient statistic :math:`T`, the
+with the parameter :math:`\theta_{ij}`, the sufficient statistic :math:`T`, the
 natural parametrization :math:`\eta`, the log-partition function :math:`A` and the
 base measure :math:`h`. The cost of a model :math:`\hat\Theta` is the negative
 log-likelihood of the data:
 
 .. math::
 
-   \mathcal{L}(\hat\Theta; X) = - \sum_{c=1}^{N} \sum_{i=1}^{P}
-   \log p(x_{ci} \mid \hat\theta_{ci})
+   \mathcal{L}(\hat\Theta; X) = - \sum_{i=1}^{N} \sum_{j=1}^{P}
+   \log p(x_{ij} \mid \hat\theta_{ij})
 
 For the Gaussian distribution with unit variance, :math:`\mathcal{L}` is the squared
 error, and so Gaussian GLMPCA is equal to PCA.
@@ -45,13 +45,13 @@ error, and so Gaussian GLMPCA is equal to PCA.
 Saturated parameters
 --------------------
 
-The saturated parameter :math:`\tilde\theta_{ci}` of an entry is the parameter that
+The saturated parameter :math:`\tilde\theta_{ij}` of an entry is the parameter that
 gives the highest likelihood to that entry alone:
 
 .. math::
 
-   \tilde\theta_{ci} = g^{-1}(x_{ci})
-   = \operatorname*{arg\,max}_{\theta} \; p(x_{ci} \mid \theta)
+   \tilde\theta_{ij} = g^{-1}(x_{ij})
+   = \operatorname*{arg\,max}_{\theta} \; p(x_{ij} \mid \theta)
 
 The saturated model :math:`\tilde\Theta = g^{-1}(X)` has one parameter for each
 entry, so it fits the data perfectly. :math:`g^{-1}` is applied to every entry
@@ -129,23 +129,23 @@ values:
      - :math:`\log` rate
      - :math:`\log \max(x, 0.02)`
    * - ``negative_binomial``
-     - :math:`\log` mean, inverse dispersion :math:`\kappa_i`
+     - :math:`\log` mean, inverse dispersion :math:`\kappa_j`
      - :math:`\log \max(x, 0.02)`
    * - ``bernoulli``
      - logit of the probability
      - :math:`\operatorname{clip}(\operatorname{logit} x, -4, 4)`
    * - ``gamma``
-     - shape :math:`\theta + 1`, rate :math:`\nu_i`
-     - :math:`\psi^{-1}\big(\log(\nu_i x)\big) - 1`
+     - shape :math:`\theta + 1`, rate :math:`\nu_j`
+     - :math:`\psi^{-1}\big(\log(\nu_j x)\big) - 1`
    * - ``lognormal``
-     - mean of :math:`\log x`, standard deviation :math:`\nu_i`
+     - mean of :math:`\log x`, standard deviation :math:`\nu_j`
      - :math:`\log \max(x, 10^{-5})`
    * - ``beta``
-     - mean :math:`\pi \in (0, 1)`, concentration :math:`\nu_i`
+     - mean :math:`\pi \in (0, 1)`, concentration :math:`\nu_j`
      - the root :math:`\pi` of
-       :math:`\operatorname{logit} x + \psi\big((1-\pi)\nu_i\big) - \psi(\pi\nu_i) = 0`
+       :math:`\operatorname{logit} x + \psi\big((1-\pi)\nu_j\big) - \psi(\pi\nu_j) = 0`
    * - ``sigmoid_beta``
-     - logit of the mean, concentration :math:`\nu_i`
+     - logit of the mean, concentration :math:`\nu_j`
      - :math:`\operatorname{logit}` of the ``beta`` root
 
 :math:`\psi` is the digamma function. ``sigmoid_beta`` is a ``beta`` distribution
@@ -156,24 +156,24 @@ Nuisance parameters
 ~~~~~~~~~~~~~~~~~~~
 
 Some families have one more parameter for each feature, shown with the index
-:math:`i` in the table. GLMPCA estimates it once from the column statistics of the
+:math:`j` in the table. GLMPCA estimates it once from the column statistics of the
 data, before the fit, and keeps it fixed:
 
 - ``negative_binomial``: method of moments,
-  :math:`\kappa_i = \bar x_i^2 / (\sigma_i^2 - \bar x_i)` with the mean
-  :math:`\bar x_i` and the variance :math:`\sigma_i^2` of the feature, clipped to
+  :math:`\kappa_j = \bar x_j^2 / (\sigma_j^2 - \bar x_j)` with the mean
+  :math:`\bar x_j` and the variance :math:`\sigma_j^2` of the feature, clipped to
   :math:`[0.1, 500]`.
 - ``beta`` and ``sigmoid_beta``: maximum likelihood with the fixed-point iteration of
   Minka, from a method of moments start.
-- ``gamma``: maximum likelihood of the shape :math:`a_i` with Newton's method, and the
-  rate :math:`\nu_i = a_i / \bar x_i`.
+- ``gamma``: maximum likelihood of the shape :math:`a_j` with Newton's method, and the
+  rate :math:`\nu_j = a_j / \bar x_j`.
 - ``lognormal``: the standard deviation of :math:`\log x`.
 
 Sparse data
 -----------
 
 :math:`g^{-1}` is applied to every entry separately. Thus, all zeros of feature
-:math:`i` have the same saturated parameter :math:`\theta^0_i = g^{-1}(0)`. sincei
+:math:`j` have the same saturated parameter :math:`\theta^0_j = g^{-1}(0)`. sincei
 writes the saturated parameters of sparse data as:
 
 .. math::
@@ -194,29 +194,29 @@ Sequencing depth correction
 ---------------------------
 
 We can include a size factor to correct the effects of sequencing depth per cell.
-For cell :math:`c`, the size factor is :math:`s_c = L_c / \operatorname{median}(L)`,
-with :math:`L_c = \sum_i x_{ci}` the total counts of the cell. It can be applied in one
+For cell :math:`i`, the size factor is :math:`s_i = L_i / \operatorname{median}(L)`,
+with :math:`L_i = \sum_j x_{ij}` the total counts of the cell. It can be applied in one
 of two ways:
 
-- ``"normalize"`` fits GLMPCA on :math:`x_{ci} / s_c`. It is available for
+- ``"normalize"`` fits GLMPCA on :math:`x_{ij} / s_i`. It is available for
   ``poisson``, ``negative_binomial``, ``gamma`` and ``lognormal``.
-- ``"offset"`` keeps the counts in the likelihood and adds :math:`\log s_c` to the
+- ``"offset"`` keeps the counts in the likelihood and adds :math:`\log s_i` to the
   parameters of the cell:
 
   .. math::
 
-     \hat\theta_{ci} = \log s_c + \mu_i + u_c^\top v_i
+     \hat\theta_{ij} = \log s_i + \mu_j + u_i^\top v_j
 
-  with :math:`u_c` the row of cell :math:`c` in :math:`U` and :math:`v_i` the row of
-  feature :math:`i` in :math:`V`. The non-zero saturated parameters of the cell move by
-  :math:`-\log s_c`, which is :math:`g^{-1}(x_{ci} / s_c)` for the log-link families. It is available for
+  with :math:`u_i` the row of cell :math:`i` in :math:`U` and :math:`v_j` the row of
+  feature :math:`j` in :math:`V`. The non-zero saturated parameters of the cell move by
+  :math:`-\log s_i`, which is :math:`g^{-1}(x_{ij} / s_i)` for the log-link families. It is available for
   ``poisson``, ``negative_binomial`` and ``lognormal``.
 
 Optimization
 ------------
 
 **Initialization.** The intercept starts at the saturated parameter of the column
-means, :math:`\mu_0 = g^{-1}(\bar{x})`, with :math:`\bar x_i` the mean of feature :math:`i`. This is the maximum likelihood intercept
+means, :math:`\mu_0 = g^{-1}(\bar{x})`, with :math:`\bar x_j` the mean of feature :math:`j`. This is the maximum likelihood intercept
 when :math:`T(x) = x`. The loadings start with a randomized SVD of
 :math:`\tilde\Theta - \mathbf{1}\mu_0^\top` on a random set of up to 8,192 cells
 (``init="spectral"``).
