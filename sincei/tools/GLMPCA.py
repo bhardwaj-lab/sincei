@@ -614,7 +614,8 @@ class GLMPCA:
     # ---------------------------------------------------------------------------------
     def _initial_point(self, data: _Data) -> tuple[torch.Tensor, torch.Tensor]:
         d, p = self.n_pc, data.p
-        # saturated parameter of the column means: intercept-only MLE when T(x)=x
+        # saturated parameter of the raw column means: intercept-only MLE when T(x)=x
+        # doesn't hold for beta/gamma/lognormal, therefore I set it to theta from cell-subset mean where possible (631)
         mu0 = self.exponential_family.invert_g(self._colmean.reshape(1, -1)).reshape(-1)
         if isinstance(self.init, (np.ndarray, torch.Tensor)):
             V0 = torch.linalg.qr(torch.as_tensor(self.init).to(self.device, self.dtype))[0]
@@ -626,6 +627,8 @@ class GLMPCA:
                 Th = torch.where(b.obs.to_dense() > 0, Th, mu0)
             if b.o is not None:
                 Th = Th - b.o[:, None] * (Th != data.theta0)
+            if b.obs is None:
+                mu0 = Th.mean(0)
             V0 = torch.svd_lowrank(Th - mu0, q=min(d + 10, *Th.shape), niter=4)[2][:, :d]
         elif self.init == "random":
             V0 = torch.linalg.qr(torch.randn(p, d, device=self.device, dtype=self.dtype))[0]
