@@ -8,9 +8,6 @@ import numpy as np
 import torch
 import torch.distributions as td
 
-EULER_GAMMA = 0.5772156649015329
-
-
 class GLMFamily(str, Enum):
     gaussian = "gaussian"
     poisson = "poisson"
@@ -33,7 +30,7 @@ class GLMFamily(str, Enum):
             GLMFamily.sigmoid_beta: SigmoidBeta,
         }[self]
 
-
+EULER_GAMMA = 0.5772156649015329
 def inverse_digamma(y: torch.Tensor, n_iter: int = 8) -> torch.Tensor:
     """Vectorised inverse digamma (Minka, 2000): asymptotic init + Newton steps."""
     x = torch.where(y >= -2.22, torch.exp(y) + 0.5, -1.0 / (y + EULER_GAMMA))
@@ -273,7 +270,8 @@ class Beta(ExponentialFamily):
     these bounds are clipped.
 
     family_params:
-        - "nu": fixed per-feature concentration (estimated by streaming MLE if not given).
+        - "nu": fixed per-feature concentration (a+b). A scalar with global value is accepted.
+                Estimated by streaming MLE if not given.
         - "min_val" (int): min data value (replaces 0 and 1).
         - "method" (str): method use to compute the "nu" parameter per feature.
             Two possibles: "MLE" and "MM". Defaults to "MLE".
@@ -369,7 +367,7 @@ class Gamma(ExponentialFamily):
     family_params:
         - "min_val" (int): min data value. Defaults to 1e-5.
         - "max_val" (int): max data value. Defaults to 1e7.
-        - "nu" (float): shape parameter (estimated by default using MLE).
+        - "nu" (float): rate parameter (1/scale). Estimated using MLE.
     """
 
     family_name = "gamma"
@@ -407,6 +405,7 @@ class LogNormal(ExponentialFamily):
 
     family_params:
         - "min_val" (int): min data value. Defaults to 1e-5.
+        - "nu" (float): standard dev (sigma) of log(x). A scalar with global value is accepted.
     """
 
     family_name = "lognormal"
