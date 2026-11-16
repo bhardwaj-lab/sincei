@@ -397,11 +397,6 @@ def VCRfinder(
                 )
                 adata_chrom = adata_chrom[:, : _var(adata_chrom).index[-2]]
 
-        # assert all(
-        #     (adata_chrom.var["end"] - adata_chrom.var["start"] == binsize)
-        #     | (adata_chrom.var["end"] - adata_chrom.var["start"] == (binsize - 1))
-        # ), f"Variable bin sizes detected in chromosome {chrom}"
-
         ctime = time.time()
         X = _rare_features(cast("CountMatrix", adata_chrom.X), X_pct=X_pct, k=k)
         blocks = _signal_blocks(X, k=k)
