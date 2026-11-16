@@ -51,16 +51,6 @@ _VCR = "VCR options"
 @app.callback(invoke_without_command=True)
 def main(
     input: Annotated[str, INPUT_OUTPUT_OPTS["h5ad_file"]],
-    bin_size: Annotated[
-        int,
-        typer.Option(
-            "-bs",
-            "--binSize",
-            metavar="INT",
-            rich_help_panel=_VCR,
-            help="The size of the bins in the input AnnData object.",
-        ),
-    ],
     out_file: Annotated[
         str,
         override(
@@ -139,11 +129,10 @@ def main(
 
     regions = VCRfinder(
         adata=adata,
-        binsize=bin_size,
-        penalty=penalty,
-        max_length=max_bins_region,
         X_pct=min_cell_pct,
         k=slack,
+        max_length=max_bins_region,
+        penalty=penalty,
         region=region,
         verbose=verbose,
         n_jobs=number_of_processors,

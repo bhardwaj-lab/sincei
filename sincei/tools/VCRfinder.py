@@ -238,11 +238,10 @@ def _block_regions(
 
 def VCRfinder(
     adata: ad.AnnData,
-    binsize: int,
-    penalty: float = 1.0,
-    max_length: int = 2000,
     X_pct: float = 1.0,
     k: int = 0,
+    max_length: int = 2000,
+    penalty: float = 1.0,
     region: str | None = None,
     verbose: bool = False,
     n_jobs: int = DEFAULT_PROCESSORS,
@@ -278,9 +277,9 @@ def VCRfinder(
     ----------
     adata : anndata.AnnData
         Input anndata object with binned chromatin data. `adata.var` must contain
-        'chrom', 'start', and 'end' columns.
-    binsize : int
-        Size of the bins in base pairs.
+        'chrom', 'start', and 'end' columns. The bin size is the most common
+        end - start; more than 90% of the bins must have it, else a ValueError is
+        raised.
     penalty : float, optional
         Penalty for each segment, in units of bins. Higher values give fewer,
         longer regions. Default is 1.0.
@@ -311,6 +310,24 @@ def VCRfinder(
         Output DataFrame with the detected variable chromatin regions.
     """
     _var(adata)[["start", "end"]] = _var(adata)[["start", "end"]].apply(pd.to_numeric)
+
+    # Detect bin size from AnnData
+    sizes = (_var(adata)["end"] - _var(adata)["start"]).to_numpy()
+    values, counts = np.unique(sizes, return_counts=True)
+    binsize = int(values[np.argmax(counts)])
+    fraction = counts.max() / len(sizes)
+    if fraction <= 0.9:
+        msg = (
+            f"The bins in the input have varying sizes: {1 - fraction:.1%} of bins "
+            f"are not of the most common size, {binsize} bp. More than 90% of the bins "
+            f"must have the same size. You can make a matrix of equal-size bins with "
+            f"scCountReads bins."
+        )
+        raise ValueError(msg)
+    if verbose:
+        sys.stdout.write(
+            f"Bin size: {binsize} bp ({fraction:.1%} of bins are this length.)\n"
+        )
 
     if region is not None:
         parts = region.split(":")
