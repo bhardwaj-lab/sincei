@@ -125,69 +125,55 @@ def _signal_blocks(
     return [(int(s), X[:, s:e]) for s, e in zip(starts, ends, strict=True)]
 
 
-def _cooccurrence(X: CountMatrix) -> np.ndarray | sparse.csc_array:
+def _band_cooccurrence(X: CountMatrix, L: int) -> np.ndarray:
     """
-    Compute the bin-to-bin co-occurrence of a matrix X. The matrix is binarized,
-    then multiplied by its transpose.
-
-    Parameters
-    ----------
-    X : scipy.sparse array or np.ndarray
-        Input data matrix of shape (n_samples, n_features).
-
-    Returns
-    -------
-    cooc : np.ndarray or scipy.sparse.csc_array, shape (n_features, n_features)
-        Symmetric co-occurrence matrix. The diagonal holds the number of cells
-        with a nonzero count in each bin. Sparse when X is sparse.
-    """
-    if not isinstance(X, np.ndarray):
-        X = sparse.csc_array(X)
-    B = (X != 0).astype(np.int32)
-    return B.T @ B
-
-
-def _normalized_cooccurrence(X: CountMatrix) -> np.ndarray:
-    """
-    Compute the normalized co-occurrence W = D^-1/2 O D^-1/2 of a block, with
+    Band of the normalized co-occurrence W = D^-1/2 O D^-1/2 of a block, with
     O = B^T B the co-occurrence of the binarized block B and D = diag(O).
-
-    W[s, t] is the cosine similarity of the binary columns of bins s and t, and its
-    diagonal is 1. A bin without signal gets D[t, t] = 1, so its row, column and
-    diagonal of W are 0.
+    W[s, t] is the cosine similarity of the cells with signal in bins s and t. A
+    bin without signal gets D[t, t] = 1, so its row and column of W are 0. The
+    full W is not calculated.
 
     Parameters
     ----------
     X : scipy.sparse array or np.ndarray
         Input data matrix of shape (n_samples, n_features).
+    L : int
+        Width of the band: the maximum segment length.
 
     Returns
     -------
-    W : np.ndarray, shape (n_features, n_features)
-        Dense, symmetric normalized co-occurrence matrix.
+    band : np.ndarray, shape (n_features, L)
+        band[s, d] = W[s, s + d], and 0 where s + d is outside the block.
     """
-    cooc = _cooccurrence(X)
-    cooc = (cooc.toarray() if sparse.issparse(cooc) else np.asarray(cooc)).astype(
-        np.float64
-    )
-    f = np.diag(cooc)
-    D_inv_sqrt = 1.0 / np.sqrt(np.where(f > 0, f, 1.0))
-    return cooc * np.outer(D_inv_sqrt, D_inv_sqrt)
+    B = sparse.csc_array(X != 0, dtype=np.float64)
+    f = np.asarray(B.sum(axis=0)).ravel()
+    B = sparse.csc_array(B @ sparse.diags_array(1.0 / np.sqrt(np.where(f > 0, f, 1.0))))
+    w = B.shape[1]
+    band = np.zeros((w, L))
+    for c0 in range(0, w, L):
+        c1 = min(c0 + L, w)
+        G = (B[:, c0:c1].T @ B[:, c0 : min(c1 + L, w)]).toarray()
+        for s in range(c0, c1):
+            n = min(L, w - s)
+            band[s, :n] = G[s - c0, s - c0 : s - c0 + n]
+    return band
 
 
-def _segment_dp(W: np.ndarray, pen: float) -> list[int]:
+def _segment_dp(band: np.ndarray, pen: float) -> tuple[list[int], list[float]]:
     """
-    Exact segmentation of a block by dynamic programming.
+    Segmentation of a block by dynamic programming on the band of W.
 
     The cost of a segment [a, b) with m = b - a bins is
     C(a, b) = sum_t W[t, t] - (1 / m) sum_{s, t} W[s, t], over the bins of the
-    segment, calculated in O(1) from the 2D prefix sum of W. The segmentation is
-    the exact minimum of the sum of the segment costs plus `pen` for each segment.
+    segment. The segmentation is the minimum of the sum of segment costs plus `pen`
+    for each segment, with segments of at most L bins (the width of the band). It
+    is exact if L is larger than the number of bins in the block. If two segmentations
+    have the same minimum, the one with the longer segment is used.
 
     Parameters
     ----------
-    W : np.ndarray, shape (w, w)
-        Normalized co-occurrence of the block (see `_normalized_cooccurrence`).
+    band : np.ndarray, shape (w, L)
+        Band of the normalized co-occurrence (see `_band_cooccurrence`).
     pen : float
         Penalty for each segment, in units of bins.
 
@@ -196,83 +182,65 @@ def _segment_dp(W: np.ndarray, pen: float) -> list[int]:
     ends : list of int
         The end of each segment (exclusive, relative to the block start), in
         order. The last end is w.
+    costs : list of float
+        The cost C(a, b) of each segment.
     """
-    w = W.shape[0]
-    P = np.zeros((w + 1, w + 1))
-    P[1:, 1:] = W.cumsum(axis=0).cumsum(axis=1)
-    q = np.r_[0.0, np.cumsum(np.diag(W))]
+    w, L = band.shape
+    rowcum = np.cumsum(band, axis=1)
+    q = np.r_[0.0, np.cumsum(band[:, 0])]
     F = np.zeros(w + 1)
     best = np.zeros(w + 1, dtype=np.int64)
+    cost = np.zeros(w + 1)
     for b in range(1, w + 1):
-        a = np.arange(b)
-        inside = P[b, b] - P[a, b] - P[b, a] + P[a, a]
-        total = F[:b] + (q[b] - q[a]) - inside / (b - a) + pen
-        best[b] = int(np.argmin(total))
-        F[b] = total[best[b]]
-    ends = []
+        a = np.arange(max(b - L, 0), b)
+        row_sums = 2 * rowcum[a, b - 1 - a] - band[a, 0]
+        inside = np.cumsum(row_sums[::-1])[::-1]
+        c = q[b] - q[a] - inside / (b - a)
+        total = F[a] + c + pen
+        i = int(np.argmax(total <= total.min() + 1e-9))
+        best[b], cost[b], F[b] = a[i], c[i], total[i]
+    ends, costs = [], []
     b = w
     while b > 0:
         ends.append(b)
+        costs.append(float(cost[b]))
         b = int(best[b])
-    return ends[::-1]
+    return ends[::-1], costs[::-1]
 
 
 def _var(adata: ad.AnnData) -> pd.DataFrame:
     return cast("pd.DataFrame", adata.var)
 
 
-def _segment_costs(W: np.ndarray, ends: list[int]) -> list[float]:
-    """Cost of each segment of a block, sum_t W[t, t] - (1 / m) sum_{s, t} W[s, t]."""
-    costs = []
-    for a, b in zip([0, *ends[:-1]], ends, strict=True):
-        inside = W[a:b, a:b]
-        costs.append(float(np.trace(inside) - inside.sum() / (b - a)))
-    return costs
-
-
-def _regions_df(
-    bkps: list[int],
-    costs: list[float],
-    chrom: str,
-    start: int,
-    offset: int,
-    binsize: int,
-) -> pd.DataFrame:
-    """BED rows for the segments of one block, which starts at bin `offset`. The
-    score is the segment cost."""
-    prevs = [0, *bkps[:-1]]
-    return pd.DataFrame({
-        "chrom": chrom,
-        "start": [int(start + (offset + prev) * binsize) for prev in prevs],
-        "end": [int(start + (offset + bkp) * binsize) for bkp in bkps],
-        "name": [f"{chrom}_VCR_{offset + bkp}" for bkp in bkps],
-        "score": costs,
-        "strand": "*",
-    })
-
-
 def _block_regions(
     block: tuple[int, np.ndarray | sparse.csc_array],
     penalty: float,
+    max_length: int,
     chrom: str,
     start: int,
     binsize: int,
 ) -> pd.DataFrame:
-    """Segment one signal block on its normalized co-occurrence."""
+    """BED rows for the segments of one signal block, which starts at bin `offset`.
+    The score is the segment cost."""
     offset, X_block = block
-
-    if X_block.shape[1] == 1:
-        return _regions_df([1], [0.0], chrom, start, offset, binsize)
-
-    W = _normalized_cooccurrence(X_block)
-    ends = _segment_dp(W, penalty)
-    return _regions_df(ends, _segment_costs(W, ends), chrom, start, offset, binsize)
+    band = _band_cooccurrence(X_block, min(X_block.shape[1], max_length))
+    ends, costs = _segment_dp(band, penalty)
+    starts = [0, *ends[:-1]]
+    return pd.DataFrame({
+        "chrom": chrom,
+        "start": [int(start + (offset + a) * binsize) for a in starts],
+        "end": [int(start + (offset + b) * binsize) for b in ends],
+        "name": [f"{chrom}_VCR_{offset + b}" for b in ends],
+        "score": costs,
+        "strand": "*",
+    })
 
 
 def VCRfinder(
     adata: ad.AnnData,
     binsize: int,
     penalty: float = 1.0,
+    max_length: int = 2000,
     X_pct: float = 1.0,
     k: int = 0,
     region: str | None = None,
@@ -285,20 +253,22 @@ def VCRfinder(
 
     Each chromosome is processed separately:
 
-    1. The counts are binarized: a cell has signal in a bin if its count is not 0.
-    2. Prefilter: a bin passes if at least X_pct percent of the cells have signal in
-       it. The bins that pass, and the bins at most k bins from them, are kept; all
-       other bins are set to 0.
-    3. Signal blocks: runs of bins with signal, with at most k bins without signal
-       between two bins with signal. Bins outside all blocks get no region.
-    4. For each block, the co-occurrence O = B^T B of the binarized block B, and the
-       normalized co-occurrence W = D^-1/2 O D^-1/2, with D = diag(O). W[s, t] is
-       the cosine similarity of the cells with signal in bins s and t.
-    5. Each block is segmented exactly by dynamic programming. The cost of a
-       segment of m bins is sum_t W[t, t] - (1 / m) sum_{s, t} W[s, t] over its
-       bins, and the segmentation minimizes the sum of the segment costs plus the
-       penalty for each segment. A low cost means a high co-occurrence inside the
-       segments; the penalty, in units of bins, controls the number of regions.
+    1. Binarize the count matrix: set all nonzero counts to 1.
+    2. Prefilter: keep the 1 counts in bins with at counts in at least X_pct cells and
+       in bins that are at most k bins away from a bin that passes.
+    3. Split the filtered matrix into signal blocks, runs of bins with signal with at
+       most k bins without signal between.
+    4. For each block, the compute the normalized co-occurrence the binarized block B,
+       W = D^-1/2 O D^-1/2, with O the co-occurrence matrix and D = diag(O). Only the
+       band of W with |s - t| < L is calculated, with L = max_length. This avoids the
+       quadratic blowup of memory needed to store the whole co-occurrence matrix of a
+       large block.
+    5. Each block is segmented by dynamic programming. We minimize the sum of the cost
+       of splitting a block into segments plus a penalty. The cost of a segment of m
+       bins is sum_t W[t, t] - (1 / m) sum_{s, t} W[s, t] over the bins in the segment.
+       Segments can be at most L bins long. A low cost means a high co-occurrence inside
+       a segment. The penalty, in units of bins, controls that a block does not always
+       separate into individual bins.
 
     The function returns a pandas DataFrame containing the detected variable
     chromatin regions. The DataFrame has columns: chrom, start, end, name, score,
@@ -314,6 +284,10 @@ def VCRfinder(
     penalty : float, optional
         Penalty for each segment, in units of bins. Higher values give fewer,
         longer regions. Default is 1.0.
+    max_length : int, optional
+        Maximum number of bins in a region. Only the band of W of this width is
+        calculated, so the memory for a block of w bins is O(w * max_length). The
+        segmentation is exact for blocks of at most max_length bins. Default is 2000.
     X_pct : float, optional
         Minimum percentage of cells with signal to keep a bin. Bins below it are set
         to 0 before the blocks are made. Default is 1.0 (1%).
@@ -423,6 +397,7 @@ def VCRfinder(
         block_regions = partial(
             _block_regions,
             penalty=penalty,
+            max_length=max_length,
             chrom=chrom,
             start=start,
             binsize=binsize,
