@@ -29,10 +29,11 @@ DESCRIPTION = (
     "--slack bins without signal between two bins with signal.\n\n"
     "In each block, the co-occurrence of two bins is the number of cells with signal "
     "in both, normalized by the number of cells in each bin (the cosine similarity of "
-    "the cells with signal). Each block is then segmented exactly, by dynamic "
-    "programming, into runs of bins that co-occur. A penalty for each segment, in "
-    "units of bins, controls the number of regions: a higher penalty gives fewer, "
-    "longer regions."
+    "the cells with signal). Each block is then segmented by dynamic programming "
+    "into runs of bins that co-occur, with segments of at most --maxBinsRegion bins. "
+    "The segmentation is exact for blocks of at most --maxBinsRegion bins. A penalty "
+    "for each segment, in units of bins, controls the number of regions: a higher "
+    "penalty gives fewer, longer regions."
 )
 
 
@@ -114,6 +115,20 @@ def main(
             ),
         ),
     ] = 1.0,
+    max_bins_region: Annotated[
+        int,
+        typer.Option(
+            "-mb",
+            "--maxBinsRegion",
+            metavar="INT",
+            min=1,
+            rich_help_panel=_VCR,
+            help=(
+                "Maximum number of bins in a region. The segmentation is exact for "
+                "signal blocks of at most this number of bins."
+            ),
+        ),
+    ] = 2000,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
     ] = DEFAULT_PROCESSORS,
@@ -126,6 +141,7 @@ def main(
         adata=adata,
         binsize=bin_size,
         penalty=penalty,
+        max_length=max_bins_region,
         X_pct=min_cell_pct,
         k=slack,
         region=region,
