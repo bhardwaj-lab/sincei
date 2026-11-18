@@ -182,15 +182,20 @@ def test_logNormalize_changes_the_reduction_but_not_the_counts(
 ) -> None:
     method = "PCA"
     embeddings = []
-    for extra in ([], ["--logNormalize"]):
+    for extra in (
+        ["--depthCorrection", "none"],
+        ["--depthCorrection", "lognormalize"],
+        ["--logNormalize"],
+    ):
         code, stderr, out = cluster(h5ad, method, *extra)
         assert code == 0, stderr
         result = ad.read_h5ad(out)
         np.testing.assert_array_equal(result.X.toarray(), counts.toarray())
         embeddings.append(result.obsm[f"X_{method.lower()}"])
 
-    assert embeddings[0].shape == embeddings[1].shape == (N_CELLS, 3)
+    assert all(embedding.shape == (N_CELLS, 3) for embedding in embeddings)
     assert not np.allclose(np.abs(embeddings[0]), np.abs(embeddings[1]))
+    np.testing.assert_allclose(np.abs(embeddings[1]), np.abs(embeddings[2]))
 
 
 @pytest.mark.parametrize("method", ["LSA", "LDA"])

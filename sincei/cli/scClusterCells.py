@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 import sys
 import warnings
 from pathlib import Path
 from typing import Annotated
 
-import h5py
 import anndata as ad
+import h5py
 import matplotlib as mpl
+
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -20,17 +21,9 @@ import torch
 import typer
 
 from sincei.tools.ExponentialFamily import GLMFamily
-from sincei.tools.GLMPCA import GLMPCA
+from sincei.tools.GLMPCA import DEPTH_CORRECTION_FAMILIES, GLMPCA
 from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
-
-def x_nbytes(path: str) -> int:
-    "Check in-memory size of X from metadata."
-    with h5py.File(path, "r") as f:
-        X = f["X"]
-        if isinstance(X, h5py.Dataset):
-            return X.size * X.dtype.itemsize
-        return sum(X[k].size * X[k].dtype.itemsize for k in ("data", "indices", "indptr"))
 
 from ._common_args import (
     CM_PER_INCH,
@@ -46,6 +39,18 @@ from ._common_args import (
 )
 from ._parsers import validate_anndata
 
+
+def x_nbytes(path: str) -> int:
+    "Check in-memory size of X from metadata."
+    with h5py.File(path, "r") as f:
+        X = f["X"]
+        if isinstance(X, h5py.Dataset):
+            return X.size * X.dtype.itemsize
+        return sum(
+            X[k].size * X[k].dtype.itemsize for k in ("data", "indices", "indptr")
+        )
+
+
 DESCRIPTION = (
     "Cluster cells from a cell-by-feature matrix.\n\n"
     "``scClusterCells`` performs dimensionality reduction, Leiden clustering and "
@@ -57,9 +62,10 @@ DESCRIPTION = (
     'in lowercase (for example ``obsm["X_glmpca"]``). If the input AnnData object '
     "already contains a reduction of the requested method, the existing reduction"
     "is used instead of computing a new one, unless ``--recomputeDimRed`` is given. "
-    "With ``--logNormalize``, the counts of every cell are scaled to a total of 10,000 "
-    "and log1p-transformed before the reduction. The counts in the output file are not "
-    "changed.\n\n"
+    "Cell-depth correction is controlled by ``--depthCorrection`` (default "
+    "``auto``), which selects a strategy for the chosen method and glmPCA family. "
+    "The deprecated ``--logNormalize`` option remains available for compatibility. "
+    "The counts in the output file are not changed.\n\n"
     "``scClusterCells`` provides the following dimensionality reduction methods:\n"
     "* glmPCA: generalized PCA, with an exponential family distribution such as "
     "Poisson, Bernoulli, etc.\n"
@@ -164,11 +170,21 @@ def main(
             help=(
                 "Strategy to correct for differences in total counts across cells "
                 "during dimentionality reduction."
-                "Default: auto - selects the most appropriate strategy based on the selected "
-                "--method. Options are: [bold yellow]none, drop, lognormalize, normalize, offset[/bold yellow], "
+                "Default: auto - selects the most appropriate strategy based on "
+                "the selected --method. Options are: "
+                "[bold yellow]none, drop, lognormalize, normalize, "
+                "offset[/bold yellow]."
             ),
         ),
     ] = "auto",
+    log_normalize: Annotated[
+        bool,
+        typer.Option(
+            "--logNormalize",
+            rich_help_panel=_REDUCTION,
+            help="Deprecated compatibility option; use --depthCorrection lognormalize.",
+        ),
+    ] = False,
     recompute_dim_red: Annotated[
         bool,
         typer.Option(
@@ -311,34 +327,49 @@ def main(
     adata = validate_anndata(ad.read_h5ad(input, backed="r" if backed else None), input)
 
     # handle depth correction
-    if depth_correction.lower() == "none":
+    if log_normalize and method in {DimRed.LSA, DimRed.LDA}:
+        logging.warning(
+            "--logNormalize is ignored with %s, which takes raw counts.", method.value
+        )
+    if depth_correction is None or depth_correction.lower() == "none":
         depth_correction = None
-    if depth_correction.lower() == "auto":
+    elif depth_correction.lower() == "auto":
         if method in {DimRed.LSA, DimRed.LDA}:
             depth_correction = "drop"
         if method is DimRed.PCA:
             depth_correction = "lognormalize"
         if method is DimRed.glmPCA:
-            if family in DEPTH_CORRECTION_FAMILIES["offset"]:
+            if glmpca_family.value in DEPTH_CORRECTION_FAMILIES["offset"]:
                 depth_correction = "offset"
-            elif family in DEPTH_CORRECTION_FAMILIES["normalize"]:
+            elif glmpca_family.value in DEPTH_CORRECTION_FAMILIES["normalize"]:
                 depth_correction = "normalize"
             else:
                 depth_correction = None
     else:
-        if depth_correction not in {"drop", None} and method in {DimRed.LSA, DimRed.LDA}:
+        if depth_correction not in {"drop", None} and method in {
+            DimRed.LSA,
+            DimRed.LDA,
+        }:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
         if depth_correction not in {"lognormalize", None} and method in {DimRed.PCA}:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
-        if depth_correction not in {"offset", "normalize", None} and method in {DimRed.glmPCA}:
+        if depth_correction not in {"offset", "normalize", None} and method in {
+            DimRed.glmPCA
+        }:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
 
@@ -349,6 +380,7 @@ def main(
         matrix = adata
         if method is DimRed.PCA:
             if depth_correction == "lognormalize":
+                matrix = adata.copy()
                 sc.pp.normalize_total(matrix, target_sum=1e4)
                 sc.pp.log1p(matrix)
             sc.pp.pca(matrix, n_comps=n_prin_comps)
@@ -358,11 +390,12 @@ def main(
         elif method is DimRed.glmPCA:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logging.info("Running glmPCA on device: %s", device)
-            glmpca = GLMPCA(n_pc=n_prin_comps,
-                            family=glmpca_family,
-                            device=device,
-                            depth_correction=depth_correction
-                            )
+            glmpca = GLMPCA(
+                n_pc=n_prin_comps,
+                family=glmpca_family,
+                device=device,
+                depth_correction=depth_correction,
+            )
             adata.obsm[reduction] = glmpca.fit_transform(matrix).numpy()
             assert glmpca.saturated_loadings_ is not None
             adata.varm[reduction] = glmpca.saturated_loadings_.cpu().numpy()
@@ -413,9 +446,7 @@ def main(
         figure, axes = plt.subplots(
             figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
         )
-        sc.pl.umap(
-            adata, color="leiden", legend_loc="on data", ax=axes, show=False
-        )
+        sc.pl.umap(adata, color="leiden", legend_loc="on data", ax=axes, show=False)
 
         umap_title = (
             f"Leiden clusters; resolution : {cluster_resolution}\n"
