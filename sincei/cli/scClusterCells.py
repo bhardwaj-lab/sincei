@@ -57,22 +57,19 @@ DESCRIPTION = (
     "2D projection (UMAP) on the input count matrix (output of ``scCountReads``). "
     "The result is an updated h5ad object, and (optionally) a plot file and a .tsv "
     "file with UMAP coordinates and the corresponding cluster id for each barcode.\n\n"
-    'Each dimensionality reduction is stored in ``obsm["X_<method>"]``, and the '
-    'region loadings of LSA and LDA in ``varm["X_<method>"]``, with the method name '
+    "``scClusterCells`` provides the two kinds of dimensionality reduction methods:\n"
+    "1. glmPCA: generalized PCA, with an exponential family distribution. "
+    "(choose based on assay-type).\n"
+    "2. topic models : LSA (Latent Schemantic Analysis), LDA(Latent Dirichlet Allocation) "
+    'Cell and region-level loadings obtained from the methods are stored in '
+    '``obsm["X_<method>"]`` and ``varm["X_<method>"]``, with the method name '
     'in lowercase (for example ``obsm["X_glmpca"]``). If the input AnnData object '
     "already contains a reduction of the requested method, the existing reduction"
     "is used instead of computing a new one, unless ``--recomputeDimRed`` is given. "
     "With ``--logNormalize``, the counts of every cell are scaled to a total of 10,000 "
     "and log1p-transformed before the reduction. The counts in the output file are not "
     "changed.\n\n"
-    "``scClusterCells`` provides the following dimensionality reduction methods:\n"
-    "* glmPCA: generalized PCA, with an exponential family distribution such as "
-    "Poisson, Bernoulli, etc.\n"
-    "* PCA: Principal Component Analysis.\n"
-    "* LSA: Latent Semantic Analysis. One extra component is fitted, and the "
-    "component that correlates the most with the cell depth is dropped if its "
-    f"Spearman rho is above {DEPTH_CORRELATION_CUTOFF}, else the extra component.\n"
-    "* LDA: Latent Dirichlet Allocation."
+
 )
 
 
