@@ -4,8 +4,8 @@ Creating a count matrix
 :ref:`scCountReads` makes a count matrix :math:`X \in \mathbb{R}^{N \times P}` from one
 or more BAM files, with one row per cell and one column per feature. The features are
 either bins from a uniform tiling of the genome, or regions from an annotation file.
-The entry :math:`x_{ci}` is the number of reads of cell :math:`c` that overlap feature
-:math:`i`.
+The entry :math:`x_{ij}` is the number of reads of cell :math:`i` that overlap feature
+:math:`j`.
 
 Every read from a BAM file goes through the same steps in both modes:
 

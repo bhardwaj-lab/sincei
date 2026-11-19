@@ -20,10 +20,10 @@ process:
 
 1. For each topic :math:`k`, draw a distribution over the features:
    :math:`\phi_k \sim \operatorname{Dirichlet}(\eta)`.
-2. For each cell :math:`c`, draw the topic proportions:
-   :math:`\vartheta_c \sim \operatorname{Dirichlet}(\alpha)`.
-3. For each token :math:`t` of cell :math:`c`, draw a topic
-   :math:`z_t \sim \operatorname{Categorical}(\vartheta_c)`, then draw a feature
+2. For each cell :math:`i`, draw the topic proportions:
+   :math:`\vartheta_i \sim \operatorname{Dirichlet}(\alpha)`.
+3. For each token :math:`t` of cell :math:`i`, draw a topic
+   :math:`z_t \sim \operatorname{Categorical}(\vartheta_i)`, then draw a feature
    :math:`w_t \sim \operatorname{Categorical}(\phi_{z_t})`.
 
 :math:`\alpha` controls the topic proportions of a cell. A small :math:`\alpha`
@@ -35,9 +35,9 @@ with few features.
 From counts to tokens
 ---------------------
 
-LDA requires integer counts. A count :math:`x_{ci}` of feature :math:`i` in cell
-:math:`c` gives :math:`x_{ci}` tokens of :math:`i`. The total number of tokens in
-the dataset is the sum of all counts :math:`T = \sum_{c,i} x_{ci}`.
+LDA requires integer counts. A count :math:`x_{ij}` of feature :math:`j` in cell
+:math:`i` gives :math:`x_{ij}` tokens of :math:`j`. The total number of tokens in
+the dataset is the sum of all counts :math:`T = \sum_{i,j} x_{ij}`.
 
 If the data is binarized before LDA, the number of tokens is equivalent to the number
 of non-zero entries of the matrix :math:`T = \mathrm{nnz}`.
@@ -78,9 +78,9 @@ posterior :math:`p(z, \vartheta, \phi \mid \mathbf{w})` has no closed form. Coll
 Gibbs sampling integrates out :math:`\vartheta` and :math:`\phi`, and samples only
 the topic assignment :math:`z_t` of each token. Let:
 
-- :math:`n_{ck}`: the number of tokens of cell :math:`c` with topic :math:`k`,
-- :math:`n_{ki}`: the number of tokens of feature :math:`i` with topic :math:`k`,
-- :math:`n_k = \sum_i n_{ki}`: the number of tokens with topic :math:`k`,
+- :math:`n_{ik}`: the number of tokens of cell :math:`i` with topic :math:`k`,
+- :math:`n_{kj}`: the number of tokens of feature :math:`j` with topic :math:`k`,
+- :math:`n_k = \sum_j n_{kj}`: the number of tokens with topic :math:`k`,
 
 and let the superscript :math:`-t` mean "without token :math:`t`". Each iteration
 samples the topic of every token again from its conditional distribution:
@@ -88,33 +88,33 @@ samples the topic of every token again from its conditional distribution:
 .. math::
 
    p(z_t = k \mid z^{-t}, \mathbf{w}) \;\propto\;
-   \big(n_{ck}^{-t} + \alpha_k\big)\,
+   \big(n_{ik}^{-t} + \alpha_k\big)\,
    \frac{n_{k w_t}^{-t} + \eta}{n_k^{-t} + P\eta}
 
-with :math:`c` the cell of token :math:`t`.
+with :math:`i` the cell of token :math:`t`.
 
 The first term favors the frequent topics in the cell, and the second term favors
 the topics that already contain the feature.
 
-After each sample, the counts :math:`n_{ck}`, :math:`n_{ki}` and :math:`n_k` change
+After each sample, the counts :math:`n_{ik}`, :math:`n_{kj}` and :math:`n_k` change
 to include the new topic of the token.
 
 Estimates
 ~~~~~~~~~
 
-Results come from the last sample in a run. The topic proportions of cell :math:`c` are:
+Results come from the last sample in a run. The topic proportions of cell :math:`i` are:
 
 .. math::
 
-   \hat\vartheta_{ck} = \frac{n_{ck} + \alpha_k}{n_c + \sum_{k'} \alpha_{k'}}
+   \hat\vartheta_{ik} = \frac{n_{ik} + \alpha_k}{n_i + \sum_{k'} \alpha_{k'}}
 
-with :math:`n_c` the number of tokens of the cell.
+with :math:`n_i` the number of tokens of the cell.
 
 The feature distribution of topic :math:`k` is:
 
 .. math::
 
-   \hat\phi_{ki} = \frac{n_{ki} + \eta}{n_k + P\eta}
+   \hat\phi_{kj} = \frac{n_{kj} + \eta}{n_k + P\eta}
 
 over all features, also the features without tokens.
 
@@ -146,7 +146,7 @@ With :math:`N` cells, :math:`P` features, :math:`T` tokens, :math:`K` topics and
   topics. Runtime is linear with the number of tokens. Binarized counts reduce
   :math:`T` to :math:`\mathrm{nnz}`.
 - **Memory**: :math:`O(T + (N + P)\,K)`, for one topic assignment per token and the
-  tables :math:`n_{ck}` and :math:`n_{ki}`. sincei passes tokens to tomotopy as lists
+  tables :math:`n_{ik}` and :math:`n_{kj}`. sincei passes tokens to tomotopy as lists
   of strings, which needs an additional :math:`O(T)` memory while the model is built.
 
 References
