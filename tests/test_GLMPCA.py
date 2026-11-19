@@ -1,7 +1,17 @@
-"""Tests for ``GLMPCA``: family selection, the fit/transform contract, AnnData input."""
+"""Tests for ``GLMPCA``:
+- family selection
+- fit/transform contract
+- GLMPCA recovers the simulated low-rank structure for every family from anndata.
+
+Each layer of ``glmpca_sim_k5_100x100_sp0.1.h5ad`` was simulated from the true
+scores ``obsm['X_true']`` and loadings ``varm['V_true']`` with the family it is
+named after. (bernoulli = ``success`` / ``total``; ``beta`` fitted with ``sigmoid_beta``).
+Simulation parameters stored in ``uns['sim_params']`` are passed here as fixed family parameters.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import anndata as ad
@@ -9,6 +19,7 @@ import numpy as np
 import pytest
 import torch
 from scipy import sparse
+from scipy.linalg import subspace_angles
 
 from sincei.tools.ExponentialFamily import GLMFamily, Poisson
 from sincei.tools.GLMPCA import GLMPCA
@@ -16,9 +27,29 @@ from sincei.tools.GLMPCA import GLMPCA
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+# For general checks
 N_CELLS = 40
 N_FEATURES = 12
 N_PC = 2
+
+# for simulated anndata checks
+SIM = Path(__file__).parent / "testdata" / "glmpca_sim_k5_100x100_sp0.1.h5ad"
+MAX_MEAN_ANGLE = 50.0  # degrees
+FAMILIES = [
+    "gaussian",
+    "poisson",
+    "negative_binomial",
+    "bernoulli",
+    "sigmoid_beta",
+    "gamma",
+    "lognormal",
+]
+LAYER = {"sigmoid_beta": "beta"}
+
+
+@pytest.fixture(scope="module")
+def sim() -> ad.AnnData:
+    return ad.read_h5ad(SIM)
 
 
 @pytest.fixture(autouse=True)
@@ -80,9 +111,7 @@ def test_transform_before_fit_fails_with_advice() -> None:
 
 
 def fitted_loadings(X: torch.Tensor | ad.AnnData) -> torch.Tensor:
-    torch.manual_seed(0)
-    np.random.seed(0)
-    model = GLMPCA(N_PC, family="poisson", max_iter=2, batch_size=8)
+    model = GLMPCA(N_PC, family="poisson", max_iter=2, batch_size=8, seed=0)
     model.fit(X)
     assert model.saturated_loadings_ is not None
     return model.saturated_loadings_.detach()
@@ -99,7 +128,7 @@ def fitted_loadings(X: torch.Tensor | ad.AnnData) -> torch.Tensor:
     ],
     ids=lambda matrix_type: matrix_type.__name__,
 )
-def test_anndata_input_is_fitted_with_cells_as_features(
+def test_anndata_input_is_fitted_with_cells_in_rows(
     matrix_type: Callable[[np.ndarray], Any],
 ) -> None:
     counts = (
@@ -110,6 +139,220 @@ def test_anndata_input_is_fitted_with_cells_as_features(
     )
     adata = ad.AnnData(matrix_type(counts))
 
+    # sparse input takes the theta0 + Delta path, dense the direct one: same model
     torch.testing.assert_close(
-        fitted_loadings(adata), fitted_loadings(torch.Tensor(counts.T))
+        fitted_loadings(adata),
+        fitted_loadings(torch.Tensor(counts)),
+        rtol=1e-4,
+        atol=1e-4,
     )
+
+
+@pytest.mark.parametrize("family", list(GLMFamily))
+def test_sparse_and_dense_input_give_the_same_scores(family: GLMFamily) -> None:
+    X = sample(family) * (torch.rand(N_CELLS, N_FEATURES) > 0.5)
+    model = GLMPCA(N_PC, family=family, max_iter=2, batch_size=16, seed=0)
+    model.fit(X)
+
+    torch.testing.assert_close(
+        model.transform(sparse.csr_matrix(X.numpy())),
+        model.transform(X),
+        rtol=1e-4,
+        atol=1e-4,
+    )
+
+
+def test_refit_re_estimates_per_feature_parameters() -> None:
+    model = GLMPCA(N_PC, family="negative_binomial", max_iter=2, seed=0)
+    model.fit(sample(GLMFamily.poisson))
+    model.fit(sample(GLMFamily.poisson)[:, :-2])  # fewer features
+
+    assert model.exponential_family.family_params["r"].shape == (N_FEATURES - 2,)
+
+
+def _grads(
+    model: GLMPCA, X: Any, n_jobs: int = 1
+) -> tuple[float, torch.Tensor, torch.Tensor]:
+    """Cost and gradients of one full pass, at the fitted point."""
+    model.n_jobs = n_jobs
+    data = model._data(X)
+    V = model.saturated_loadings_.clone().requires_grad_(True)
+    mu = model.saturated_intercept_.clone().requires_grad_(True)
+    cost = model._accumulate(
+        V, mu, data, np.arange(data.n), backward=True, scale=1 / data.n
+    )
+    return cost, V.grad, mu.grad
+
+
+def test_sparse_path_gives_the_dense_gradient_with_an_offset() -> None:
+    X = sample(GLMFamily.poisson) * (torch.rand(N_CELLS, N_FEATURES) > 0.5)
+    model = GLMPCA(
+        N_PC, family="poisson", max_iter=2, seed=0, depth_correction="offset"
+    )
+    model.fit(X)
+    Xs = sparse.csr_matrix(X.numpy())
+    assert model._data(Xs).batch(np.arange(4)).delta.is_coalesced()
+
+    for got, want in zip(_grads(model, Xs), _grads(model, X), strict=False):
+        torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
+
+
+def test_threaded_passes_match_the_serial_pass() -> None:
+    X = sparse.csr_matrix(sample(GLMFamily.poisson).numpy())
+    model = GLMPCA(
+        N_PC, family="poisson", max_iter=2, seed=0, chunk_size=8
+    )  # 4 pieces of 2
+    model.fit(X)
+
+    for got, want in zip(
+        _grads(model, X, n_jobs=4), _grads(model, X, n_jobs=1), strict=False
+    ):
+        torch.testing.assert_close(got, want, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("optimizer", ["geoopt", "lbfgs"])
+def test_n_jobs_fits_and_restores_torch_threads(optimizer: str) -> None:
+    threads = torch.get_num_threads()
+    X = sample(GLMFamily.poisson)
+    fits = [
+        GLMPCA(
+            N_PC,
+            family="poisson",
+            optimizer=optimizer,
+            fit_mode="exact",
+            max_iter=3,
+            chunk_size=8,
+            n_jobs=n_jobs,
+            seed=0,
+        ).fit_transform(X)
+        for n_jobs in (1, 3)
+    ]
+
+    torch.testing.assert_close(fits[1], fits[0], rtol=1e-3, atol=1e-3)
+    assert torch.get_num_threads() == threads
+
+
+def test_prefetching_minibatches_does_not_change_the_fit() -> None:
+    X = sample(GLMFamily.poisson)
+    fits = []
+    for prefetch in (True, False):
+        model = GLMPCA(
+            N_PC,
+            family="poisson",
+            max_iter=3,
+            batch_size=8,
+            feature_subsample=0.5,
+            seed=0,
+        )
+        model._prefetch = prefetch
+        model.fit(X)
+        fits.append(model.saturated_loadings_)
+
+    assert torch.equal(fits[0], fits[1])
+
+
+@pytest.mark.parametrize("optimizer", ["geoopt", "lbfgs"])
+def test_threaded_fits_with_the_same_seed_are_identical(optimizer: str) -> None:
+    X = sample(GLMFamily.poisson)
+    fits = [
+        GLMPCA(
+            N_PC,
+            family="poisson",
+            optimizer=optimizer,
+            fit_mode="exact",
+            max_iter=3,
+            chunk_size=8,
+            n_jobs=4,
+            seed=0,
+        ).fit_transform(X)
+        for _ in range(2)
+    ]
+
+    assert torch.equal(fits[0], fits[1])
+
+
+## Tests below take simulated anndata as input
+
+
+def family_input(sim: ad.AnnData, family: str) -> tuple[ad.AnnData, dict, str | None]:
+    """AnnData to fit (make float32), re-use family params, weights layer."""
+    p = sim.uns["sim_params"]
+    if family == "bernoulli":
+        total = sparse.csr_matrix(sim.layers["total"], dtype=np.float32)
+        success = sparse.csr_matrix(sim.layers["success"], dtype=np.float32)
+        frac = success.multiply(total.power(-1)).tocsr()  # 0 where total == 0
+        return ad.AnnData(frac, layers={"total": total}), {}, "total"
+    X = sim.layers[LAYER.get(family, family)]
+    X = X.astype(np.float32) if sparse.issparse(X) else np.asarray(X, dtype=np.float32)
+    params = {
+        "negative_binomial": {"r": float(p["nb_r"])},
+        "sigmoid_beta": {"nu": float(p["beta_nu"])},
+        # per-feature parameters are 1-D tensors (ExponentialFamily convention)
+        "gamma": {"nu": torch.tensor(sim.var["gamma_rate"].to_numpy(np.float32))},
+        "lognormal": {"nu": float(p["lognormal_nu"])},
+    }.get(family, {})
+    return ad.AnnData(X), params, None
+
+
+def mean_angle(A: np.ndarray, B: np.ndarray) -> float:
+    return float(np.degrees(subspace_angles(A, B)).mean())
+
+
+@pytest.mark.parametrize(
+    "fit_kwargs",
+    [
+        {"optimizer": "lbfgs", "fit_mode": "exact"},
+        {"optimizer": "geoopt", "fit_mode": "minibatch"},
+        {
+            "optimizer": "geoopt",
+            "fit_mode": "subsample",
+            "n_cells_fit": 50,
+        },  # 50% of cells
+    ],
+    ids=["lbfgs-exact", "geoopt-minibatch", "geoopt-subsample"],
+)
+@pytest.mark.parametrize("family", FAMILIES)
+def test_glmpca_recovers_simulated_subspaces(
+    sim: ad.AnnData, family: str, fit_kwargs: dict
+) -> None:
+    adata, params, weights = family_input(sim, family)
+    model = GLMPCA(
+        sim.uns["sim_params"]["rank"],
+        family=family,
+        family_params=params,
+        weights_layer=weights,
+        seed=int(sim.uns["sim_params"]["seed"]),
+        verbose=False,
+        **fit_kwargs,
+    )
+    model.fit(adata)
+
+    scores = model.transform(adata).numpy()
+    loadings = model.saturated_loadings_.detach().cpu().numpy()
+    cell_angle = mean_angle(scores, sim.obsm["X_true"])
+    feature_angle = mean_angle(loadings, sim.varm["V_true"])
+    print(
+        f"{family} {fit_kwargs}: mean principal angle cells={cell_angle:.1f} features={feature_angle:.1f}"
+    )
+
+    assert cell_angle < MAX_MEAN_ANGLE
+    assert feature_angle < MAX_MEAN_ANGLE
+
+
+def test_backed_anndata_gives_the_in_memory_fit(
+    sim: ad.AnnData, tmp_path: Path
+) -> None:
+    adata, _, _ = family_input(sim, "gaussian")
+    adata.write_h5ad(tmp_path / "gaussian.h5ad")
+    backed = ad.read_h5ad(tmp_path / "gaussian.h5ad", backed="r")
+
+    fits = []
+    for X in (adata, backed):
+        model = GLMPCA(
+            sim.uns["sim_params"]["rank"], family="gaussian", seed=0, verbose=False
+        )
+        fits.append((model.fit_transform(X), model.saturated_loadings_.detach()))
+    backed.file.close()
+
+    for got, want in zip(fits[1], fits[0], strict=False):
+        torch.testing.assert_close(got, want, rtol=1e-5, atol=1e-5)

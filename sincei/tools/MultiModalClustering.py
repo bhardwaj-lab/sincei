@@ -11,6 +11,7 @@ import umap
 from scanpy._utils import get_igraph_from_adjacency
 
 # own modules
+from sincei.cli._common_args import DEFAULT_PROCESSORS
 from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import depth_components
 
@@ -203,21 +204,16 @@ def MultiModalClustering(
             adata.obsm[reduction] = lda.fit_transform(matrix)
 
         elif met == "glmPCA":
-            # import glmPCA (not imported on top due to special optional import of
-            # mctorch)
+            # import glmPCA lazily (pulls in torch)
             from sincei.tools.GLMPCA import GLMPCA  # noqa: PLC0415
 
-            ## glmPCA using mctorch
             glmpca = GLMPCA(
                 n_pc=n_comps[i],
                 family=glmPCAfamily,
+                n_jobs=DEFAULT_PROCESSORS,
             )
-            glmpca.fit(matrix)
-            assert glmpca.saturated_loadings_ is not None
-            cell_pcs = glmpca.saturated_loadings_.detach().numpy()
-
-            ## update the anndata object
-            adata.obsm[reduction] = np.asarray(cell_pcs)
+            ## cell scores, cells x n_pc
+            adata.obsm[reduction] = glmpca.fit_transform(adata).numpy()
 
         sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=nK)
         sc.tl.leiden(adata, resolution=resolutions[i])
