@@ -23,7 +23,7 @@ import typer
 from sincei.tools.ExponentialFamily import GLMFamily
 from sincei.tools.GLMPCA import DEPTH_CORRECTION_FAMILIES, GLMPCA
 from sincei.tools.TopicModels import LDA, LSA
-from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
+from sincei.utils import depth_components
 
 from ._common_args import (
     CM_PER_INCH,
@@ -57,23 +57,15 @@ DESCRIPTION = (
     "2D projection (UMAP) on the input count matrix (output of ``scCountReads``). "
     "The result is an updated h5ad object, and (optionally) a plot file and a .tsv "
     "file with UMAP coordinates and the corresponding cluster id for each barcode.\n\n"
-    'Each dimensionality reduction is stored in ``obsm["X_<method>"]``, and the '
-    'region loadings of LSA and LDA in ``varm["X_<method>"]``, with the method name '
-    'in lowercase (for example ``obsm["X_glmpca"]``). If the input AnnData object '
-    "already contains a reduction of the requested method, the existing reduction"
-    "is used instead of computing a new one, unless ``--recomputeDimRed`` is given. "
+    "A range of dimentionality reduction methods can be chosen: glmPCA (with an "
+    "exponential family model, LSA or LDA (topic models). The output from chosen "
+    'methods are stored in ``obsm["X_<method>"]``, and `varm["X_<method>"]``, with '
+    'the method name in lowercase (for example ``obsm["X_glmpca"]``). If the input '
+    "AnnData object already contains a reduction of the requested method, the existing "
+    "reduction is used instead of computing a new one, unless ``--recomputeDimRed`` is given. "
     "Cell-depth correction is controlled by ``--depthCorrection`` (default "
-    "``auto``), which selects a strategy for the chosen method and glmPCA family. "
-    "The deprecated ``--logNormalize`` option remains available for compatibility. "
-    "The counts in the output file are not changed.\n\n"
-    "``scClusterCells`` provides the following dimensionality reduction methods:\n"
-    "* glmPCA: generalized PCA, with an exponential family distribution such as "
-    "Poisson, Bernoulli, etc.\n"
-    "* PCA: Principal Component Analysis.\n"
-    "* LSA: Latent Semantic Analysis. One extra component is fitted, and the "
-    "component that correlates the most with the cell depth is dropped if its "
-    f"Spearman rho is above {DEPTH_CORRELATION_CUTOFF}, else the extra component.\n"
-    "* LDA: Latent Dirichlet Allocation."
+    "``auto``), which selects a strategy for the chosen method. Counts in the "
+    " output file are not changed.\n\n"
 )
 
 
@@ -177,14 +169,6 @@ def main(
             ),
         ),
     ] = "auto",
-    log_normalize: Annotated[
-        bool,
-        typer.Option(
-            "--logNormalize",
-            rich_help_panel=_REDUCTION,
-            help="Deprecated compatibility option; use --depthCorrection lognormalize.",
-        ),
-    ] = False,
     recompute_dim_red: Annotated[
         bool,
         typer.Option(
@@ -327,10 +311,6 @@ def main(
     adata = validate_anndata(ad.read_h5ad(input, backed="r" if backed else None), input)
 
     # handle depth correction
-    if log_normalize and method in {DimRed.LSA, DimRed.LDA}:
-        logging.warning(
-            "--logNormalize is ignored with %s, which takes raw counts.", method.value
-        )
     if depth_correction is None or depth_correction.lower() == "none":
         depth_correction = None
     elif depth_correction.lower() == "auto":
