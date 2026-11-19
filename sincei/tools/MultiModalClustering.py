@@ -11,7 +11,6 @@ import umap
 from scanpy._utils import get_igraph_from_adjacency
 
 # own modules
-from sincei.cli._common_args import DEFAULT_PROCESSORS
 from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import depth_components
 
@@ -210,7 +209,7 @@ def MultiModalClustering(
             glmpca = GLMPCA(
                 n_pc=n_comps[i],
                 family=glmPCAfamily,
-                n_jobs=DEFAULT_PROCESSORS,
+                n_jobs=available_processors(),
             )
             ## cell scores, cells x n_pc
             adata.obsm[reduction] = glmpca.fit_transform(adata).numpy()
