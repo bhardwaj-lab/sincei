@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.distributions as td
 
+
 class GLMFamily(str, Enum):
     gaussian = "gaussian"
     poisson = "poisson"
@@ -30,7 +31,10 @@ class GLMFamily(str, Enum):
             GLMFamily.sigmoid_beta: SigmoidBeta,
         }[self]
 
+
 EULER_GAMMA = 0.5772156649015329
+
+
 def inverse_digamma(y: torch.Tensor, n_iter: int = 8) -> torch.Tensor:
     """Vectorised inverse digamma (Minka, 2000): asymptotic init + Newton steps."""
     x = torch.where(y >= -2.22, torch.exp(y) + 0.5, -1.0 / (y + EULER_GAMMA))
@@ -118,7 +122,8 @@ class ExponentialFamily:
     def to(self, device: torch.device | str, dtype: torch.dtype | None = None):
         self.family_params = {
             k: v.to(device, dtype if v.is_floating_point() else None)
-            if isinstance(v, torch.Tensor) else v
+            if isinstance(v, torch.Tensor)
+            else v
             for k, v in self.family_params.items()
         }
         return self
@@ -254,11 +259,13 @@ class NegativeBinomial(Poisson):
         X = X.double()
         return {"s1": X.sum(0), "s2": (X * X).sum(0)}
 
-    def initialize_family_parameters_from_statistics(self, stats, n):
+    def initialize_family_parameters_from_statistics(self, stats, n) -> None:
         m = stats["s1"] / n
         v = stats["s2"] / n - m**2
         r_max = self.family_params["r_max"]
-        r = torch.where(v > m, m**2 / (v - m).clamp_min(1e-12), torch.full_like(m, r_max))
+        r = torch.where(
+            v > m, m**2 / (v - m).clamp_min(1e-12), torch.full_like(m, r_max)
+        )
         self.family_params["r"] = r.clamp(self.family_params["r_min"], r_max).float()
 
 
@@ -302,7 +309,12 @@ class Beta(ExponentialFamily):
         lo, hi = torch.full_like(lx, -40.0), torch.full_like(lx, 40.0)
         for _ in range(8):
             z = (lo + hi) / 2
-            pos = lx + torch.digamma((1 - z.sigmoid()) * nu) - torch.digamma(z.sigmoid() * nu) > 0
+            pos = (
+                lx
+                + torch.digamma((1 - z.sigmoid()) * nu)
+                - torch.digamma(z.sigmoid() * nu)
+                > 0
+            )
             lo, hi = torch.where(pos, z, lo), torch.where(pos, hi, z)
         z = (lo + hi) / 2
         for _ in range(4):
@@ -318,10 +330,14 @@ class Beta(ExponentialFamily):
 
     def family_statistics(self, X):
         X = self.clip_data(X).double()
-        return {"s1": X.sum(0), "s2": (X * X).sum(0),
-                "slx": X.log().sum(0), "sl1x": torch.log1p(-X).sum(0)}
+        return {
+            "s1": X.sum(0),
+            "s2": (X * X).sum(0),
+            "slx": X.log().sum(0),
+            "sl1x": torch.log1p(-X).sum(0),
+        }
 
-    def initialize_family_parameters_from_statistics(self, stats, n):
+    def initialize_family_parameters_from_statistics(self, stats, n) -> None:
         m = stats["s1"] / n
         v = (stats["s2"] / n - m**2).clamp_min(1e-12)
         c = (m * (1 - m) / v - 1).clamp_min(1e-2)  # method of moments
@@ -381,19 +397,22 @@ class Gamma(ExponentialFamily):
         return td.Gamma(theta + 1, self._param("nu", theta), validate_args=False)
 
     def invert_g(self, X):
-        return inverse_digamma(torch.log(self.clip_data(X) * self._param("nu", X))) - 1.0
+        return (
+            inverse_digamma(torch.log(self.clip_data(X) * self._param("nu", X))) - 1.0
+        )
 
     def family_statistics(self, X):
         X = self.clip_data(X).double()
         return {"s1": X.sum(0), "slx": X.log().sum(0)}
 
-    def initialize_family_parameters_from_statistics(self, stats, n):
+    def initialize_family_parameters_from_statistics(self, stats, n) -> None:
         mean = stats["s1"] / n
         s = (torch.log(mean) - stats["slx"] / n).clamp_min(1e-10)
         a = (3 - s + torch.sqrt((s - 3) ** 2 + 24 * s)) / (12 * s)  # Minka init
         for _ in range(20):  # Newton on log a - psi(a) = s
-            a = (a - (a.log() - torch.digamma(a) - s)
-                 / (1 / a - torch.polygamma(1, a))).clamp_min(1e-6)
+            a = (
+                a - (a.log() - torch.digamma(a) - s) / (1 / a - torch.polygamma(1, a))
+            ).clamp_min(1e-6)
         self.family_params["nu"] = (a / mean).float()  # rate
 
 
@@ -425,6 +444,6 @@ class LogNormal(ExponentialFamily):
         lx = torch.log(self.clip_data(X)).double()
         return {"s1": lx.sum(0), "s2": (lx * lx).sum(0)}
 
-    def initialize_family_parameters_from_statistics(self, stats, n):
+    def initialize_family_parameters_from_statistics(self, stats, n) -> None:
         var = (stats["s2"] - stats["s1"] ** 2 / n) / max(n - 1, 1)
         self.family_params["nu"] = var.clamp_min(1e-8).sqrt().float()

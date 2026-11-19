@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 import sys
 import warnings
 from pathlib import Path
 from typing import Annotated
 
-import h5py
 import anndata as ad
+import h5py
 import matplotlib as mpl
+
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -24,13 +25,17 @@ from sincei.tools.GLMPCA import GLMPCA
 from sincei.tools.TopicModels import LDA, LSA
 from sincei.utils import DEPTH_CORRELATION_CUTOFF, depth_components
 
+
 def x_nbytes(path: str) -> int:
     "Check in-memory size of X from metadata."
     with h5py.File(path, "r") as f:
         X = f["X"]
         if isinstance(X, h5py.Dataset):
             return X.size * X.dtype.itemsize
-        return sum(X[k].size * X[k].dtype.itemsize for k in ("data", "indices", "indptr"))
+        return sum(
+            X[k].size * X[k].dtype.itemsize for k in ("data", "indices", "indptr")
+        )
+
 
 from ._common_args import (
     CM_PER_INCH,
@@ -326,19 +331,30 @@ def main(
             else:
                 depth_correction = None
     else:
-        if depth_correction not in {"drop", None} and method in {DimRed.LSA, DimRed.LDA}:
+        if depth_correction not in {"drop", None} and method in {
+            DimRed.LSA,
+            DimRed.LDA,
+        }:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
         if depth_correction not in {"lognormalize", None} and method in {DimRed.PCA}:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
-        if depth_correction not in {"offset", "normalize", None} and method in {DimRed.glmPCA}:
+        if depth_correction not in {"offset", "normalize", None} and method in {
+            DimRed.glmPCA
+        }:
             logging.warning(
-            "--depthCorrection %s is incompatible with %s. Ignored..", depth_correction, method.value
+                "--depthCorrection %s is incompatible with %s. Ignored..",
+                depth_correction,
+                method.value,
             )
             depth_correction = None
 
@@ -358,11 +374,12 @@ def main(
         elif method is DimRed.glmPCA:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logging.info("Running glmPCA on device: %s", device)
-            glmpca = GLMPCA(n_pc=n_prin_comps,
-                            family=glmpca_family,
-                            device=device,
-                            depth_correction=depth_correction
-                            )
+            glmpca = GLMPCA(
+                n_pc=n_prin_comps,
+                family=glmpca_family,
+                device=device,
+                depth_correction=depth_correction,
+            )
             adata.obsm[reduction] = glmpca.fit_transform(matrix).numpy()
             assert glmpca.saturated_loadings_ is not None
             adata.varm[reduction] = glmpca.saturated_loadings_.cpu().numpy()
@@ -413,9 +430,7 @@ def main(
         figure, axes = plt.subplots(
             figsize=(plot_width / CM_PER_INCH, plot_height / CM_PER_INCH)
         )
-        sc.pl.umap(
-            adata, color="leiden", legend_loc="on data", ax=axes, show=False
-        )
+        sc.pl.umap(adata, color="leiden", legend_loc="on data", ax=axes, show=False)
 
         umap_title = (
             f"Leiden clusters; resolution : {cluster_resolution}\n"

@@ -43,7 +43,9 @@ def test_gaussian_pdf_matches_scipy() -> None:
 
 def test_bernoulli_success_probability_is_the_sigmoid_of_theta() -> None:
     theta = torch.linspace(-30, 30, 1000)
-    success = Bernoulli().torch_distribution(theta).log_prob(torch.ones_like(theta)).exp()
+    success = (
+        Bernoulli().torch_distribution(theta).log_prob(torch.ones_like(theta)).exp()
+    )
     torch.testing.assert_close(success, torch.sigmoid(theta), rtol=0, atol=1e-6)
 
 
@@ -102,7 +104,8 @@ def test_gamma_pdf_matches_scipy() -> None:
 
 
 @pytest.mark.parametrize(
-    "family", [Poisson(), NegativeBinomial({"r": torch.tensor([0.5, 2.0, 50.0])})],
+    "family",
+    [Poisson(), NegativeBinomial({"r": torch.tensor([0.5, 2.0, 50.0])})],
     ids=lambda family: family.family_name,
 )
 def test_fit_nll_differs_from_the_full_nll_by_a_constant(family) -> None:
@@ -111,8 +114,8 @@ def test_fit_nll_differs_from_the_full_nll_by_a_constant(family) -> None:
     for _ in range(2):
         theta = torch.randn(30, 3, requires_grad=True)
         full, fit = family.log_likelihood(X, theta), family.fit_nll(X, theta)
-        g_full, = torch.autograd.grad(full, theta)
-        g_fit, = torch.autograd.grad(fit, theta)
+        (g_full,) = torch.autograd.grad(full, theta)
+        (g_fit,) = torch.autograd.grad(fit, theta)
         torch.testing.assert_close(g_fit, g_full)
         gaps.append(float(full - fit))
     assert gaps[0] == pytest.approx(gaps[1], rel=1e-5)
