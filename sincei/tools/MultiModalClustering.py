@@ -213,7 +213,7 @@ def MultiModalClustering(
                 n_jobs=DEFAULT_PROCESSORS,
             )
             ## cell scores, cells x n_pc
-            adata.obsm[reduction] = glmpca.fit_transform(adata).numpy()
+            adata.obsm[reduction] = glmpca.fit_transform(matrix).numpy()
 
         sc.pp.neighbors(adata, use_rep=reduction, n_neighbors=nK)
         sc.tl.leiden(adata, resolution=resolutions[i])
