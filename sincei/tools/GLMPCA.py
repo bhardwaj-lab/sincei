@@ -129,7 +129,7 @@ class _Data:
         inv = (1.0 / self.s[rows]).astype(np.float32)
         if not sp.issparse(Xc):
             return np.asarray(Xc) * inv[:, None]
-        Xc = sp.csr_matrix(Xc, copy=True)
+        Xc = sp.csr_matrix(Xc, dtype=np.result_type(Xc.dtype, np.float32), copy=True)
         Xc.data *= np.repeat(inv, np.diff(Xc.indptr))  # keeps the sparsity pattern
         return Xc
 
