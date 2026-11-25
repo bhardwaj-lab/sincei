@@ -46,11 +46,10 @@ from BAM files:
 - Create coverage files (bigwigs) per group of cells for visualization.
 - Along with additional tools to visualize, interpret, and annotate cells and genomic regions.
 
-Sincei is part of the `scverse <https://scverse.org/>`_ ecosystem, and it's command-line
-tools can easily be combined with other tools Python or R packages for further analysis.
+sincei is also part of the `scverse <https://scverse.org/>`_ ecosystem, and it's command-line tools can easily be combined with other Python or R packages for further analysis.
 
-For details, please `read our preprint <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`_
-describing Sincei.
+For details, please `read our preprint <https://www.biorxiv.org/content/10.1101/2024.07.27.605424v1>`_ describing sincei.
+
 
 Getting Help
 ------------
@@ -105,7 +104,7 @@ Contents
 
 .. toctree::
     :maxdepth: 2
- 
+
     content/installation
     content/list_of_tools
     content/tutorials
