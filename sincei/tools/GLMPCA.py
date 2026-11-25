@@ -118,6 +118,7 @@ class _Data:
     # -- rows ------------------------------------------------------------------------
     def _read(self, rows: np.ndarray):
         out = self.M[rows]
+        self.sparse = self.sparse or sp.issparse(out)
         out = sp.csr_matrix(out) if self.sparse else np.asarray(out)
         if self.sparse:
             out.sum_duplicates()  # canonical: sorted, no duplicates
