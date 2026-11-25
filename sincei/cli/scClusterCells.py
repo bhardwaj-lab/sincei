@@ -321,9 +321,11 @@ def main(
         if method is DimRed.PCA:
             depth_correction = "lognormalize"
         if method is DimRed.glmPCA:
-            if family in DEPTH_CORRECTION_FAMILIES["offset"]:
+            from sincei.tools.GLMPCA import DEPTH_CORRECTION_FAMILIES  # noqa: PLC0415
+
+            if glmpca_family in DEPTH_CORRECTION_FAMILIES["offset"]:
                 depth_correction = "offset"
-            elif family in DEPTH_CORRECTION_FAMILIES["normalize"]:
+            elif glmpca_family in DEPTH_CORRECTION_FAMILIES["normalize"]:
                 depth_correction = "normalize"
             else:
                 depth_correction = None
