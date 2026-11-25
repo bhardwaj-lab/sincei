@@ -384,7 +384,10 @@ def main(
             assert glmpca.saturated_loadings_ is not None
             adata.varm[reduction] = glmpca.saturated_loadings_.cpu().numpy()
         elif method is DimRed.LSA:
-            lsa = LSA(n_pc=n_prin_comps + 1, binarize=binarize)
+            lsa = LSA(
+                n_pc=n_prin_comps + int(depth_correction == "drop"),
+                binarize=binarize,
+            )
             scores = lsa.fit_transform(matrix)
             assert lsa._components is not None
             assert lsa._singular_values is not None
