@@ -313,9 +313,10 @@ def main(
     adata = validate_anndata(ad.read_h5ad(input, backed="r" if backed else None), input)
 
     # handle depth correction
-    if depth_correction.lower() == "none":
+    depth_correction = depth_correction.lower() if depth_correction is not None else None
+    if depth_correction == "none":
         depth_correction = None
-    if depth_correction.lower() == "auto":
+    if depth_correction == "auto":
         if method in {DimRed.LSA, DimRed.LDA}:
             depth_correction = "drop"
         if method is DimRed.PCA:
