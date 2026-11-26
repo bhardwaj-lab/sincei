@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 import time
 import warnings
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     )
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
+
+log = logging.getLogger(__name__)
 
 
 ### Helper functions ###
@@ -310,19 +313,6 @@ def VCRfinder(
             sys.stdout.write(f"Processing chromosome {chrom}...\n")
             adata_chrom = adata[:, _var(adata)["chrom"] == chrom]
 
-            if adata_chrom.shape[1] == 1:
-                sys.stderr.write(f"Skipping chromosome {chrom} with only one bin.\n")
-                bkp_df = pd.DataFrame({
-                    "chrom": [chrom],
-                    "start": [int(_var(adata_chrom)["start"].to_numpy()[0])],
-                    "end": [int(_var(adata_chrom)["end"].to_numpy()[0])],
-                    "name": [f"{chrom}_VCR_1"],
-                    "score": [0.0],
-                    "strand": ["*"],
-                })
-                bed_df = pd.concat([bed_df, bkp_df], ignore_index=True)
-                continue
-
             start = _var(adata_chrom)["start"].min()
             # Sort the bins
             adata_chrom = adata_chrom[
@@ -349,7 +339,15 @@ def VCRfinder(
                     sys.stderr.write(
                         f"Feature {last_idx} removed due to difference in binsize\n"
                     )
-                    adata_chrom = adata_chrom[:, : _var(adata_chrom).index[-2]]
+                    adata_chrom = adata_chrom[:, :-1]
+
+            # A single bin cannot be segmented and is not a region
+            if adata_chrom.shape[1] < 2:
+                sys.stderr.write(
+                    f"Skipping chromosome {chrom}: fewer than two bins of size "
+                    f"{binsize} bp.\n"
+                )
+                continue
 
             ctime = time.time()
             X = _rare_features(cast("CountMatrix", adata_chrom.X), X_pct=X_pct, k=k)
@@ -389,5 +387,12 @@ def VCRfinder(
                 bed_df = pd.concat([bed_df, chrom_df], ignore_index=True)
 
             sys.stdout.write("\n")
+
+    if bed_df.empty:
+        log.warning(
+            "No VCRs found%s. Check that the chromosomes have at least two bins, and "
+            f"that bins have signal in at least {X_pct}%% of the cells (--minCellPct).",
+            f" in region {region}" if region is not None else "",
+        )
 
     return bed_df
