@@ -84,7 +84,7 @@ def available_processors() -> int:
     if process_cpu_count is not None:
         return process_cpu_count() or 1
     try:
-        return len(os.sched_getaffinity(0))  # ty: ignore[unresolved-attribute]
+        return len(os.sched_getaffinity(0))  # ty: ignore[missing-attribute]
     except (AttributeError, OSError):
         return os.cpu_count() or 1
 
@@ -308,7 +308,7 @@ INPUT_OUTPUT_OPTS: dict[str, typer.models.OptionInfo] = {
         metavar=".txt",
         rich_help_panel=_IO,
         help=(
-            "A single-column file containing the cell barcode whitelist, one barcode"
+            "A single-column file containing the cell barcode whitelist, one barcode "
             "per line."
         ),
     ),

@@ -11,45 +11,45 @@ The TF-IDF used is the ``lfu`` formulation. In
 ``u`` is the pivoted unique normalization.
 Here, a cell is a document and a feature is a term.
 
-Let :math:`X \in \mathbb{R}^{N \times P}` be the input matrix, :math:`x_{ci}` be the
-count of feature :math:`i` in cell :math:`c`, :math:`N` the total number of cells,
-:math:`P` the total number of features, and :math:`\mathrm{n}_i` the number of cells with
-:math:`x_{ci} > 0` for feature :math:`i`.
+Let :math:`X \in \mathbb{R}^{N \times P}` be the input matrix, :math:`x_{ij}` be the
+count of feature :math:`j` in cell :math:`i`, :math:`N` the total number of cells,
+:math:`P` the total number of features, and :math:`\mathrm{n}_j` the number of cells with
+:math:`x_{ij} > 0` for feature :math:`j`.
 
 The term frequency (``l``) is:
 
 .. math::
 
-   \mathrm{tf}_{ci} = 1 + \log_2 x_{ci} \quad \text{for } x_{ci} > 0
+   \mathrm{tf}_{ij} = 1 + \log_2 x_{ij} \quad \text{for } x_{ij} > 0
 
 The inverse document frequency (``f``) is:
 
 .. math::
 
-   \mathrm{idf}_i = \log_2 \frac{N}{\mathrm{n}_i}
+   \mathrm{idf}_j = \log_2 \frac{N}{\mathrm{n}_j}
 
-A feature in all cells has :math:`\mathrm{idf}_i = 0`.
+A feature in all cells has :math:`\mathrm{idf}_j = 0`.
 
 And the pivoted unique normalization (``u``) divides the weights of a cell by:
 
 .. math::
 
-   d_c = (1 - \beta)\,\bar{\mathrm{n}} + \beta\,|\mathcal{F}_c|
+   d_i = (1 - \beta)\,\bar{\mathrm{n}} + \beta\,|\mathcal{F}_i|
 
 with the slope :math:`\beta = 0.25`, the pivot
-:math:`\bar{\mathrm{n}} = \frac{1}{N}\sum_i \mathrm{n}_i = \mathrm{nnz} / N`
+:math:`\bar{\mathrm{n}} = \frac{1}{N}\sum_j \mathrm{n}_j = \mathrm{nnz} / N`
 (the mean number of features with counts in a cell), and
-:math:`\mathcal{F}_c = \{\, i : x_{ci} > 0,\; \mathrm{idf}_i > 0 \,\}` the features of
-cell :math:`c` with a count above zero and an idf above zero.
+:math:`\mathcal{F}_i = \{\, j : x_{ij} > 0,\; \mathrm{idf}_j > 0 \,\}` the features of
+cell :math:`i` with a count above zero and an idf above zero.
 
 The TF-IDF weight matrix :math:`W \in \mathbb{R}^{N \times P}` is then:
 
 .. math::
 
-   w_{ci} =
+   w_{ij} =
    \begin{cases}
-   \dfrac{\mathrm{tf}_{ci}\,\mathrm{idf}_i}{d_c} & \text{if } x_{ci} > 0 \\
-   0 & \text{if } x_{ci} = 0
+   \dfrac{\mathrm{tf}_{ij}\,\mathrm{idf}_j}{d_i} & \text{if } x_{ij} > 0 \\
+   0 & \text{if } x_{ij} = 0
    \end{cases}
 
 The zeros of the input matrix stay at zero, so :math:`W` stays sparse.
@@ -59,7 +59,7 @@ matrix, with the top :math:`K` components in :math:`V \in \mathbb{R}^{P \times K
 (features by components).
 
 The scores of the cells are :math:`U \Sigma = W V \in \mathbb{R}^{N \times K}`, and
-the score of cell :math:`c` is :math:`w_c V`, with :math:`w_c` the row of the cell
+the score of cell :math:`i` is :math:`w_i V`, with :math:`w_i` the row of the cell
 in :math:`W`.
 
 Effect of cell depth

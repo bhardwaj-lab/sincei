@@ -1,5 +1,5 @@
 [package]
-authors = ["Fernando Sanchó-Gómez <f.sanchogomez@uu.nl>"]
+authors = ["Fernando Sancho Gómez <f.sanchogomez@uu.nl>"]
 name = "sincei"
 version = "1.0.0-dev"
 edition = "2024"

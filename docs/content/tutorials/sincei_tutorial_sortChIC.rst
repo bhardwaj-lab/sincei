@@ -374,15 +374,15 @@ First, we produce a 2kb bin anndata of our dataset.
         -b ${bamfiles}
     # Number of bins found: 96883
 
-We then run :ref:`scFindVCRs`. We pass the anndata, its binsize, and the value (or multiple values) for the
-penalty parameter to the tool. The output is a BED file containing the resulting VCRs. For more
-information on the VCR algorithm, consult :ref:`scFindVCRs`.
+We then run :ref:`scFindVCRs`. We pass the anndata to the tool; it detects the bin size from the
+anndata. We keep the bins with signal in at least 1% of the cells (``--minCellPct``, the default).
+The output is a BED file containing the resulting VCRs. For more information on the VCR algorithm,
+consult :ref:`scFindVCRs`.
 
 .. code:: bash
 
     scFindVCRs -i sincei_output/scCounts_2kb_bins.h5ad \
-        --binSize 2000 \
-        --penalty 0.005 \
+        --minCellPct 1 \
         -o sincei_output/VCRs.bed
 
 We can use :ref:`scScoreFeatures` to make an anndata with our VCRs as features. We use the 2kb bin
