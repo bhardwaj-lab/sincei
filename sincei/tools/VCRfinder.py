@@ -237,23 +237,23 @@ def VCRfinder(
         'chrom', 'start', and 'end' columns. The bin size is the most common
         end - start; more than 90% of the bins must have it, else a ValueError is
         raised.
-    penalty : float, optional
-        Penalty for each segment, in units of bins. Higher values give fewer,
-        longer regions. Default is 1.0.
     X_pct : float, optional
         Minimum percentage of cells with signal to keep a bin. Bins below it are set
         to 0 before the blocks are made. Default is 1.0 (1%).
     k : int, optional
         Number of neighbor bins to keep to the left and to the right of bins passing
         the X_pct filter. Default is 0.
+    penalty : float, optional
+        Penalty for each segment, in units of bins. Higher values give fewer,
+        longer regions. Default is 1.0 (the value that scFindVCRs uses).
     region : str, optional
         Genomic region to limit the analysis to (e.g., 'chr1:100000:200000').
         Default is None.
     verbose : bool, optional
         Print progress messages and warnings. Default is False.
     n_jobs : int, optional
-        Number of threads to use for parallel processing. Default is DEFAULT_PROCESSORS
-        (half of the available processors, at most 16).
+        Number of processes to use for parallel processing. Default is
+        DEFAULT_PROCESSORS (half of the available processors, at most 16).
 
     Returns
     -------
