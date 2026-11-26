@@ -2,12 +2,13 @@ Variable Chromatin Region Finder
 ================================
 
 :ref:`scFindVCRs` segments the chromosomes in an input AnnData into variable chromatin
-regions (VCRs): bins with signal in the same cells. In other words, co-occurring bins.
+regions (VCRs): genomic regions with signal in the same cells. In other words,
+in aggregates co-occurring genomic bins into larger related regions.
 
 It takes a count matrix :math:`X \in \mathbb{R}^{N \times P}` of :math:`N` cells
-and :math:`P` genomic bins of equal size (from :ref:`scCountReads` ``bins``) as input,
-and processes it in two stages: a prefilter that splits each chromosome into signal
-blocks, and a segmentation of each block into regions.
+and :math:`P` genomic bins of equal size (from :ref:`scCountReads bins <scCountReads>`)
+as input, and processes it in two stages: a prefilter that splits each chromosome into
+signal blocks, and segmentation of each block into regions.
 
 The prefilter keeps bins which have nonzero counts in at least a percentage of the total
 cells. This reduces the noise in the input count matrix and roughly separates the
@@ -15,7 +16,9 @@ genomic bins into signal blocks and background.
 
 The segmentation minimizes a cost function within each signal block to aggregate
 neighboring bins into regions of high co-occurrence. The cost is based on the
-normalized co-occurrence of the binarized input count matrix.
+normalized co-occurrence of the binarized input count matrix. It is the cost of kernel
+change point detection with a cosine kernel, and the segmentation is calculated with
+`ruptures <https://centre-borelli.github.io/ruptures-docs/>`_.
 
 The result of the algorithm is a list of regions in the genome that co-occur for the
 genomic signal from the input count matrix.
@@ -39,7 +42,7 @@ In addition to the :doc:`common notation <notation>`, this page uses:
      - Minimum percentage of cells with signal for a bin to pass the prefilter
        (``--minCellPct``)
    * - :math:`k`
-     - Slack parameter, in bins (``--slack``)
+     - Slack parameter: the number of neighbor bins kept by the prefilter (``--slack``)
    * - :math:`\mathcal{B}`
      - Set of bins that pass the prefilter
    * - :math:`\widetilde{B}`
@@ -51,7 +54,7 @@ In addition to the :doc:`common notation <notation>`, this page uses:
      - Co-occurrence: :math:`O_{jl}` is the number of cells with signal in bins
        :math:`j` and :math:`l`, with :math:`O_{jj} = f_j`
    * - :math:`W = D^{-1/2} O D^{-1/2}`
-     - Normalized co-occurrence of the block
+     - Normalized co-occurrence of the block, with :math:`D = \operatorname{diag}(O)`
    * - :math:`[a, b)`, :math:`m`
      - A segment made up of the bins :math:`a, \dots, b-1` of a block, and its number
        of bins :math:`m = b - a`
@@ -60,9 +63,7 @@ In addition to the :doc:`common notation <notation>`, this page uses:
    * - :math:`S`
      - Number of segments in a block
    * - :math:`\lambda`
-     - Penalty for each segment, in units of bins (``--penalty``)
-   * - :math:`L`
-     - Maximum segment length, in bins (``--maxBinsRegion``)
+     - Penalty for each segment, in units of bins
 
 Algorithm
 ---------
@@ -105,9 +106,9 @@ are kept. The entries of all other bins are set to 0:
 
 **3. Signal blocks**
 
-:math:`\widetilde{B}` is split into blocks :math:`\mathcal{C}` of
-contiguous bins with signal, with at most :math:`k` bins without signal between two bins
-with signal. Bins outside all blocks get no region. A block of one bin is one region.
+:math:`\widetilde{B}` is split into blocks :math:`\mathcal{C}` of adjacent bins with
+signal. A bin without signal in :math:`\widetilde{B}` always splits two blocks. Thus,
+all bins in a block have :math:`f_j \geq 1`.
 
 **4. Normalized co-occurrence**
 
@@ -119,18 +120,14 @@ We compute the cosine similarity :math:`W_{jl}` of the columns :math:`B_{\cdot j
   W_{jl} = \frac{O_{jl}}{\sqrt{f_j f_l}}
 
 This is the number of cells with signal in both bins, divided by the geometric mean of
-the total number of cells with signal in each bin. It is in :math:`[0, 1]`, and
-:math:`W_{jj} = 1` for every bin with signal.
+the total number of cells with signal in each bin. Its values are in :math:`[0, 1]`,
+and all the diagonal elements are :math:`W_{jj} = 1`.
 
 We can write this in matrix notation as:
 
 .. math::
 
-  W = D^{-1/2}\, O\, D^{-1/2}, \qquad D_{jj} = \max(O_{jj},\, 1)
-
-With :math:`k > 0`, a block can contain bins without signal (:math:`O_{jj} = 0`). For
-these bins :math:`D_{jj}` is set to 1 to prevent a division by 0, so their row and
-column of :math:`W` are 0.
+  W = D^{-1/2}\, O\, D^{-1/2}, \quad D = \operatorname{diag}(O)
 
 **5. Segment cost**
 
@@ -140,7 +137,10 @@ The cost of a segment :math:`[a, b)` of :math:`m` bins is
 
    C(a, b) = \sum_{j=a}^{b-1} W_{jj} \;-\; \frac{1}{m} \sum_{j=a}^{b-1} \sum_{l=a}^{b-1} W_{jl}
 
-In other terms, if all bins in the segment have signal its cost is
+This is the cost of kernel change point detection with a cosine kernel
+:math:`\kappa(B_{\cdot j}, B_{\cdot l}) = W_{jl}`.
+
+All :math:`W_{jj}` are 1, so we can also write the cost as
 
 .. math::
 
@@ -148,9 +148,13 @@ In other terms, if all bins in the segment have signal its cost is
 
 with :math:`\overline{W}_{[a, b)}` the mean of all :math:`m^2` entries of :math:`W` in
 the segment, diagonal included. Thus, the cost is the length of the segment multiplied
-by its mean dissimilarity. A segment of one bin costs 0. A segment of bins that share
-all their cells (:math:`\overline{W}_{[a, b)} = 1`) also costs 0. A segment of bins
-that share no cells (:math:`\overline{W}_{[a, b)} = 1/m`) costs :math:`m - 1`.
+by its mean cosine dissimilarity. It follows that:
+
+- A segment of one bin costs 0.
+- A segment of bins that share all their cells (:math:`\overline{W}_{[a, b)} = 1`)
+  also costs 0.
+- A segment of bins that share no cells (:math:`\overline{W}_{[a, b)} = 1/m`) costs
+  :math:`m - 1`.
 
 **6. Segmentation**
 
@@ -159,38 +163,18 @@ The segments of a block are determined by the minimization of
 .. math::
 
    \sum_{s=1}^{S} C(a_{s-1}, a_s) \;+\; \lambda S,
-   \qquad 0 = a_0 < a_1 < \dots < a_S = w, \qquad a_s - a_{s-1} \le L
+   \quad 0 = a_0 < a_1 < \dots < a_S = w
 
 with :math:`a_1, \dots, a_{S-1}` the ends of the segments. The minimum is calculated
-by dynamic programming. :math:`F(b)` is the minimum cost of the bins :math:`0, \dots,
-b-1`, and the last segment of this minimum is :math:`[a, b)`:
+with the PELT algorithm (`Killick et al., 2012
+<https://doi.org/10.1080/01621459.2012.737745>`_), as implemented in
+``ruptures.KernelCPD`` with the cosine kernel and a minimum segment length of one bin.
+PELT gives the exact minimum, with no limit on the length of a segment.
 
-.. math::
-
-   F(0) = 0, \qquad F(b) = \min_{\max(0,\, b - L) \le a < b}
-   \big[ F(a) + C(a, b) + \lambda \big]
-
-Tracing the best :math:`a` back from :math:`b = w` gives the segment ends. If two values
-of :math:`a` have the same minimum, the smallest :math:`a` is chosen, and thus the
-longest last segment :math:`[a, b)`.
-
-Ties occur at :math:`\lambda = 1`. For example, :math:`n` bins that share no cells cost
-:math:`(n - 1) + \lambda` as one segment, and :math:`n \lambda` as :math:`n` segments of
-one bin. At :math:`\lambda = 1`, these two costs are the same.
-
-Maximum segment length
-~~~~~~~~~~~~~~~~~~~~~~
-
-The memory required to compute the full normalized co-occurrence matrix :math:`W` of a
-block scales with :math:`O(w^2)`. To avoid a memory blow-up, we limit segments to a
-maximum length of :math:`L` bins (``--maxBinsRegion``, 2,000 bins by default). This allows us to compute
-only the band :math:`W_{jl}` with :math:`0 \le l - j < L` for the segmentation. For a
-block of length :math:`L` or shorter, the segmentation is exact. For larger blocks, the
-result is the same as the exact segmentation if no exact segment is longer than
-:math:`L` bins.
-
-In practice, such long blocks of signal rarely occur in the genome, so this heuristic
-only safeguards a hypothetical the worst case scenario.
+If two segmentations have the same minimum, the result depends on floating-point
+rounding. Ties occur at :math:`\lambda = 1`. For example, :math:`n` bins that share no
+cells cost :math:`(n - 1) + \lambda` as one segment, and :math:`n \lambda` as :math:`n`
+segments of one bin. At :math:`\lambda = 1`, these two costs are the same.
 
 Choosing a penalty
 ~~~~~~~~~~~~~~~~~~
@@ -203,19 +187,20 @@ For sparse single-cell data the cosines are small, so the number of regions chan
 quickly for penalties near 1: below about 0.9 almost every bin is a separate region,
 and above about 1.1 almost every signal block is one region.
 
+:ref:`scFindVCRs` uses :math:`\lambda = 1`, our recommended default. To use a different
+penalty, call :func:`sincei.tools.VCRfinder.VCRfinder` changing the ``penalty`` argument.
+
 Output
 ------
 
 A 6-column BED file (``chrom``, ``start``, ``end``, ``name``, ``score``, ``strand``),
 with one row per region. The score is the segment cost :math:`C(a, b)` (0 for a region
-of one bin). See :ref:`the file formats
-<fmt-bed>` for details.
+of one bin). See :ref:`the file formats <fmt-bed>` for details.
 
 Space and time complexity
 -------------------------
 
-For a block of :math:`w` bins, :math:`r_i` is the number of its bins with signal in cell
-:math:`i`.
+For a block of :math:`w` bins:
 
 .. list-table::
    :header-rows: 1
@@ -227,10 +212,17 @@ For a block of :math:`w` bins, :math:`r_i` is the number of its bins with signal
    * - Binarize, prefilter and blocks
      - :math:`O(\mathrm{nnz} + P)`
      - :math:`O(\mathrm{nnz} + P)`
-   * - Band of :math:`W` and DP of one block
-     - :math:`O\big(\sum_i r_i \min(r_i, L) + w L\big)`
-     - :math:`O(w L)`
+   * - Segmentation of one block (PELT)
+     - :math:`O(w^2 N)` at most
+     - :math:`O(w N)`
+   * - Segment costs of one block
+     - :math:`O(w N)`
+     - :math:`O(w N)`
 
-The blocks are segmented one at a time, so the working memory scales with
-:math:`O(w_\mathrm{max} L)`.  Larger values of the slack parameter :math:`k` give wider
-blocks, so the :math:`w L` terms increase.
+ruptures needs the block as a dense matrix of :math:`w \times N` values, but it does not
+store :math:`W`: it calculates each kernel value when it needs it. The pruning of PELT
+removes most of the :math:`w^2` pairs of bins when the segments are short, so the time
+is usually much smaller than :math:`O(w^2 N)`.
+
+The blocks are segmented in parallel by ``--numberOfProcessors`` processes, so the
+working memory scales with :math:`O(n_\mathrm{proc}\, w_\mathrm{max} N)`.
