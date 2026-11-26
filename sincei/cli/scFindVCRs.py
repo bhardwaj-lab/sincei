@@ -87,19 +87,6 @@ def main(
             ),
         ),
     ] = 0,
-    penalty: Annotated[
-        float,
-        typer.Option(
-            "-pen",
-            "--penalty",
-            metavar="FLOAT",
-            rich_help_panel=_VCR,
-            help=(
-                "Penalty for each segment, in units of bins. Higher values result in "
-                "fewer, longer segments."
-            ),
-        ),
-    ] = 1.0,
     number_of_processors: Annotated[
         int, OTHER_OPTS["number_of_processors"]
     ] = DEFAULT_PROCESSORS,
@@ -112,7 +99,7 @@ def main(
         adata=adata,
         X_pct=min_cell_pct,
         k=slack,
-        penalty=penalty,
+        penalty=1.0,
         region=region,
         verbose=verbose,
         n_jobs=number_of_processors,
